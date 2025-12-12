@@ -54,7 +54,7 @@ class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
         return std::numeric_limits<timestamp>::min() + 1;
     }
 
-    explicit TimeseriesIndex(const std::string& name);
+    explicit TimeseriesIndex(std::string_view name);
     static TimeseriesIndex default_index();
     void check(const FieldCollection& fields) const;
     static IndexValue start_value_for_segment(const SegmentInMemory& segment);

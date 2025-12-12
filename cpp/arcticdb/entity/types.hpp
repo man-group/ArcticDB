@@ -414,8 +414,6 @@ struct TypeDescriptor {
 
     TypeDescriptor() : data_type_(DataType::UINT8), dimension_(Dimension::Dim0) {}
 
-    static TypeDescriptor scalar_type(DataType type) { return TypeDescriptor(type, Dimension::Dim0); }
-
     ARCTICDB_MOVE_COPY_DEFAULT(TypeDescriptor)
 
     template<typename Callable>

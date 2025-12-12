@@ -27,10 +27,4 @@ concept instantiation_of = is_instantiation_of_v<T, TT>;
 
 template<typename T, typename... U>
 concept any_of = std::disjunction_v<std::is_same<T, U>...>;
-
-template<typename Given, typename Base>
-concept decays_to = std::same_as<std::decay_t<Given>, Base>;
-
-template<typename ReturnType, typename Functor, typename... Args>
-concept invocable_r = std::is_invocable_r_v<ReturnType, Functor, Args...>;
 } // namespace arcticdb::util

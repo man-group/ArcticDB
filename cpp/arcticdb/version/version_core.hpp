@@ -30,17 +30,6 @@ namespace arcticdb::version_store {
 using namespace entity;
 using namespace pipelines;
 
-enum class ReadModifyWriteIndexStrategy {
-    /// The index key for the new version will contain only the data produced by the processing query.
-    /// E.g. Running a filter query will produce a new version containing only the filtered data.
-    REWRITE_INDEX,
-    /// The index key will be a merge of the current index key and the new data.
-    /// E.g. Running merge_update with 3 segments where only the middle segment is matched will keep the first and the
-    /// third segment in the index and add a new segment in the middle. If REWRITE_INDEX was used it would only keep the
-    /// new (middle segment)
-    MERGE_INDEX
-};
-
 VersionedItem write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
@@ -194,18 +183,17 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
 );
 
-VersionedItem read_modify_write_impl(
-        const std::shared_ptr<Store>& store, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
-        std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy,
-        std::shared_ptr<PipelineContext> pipeline_context
+folly::Future<VersionedItem> read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 );
 
-VersionedItem merge_update_impl(
+folly::Future<VersionedItem> merge_update_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
-        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        std::vector<std::string>&& on, bool match_on_timeseries_index, const MergeStrategy& strategy,
+        const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, std::vector<std::string>&& on, const MergeStrategy& strategy,
         std::shared_ptr<InputFrame> source
 );
 

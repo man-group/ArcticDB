@@ -1,0 +1,78 @@
+import pandas as pd
+import numpy as np
+import pytest
+from arcticdb.util.hypothesis import date, dataframe, use_of_function_scoped_fixtures_in_hypothesis_checked
+from arcticdb.version_store._store import MergeStrategy
+from hypothesis import strategies as st, given, settings, HealthCheck
+from typing import List, Tuple, Optional
+
+from arcticdb.util.test import assert_frame_equal, merge
+
+DTYPES = ["uint32", "int64", "float", "object", "datetime64[ns]", "bool"]
+COL_NAMES = [f"{dtype}_col" for dtype in DTYPES]
+# Intentionally keep some pre-epoch dates in the interval. Some C++ had issues with dates before epoch in the past.
+MIN_DATE = np.datetime64("1960-01-01")
+MAX_DATE = np.datetime64("2025-01-01")
+
+
+@st.composite
+def ordered_dataframe_list(
+    draw, column_names, column_dtypes, min_date=MIN_DATE, max_date=MAX_DATE
+) -> List[pd.DataFrame]:
+    index_ranges = sorted(draw(st.lists(date(min_date=min_date, max_date=max_date, unit="s"), min_size=2)))
+    return [
+        draw(dataframe(column_names, column_dtypes, index_ranges[i], index_ranges[i + 1]))
+        for i in range(len(index_ranges) - 1)
+    ]
+
+
+@st.composite
+def source_for_merge(
+    draw, target: pd.DataFrame, min_date=MIN_DATE, max_date=MAX_DATE, on: List[str] = None
+) -> pd.DataFrame:
+    assert target.index.name == "index"
+    source = draw(dataframe(target.columns, target.dtypes, min_date, max_date))
+
+    on = [] if on is None else on
+    drop_duplicates_on = on + ["index"]
+    target_with_no_duplicates = target[~target.reset_index().duplicated(subset=drop_duplicates_on, keep="first").values]
+
+    matched = target_with_no_duplicates.iloc[
+        draw(st.lists(st.integers(0, len(target_with_no_duplicates) - 1), max_size=len(source)))
+    ]
+    if len(matched) == 0:
+        return source
+    for column in on:
+        source.iloc[: len(matched), source.columns.get_loc(column)] = matched[column]
+    new_index = matched.index.append(source.index[len(matched) :])
+    source.index = new_index
+    source.index.name = "index"
+    source.sort_index(inplace=True)
+    return source[~source.reset_index().duplicated(subset=drop_duplicates_on, keep="first").values]
+
+
+@st.composite
+def target_and_source(
+    draw, column_names, column_dtypes, min_date=MIN_DATE, max_date=MAX_DATE
+) -> Tuple[List[pd.DataFrame], pd.DataFrame]:
+    target_list = draw(ordered_dataframe_list(column_names, column_dtypes, min_date, max_date))
+    target = pd.concat(target_list)
+    source = draw(source_for_merge(target))
+    return target_list, source
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@given(target_source=target_and_source(COL_NAMES, DTYPES))
+@settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+def test_merge_update(lmdb_version_store_v1, target_source):
+    target_list, source = target_source
+    lib = lmdb_version_store_v1
+    symbol = "test_merge_update"
+    lib.version_store.force_delete_symbol(symbol)
+    for df in target_list:
+        lib.append(symbol, df)
+    strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+    lib.merge(symbol, source, strategy=strategy)
+    result = lib.read(symbol).data
+    expected = merge(pd.concat(target_list), source, strategy=strategy, inplace=True)
+    assert_frame_equal(result, expected)

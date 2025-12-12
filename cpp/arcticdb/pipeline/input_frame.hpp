@@ -31,17 +31,23 @@ struct InputFrame {
     InputFrame();
     InputFrame(SegmentInMemory&& seg);
 
-    template<typename DescriptorT>
-    requires util::decays_to<DescriptorT, StreamDescriptor>
+    template<ValidIndex Index, typename DescriptorT>
+    requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
     InputFrame(
-            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index,
+            std::optional<NativeTensor>&& index_tensor
     ) :
-        index(stream::empty_index()) {
+        index(std::forward<Index>(index)) {
+        if constexpr (std::same_as<Index, stream::TimeseriesIndex>) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    index_tensor.has_value(), "Timeseries index tensor required"
+            );
+        }
         set_from_tensors(std::forward<DescriptorT>(desc), std::move(field_tensors), std::move(index_tensor));
     }
 
     template<typename DescriptorT>
-    requires util::decays_to<DescriptorT, StreamDescriptor>
+    requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
     void set_from_tensors(
             DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
     ) {

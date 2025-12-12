@@ -285,8 +285,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem merge(
             const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
-            const bool prune_previous_versions, const py::tuple& py_strategy, std::vector<std::string> on,
-            const bool match_on_timeseries_index
+            const bool prune_previous_versions, const bool upsert, const py::tuple& py_strategy,
+            std::vector<std::string> on
     );
 
   private:

@@ -90,15 +90,13 @@ RawType* flatten_tensor(
 }
 
 template<DataType dt>
-std::optional<convert::StringEncodingError> read_py_string_to_buffer(
-        PyObject* py_string_object, position_t& out, std::optional<ScopedGILLock>& scoped_gil_lock, StringPool& pool
+std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
+        PyObject* py_string_object, std::optional<ScopedGILLock>& scoped_gil_lock, StringPool& pool
 ) {
     if (is_py_none(py_string_object)) {
-        out = not_a_string();
-        return std::nullopt;
+        return not_a_string();
     } else if (is_py_nan(py_string_object)) {
-        out = nan_placeholder();
-        return std::nullopt;
+        return nan_placeholder();
     } else {
         std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
         if constexpr (is_utf_type(slice_value_type(dt))) {
@@ -110,8 +108,7 @@ std::optional<convert::StringEncodingError> read_py_string_to_buffer(
         if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
             const convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
             const auto offset = pool.get(wrapper.buffer_, wrapper.length_);
-            out = offset.offset();
-            return std::nullopt;
+            return offset.offset();
         } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
             return std::get<convert::StringEncodingError>(std::move(wrapper_or_error));
         } else {
@@ -157,12 +154,13 @@ std::optional<convert::StringEncodingError> set_sequence_type(
         auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
         auto& string_pool = agg.segment().string_pool();
         for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
-            std::optional<convert::StringEncodingError> maybe_error =
-                    read_py_string_to_buffer<dt>(*ptr_data, *out_ptr, scoped_gil_lock, string_pool);
-            if (maybe_error.has_value()) {
-                maybe_error->row_index_in_slice_ = s;
-                return maybe_error;
+            std::variant<position_t, convert::StringEncodingError> string_pool_entry =
+                    add_py_string_to_pool<dt>(*ptr_data, scoped_gil_lock, string_pool);
+            if (auto* err = std::get_if<convert::StringEncodingError>(&string_pool_entry); err) {
+                err->row_index_in_slice_ = s;
+                return std::move(*err);
             }
+            *out_ptr = std::get<position_t>(string_pool_entry);
             ++out_ptr;
         }
     }

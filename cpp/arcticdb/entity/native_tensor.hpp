@@ -67,15 +67,6 @@ struct NativeTensor {
         }
     }
 
-    template<std::ranges::contiguous_range T>
-    static NativeTensor one_dimensional_tensor(const T& data, const DataType data_type) {
-        using ValueType = std::decay_t<std::ranges::range_value_t<T>>;
-        constexpr static size_t element_size = sizeof(ValueType);
-        constexpr shape_t shapes = 1;
-        const int64_t byte_size = data.size() * element_size;
-        return NativeTensor{byte_size, 1, nullptr, &shapes, data_type, element_size, std::ranges::data(data), 1};
-    }
-
     NativeTensor(const NativeTensor& other) :
         nbytes_(other.nbytes_),
         ndim_(other.ndim_),
@@ -181,7 +172,6 @@ ssize_t byte_offset_impl(const stride_t* strides, ssize_t i, Ix... index) {
 // TODO is the conversion to a typed tensor really necessary for the codec part?
 template<typename T>
 struct TypedTensor : public NativeTensor {
-    using raw_type = T;
 
     constexpr static size_t itemsize() { return sizeof(T); }
 

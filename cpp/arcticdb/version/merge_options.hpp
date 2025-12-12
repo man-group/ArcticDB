@@ -13,6 +13,46 @@ enum class MergeAction : uint8_t { DO_NOTHING, UPDATE, INSERT };
 struct MergeStrategy {
     MergeAction matched;
     MergeAction not_matched_by_target;
+    bool operator==(const MergeStrategy&) const = default;
 };
 
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::MergeAction> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(arcticdb::MergeAction action, FormatContext& ctx) const {
+        switch (action) {
+        case arcticdb::MergeAction::DO_NOTHING:
+            return fmt::format_to(ctx.out(), "do_nothing");
+        case arcticdb::MergeAction::UPDATE:
+            return fmt::format_to(ctx.out(), "update");
+        case arcticdb::MergeAction::INSERT:
+            return fmt::format_to(ctx.out(), "insert");
+        }
+    }
+};
+template<>
+struct formatter<arcticdb::MergeStrategy> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(arcticdb::MergeStrategy strategy, FormatContext& ctx) const {
+        return fmt::format_to(
+                ctx.out(),
+                "MergeStrategy(matched={}, not_matched_by_target={})",
+                strategy.matched,
+                strategy.not_matched_by_target
+        );
+    }
+};
+} // namespace fmt

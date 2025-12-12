@@ -845,8 +845,8 @@ struct WriteClause {
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
 /// the source_ member. Source and target must have the same index type. There are two actions
-/// UPDATE: For a particular row in the segment if there's  a row source_ for which all values in the columns listed in
-/// on and the index (only in case if timeseries) match update will be performed.
+/// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
+/// in on and the index (only in case if timeseries) match update will be performed.
 /// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
@@ -854,13 +854,15 @@ struct MergeUpdateClause {
     std::vector<std::string> on_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
-    bool match_on_timeseries_index_;
-    MergeUpdateClause(
-            std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
-            bool match_on_timeseries_index
-    );
+    MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
+    /// Row range indexes require full table scan
+    /// In case of timestamp index this will filter out only the ranges and keys whose index span contains at least one
+    /// value from the source index. This does not mean that there's a match only that a match is possible. A crucial
+    /// assumption is that the source is ordered. This means that after ranges_and_keys are ordered by row slice we can
+    /// perform only forward iteration over the source index to find matches (except the edge of one segment starting
+    /// with the same value as the previous ends, see below)
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&);
 
     [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
@@ -882,18 +884,50 @@ struct MergeUpdateClause {
     [[nodiscard]] std::string to_string() const;
 
   private:
-    template<typename T>
-    requires util::any_of<T, SegmentInMemory, std::vector<NativeTensor>>
-    void
-    update_and_insert(const T&, const StreamDescriptor&, const ProcessingUnit&, std::span<const std::vector<size_t>>)
-            const;
+    void update_and_insert(
+            const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
+            const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
+    ) const;
 
-    /// @return Vector of size equal to the number of source data rows that are within the row slice being processed.
-    /// Each element is a vector of the rows from the target data that has the same index as the corresponding source
-    /// row
+    /// Filter segments which will be affected by the merge. The complexity is O(n) where n is the number of rows in
+    /// the source data.
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing_linear(std::vector<RangesAndKey>&);
+    /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
+    /// of rows in the source data and m is the number of row slices in the library
+    std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
+
+    /// @return Vector of size equal to the number of source data rows that are within the row slice being
+    /// processed. Each element is a vector of the rows from the target data that has the same index as the
+    /// corresponding source row
     std::vector<std::vector<size_t>> filter_index_match(const ProcessingUnit& proc) const;
 
-    /// For each row range stores the first and last row in the source that overlaps with the row range
+    /// During filtering of rowslices in structure for processing, there might be multiple row slices that contain
+    /// the same index value. All of them must have the same  value in  source_start_end_for_row_range_. Add the
+    /// values and skip the rows containing a single  repeated index value
+    /// @return pair of the number of consecutive row slices whose time range is the same as range and an iterator
+    /// to the first column slice that has a different start and end range
+    std::pair<size_t, std::vector<RangesAndKey>::iterator> mark_duplicate_time_ranges_for_processing(
+            const size_t row_slice_idx, const std::span<std::vector<size_t>> offsets, const TimestampRange& range,
+            const std::pair<size_t, size_t>& source_row_range,
+            std::vector<RangesAndKey>::iterator first_col_slice_in_row, std::vector<size_t>& row_slices_to_keep
+    );
+    /// The last value of the current row range can be the same as the first value of the next segment. Start
+    /// iterating the source from the first occurrence of that index value so that we don't miss potential matches.
+    /// @example
+    ///          0  1  2  3  4  5  6
+    /// Source: [1, 4, 5, 7, 7, 7, 8]
+    /// Target: [1, 4), [5, 8), [7, 9)
+    /// The rows of source that fall into the second row slice are [2;6] (corresponding to 5, 7, 7, 7). The rows of
+    /// source that fall into the third row slice are [3;7] (corresponding to 7, 7, 7, 8).
+    size_t count_repetitions_of_overlapping_segment_values_in_source(
+            std::ranges::subrange<const ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>::DataTypeTag::raw_type*>
+                    source_range_for_slice,
+            const size_t next_row_slice_with_different_time_range, const size_t row_slice_count,
+            const std::vector<RangesAndKey>::iterator col_slice, const TimestampRange& time_range,
+            const size_t* first_occurrence_of_last_value
+    ) const;
+    /// For each row range stores the first and last row in the source that overlaps with the row range. The
+    /// interval is closed in the start and open in the end: [start, end)
     ankerl::unordered_dense::map<RowRange, std::pair<size_t, size_t>, RowRange::Hasher> source_start_end_for_row_range_;
 };
 } // namespace arcticdb

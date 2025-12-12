@@ -123,6 +123,13 @@ void pb_from_python(const py::object& py_msg, Msg& out) {
     out.ParseFromString(s);
 }
 
+template<typename Msg>
+Msg pb_from_python(const py::object& py_msg) {
+    Msg out;
+    out.ParseFromString(py_msg.attr("SerializeToString")().cast<std::string>());
+    return out;
+}
+
 /**
  * Register __repr__ string representation by piggy backing on fmt::format
  * @tparam PyClass type of class binding
