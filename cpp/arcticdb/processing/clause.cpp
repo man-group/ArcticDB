@@ -37,10 +37,6 @@ using namespace arcticdb;
 /// @param indexes_to_keep Elements must be sorted and unique
 template<typename T>
 void select(std::span<const size_t> indexes_to_keep, std::vector<T>& vec) {
-    arcticdb::debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::ranges::adjacent_find(indexes_to_keep, std::greater_equal<size_t>{}) == indexes_to_keep.end(),
-            "Bulk selection of elements from vector requires the indexes of the elements to be sorted and unique"
-    );
     if (indexes_to_keep.size() == vec.size()) {
         return;
     }
@@ -1991,20 +1987,19 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
         // Find the first row in source that is after the row slice
         while (source_row < source_->num_rows) {
             const timestamp new_source_ts = source_->index_value_at(source_row);
+            if (new_source_ts >= time_range.second) {
+                break;
+            }
             if (source_ts != new_source_ts) {
                 last_value_first_occurrence = source_row;
             }
             source_ts = new_source_ts;
-            if (new_source_ts >= time_range.second) {
-                break;
-            }
             ++source_row;
         }
         if (source_ts_in_segment_range) {
             row_slices_to_keep.push_back(row_slice_idx);
-            source_start_end_for_row_range_.emplace(
-                    first_col_slice_in_row->row_range(), std::pair{first_source_row_in_row_slice, source_row}
-            );
+            const std::pair source_row_range{first_source_row_in_row_slice, source_row};
+            source_start_end_for_row_range_.emplace(first_col_slice_in_row->row_range(), source_row_range);
             if (row_slice_idx + 1 < row_slice_count) {
                 // There might be multiple row slices which contain the same index value. All of them must have the same
                 // value in source_start_end_for_row_range_. Add the values and skip the rows containing a single
@@ -2012,7 +2007,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
                 size_t row_slice_next_different_index = row_slice_idx + 1;
                 auto col_slice = first_col_slice_in_row + offsets[row_slice_next_different_index].size();
                 while (row_slice_next_different_index < row_slice_count && col_slice->key_.time_range() == time_range) {
-                    source_start_end_for_row_range_.emplace(col_slice->row_range(), std::pair{source_row, source_row});
+                    row_slices_to_keep.push_back(row_slice_next_different_index);
+                    source_start_end_for_row_range_.emplace(col_slice->row_range(), source_row_range);
                     col_slice += offsets[row_slice_next_different_index].size();
                     ++row_slice_next_different_index;
                 }

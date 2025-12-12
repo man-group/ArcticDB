@@ -12,6 +12,7 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/ref_key.hpp>
+#include <arcticdb/column_store/segment_utils.hpp>
 
 #define MAKE_GTEST_FMT(our_type, fstr)                                                                                 \
     namespace testing::internal {                                                                                      \

@@ -17,6 +17,11 @@
 using namespace arcticdb;
 using namespace std::ranges;
 
+constexpr static MergeStrategy update_only_strategy{
+        .matched = MergeAction::UPDATE,
+        .not_matched_by_target = MergeAction::DO_NOTHING
+};
+
 constexpr static std::array non_string_fields = {
         FieldRef(TypeDescriptor(DataType::INT8, Dimension::Dim0), "int8"),
         FieldRef(TypeDescriptor(DataType::UINT32, Dimension::Dim0), "uint32"),
@@ -345,8 +350,7 @@ INSTANTIATE_TEST_SUITE_P(
 struct MergeUpdateClauseUpdateStrategyMatchSubsetTest : MergeUpdateClauseUpdateStrategyTestBase, testing::Test {
     MergeUpdateClauseUpdateStrategyMatchSubsetTest() :
         MergeUpdateClauseUpdateStrategyTestBase(
-                non_string_fields_ts_index_descriptor(),
-                MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING},
+                non_string_fields_ts_index_descriptor(), update_only_strategy,
                 slice_data_into_segments<TimeseriesIndex>(
                         non_string_fields_ts_index_descriptor(), rows_per_segment_, cols_per_segment_,
                         iota_view(timestamp{0}, timestamp{num_rows_}),
@@ -742,15 +746,74 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
     ASSERT_EQ(*(*proc_1.col_ranges_)[1], RowRange(4, 6));
 }
 
-TEST(RepeatedValues, RepeatedValueSpansSeveralSegments) {
+TEST(IndexValueSpansMultipleSegments, SegmetStartsWithTheSameValueAsAnotherEnds) {
+    constexpr static std::array fields{
+            FieldRef({DataType::INT32, Dimension::Dim0}, "a"), FieldRef({DataType::INT32, Dimension::Dim0}, "b")
+    };
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    constexpr static MergeStrategy strategy = update_only_strategy;
+    constexpr static size_t rows_per_segment = 3;
+    constexpr static size_t cols_per_segment = 1;
+    auto [target_segments, target_column_ranges, target_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            std::array<timestamp, 6>{1, 2, 2, 2, 2, 3},
+            iota_view{0, 6},
+            iota_view{0, 6}
+    );
+    sort_by_rowslice(target_row_ranges, target_column_ranges, target_segments);
+
+    std::vector<RangesAndKey> ranges_and_keys =
+            generate_ranges_and_keys(desc, target_segments, target_column_ranges, target_row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+    auto [input_frame, source_data] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array<timestamp, 3>{1, 2, 3}, std::array{100, 200, 300}, std::array{100, 200, 300}
+    );
+    MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    ASSERT_EQ(structure_indices.size(), 2);
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            std::move(target_segments),
+            std::move(target_column_ranges),
+            std::move(target_row_ranges)
+    );
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    auto [expected_segments, expected_col_slices, expected_row_slices] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            std::array<timestamp, 6>{1, 2, 2, 2, 2, 3},
+            std::array{100, 200, 200, 200, 200, 300},
+            std::array{100, 200, 200, 200, 200, 300}
+    );
+    sort_by_rowslice(expected_row_slices, expected_col_slices, expected_segments);
+    for (size_t row_slice = 0; row_slice < structured_entities.size(); ++row_slice) {
+        const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[row_slice]));
+        auto proc =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, result_entities
+                );
+        constexpr static size_t column_slices = 2;
+        ASSERT_EQ(proc.segments_->size(), column_slices);
+        SCOPED_TRACE(testing::Message() << fmt::format("Row slice: {}", row_slice));
+        for (size_t col_slice = 0; col_slice < proc.segments_->size(); ++col_slice) {
+            SCOPED_TRACE(testing::Message() << fmt::format("Col slice: {}", col_slice));
+            ASSERT_EQ(*proc.segments_->at(col_slice), expected_segments[col_slice + column_slices * row_slice]);
+            ASSERT_EQ(*proc.col_ranges_->at(col_slice), expected_col_slices[col_slice + column_slices * row_slice]);
+            ASSERT_EQ(*proc.row_ranges_->at(col_slice), expected_row_slices[col_slice + column_slices * row_slice]);
+        }
+    }
+}
+
+TEST(IndexValueSpansMultipleSegments, MultipleSegmentsConsistedOfTheSameValue) {
     for (timestamp source_index = 1; source_index < 4; ++source_index) {
         constexpr static std::array fields{
-                FieldRef(TypeDescriptor(DataType::INT32, Dimension::Dim0), "a"),
-                FieldRef(TypeDescriptor(DataType::INT32, Dimension::Dim0), "b")
+                FieldRef({DataType::INT32, Dimension::Dim0}, "a"), FieldRef({DataType::INT32, Dimension::Dim0}, "b")
         };
-        constexpr static MergeStrategy strategy = {
-                .matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING
-        };
+        constexpr static MergeStrategy strategy = update_only_strategy;
         const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
         auto [target_segments, target_column_ranges, target_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
                 desc, 2, 1, std::array<timestamp, 6>{2, 2, 2, 2, 2, 2}, iota_view{0, 6}, iota_view{0, 6}
@@ -776,11 +839,7 @@ TEST(RepeatedValues, RepeatedValueSpansSeveralSegments) {
                     std::move(target_row_ranges)
             );
             std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
-            const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[0]));
-            auto proc = gather_entities<
-                    std::shared_ptr<SegmentInMemory>,
-                    std::shared_ptr<RowRange>,
-                    std::shared_ptr<ColRange>>(*component_manager, result_entities);
+            ASSERT_EQ(structured_entities.size(), 3);
             auto [expected_segments, expected_col_slices, expected_row_slices] =
                     slice_data_into_segments<TimeseriesIndex>(
                             desc,
@@ -791,10 +850,25 @@ TEST(RepeatedValues, RepeatedValueSpansSeveralSegments) {
                             iota_view{0, 6} | views::transform([](auto) { return 200; })
                     );
             sort_by_rowslice(expected_row_slices, expected_col_slices, expected_segments);
-            for (size_t i = 0; i < proc.segments_->size(); ++i) {
-                ASSERT_EQ(*proc.segments_->at(i), expected_segments[i]);
-                ASSERT_EQ(*proc.col_ranges_->at(i), expected_col_slices[i]);
-                ASSERT_EQ(*proc.row_ranges_->at(i), expected_row_slices[i]);
+            for (size_t row_slice = 0; row_slice < structured_entities.size(); ++row_slice) {
+                const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[row_slice]));
+                auto proc = gather_entities<
+                        std::shared_ptr<SegmentInMemory>,
+                        std::shared_ptr<RowRange>,
+                        std::shared_ptr<ColRange>>(*component_manager, result_entities);
+                constexpr static size_t column_slices = 2;
+                ASSERT_EQ(proc.segments_->size(), column_slices);
+                SCOPED_TRACE(testing::Message() << fmt::format("Row slice: {}", row_slice));
+                for (size_t col_slice = 0; col_slice < proc.segments_->size(); ++col_slice) {
+                    SCOPED_TRACE(testing::Message() << fmt::format("Col slice: {}", col_slice));
+                    ASSERT_EQ(*proc.segments_->at(col_slice), expected_segments[col_slice + column_slices * row_slice]);
+                    ASSERT_EQ(
+                            *proc.col_ranges_->at(col_slice), expected_col_slices[col_slice + column_slices * row_slice]
+                    );
+                    ASSERT_EQ(
+                            *proc.row_ranges_->at(col_slice), expected_row_slices[col_slice + column_slices * row_slice]
+                    );
+                }
             }
         }
     }

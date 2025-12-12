@@ -267,3 +267,44 @@ slice_data_into_segments(
     return std::make_tuple(std::move(segments), std::move(col_ranges), std::move(row_ranges));
 }
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::SegmentInMemory> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::SegmentInMemory& segment, FormatContext& ctx) const {
+        const StreamDescriptor& desc = segment.descriptor();
+        auto out = fmt::format_to(ctx.out(), "Segment\n");
+        for (unsigned i = 0; i < desc.field_count(); ++i) {
+            out = fmt::format_to(out, "\nColumn[{}]: {}\n", i, desc.field(i));
+            const arcticdb::Column& column = segment.column(i);
+            details::visit_type(column.type().data_type(), [&](auto tag) {
+                using type_info = ScalarTypeInfo<decltype(tag)>;
+                auto input_data = column.data();
+                auto it = input_data.begin<typename type_info::TDT>();
+                while (it != input_data.end<typename type_info::TDT>()) {
+                    if constexpr (is_sequence_type(type_info::data_type)) {
+                        const std::string_view str = [&]() -> std::string_view {
+                            if (arcticdb::is_a_string(*it)) {
+                                return segment.string_at_offset(*it);
+                            } else if (arcticdb::not_a_string() == *it) {
+                                return "\"None\"";
+                            }
+                            return "\"NaN\"";
+                        }();
+                        fmt::vformat_to(out, "{} ", fmt::make_format_args(str));
+                    } else {
+                        fmt::vformat_to(out, "{:n} ", fmt::make_format_args(*it));
+                    }
+                }
+            });
+        }
+        return out;
+    }
+};
+} // namespace fmt
