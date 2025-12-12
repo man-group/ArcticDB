@@ -366,6 +366,8 @@ void decode_string_pool(
 ) {
     if (hdr.has_string_pool_field()) {
         ARCTICDB_TRACE(log::codec(), "Decoding string pool");
+        interval timer;
+        timer.start();
         util::check(data != end, "Reached end of input block with string pool fields to decode");
         std::optional<util::BitMagic> bv;
         data += decode_ndarray(
@@ -376,8 +378,8 @@ void decode_string_pool(
                 bv,
                 hdr.encoding_version()
         );
-
-        ARCTICDB_TRACE(log::codec(), "Decoded string pool to position {}", data - begin);
+        timer.end();
+        log::codec().debug("Decoded string pool to position {} in {}s", data - begin, timer.get_results_total());
     }
 }
 
