@@ -256,8 +256,8 @@ jobs:
 
       - name: Run C++ Tests (linux_64)
         run: |
-          cd cpp
-          ctest --preset linux-conda-release --output-on-failure
+          cd cpp/out/linux-conda-release-build/
+          ctest --output-on-failure
         env:
           ARCTICDB_USING_CONDA: 1
 
@@ -323,8 +323,8 @@ jobs:
 
       - name: Run C++ Tests (osx_arm64)
         run: |
-          cd cpp
-          ctest --preset macos-conda-release --output-on-failure
+          cd cpp/out/macos-conda-release-build/
+          ctest --output-on-failure
         env:
           ARCTICDB_USING_CONDA: 1
 
