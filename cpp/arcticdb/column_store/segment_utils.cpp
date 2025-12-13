@@ -37,7 +37,7 @@ std::vector<StreamDescriptor> split_descriptor(const StreamDescriptor& descripto
     if (descriptor.fields().size() <= cols_per_segment) {
         return std::vector{descriptor};
     }
-    const size_t num_segments = descriptor.fields().size() / cols_per_segment;
+    const size_t num_segments = (descriptor.fields().size() + cols_per_segment - 1) / cols_per_segment;
     std::vector<StreamDescriptor> res;
     res.reserve(num_segments);
 
