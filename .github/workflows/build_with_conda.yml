@@ -85,7 +85,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -151,7 +151,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -212,7 +212,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -245,7 +245,13 @@ jobs:
       - name: Configure C++ Tests (linux_64)
         run: |
           cd cpp
-          cmake --preset linux-conda-release -DTEST=ON
+          # Only reconfigure if TEST is not already ON in the CMake cache
+          # This avoids unnecessary reconfiguration when the compile job already built with TEST=ON
+          if [ -f out/linux-conda-release-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/linux-conda-release-build/CMakeCache.txt; then
+            echo "CMake cache already has TEST=ON, skipping reconfiguration"
+          else
+            cmake --preset linux-conda-release -DTEST=ON
+          fi
         env:
           ARCTICDB_USING_CONDA: 1
 
@@ -287,7 +293,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -313,7 +319,13 @@ jobs:
       - name: Configure C++ Tests (osx_arm64)
         run: |
           cd cpp
-          cmake --preset macos-conda-release -DTEST=ON
+          # Only reconfigure if TEST is not already ON in the CMake cache
+          # This avoids unnecessary reconfiguration when the compile job already built with TEST=ON
+          if [ -f out/macos-conda-release-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/macos-conda-release-build/CMakeCache.txt; then
+            echo "CMake cache already has TEST=ON, skipping reconfiguration"
+          else
+            cmake --preset macos-conda-release -DTEST=ON
+          fi
         env:
           ARCTICDB_USING_CONDA: 1
 
@@ -368,7 +380,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -396,6 +408,11 @@ jobs:
           # Protocol buffers compilation require not using build isolation.
           # We should always retry due to unstable nature of connections and environments
           # This reuses the build artifacts from the compile_linux step and make ArcticDB available for testing.
+          # Skip CMake configuration/build if artifacts are already present to speed up installation
+          if [ -d "cpp/out/linux-conda-release-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+            echo "Build artifacts found, skipping CMake build"
+            export ARCTIC_CMAKE_PRESET=skip
+          fi
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -500,7 +517,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -528,6 +545,11 @@ jobs:
           # Protocol buffers compilation require not using build isolation.
           # We should always retry due to unstable nature of connections and environments
           # This reuses the build artifacts from the compile_macos step and make ArcticDB available for testing.
+          # Skip CMake configuration/build if artifacts are already present to speed up installation
+          if [ -d "cpp/out/macos-conda-release-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+            echo "Build artifacts found, skipping CMake build"
+            export ARCTIC_CMAKE_PRESET=skip
+          fi
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -618,7 +640,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -689,7 +711,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
@@ -779,7 +801,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+          version: v0.12.0
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
@@ -796,6 +818,15 @@ jobs:
           REM Protocol buffers compilation require not using build isolation.
           REM We should always retry due to unstable nature of connections and environments
           REM This reuses the build artifacts from the compile_windows step and make ArcticDB available for testing.
+          REM Skip CMake configuration/build if artifacts are already present to speed up installation
+          set ARCTIC_CMAKE_PRESET=
+          if exist "cpp\out\windows-cl-conda-release-build" (
+            dir /b python\arcticdb_ext*.pyd >nul 2>&1
+            if not errorlevel 1 (
+              echo Build artifacts found, skipping CMake build
+              set ARCTIC_CMAKE_PRESET=skip
+            )
+          )
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
