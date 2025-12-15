@@ -107,7 +107,7 @@ jobs:
             bash
           cache-environment: true
           cache-environment-key: conda-env-linux-64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         run: |
@@ -166,7 +166,7 @@ jobs:
             bash
           cache-environment: true
           cache-environment-key: conda-env-osx-arm64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         run: |
@@ -240,7 +240,7 @@ jobs:
             bash
           cache-environment: true
           cache-environment-key: conda-env-linux-64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Configure C++ Tests (linux_64)
         run: |
@@ -308,7 +308,7 @@ jobs:
             bash
           cache-environment: true
           cache-environment-key: conda-env-osx-arm64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Configure C++ Tests (osx_arm64)
         run: |
@@ -389,7 +389,7 @@ jobs:
             bash
           cache-environment: true
           cache-environment-key: conda-env-linux-64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts
         run: |
@@ -521,7 +521,7 @@ jobs:
             bash
           cache-environment: true
           cache-environment-key: conda-env-osx-arm64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts
         run: |
@@ -631,7 +631,7 @@ jobs:
           init-shell: bash cmd.exe
           cache-environment: true
           cache-environment-key: conda-env-win-64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: cmd /C call {0}
@@ -698,7 +698,7 @@ jobs:
           init-shell: bash cmd.exe
           cache-environment: true
           cache-environment-key: conda-env-win-64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Configure C++ Tests (win_64)
         shell: cmd /C call {0}
@@ -788,7 +788,7 @@ jobs:
           init-shell: bash cmd.exe
           cache-environment: true
           cache-environment-key: conda-env-win-64
-          post-cleanup: 'all'
+          post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts
         shell: cmd /C call {0}
