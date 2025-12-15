@@ -19,6 +19,11 @@ from arcticdb.util.hypothesis import (
 
 
 def gen_params_append():
+    # Note: We use sorted() and deterministic selection instead of random.sample() to ensure
+    # consistent test collection order across pytest-xdist workers. pytest-xdist requires that
+    # all workers collect tests in the same order, and using unordered containers (like sets)
+    # or random sampling can cause "Different tests were collected between workers" errors.
+    # See: https://pytest-xdist.readthedocs.io/en/stable/known-limitations.html
     with random_seed_context():
         # colnums
         p = [list(range(2, 5))]
@@ -33,7 +38,10 @@ def gen_params_append():
         p.append([(j, i) for i in [1, periods - 1] for j in range(i)])
         # append_point
         p.append([k for k in range(1, periods - 1)])
-        result = sorted(random.sample(list(product(*p)), 10))
+        # Sort the product list first to ensure deterministic ordering across workers
+        all_params = sorted(list(product(*p)))
+        # Use deterministic selection: take first 10 after sorting
+        result = sorted(all_params[:10])
     return result
 
 
