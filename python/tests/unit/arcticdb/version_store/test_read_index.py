@@ -250,7 +250,7 @@ class TestReadIndexRange:
 
 
 class TestWithNormalizers:
-    def test_recursive_throws(self, lmdb_library_static_dynamic, recursive_normalizer_meta_structure_v2):
+    def test_recursive_throws(self, lmdb_library_static_dynamic, all_recursive_metastructure_versions):
         data = {"a": np.arange(5), "b": np.arange(8)}
         lib = lmdb_library_static_dynamic
         lib._nvs.write("sym_recursive", data, recursive_normalizers=True)

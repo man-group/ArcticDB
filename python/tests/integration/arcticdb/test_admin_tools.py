@@ -35,7 +35,7 @@ def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1):
                 raise
 
 
-def test_get_sizes(arctic_client, lib_name, recursive_normalizer_meta_structure_v2):
+def test_get_sizes(arctic_client, lib_name, all_recursive_metastructure_versions):
     lib_opts = EnterpriseLibraryOptions(replication=True)
     arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
     # Given
@@ -94,7 +94,7 @@ def test_get_sizes(arctic_client, lib_name, recursive_normalizer_meta_structure_
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
 
 
-def test_get_sizes_by_symbol(arctic_client, lib_name, recursive_normalizer_meta_structure_v2):
+def test_get_sizes_by_symbol(arctic_client, lib_name, all_recursive_metastructure_versions):
     lib_opts = EnterpriseLibraryOptions(replication=True)
     arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
     # Given
@@ -157,7 +157,7 @@ def test_get_sizes_by_symbol(arctic_client, lib_name, recursive_normalizer_meta_
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
 
 
-def test_get_sizes_for_symbol(arctic_client, lib_name, recursive_normalizer_meta_structure_v2):
+def test_get_sizes_for_symbol(arctic_client, lib_name, all_recursive_metastructure_versions):
     lib_opts = EnterpriseLibraryOptions(replication=True)
     arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
     arctic_library.write_pickle("sym_1", 1)

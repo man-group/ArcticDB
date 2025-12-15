@@ -113,16 +113,26 @@ Controls whether the recursive normalizer will use meta structure V2
 | Meta Structure Version | Read Support |
 |------------------------|--------------|
 | V1 | All existing and future ArcticDB releases |
-| V2 | ArcticDB v6.6.0 and later |
+| V2 | ArcticDB v6.7.0 and later |
 
 **V1 meta structure phase-out plan:**
 
 | Version | Change |
 |---------|--------|
-| >= v6.6.0 | Deprecation warning when writing V1 meta structure; V2 meta structure can be enabled optionally |
+| >= v6.7.0 | Deprecation warning when writing V1 meta structure; V2 meta structure can be enabled optionally |
 | >= v7.0.0 | V2 meta structure will be enabled by default |
 
 Values: * 0: Disable (Default) * 1: Enable
+
+### VersionStore.VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning
+
+Control whether deprecation warning will be given if meta structure V1 for recursive normalizer is still in use
+
+Values:
+* 0: Disable
+* 1: Enable (Default)
+
+Please note that if meta structure V2 is read by < v6.7.0, exception KeyError will be raised
 
 ## Logging configuration
 

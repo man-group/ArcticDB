@@ -57,7 +57,7 @@ def test_compose_back_metast():
 
     for sample in samples:
         meta, flattened = fl.create_meta_structure(sample, base_sym)
-        assert fl.create_original_obj_from_metastruct_new(meta, dict(flattened)) == sample
+        assert fl.create_original_obj_from_metastruct(meta, dict(flattened)) == sample
 
 
 def test_dict_like_structure():
@@ -72,7 +72,7 @@ def test_dict_like_structure():
 
     meta, flattened = fl.create_meta_structure(sample, "sym")
 
-    recreated = fl.create_original_obj_from_metastruct_new(meta, flattened)
+    recreated = fl.create_original_obj_from_metastruct(meta, flattened)
     assert type(recreated) == CustomDict
     clear_registered_normalizers()
 
@@ -109,18 +109,18 @@ def test_dict_record_keys():
     assert sub_keys[3]["symbol"] == f"sym__{'e' * 95}"
 
 
-def test_pandas_series(lmdb_version_store, recursive_normalizer_meta_structure_v2):
+def test_pandas_series(lmdb_version_store, all_recursive_metastructure_versions):
     test_data = [pd.Series(["hello", "good morning"])]
     meta, flattened = fl.create_meta_structure(test_data, "sym")
 
-    assert fl.create_original_obj_from_metastruct_new(meta, flattened)[0].equals(test_data[0])
+    assert fl.create_original_obj_from_metastruct(meta, flattened)[0].equals(test_data[0])
 
     lib = lmdb_version_store
     lib.write("sym", test_data, recursive_normalizers=True)
     assert_series_equal(lib.read("sym").data[0], test_data[0])
 
 
-def test_multiindex_recursive_normalizer(lmdb_version_store, recursive_normalizer_meta_structure_v2):
+def test_multiindex_recursive_normalizer(lmdb_version_store, all_recursive_metastructure_versions):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=2)
     vals = ["a", "b", "c"]
     df = pd.DataFrame(data=np.arange(6), index=pd.MultiIndex.from_product([dtidx, vals], names=["a", "b"]))

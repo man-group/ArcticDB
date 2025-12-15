@@ -846,7 +846,7 @@ def test_delete_multi_keys(object_version_store, sym):
 
 @pytest.mark.parametrize("map_timeout", MAP_TIMEOUTS)
 @pytest.mark.storage
-def test_delete_multi_keys_snapshot(basic_store, map_timeout, sym, recursive_normalizer_meta_structure_v2):
+def test_delete_multi_keys_snapshot(basic_store, map_timeout, sym, all_recursive_metastructure_versions):
     data = {"e": np.arange(1000), "f": np.arange(8000), "g": None}
     basic_store.write(sym, data=data, metadata="realyolo2", recursive_normalizers=True)
     basic_store.snapshot("mysnap1")

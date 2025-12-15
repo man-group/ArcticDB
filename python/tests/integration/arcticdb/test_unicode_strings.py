@@ -147,7 +147,7 @@ def assert_dicts_of_dfs_equal(dict1, dict2):
 
 
 def test_recursive_normalizers_blns(
-    lmdb_version_store_v1, any_arrow_string_format, recursive_normalizer_meta_structure_v2
+    lmdb_version_store_v1, any_arrow_string_format, all_recursive_metastructure_versions
 ):
     lib = lmdb_version_store_v1
     lib.set_arrow_string_format_default(any_arrow_string_format)
@@ -172,7 +172,7 @@ def test_recursive_normalizers_blns(
 
 
 @pytest.mark.skip(reason="These do not roundtrip properly. Monday: 9256783357")
-def test_recursive_normalizers_blns_in_keys(lmdb_version_store, recursive_normalizer_meta_structure_v2):
+def test_recursive_normalizers_blns_in_keys(lmdb_version_store, all_recursive_metastructure_versions):
     lib = lmdb_version_store
     strings = read_big_list_of_naughty_strings()
     symbol = "blnd_recursive_in_keys"

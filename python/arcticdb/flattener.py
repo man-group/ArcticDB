@@ -24,6 +24,7 @@ from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
 from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer
+from arcticdb.preconditions import check
 from arcticdb_ext import get_config_int
 
 
@@ -35,6 +36,9 @@ class Flattener:
     def __init__(self):
         self.custom_normalizer = get_custom_normalizer(False)
         self.meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructureV2") == 1
+        self.meta_structure_v1_deprecation_warning = (
+            get_config_int("VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning") != 0
+        )
 
     @staticmethod
     def is_named_tuple(obj):
@@ -89,10 +93,7 @@ class Flattener:
         return isinstance(item, collections.abc.MutableMapping)
 
     def _encode_metastruct_item_type_v2(self, obj_type):
-        if obj_type == None or obj_type == type(None):
-            return None, None, None
-        else:
-            return "class", obj_type.__module__, obj_type.__name__
+        return (None if obj_type == type(None) else "class"), obj_type.__module__, obj_type.__name__
 
     def derive_iterables(self, obj):
         # TODO: maybe move out the normalizer related bits.
@@ -104,13 +105,18 @@ class Flattener:
         else:
             derived_item = obj
 
+        if self.meta_structure_v2 or derived_item is not None:
+            derived_item_type = type(derived_item)
+        else:
+            derived_item_type = None
+
         if self.is_sequence_like(derived_item):
-            return type(derived_item), list(enumerate(derived_item)), normalizer
+            return derived_item_type, list(enumerate(derived_item)), normalizer
         elif self.is_dict_like(derived_item):
-            return type(derived_item), list(derived_item.items()), normalizer
+            return derived_item_type, list(derived_item.items()), normalizer
         else:  # leaf node
             return (
-                type(derived_item) if derived_item is not None else None,
+                derived_item_type,
                 None,
                 normalizer,
             )
@@ -160,7 +166,7 @@ class Flattener:
 
         # Commit 450170d94 shows a non-recursive implementation of this function, but since `msgpack.packb` of the
         # result is itself recursive, there is little point to rewriting this function.
-        item_type, iterables, normalizer = self.derive_iterables(obj)  # if obj
+        item_type, iterables, normalizer = self.derive_iterables(obj)
         shortened_symbol = sym
 
         if self.meta_structure_v2:
@@ -173,7 +179,7 @@ class Flattener:
                 "type_name": type_name,
                 "leaf": False,
                 "symbol": shortened_symbol,
-                "__version__": 2,
+                "__VER__": 2,  # Purposefully to be different from V1 so exception KeyError is raised if old releases try to read V2 metastructures
                 "sub_keys": None,
                 "data": None,
                 "normalizer_format": norm_format,
@@ -240,8 +246,7 @@ class Flattener:
     def _get_class_type_from_flattened(self, type_format, type_module, type_name):
         if type_format is None:
             return None
-        if type_format != "class":
-            raise RuntimeError(f"Unexpected serialized key type format {type_format} in meta structure")
+        check(type_format == "class", f"Unexpected serialized key type format {type_format} in meta structure")
         try:
             module = sys.modules[type_module]
             return getattr(module, type_name)
@@ -266,9 +271,9 @@ class Flattener:
             for key in child_keys:
                 split_on = key["symbol"]
                 actual_key = split_on.split(self.SEPARATOR)[-1]
-                base_struct[actual_key] = self.create_original_obj_from_metastruct_new(key, key_map)
+                base_struct[actual_key] = self.create_original_obj_from_metastruct(key, key_map)
         elif isinstance(base_struct, collections.abc.Sequence):
-            args = [self.create_original_obj_from_metastruct_new(key, key_map) for key in child_keys]
+            args = [self.create_original_obj_from_metastruct(key, key_map) for key in child_keys]
             if is_tuple:
                 base_struct = type_of_key(*args)
             else:
@@ -317,11 +322,13 @@ class Flattener:
 
         return base_struct
 
-    def create_original_obj_from_metastruct_new(self, meta_struct, key_map):
-        meta_struct_ver = meta_struct["__version__"]
+    def create_original_obj_from_metastruct(self, meta_struct, key_map):
+        # Different meta structure before V2 (__version__ -> __VER__) as old releases only logs error for incompatible versions.
+        # As old releases checks version by running meta_struct["__version__"], we can leverage the KeyError
+        meta_struct_ver = meta_struct.get("__version__", meta_struct.get("__VER__", None))
         if meta_struct_ver == 1:
             return self._create_original_obj_from_metastruct_v1(meta_struct, key_map)
         elif meta_struct_ver == 2:
             return self._create_original_obj_from_metastruct_v2(meta_struct, key_map)
         else:
-            log.error("Could not identify version of nested normalizer used, Got:", meta_struct)
+            raise RuntimeError(f"Could not identify version of nested normalizer used, Got: {meta_struct}")

@@ -1098,13 +1098,6 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
-@pytest.fixture(scope="function")
-def lmdb_version_store_custome_array_norm(version_store_factory):
-    register_normalizer(CustomArrayNormalizer())
-    yield version_store_factory()
-    clear_registered_normalizers()
-
-
 @pytest.fixture
 def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     store = lmdb_version_store_v1
@@ -1620,9 +1613,9 @@ def clear_query_stats():
 
 
 @pytest.fixture(params=[1, 0])
-def recursive_normalizer_meta_structure_v2(request):
+def all_recursive_metastructure_versions(request):
     set_config_int("VersionStore.RecursiveNormalizerMetastructureV2", request.param)
-    yield
+    yield request.param
     unset_config_int("VersionStore.RecursiveNormalizerMetastructureV2")
 
 

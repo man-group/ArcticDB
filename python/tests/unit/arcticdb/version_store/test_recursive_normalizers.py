@@ -10,7 +10,11 @@ import numpy as np
 import arcticdb
 from arcticdb import QueryBuilder, LibraryOptions
 from arcticdb.flattener import Flattener
-from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
+from arcticdb.version_store._custom_normalizers import (
+    CustomNormalizer,
+    register_normalizer,
+    clear_registered_normalizers,
+)
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
@@ -114,8 +118,15 @@ def test_v2_api_write_partial_pickle(arctic_library_lmdb_v1_only, sym, recursive
         lib.write(sym, partial_pickle_required_data, recursive_normalizers=recursive_normalizers)
 
 
-def test_custom_normalizer(lmdb_version_store_custome_array_norm, sym, recursive_normalizer_meta_structure_v2):
-    lib = lmdb_version_store_custome_array_norm
+@pytest.fixture(scope="function")
+def lmdb_version_store_custom_array_norm(version_store_factory):
+    register_normalizer(CustomArrayNormalizer())
+    yield version_store_factory()
+    clear_registered_normalizers()
+
+
+def test_custom_normalizer(lmdb_version_store_custom_array_norm, sym, all_recursive_metastructure_versions):
+    lib = lmdb_version_store_custom_array_norm
     data = {
         "a": [1, 2, 3],
         "b": {"c": np.arange(24)},
@@ -128,7 +139,7 @@ def test_custom_normalizer(lmdb_version_store_custome_array_norm, sym, recursive
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
-def test_recursively_written_data(basic_store, read, recursive_normalizer_meta_structure_v2):
+def test_recursively_written_data(basic_store, read, all_recursive_metastructure_versions):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
@@ -163,7 +174,7 @@ def test_recursively_written_data(basic_store, read, recursive_normalizer_meta_s
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
-def test_recursively_written_data_with_metadata(basic_store, read, recursive_normalizer_meta_structure_v2):
+def test_recursively_written_data_with_metadata(basic_store, read, all_recursive_metastructure_versions):
     samples = [
         {"a": np.arange(5), "b": np.arange(8)},  # dict of np arrays
         (np.arange(5), np.arange(6)),  # tuple of np arrays
@@ -193,7 +204,7 @@ def test_recursively_written_data_with_metadata(basic_store, read, recursive_nor
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
-def test_recursively_written_data_with_nones(basic_store, read, recursive_normalizer_meta_structure_v2):
+def test_recursively_written_data_with_nones(basic_store, read, all_recursive_metastructure_versions):
     sample = {"a": np.arange(5), "b": np.arange(8), "c": None}
     recursive_sym = "sym_recursive"
     pickled_sym = "sym_pickled"
@@ -213,7 +224,7 @@ def test_recursively_written_data_with_nones(basic_store, read, recursive_normal
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
-def test_recursive_nested_data(basic_store, read, recursive_normalizer_meta_structure_v2):
+def test_recursive_nested_data(basic_store, read, all_recursive_metastructure_versions):
     sym = "test_recursive_nested_data"
     sample_data = {"a": {"b": {"c": {"d": np.arange(24)}}}}
     fl = Flattener()
@@ -243,7 +254,7 @@ def test_recursive_normalizer_with_custom_class():
 
 
 @pytest.mark.storage
-def test_nested_custom_types(basic_store, recursive_normalizer_meta_structure_v2):
+def test_nested_custom_types(basic_store, all_recursive_metastructure_versions):
     data = AlmostAList([1, 2, 3, AlmostAList([5, np.arange(6)])])
     fl = Flattener()
     sym = "sym"
@@ -260,7 +271,7 @@ def test_nested_custom_types(basic_store, recursive_normalizer_meta_structure_v2
 
 
 @pytest.mark.storage
-def test_data_directly_msgpackable(basic_store, recursive_normalizer_meta_structure_v2):
+def test_data_directly_msgpackable(basic_store, all_recursive_metastructure_versions):
     data = {"a": [1, 2, 3], "b": {"c": 5}}
     fl = Flattener()
     meta, to_write = fl.create_meta_structure(data, "s")
@@ -273,7 +284,7 @@ def test_data_directly_msgpackable(basic_store, recursive_normalizer_meta_struct
     assert basic_store.get_info("s")["type"] == "pickled"
 
 
-def test_data_that_can_be_serialized_already(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_data_that_can_be_serialized_already(lmdb_version_store_v1, all_recursive_metastructure_versions):
     """Check that we save data normally when possible even if `recursive_normalizers` is True`"""
     # Given
     lib = lmdb_version_store_v1
@@ -322,7 +333,7 @@ def test_recursive_normalizers_not_set(lmdb_version_store_v1, type, pickle_on_fa
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
-def test_really_large_symbol_for_recursive_data(basic_store, read, recursive_normalizer_meta_structure_v2):
+def test_really_large_symbol_for_recursive_data(basic_store, read, all_recursive_metastructure_versions):
     sym = "s" * 100
     data = {"a" * 100: {"b" * 100: {"c" * 1000: {"d": np.arange(5)}}}}
     write_vit = basic_store.write(sym, data, recursive_normalizers=True)
@@ -336,7 +347,7 @@ def test_really_large_symbol_for_recursive_data(basic_store, read, recursive_nor
     assert basic_store.get_info(sym)["type"] != "pickled"
 
 
-def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     sym = "test_too_much_recursive_metastruct_data"
     data = [pd.DataFrame({"col": [0]}), pd.DataFrame({"col": [1]})]
@@ -347,7 +358,7 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1, 
     assert "recursive" in str(e.value).lower()
 
 
-def test_nesting(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_nesting(lmdb_version_store_v1, all_recursive_metastructure_versions):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
@@ -369,7 +380,7 @@ def test_nesting(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
     assert_frame_equal(result, pd.DataFrame({"col": [0]}))
 
 
-def test_long_lists(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_long_lists(lmdb_version_store_v1, all_recursive_metastructure_versions):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
@@ -386,7 +397,7 @@ def test_long_lists(lmdb_version_store_v1, recursive_normalizer_meta_structure_v
     assert_frame_equal(result[500], df)
 
 
-def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1, all_recursive_metastructure_versions):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
@@ -402,7 +413,7 @@ def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1, recursiv
         lib.write(sym, data, recursive_normalizers=True)
 
 
-def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1, all_recursive_metastructure_versions):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
@@ -422,7 +433,7 @@ def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1, recursi
     assert_frame_equal(res, pd.DataFrame({"col": [0]}))
 
 
-def test_long_keys(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_long_keys(lmdb_version_store_v1, all_recursive_metastructure_versions):
     """Long keys are truncated when they're saved - check that we can still roundtrip even with long keys."""
     # Given
     lib = lmdb_version_store_v1
@@ -443,7 +454,7 @@ def test_long_keys(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2
 
 
 @pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
-def test_unsupported_characters_in_keys(s3_version_store_v1, key, recursive_normalizer_meta_structure_v2):
+def test_unsupported_characters_in_keys(s3_version_store_v1, key, all_recursive_metastructure_versions):
     """Check how we serialize nested keys with characters that we do not support in normal symbol names"""
     # Given
     lib = s3_version_store_v1
@@ -464,7 +475,7 @@ def test_unsupported_characters_in_keys(s3_version_store_v1, key, recursive_norm
 
 
 @pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
-def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key, recursive_normalizer_meta_structure_v2):
+def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key, all_recursive_metastructure_versions):
     """Check how we serialize nested keys with characters that we do not support in normal symbol names"""
     # Given
     lib = s3_version_store_v1
@@ -483,7 +494,7 @@ def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key, recursi
     assert not multi_keys
 
 
-def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1, all_recursive_metastructure_versions):
     """We allow empty keys in the recursive structure even though these do not work as top-level symbol names"""
     # Given
     lib = s3_version_store_v1
@@ -500,7 +511,7 @@ def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1, recurs
 
 
 @pytest.mark.parametrize("sequence_type", (tuple, list))
-def test_sequences_data_layout(lmdb_version_store_v1, sequence_type, recursive_normalizer_meta_structure_v2):
+def test_sequences_data_layout(lmdb_version_store_v1, sequence_type, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = ("abc", df, {"ghi": df})
@@ -555,7 +566,7 @@ def test_sequences_data_layout(lmdb_version_store_v1, sequence_type, recursive_n
 
 
 def test_dictionaries_with_custom_keys_that_cannot_roundtrip(
-    lmdb_version_store_v1, recursive_normalizer_meta_structure_v2
+    lmdb_version_store_v1, all_recursive_metastructure_versions
 ):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
@@ -584,7 +595,7 @@ class CustomClass:
         return self.n == other.n
 
 
-def test_dictionaries_with_custom_keys(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_dictionaries_with_custom_keys(lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {CustomClass(1): df}
@@ -622,7 +633,7 @@ def test_dictionaries_with_custom_keys(lmdb_version_store_v1, recursive_normaliz
     assert contents["stream_id"] == b"sym__CustomClassStr1"
 
 
-def test_list_with_custom_elements(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_list_with_custom_elements(lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = [CustomClassSeparatorInStr(1), df]
@@ -664,7 +675,7 @@ def test_list_with_custom_elements(lmdb_version_store_v1, recursive_normalizer_m
     assert contents["stream_id"] == b"sym__1"
 
 
-def test_dictionaries_with_non_str_keys(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_dictionaries_with_non_str_keys(lmdb_version_store_v1, all_recursive_metastructure_versions):
     """We seem to inadvertently coerce dictionary keys to strings. We should change this so we either round trup correctly
     or raise, but this test records the current behaviour."""
     lib = lmdb_version_store_v1
@@ -735,7 +746,7 @@ def test_something_we_cannot_normalize_just_gets_pickled(lmdb_version_store_v1):
 
 
 @pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
-def test_double_underscore_names_validated_against(lmdb_version_store_v1, key, recursive_normalizer_meta_structure_v2):
+def test_double_underscore_names_validated_against(lmdb_version_store_v1, key, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {key: df}
@@ -747,9 +758,7 @@ def test_double_underscore_names_validated_against(lmdb_version_store_v1, key, r
         lib.read("sym")
 
 
-def test_nested_double_underscore_names_validated_against(
-    lmdb_version_store_v1, recursive_normalizer_meta_structure_v2
-):
+def test_nested_double_underscore_names_validated_against(lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {"a": {"__a": df}}
@@ -761,7 +770,7 @@ def test_nested_double_underscore_names_validated_against(
         lib.read("sym")
 
 
-def test_double_underscores_in_lists_ok(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_double_underscores_in_lists_ok(lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
 
@@ -782,7 +791,7 @@ def test_double_underscores_in_lists_ok(lmdb_version_store_v1, recursive_normali
 
 
 @pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
-def test_double_underscores_in_dict_in_list_not_ok(lmdb_version_store_v1, key, recursive_normalizer_meta_structure_v2):
+def test_double_underscores_in_dict_in_list_not_ok(lmdb_version_store_v1, key, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = [df, {key: df}]
@@ -794,7 +803,7 @@ def test_double_underscores_in_dict_in_list_not_ok(lmdb_version_store_v1, key, r
         lib.read("sym")
 
 
-def test_read_asof(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_read_asof(lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
 
     df_one = pd.DataFrame({"d": [1, 2, 3]})
@@ -815,7 +824,7 @@ def test_read_asof(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2
 
 
 @pytest.mark.skip(reason="Validation for bad queries not yet implemented. Monday: 9236603911")
-def test_unsupported_queries(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_unsupported_queries(lmdb_version_store_v1, all_recursive_metastructure_versions):
     """Test how we fail with queries that we do not support over recursively normalized data."""
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
@@ -847,7 +856,7 @@ def test_unsupported_queries(lmdb_version_store_v1, recursive_normalizer_meta_st
     lib.read("sym", columns=["d"])
 
 
-def test_data_layout(lmdb_version_store_v1, recursive_normalizer_meta_structure_v2):
+def test_data_layout(lmdb_version_store_v1, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     df_two = pd.DataFrame({"q": [4, 5, 6]})
@@ -958,7 +967,7 @@ class CustomArrayNormalizer(CustomNormalizer):
     """
 
     @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
-    def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name, recursive_normalizer_meta_structure_v2):
+    def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name, all_recursive_metastructure_versions):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
@@ -1012,7 +1021,9 @@ for key in data.keys():
             )
 
     @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
-    def test_write_new_read_old_custom_normalizer(self, old_venv_and_arctic_uri, lib_name, root_custom_array):
+    def test_write_new_read_old_custom_normalizer(
+        self, old_venv_and_arctic_uri, lib_name, all_recursive_metastructure_versions, root_custom_array
+    ):
         """Test bidirectional compatibility for custom normalizer with CustomArray and partial pickle with CustomClassSeparatorInStr"""
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
@@ -1030,6 +1041,27 @@ for key in data.keys():
                 lib_tool = curr.lib._nvs.library_tool()
                 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, "sym")) > 0
 
+            read_lines = (
+                """
+data = lib.read('sym').data
+expected = {
+    "a": [1, 2, 3],
+    "b": {"c": np.arange(24)},
+    "d": CustomArray(100, 1000, 10),
+    "e": (1, 2, 3), # tuple must be pickled
+}
+equals(expected, data)
+"""
+                if all_recursive_metastructure_versions == 0  # V1
+                else """
+key_error_raised = False
+try:
+    data = lib.read('sym').data
+except KeyError:
+    key_error_raised = True
+assert key_error_raised
+                """
+            )
             compat.old_lib.execute(
                 [
                     f"""
@@ -1057,14 +1089,7 @@ def equals(x, y):
 
 register_normalizer(CustomArrayNormalizer())
 
-data = lib.read('sym').data
-expected = {{
-    "a": [1, 2, 3],
-    "b": {{"c": np.arange(24)}},
-    "d": CustomArray(100, 1000, 10),
-    "e": (1, 2, 3), # tuple must be pickled
-}}
-equals(expected, data)
+{read_lines}
 """
                 ],
                 dfs=dfs,
@@ -1072,7 +1097,7 @@ equals(expected, data)
 
     @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_compat_write_old_read_new_custom_normalizer(
-        self, old_venv_and_arctic_uri, lib_name, recursive_normalizer_meta_structure_v2, root_custom_array
+        self, old_venv_and_arctic_uri, lib_name, all_recursive_metastructure_versions, root_custom_array
     ):
         """Test bidirectional compatibility (old writes, new reads) for custom normalizer with CustomArray and partial pickle with CustomClassSeparatorInStr"""
         old_venv, arctic_uri = old_venv_and_arctic_uri
@@ -1117,7 +1142,7 @@ lib._nvs.write("sym", data, recursive_normalizers=True)
                 equals(expected, data)
 
 
-def test_write_recursive_norm_bool_named_key(lmdb_version_store, recursive_normalizer_meta_structure_v2):
+def test_write_recursive_norm_bool_named_key(lmdb_version_store, all_recursive_metastructure_versions):
     symbol = "bad_write"
     ts = pd.Timestamp("2020-01-01")
 
@@ -1131,7 +1156,7 @@ def test_write_recursive_norm_bool_named_key(lmdb_version_store, recursive_norma
     assert_frame_equal(res["True"], df)
 
 
-def test_write_recursive_norm_bool_named_columns(lmdb_version_store, recursive_normalizer_meta_structure_v2):
+def test_write_recursive_norm_bool_named_columns(lmdb_version_store, all_recursive_metastructure_versions):
     symbol = "bad_write"
     ts = pd.Timestamp("2020-01-01")
 
@@ -1150,7 +1175,7 @@ def test_write_recursive_norm_bool_named_columns(lmdb_version_store, recursive_n
 @pytest.mark.parametrize(
     "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
 )
-def test_write_recursive_norm_bool_named_index(lmdb_version_store, idx, recursive_normalizer_meta_structure_v2):
+def test_write_recursive_norm_bool_named_index(lmdb_version_store, idx, all_recursive_metastructure_versions):
     symbol = "bad_write"
 
     df = pd.DataFrame({"col": [1, 2, 3]}, index=idx)

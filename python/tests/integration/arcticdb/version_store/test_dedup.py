@@ -564,7 +564,7 @@ def test_snapshot_dedup_multiple2(basic_store_factory):
 
 
 @pytest.mark.storage
-def test_dedup_multi_keys(basic_store_factory, recursive_normalizer_meta_structure_v2):
+def test_dedup_multi_keys(basic_store_factory, all_recursive_metastructure_versions):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
@@ -613,7 +613,7 @@ def test_dedup_multi_keys(basic_store_factory, recursive_normalizer_meta_structu
 
 
 @pytest.mark.storage
-def test_dedup_multi_keys_multiple_deletions(basic_store_factory, recursive_normalizer_meta_structure_v2):
+def test_dedup_multi_keys_multiple_deletions(basic_store_factory, all_recursive_metastructure_versions):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )
@@ -656,7 +656,7 @@ def test_dedup_multi_keys_multiple_deletions(basic_store_factory, recursive_norm
 
 
 @pytest.mark.storage
-def test_dedup_multi_keys_snapshot(basic_store_factory, recursive_normalizer_meta_structure_v2):
+def test_dedup_multi_keys_snapshot(basic_store_factory, all_recursive_metastructure_versions):
     lib = basic_store_factory(
         column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
     )

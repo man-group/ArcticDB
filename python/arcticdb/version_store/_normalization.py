@@ -1721,10 +1721,11 @@ def normalize_recursive_metastruct(metastruct: Dict[Any, Any]) -> UserDefinedMet
     from arcticdb.flattener import Flattener
 
     meta_structure_v2 = Flattener().meta_structure_v2
-    if meta_structure_v2 is not True:
+    if meta_structure_v2 is not True and Flattener().meta_structure_v1_deprecation_warning:
         log.warn(
-            "Recursive metastruct normalization in use (V1) is going to be deprecated after ArcticDB v7.0.0 release. "
+            "Recursive normalization metastruct in use (V1) is going to be deprecated after ArcticDB v7.0.0 release. "
             "Please refer to https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructurev2 for more details."
+            "V2 recursive normalization metastruct can be read by >= v6.7.0 releases. Please consider switching once all readers are up-to-date",
         )
 
     # Prevent arbitrary large object serialization, as it is indicative of a poor data layout
