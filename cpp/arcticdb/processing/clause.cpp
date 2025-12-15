@@ -186,6 +186,10 @@ Column merge_update_string_column(
                 "Fixed string sequences are not supported for merge update"
         );
     } else if constexpr (is_dynamic_string_type(TDT::data_type())) {
+        // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
+        // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
+        // If such a string is encountered in a column, then the GIL will be held until that whole column has
+        // been processed, on the assumption that if a column has one such string it will probably have many.
         std::optional<ScopedGILLock> gil_lock;
         // TODO: size must take into account rows that are going to be inserted
         Column new_string_column(
@@ -2048,7 +2052,7 @@ std::vector<std::vector<EntityId>> MergeUpdateClause::structure_for_processing(s
 /// Decide which rows of should be updated and which rows from source should be inserted.
 /// 1. If there's a timestamp index  use MergeUpdateClause::filter_index_match this will produce a vector of size equal
 /// to the number of rows from the source that fall into the processed slice. Each vector will contain a vector of
-/// row-indexes in target that match the corresponding soruce index value.
+/// row-indexes in target that match the corresponding source index value.
 /// 2. For each column in MergeUpdateClause::on_ iterate over the vector of vectors produced in the previous step.
 /// Checking for match only the target rows that are in the inner vector. If there is no match for this particular
 /// column remove the target row index.
@@ -2062,15 +2066,14 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             *component_manager_, std::move(entity_ids)
     );
     // TODO: Add exception handling two source rows matching the same target row. This should be done in the function
-    //  handling the "on" parameter matching multiple columns.
+    //  handling the "on" parameter matching multiple columns. Monday 10655943156
     std::vector<std::vector<size_t>> matched = filter_index_match(proc);
     if (source_->has_segment()) {
         update_and_insert(source_->segment(), source_->desc(), proc, matched);
-    } else {
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                source_->has_tensors(), "Input frame does not contain neither a segment nor tensors"
-        );
+    } else if (source_->has_tensors()) {
         update_and_insert(source_->field_tensors(), source_->desc(), proc, matched);
+    } else {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Input frame does not contain neither a segment nor tensors");
     }
     return push_entities(*component_manager_, std::move(proc));
 }
@@ -2152,13 +2155,9 @@ void MergeUpdateClause::update_and_insert(
                     auto target_data_row_to_update = rows_to_update[source_row - source_row_start].front();
                     // TODO: Implement operator+= because std::advance is linear. Monday 10754574651
                     std::advance(target_data_it, target_data_row_to_update);
-                    while (source_row < source_row_end) {
+                    for (; source_row < source_row_end; ++source_row) {
                         std::span<const size_t> rows_to_update_for_source_row =
                                 rows_to_update[source_row - source_row_start];
-                        if (rows_to_update_for_source_row.empty()) {
-                            ++source_row;
-                            continue;
-                        }
                         source_column_view.set_row(source_row);
                         const auto& source_row_value = *source_column_view;
                         for (const size_t target_row_to_update : rows_to_update_for_source_row) {
@@ -2167,7 +2166,6 @@ void MergeUpdateClause::update_and_insert(
                             *target_data_it = source_row_value;
                             target_data_row_to_update = target_row_to_update;
                         }
-                        ++source_row;
                     }
                 }
             });
