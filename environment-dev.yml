@@ -9,6 +9,8 @@ dependencies:
   - cxx-compiler
   - c-compiler
   - cmake
+  - ccache
+  - sccache
   - gtest
   - gflags
   - benchmark
