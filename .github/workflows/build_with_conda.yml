@@ -109,10 +109,43 @@ jobs:
           cache-environment-key: conda-env-linux-64
           post-cleanup: 'none'
 
+      - name: Find latest successful workflow run
+        id: find-run
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              status: 'success',
+              per_page: 1
+            });
+            if (runs.workflow_runs.length > 0 && runs.workflow_runs[0].id !== context.runId) {
+              core.setOutput('run_id', runs.workflow_runs[0].id);
+            }
+
+      - name: Download build artifacts from previous runs
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        if: steps.find-run.outputs.run_id != ''
+        with:
+          name: build-linux
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         run: |
           # Protocol buffers compilation require not using build isolation.
           # We should always retry due to unstable nature of connections and environments
+          # Skip CMake configuration/build if artifacts are already present from previous runs
+          if [ -d "cpp/out/linux-conda-release-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+            echo "Build artifacts found from previous run, skipping CMake build"
+            export ARCTIC_CMAKE_PRESET=skip
+          fi
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -168,10 +201,43 @@ jobs:
           cache-environment-key: conda-env-osx-arm64
           post-cleanup: 'none'
 
+      - name: Find latest successful workflow run
+        id: find-run
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              status: 'success',
+              per_page: 1
+            });
+            if (runs.workflow_runs.length > 0 && runs.workflow_runs[0].id !== context.runId) {
+              core.setOutput('run_id', runs.workflow_runs[0].id);
+            }
+
+      - name: Download build artifacts from previous runs
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        if: steps.find-run.outputs.run_id != ''
+        with:
+          name: build-macos
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         run: |
           # Protocol buffers compilation require not using build isolation.
           # We should always retry due to unstable nature of connections and environments
+          # Skip CMake configuration/build if artifacts are already present from previous runs
+          if [ -d "cpp/out/macos-conda-release-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+            echo "Build artifacts found from previous run, skipping CMake build"
+            export ARCTIC_CMAKE_PRESET=skip
+          fi
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -655,6 +721,34 @@ jobs:
           cache-environment-key: conda-env-win-64
           post-cleanup: 'none'
 
+      - name: Find latest successful workflow run
+        id: find-run
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              status: 'success',
+              per_page: 1
+            });
+            if (runs.workflow_runs.length > 0 && runs.workflow_runs[0].id !== context.runId) {
+              core.setOutput('run_id', runs.workflow_runs[0].id);
+            }
+
+      - name: Download build artifacts from previous runs
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        if: steps.find-run.outputs.run_id != ''
+        with:
+          name: build-windows
+          path: .
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find-run.outputs.run_id }}
+
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: cmd /C call {0}
         run: |
@@ -667,11 +761,19 @@ jobs:
           set CMAKE_GENERATOR_TOOLSET=
           REM Protocol buffers compilation require not using build isolation.
           REM We should always retry due to unstable nature of connections and environments
+          REM Skip CMake configuration/build if artifacts are already present from previous runs
+          set ARCTIC_CMAKE_PRESET=windows-cl-conda-release
+          if exist "cpp\out\windows-cl-conda-release-build" (
+            dir /b python\arcticdb_ext*.pyd >nul 2>&1
+            if not errorlevel 1 (
+              echo Build artifacts found from previous run, skipping CMake build
+              set ARCTIC_CMAKE_PRESET=skip
+            )
+          )
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
