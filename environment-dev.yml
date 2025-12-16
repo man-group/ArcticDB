@@ -63,7 +63,7 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Build dependencies for tests
-  # - libarrow
+  - libarrow
   # Python dependences
   - python >=3.12,<3.14
   - packaging
