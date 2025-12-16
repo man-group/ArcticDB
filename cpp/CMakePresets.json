@@ -37,7 +37,9 @@
       "hidden": true,
       "inherits": "common",
       "cacheVariables": {
-        "ARCTICDB_USING_CONDA": "ON"
+        "ARCTICDB_USING_CONDA": "ON",
+        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
       },
       "condition": {
         "type": "allOf",
@@ -91,8 +93,6 @@
       "inherits": ["common_conda", "windows"],
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
-        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
         "CMAKE_CXX_FLAGS": "/MP"
       }
     },
