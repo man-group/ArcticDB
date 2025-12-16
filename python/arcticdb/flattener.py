@@ -35,7 +35,7 @@ class Flattener:
 
     def __init__(self):
         self.custom_normalizer = get_custom_normalizer(False)
-        self.meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructureV2") == 1
+        self.meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructure") == 2
         self.meta_structure_v1_deprecation_warning = (
             get_config_int("VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning") != 0
         )

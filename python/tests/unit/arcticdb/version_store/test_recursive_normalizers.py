@@ -1052,14 +1052,10 @@ expected = {
 }
 equals(expected, data)
 """
-                if all_recursive_metastructure_versions == 0  # V1
+                if all_recursive_metastructure_versions == 1  # V1
                 else """
-key_error_raised = False
-try:
-    data = lib.read('sym').data
-except KeyError:
-    key_error_raised = True
-assert key_error_raised
+with pytest.raises(KeyError):
+    lib.read("sym")
                 """
             )
             compat.old_lib.execute(
@@ -1068,6 +1064,7 @@ assert key_error_raised
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 import numpy as np
+import pytest
 
 {self._COMPAT_TEST_CLASS_DEFINITIONS}
 

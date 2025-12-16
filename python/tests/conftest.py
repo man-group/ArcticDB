@@ -1612,11 +1612,11 @@ def clear_query_stats():
     query_stats.reset_stats()
 
 
-@pytest.fixture(params=[1, 0])
+@pytest.fixture(params=[2, 1])
 def all_recursive_metastructure_versions(request):
-    set_config_int("VersionStore.RecursiveNormalizerMetastructureV2", request.param)
+    set_config_int("VersionStore.RecursiveNormalizerMetastructure", request.param)
     yield request.param
-    unset_config_int("VersionStore.RecursiveNormalizerMetastructureV2")
+    unset_config_int("VersionStore.RecursiveNormalizerMetastructure")
 
 
 # region Pytest special xfail handling

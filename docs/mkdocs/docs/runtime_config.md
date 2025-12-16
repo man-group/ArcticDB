@@ -104,7 +104,7 @@ Values:
 * 0: Disable
 * 1: Enable (Default)
 
-### VersionStore.RecursiveNormalizerMetastructureV2
+### VersionStore.RecursiveNormalizerMetastructure
 
 Controls whether the recursive normalizer will use meta structure V2
 
@@ -122,7 +122,7 @@ Controls whether the recursive normalizer will use meta structure V2
 | >= v6.7.0 | Deprecation warning when writing V1 meta structure; V2 meta structure can be enabled optionally |
 | >= v7.0.0 | V2 meta structure will be enabled by default |
 
-Values: * 0: Disable (Default) * 1: Enable
+Values: * 1: V1 (Default) * 2: V2  
 
 ### VersionStore.VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning
 
