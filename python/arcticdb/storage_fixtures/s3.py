@@ -367,13 +367,13 @@ def real_s3_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseS3StorageFixtureFactory:
     out = BaseS3StorageFixtureFactory(native_config=native_config)
-    out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT", "")
     out.region = os.getenv("ARCTICDB_REAL_S3_REGION")
     out.default_bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
     secret_key = os.getenv("ARCTICDB_REAL_S3_SECRET_KEY")
     out.default_key = Key(id=access_key, secret=secret_key, user_name="unknown user")
-    out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR").lower() in ["true", "1"]
+    out.clean_bucket_on_fixture_exit = os.getenv("ARCTICDB_REAL_S3_CLEAR", "").lower() in ["true", "1"]
     out.ssl = out.endpoint.startswith("https://")
     if shared_path:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
