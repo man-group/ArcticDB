@@ -90,7 +90,6 @@ class Resample:
         self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit="us"))
         self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
-    @skip_benchmark
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         if (
             col_type == "datetime"
