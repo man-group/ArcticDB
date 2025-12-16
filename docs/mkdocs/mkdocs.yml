@@ -63,8 +63,8 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          load_external_modules: true
           options:
-            load_external_modules: true
             preload_modules:
               - arcticdb_ext
             show_source: false
