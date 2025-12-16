@@ -93,7 +93,7 @@ class Flattener:
         return isinstance(item, collections.abc.MutableMapping)
 
     def _encode_metastruct_item_type_v2(self, obj_type):
-        return (None if obj_type == type(None) else "class"), obj_type.__module__, obj_type.__name__
+        return None if obj_type == type(None) else "class", obj_type.__module__, obj_type.__name__
 
     def derive_iterables(self, obj):
         # TODO: maybe move out the normalizer related bits.
