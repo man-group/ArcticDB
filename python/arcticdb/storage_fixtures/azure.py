@@ -323,21 +323,23 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return f"[{type(self)}=Container:{self.default_container}], ConnectionString:{self.connection_string}"
 
     def initialize_from_connection_sting(
-        self, constr: str, container: str, prefix: str = None
+        self, conn_str: str, container: str, prefix: str = None
     ) -> "AzureStorageFixtureFactory":
         def extract_from_regex(re_expr: str, constr: str) -> str:
             match = re.search(re_expr, constr)
             return match.group(1) if match else ""
 
-        if constr is None:
-            get_logger().error(f"Azure connection string not available: {constr}")
+        if not conn_str:
+            get_logger().info(f"Azure connection string not present")
+            return self
+
         if container is None:
             get_logger().error(f"Azure container not available: {container}")
-        AzureStorageFixtureFactory.connection_string = constr
-        AzureStorageFixtureFactory.account_name = extract_from_regex(r"AccountName=([^;]+)", constr)
-        AzureStorageFixtureFactory.account_key = extract_from_regex(r"AccountKey=([^;]+)", constr)
-        AzureStorageFixtureFactory.protocol = extract_from_regex(r"DefaultEndpointsProtocol=([^;]+)", constr)
-        endpoint_suffix = extract_from_regex(r"EndpointSuffix=([^;]+)", constr)
+        AzureStorageFixtureFactory.connection_string = conn_str
+        AzureStorageFixtureFactory.account_name = extract_from_regex(r"AccountName=([^;]+)", conn_str)
+        AzureStorageFixtureFactory.account_key = extract_from_regex(r"AccountKey=([^;]+)", conn_str)
+        AzureStorageFixtureFactory.protocol = extract_from_regex(r"DefaultEndpointsProtocol=([^;]+)", conn_str)
+        endpoint_suffix = extract_from_regex(r"EndpointSuffix=([^;]+)", conn_str)
         AzureStorageFixtureFactory.endpoint = (
             f"{AzureStorageFixtureFactory.protocol}://{AzureStorageFixtureFactory.account_name}.blob.{endpoint_suffix}"
         )
@@ -374,7 +376,7 @@ def real_azure_from_environment_variables(
     else:
         prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     out.initialize_from_connection_sting(
-        constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
+        conn_str=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
         container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"),
         prefix=prefix,
     )
