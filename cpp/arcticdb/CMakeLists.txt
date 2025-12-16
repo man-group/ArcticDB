@@ -874,7 +874,7 @@ target_include_directories(arcticdb_python PRIVATE
         ${LIBMONGOCXX_STATIC_INCLUDE_DIRS}
         ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
         ${BITMAGIC_INCLUDE_DIRS}
-        ${LMDB_LIBRARIES}
+        ${LMDB_INCLUDE_DIR}
         )
 
 
