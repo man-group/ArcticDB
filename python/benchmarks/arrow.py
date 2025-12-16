@@ -166,7 +166,6 @@ class ArrowStrings:
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
-    @skip_benchmark
     def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
@@ -178,7 +177,6 @@ class ArrowStrings:
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
 
-    @skip_benchmark
     def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self.lib.read(
             self.symbol_name(rows, unique_string_count),
