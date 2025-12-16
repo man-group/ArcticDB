@@ -73,7 +73,7 @@ def real_s3_credentials(shared_path: bool = True):
     else:
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
 
-    clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
+    clear = os.getenv("ARCTICDB_REAL_S3_CLEAR", "").lower() in ("true", "1")
 
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
@@ -91,7 +91,7 @@ def real_gcp_credentials(shared_path: bool = True):
     else:
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
 
-    clear = str(os.getenv("ARCTICDB_REAL_GCP_CLEAR")).lower() in ("true", "1")
+    clear = os.getenv("ARCTICDB_REAL_GCP_CLEAR", "").lower() in ("true", "1")
 
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
@@ -104,7 +104,7 @@ def real_azure_credentials(shared_path: bool = True):
     constr = (os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),)
     container = (os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"),)
 
-    clear = str(os.getenv("ARCTICDB_REALL_AZURE_CLEAR")).lower() in ("true", "1")
+    clear = os.getenv("ARCTICDB_REAL_AZURE_CLEAR", "").lower() in ("true", "1")
 
     return container, constr, path_prefix, clear
 
