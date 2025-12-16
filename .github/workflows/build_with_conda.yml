@@ -127,6 +127,69 @@ jobs:
             python/**/*.so
             python/**/*.pyd
 
+  compile_linux_aarch64:
+    name: Compile (linux_aarch64)
+    if: |
+      always() &&
+      !cancelled()
+    runs-on: ubuntu-22.04-arm
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+      SCCACHE_GHA_ENABLED: "true"
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: v0.12.0
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          cache-environment-key: conda-env-linux-aarch64
+          post-cleanup: 'none'
+
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          # We should always retry due to unstable nature of connections and environments
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+
+      - name: Show sccache stats (linux_aarch64)
+        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-linux-aarch64
+          retention-days: 7
+          path: |
+            cpp/out/linux-conda-release-build/
+            python/arcticdb_ext*
+            python/**/*.so
+            python/**/*.pyd
+
   compile_macos:
     name: Compile (osx_arm64)
     if: |
@@ -269,6 +332,91 @@ jobs:
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
 
       - name: Run C++ Tests (linux_64)
+        run: |
+          cd cpp/out/linux-conda-release-build/
+          ctest --output-on-failure
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+  cpp_tests_linux_aarch64:
+    name: C++ Tests (linux_aarch64)
+    if: |
+      always() &&
+      !cancelled() &&
+      (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
+    needs: [compile_linux_aarch64]
+    runs-on: ubuntu-22.04-arm
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+      SCCACHE_GHA_ENABLED: "true"
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: v0.12.0
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false # Time-consuming but doesn't save that much space (4GB)
+          docker-images: false  # We're using docker images we don't want to clear
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux-aarch64
+          path: .
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          cache-environment-key: conda-env-linux-aarch64
+          post-cleanup: 'none'
+
+      - name: Configure C++ Tests (linux_aarch64)
+        run: |
+          cd cpp
+          # Only reconfigure if TEST is not already ON in the CMake cache
+          # This avoids unnecessary reconfiguration when the compile job already built with TEST=ON
+          if [ -f out/linux-conda-release-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/linux-conda-release-build/CMakeCache.txt; then
+            echo "CMake cache already has TEST=ON, skipping reconfiguration"
+          else
+            cmake --preset linux-conda-release -DTEST=ON
+          fi
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Build C++ Tests (linux_aarch64)
+        run: |
+          cd cpp
+          cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
+          cmake --build --preset linux-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Show sccache stats after C++ tests build (linux_aarch64)
+        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
+
+      - name: Run C++ Tests (linux_aarch64)
         run: |
           cd cpp/out/linux-conda-release-build/
           ctest --output-on-failure
@@ -632,6 +780,147 @@ jobs:
           STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
           NODE_OPTIONS: --openssl-legacy-provider
 
+  python_tests_linux_aarch64:
+    name: Python Tests (linux_aarch64) - ${{matrix.type}}
+    if: |
+      always() &&
+      !cancelled()
+    needs: [compile_linux_aarch64]
+    strategy:
+      fail-fast: false
+      matrix:
+        type: [unit, integration, hypothesis, stress, compat, enduser]
+    runs-on: ubuntu-22.04-arm
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+    services:
+      mongodb:
+        image: mongo:4.4
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: v0.12.0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux-aarch64
+          path: .
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          cache-environment-key: conda-env-linux-aarch64
+          post-cleanup: 'none'
+
+      - name: Install ArcticDB from artifacts
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          # We should always retry due to unstable nature of connections and environments
+          # This reuses the build artifacts from the compile_linux_aarch64 step and make ArcticDB available for testing.
+          # Skip CMake configuration/build if artifacts are already present to speed up installation
+          if [ -d "cpp/out/linux-conda-release-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+            echo "Build artifacts found, skipping CMake build"
+            export ARCTIC_CMAKE_PRESET=skip
+          fi
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      # Note: mongo tests are skipped in the macos workflow
+      - name: Install MongoDB
+        run: |
+          curl -LO https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
+          tar -xzf mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
+          cp mongodb-linux-aarch64-ubuntu2204-7.0.0/bin/* /usr/local/bin/
+          mongod --version
+          rm -rf mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz mongodb-linux-aarch64-ubuntu2204-7.0.0
+
+      - name: Install npm # Linux github runner image does not come with npm
+        uses: actions/setup-node@v6.1.0
+        with:
+          node-version: '24'
+
+      - name: Install Azurite
+        uses: nick-fields/retry@v3
+        with:
+          # We should always retry due to unstable nature of connections and environments
+          timeout_minutes: 10
+          max_attempts: 3
+          command: npm install -g azurite
+
+      - name: Check no arcticdb file depend on tests package
+        run: |
+          build_tooling/checks.sh
+
+      - name: Set persistent storage variables
+        # Should be executed for all persistent storages but not for LMDB
+        if: ${{ inputs.persistent_storage != 'no' }}
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
+          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
+
+      - name: Set ArcticDB Debug Logging
+        if: ${{ inputs.run_enable_logging }}
+        uses: ./.github/actions/enable_logging
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.debug_enabled }}
+
+      - name: Install pytest-repeat
+        run: |
+          python -m pip --retries 3 --timeout 180 install pytest-repeat
+
+      - name: Test with pytest
+        run: |
+          # find ssl directory where cacerts are (for Azure)
+          openssl version -d
+          # list file descriptors and other limits of the runner
+          ulimit -a
+          echo "Run commandline: $COMMANDLINE"
+          eval "$COMMANDLINE"
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            python -m pip install pytest-repeat setuptools wheel
+            python setup.py protoc --build-lib python
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+            eval "$ARCTICDB_PYTEST_ARGS"
+          else
+            cd python
+            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
+          fi
+        env:
+          ARCTICDB_USING_CONDA: 1
+          COMMANDLINE: ${{ inputs.run_commandline }}
+          ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
+
   compile_windows:
     name: Compile (win_64)
     if: |
@@ -943,7 +1232,7 @@ jobs:
 
   can_merge_conda:
     name: All conda jobs completed
-    needs: [cpp_tests_linux, cpp_tests_macos, cpp_tests_windows, python_tests_linux, python_tests_macos, python_tests_windows]
+    needs: [cpp_tests_linux, cpp_tests_linux_aarch64, cpp_tests_macos, cpp_tests_windows, python_tests_linux, python_tests_linux_aarch64 , python_tests_macos, python_tests_windows]
     if: |
       always() &&
       !failure() &&
