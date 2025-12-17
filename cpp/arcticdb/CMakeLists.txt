@@ -213,6 +213,7 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
+        column_store/segment_utils.hpp
         entity/atom_key.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
@@ -250,6 +251,7 @@ set(arcticdb_srcs
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
         pipeline/input_frame.hpp
+        pipeline/input_frame_utils.hpp
         pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
@@ -438,6 +440,7 @@ set(arcticdb_srcs
         column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
         entity/data_error.cpp
@@ -986,6 +989,7 @@ if(${TEST})
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
             processing/test/test_unsorted_aggregation.cpp
+            processing/test/test_merge_update.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
@@ -1023,6 +1027,8 @@ if(${TEST})
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
+            util/test/gtest_custom_formatters.hpp
+            util/test/gtest_utils.hpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
@@ -1106,6 +1112,12 @@ if(${TEST})
                 )
     endif()
 
+    # In order for the custom formatting to work the ODR must be satisfied and every TU that uses gtest must include
+    # the gtest_custom_formatters.hpp https://github.com/google/googletest/issues/1149
+    target_compile_options(test_unit_arcticdb PRIVATE
+            $<$<CXX_COMPILER_ID:MSVC>:/FIutil/test/gtest_custom_formatters.hpp>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include util/test/gtest_custom_formatters.hpp>
+    )
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(benchmark_srcs
