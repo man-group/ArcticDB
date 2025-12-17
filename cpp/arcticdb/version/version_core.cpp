@@ -208,9 +208,9 @@ folly::Future<AtomKey> merge_index_key_for_read_modify_write(
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<Store>& store,
         std::vector<SliceAndKey>&& new_slices, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta
 ) {
-    ranges::sort(new_slices, [](const SliceAndKey& a, const SliceAndKey& b) {
-        return std::tie(a.slice_.col_range, a.slice_.row_range) < std::tie(b.slice_.col_range, b.slice_.row_range);
-    });
+    // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can create new segments
+    // and shift row slices.
+    ranges::sort(new_slices);
     std::vector<SliceAndKey> merged_ranges_and_keys;
     auto new_slice = new_slices.begin();
     for (SliceAndKey& slice : pipeline_context.slice_and_keys_) {

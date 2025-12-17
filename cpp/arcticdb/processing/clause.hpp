@@ -845,8 +845,8 @@ struct WriteClause {
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
 /// the source_ member. Source and target must have the same index type. There are two actions
-/// UPDATE: For a particular row in the segment if there's  a row source_ for which all values in the columns listed in
-/// on and the index (only in case if timeseries) match update will be performed.
+/// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
+/// in on and the index (only in case if timeseries) match update will be performed.
 /// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
     ClauseInfo clause_info_;

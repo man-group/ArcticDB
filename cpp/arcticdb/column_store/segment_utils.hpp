@@ -36,8 +36,8 @@ void fill_dense_column_data(SegmentInMemory& seg, const size_t column_index, con
         using ColRawType = col_type_info::RawType;
         constexpr static bool is_sequence = is_sequence_type(col_type_info::data_type);
         if constexpr (is_input_string_like && is_sequence) {
-            // Clang has a bug where it the for_each is just regular range-based for the constexpr if will not
-            // the body of the if even if the condition is false. This leads to compile time errors because it tries
+            // Clang has a bug where if the for_each is just regular range-based-for the constexpr-if will not discard
+            // the body of this if even when the condition is false. This leads to compile time errors because it tries
             // to call set_string with non-string values.
             // https://stackoverflow.com/questions/79817660/discarded-branch-of-c-constexpr-if-fails-compilation-because-it-calls-non-matc
             std::ranges::for_each(input_data, [&](const std::string_view& str) { seg.set_string(column_index, str); });
@@ -57,9 +57,10 @@ void fill_dense_column_data(SegmentInMemory& seg, const size_t column_index, con
         } else {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     std::is_same_v<typename col_type_info::RawType, InputValueType>,
-                    "Type mismatch when setting data for Column[{}]. Column data type is {}.",
+                    "Type mismatch when setting data for Column[{}]. Column data type is {}. Input type is {}.",
                     column_index,
-                    col_type_info::data_type
+                    col_type_info::data_type,
+                    typeid(InputValueType).name()
             );
         }
         seg.set_row_data(row_count - 1);
@@ -267,3 +268,44 @@ slice_data_into_segments(
     return std::make_tuple(std::move(segments), std::move(col_ranges), std::move(row_ranges));
 }
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::SegmentInMemory> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::SegmentInMemory& segment, FormatContext& ctx) const {
+        const StreamDescriptor& desc = segment.descriptor();
+        auto out = fmt::format_to(ctx.out(), "Segment\n");
+        for (unsigned i = 0; i < desc.field_count(); ++i) {
+            out = fmt::format_to(out, "\nColumn[{}]: {}\n", i, desc.field(i));
+            const arcticdb::Column& column = segment.column(i);
+            details::visit_type(column.type().data_type(), [&](auto tag) {
+                using type_info = ScalarTypeInfo<decltype(tag)>;
+                auto input_data = column.data();
+                auto it = input_data.begin<typename type_info::TDT>();
+                while (it != input_data.end<typename type_info::TDT>()) {
+                    if constexpr (is_sequence_type(type_info::data_type)) {
+                        const std::string_view str = [&]() -> std::string_view {
+                            if (arcticdb::is_a_string(*it)) {
+                                return segment.string_at_offset(*it);
+                            } else if (arcticdb::not_a_string() == *it) {
+                                return "\"None\"";
+                            }
+                            return "\"NaN\"";
+                        }();
+                        fmt::vformat_to(out, "{} ", fmt::make_format_args(str));
+                    } else {
+                        fmt::vformat_to(out, "{:n} ", fmt::make_format_args(*it));
+                    }
+                }
+            });
+        }
+        return out;
+    }
+};
+} // namespace fmt
