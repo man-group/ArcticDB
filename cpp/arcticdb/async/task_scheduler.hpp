@@ -168,6 +168,12 @@ inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_fold
 #endif
 }
 
+inline long get_default_cpu_count() {
+    return ConfigsMap::instance()->get_int(
+            "VersionStore.NumCPUThreads", arcticdb::async::get_default_num_cpus("/sys/fs/cgroup")
+    );
+}
+
 /*
  * Possible areas of inprovement in the future:
  * 1/ Task/op decoupling: push task and then use strategy to implement smart batching to
@@ -186,13 +192,7 @@ class TaskScheduler {
             const std::optional<size_t>& cpu_thread_count = std::nullopt,
             const std::optional<size_t>& io_thread_count = std::nullopt
     ) :
-        cgroup_folder_("/sys/fs/cgroup"),
-        cpu_thread_count_(
-                cpu_thread_count ? *cpu_thread_count
-                                 : ConfigsMap::instance()->get_int(
-                                           "VersionStore.NumCPUThreads", get_default_num_cpus(cgroup_folder_)
-                                   )
-        ),
+        cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : get_default_cpu_count()),
         io_thread_count_(
                 io_thread_count
                         ? *io_thread_count
@@ -313,7 +313,6 @@ class TaskScheduler {
     }
 
   private:
-    std::string cgroup_folder_;
     size_t cpu_thread_count_;
     size_t io_thread_count_;
     SchedulerWrapper<CPUSchedulerType> cpu_exec_;

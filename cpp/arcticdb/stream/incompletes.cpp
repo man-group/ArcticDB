@@ -543,7 +543,8 @@ void remove_incomplete_segments(
 }
 
 std::vector<AppendMapEntry> load_via_list(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data,
+        const std::optional<AtomKey> load_up_to
 ) {
     using namespace arcticdb::pipelines;
 
@@ -554,7 +555,7 @@ std::vector<AppendMapEntry> load_via_list(
     std::vector<AppendMapEntry> output;
 
     try {
-        while (next_key) {
+        while (next_key && (!load_up_to || next_key != load_up_to.value())) {
             auto entry = append_map_entry_from_key(store, next_key.value(), load_data);
             next_key = entry.next_key_;
             output.emplace_back(std::move(entry));
@@ -563,6 +564,18 @@ std::vector<AppendMapEntry> load_via_list(
         // Most likely compacted up to this point
     }
     return output;
+}
+
+std::pair<uint64_t, std::optional<AtomKey>> total_rows_up_to(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::optional<AtomKey>& load_up_to
+) {
+    auto entries = load_via_list(store, stream_id, false, load_up_to);
+    uint64_t total_rows = 0;
+    for (const auto& entry : entries) {
+        total_rows += entry.total_rows_;
+    }
+    auto last_loaded = entries.empty() ? std::nullopt : std::make_optional(entries.front().key());
+    return {total_rows, last_loaded};
 }
 
 std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<StreamSource>& store, StreamId stream_id) {
