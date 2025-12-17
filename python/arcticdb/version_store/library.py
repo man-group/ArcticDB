@@ -1039,6 +1039,10 @@ class Library:
                 lib.write(symbol, data) # The data will be successfully written
             Please refer to https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers for more details
             of this feature.
+            Please check https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure for the plan of
+            introducing meta structure v2. V2 has removed the dependency on pickle for normalizing meta structure. Please consider switching to V2
+            as V1 will be deprecated in future v7.0.0 release. However note that reading V2 meta structure requires ArcticDB version >= 6.7.0,
+            or KeyError will be raised.
 
         Returns
         -------

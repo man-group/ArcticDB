@@ -333,7 +333,7 @@ def sample_nested_structures():
 
 
 @pytest.mark.parametrize("batch_read", (True, False))
-def test_recursively_written_data_with_metadata(lmdb_version_store, batch_read):
+def test_recursively_written_data_with_metadata(lmdb_version_store, batch_read, all_recursive_metastructure_versions):
     samples = sample_nested_structures()
 
     for idx, sample in enumerate(samples):

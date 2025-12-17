@@ -2,3 +2,4 @@ arcticdb==5.9.3
 numpy
 pyarrow
 protobuf<6
+pytest

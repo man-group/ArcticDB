@@ -6,3 +6,4 @@ dependencies:
   - numpy<2
   - pyarrow
   - protobuf<=5.27.5
+  - pytest
