@@ -99,9 +99,9 @@ class ArrowNumeric:
 
 class ArrowStrings:
     number = 20
-    warmup_time = 0
+    warmup_time = 1
     timeout = 6000
-    rounds = 2
+    rounds = 4
     connection_string = "lmdb://arrow_strings?map_size=20GB"
     lib_name_prewritten = "arrow_strings_prewritten"
     lib_name_fresh = "arrow_strings_fresh"
