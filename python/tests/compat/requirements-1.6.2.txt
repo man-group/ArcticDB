@@ -7,3 +7,4 @@ msgpack >=0.5.0
 pyyaml
 packaging
 pyarrow
+pytest

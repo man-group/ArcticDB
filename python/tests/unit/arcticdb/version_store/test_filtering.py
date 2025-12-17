@@ -1198,7 +1198,7 @@ def test_float32_binary_comparison(lmdb_version_store_v1, any_output_format):
 
 @pytest.mark.parametrize("data", ({"a": pd.DataFrame({"col": [0]})}, np.array([1, 2, 3, 4]), np.zeros((3, 3, 3))))
 @pytest.mark.parametrize("empty", (True, False))
-def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym):
+def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     lib.write(sym, data, recursive_normalizers=True)
 
@@ -1213,7 +1213,7 @@ def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym):
 
 @pytest.mark.parametrize("data", ({"a": pd.DataFrame({"col": [0]})}, np.array([1, 2, 3, 4]), np.ndarray((3, 3))))
 @pytest.mark.parametrize("head", (True, False))
-def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data):
+def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data, all_recursive_metastructure_versions):
     lib = lmdb_version_store_v1
     lib.write(sym, data, recursive_normalizers=True)
 

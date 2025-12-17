@@ -51,6 +51,7 @@ from arcticdb.log import version as log
 from arcticdb_ext.log import LogLevel
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
 from arcticdb.options import OutputFormat
+from arcticdb_ext import get_config_int
 
 PICKLE_PROTOCOL = 4
 
@@ -1718,8 +1719,19 @@ def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
 
 
 def normalize_recursive_metastruct(metastruct: Dict[Any, Any]) -> UserDefinedMetadata:
+    meta_structure_v2 = get_config_int("VersionStore.RecursiveNormalizerMetastructure") == 2
+    meta_structure_v1_deprecation_warning = (
+        get_config_int("VersionStore.RecursiveNormalizerMetastructureV1DeprecationWarning") != 0
+    )
+    if meta_structure_v2 is not True and meta_structure_v1_deprecation_warning:
+        log.warn(
+            "Recursive normalization metastruct in use (V1) is going to be deprecated after ArcticDB v7.0.0 release. "
+            "Please refer to https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructure for more details."
+            "V2 recursive normalization metastruct can be read by >= v6.7.0 releases. Please consider switching once all readers are up-to-date",
+        )
+
     # Prevent arbitrary large object serialization, as it is indicative of a poor data layout
-    packed = _msgpack_metadata._msgpack_packb(metastruct)
+    packed = _msgpack_metadata._msgpack_packb(metastruct, disallow_pickle=True if meta_structure_v2 else None)
     size = len(packed)
     if size > _MAX_RECURSIVE_METASTRUCT:
         raise ArcticDbNotYetImplemented(

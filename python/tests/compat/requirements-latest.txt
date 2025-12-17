@@ -2,3 +2,4 @@ arcticdb
 numpy
 pyarrow
 protobuf
+pytest

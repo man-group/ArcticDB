@@ -2483,7 +2483,7 @@ class NativeVersionStore:
                 v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format)
                 for v in read_result.node_read_results
             }
-            original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
+            original_data = Flattener().create_original_obj_from_metastruct(meta_struct, key_map)
 
             return VersionedItem(
                 symbol=meta_struct["symbol"],

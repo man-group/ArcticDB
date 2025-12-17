@@ -52,9 +52,9 @@ from arcticdb.storage_fixtures.azure import real_azure_from_environment_variable
 from arcticdb.storage_fixtures.mongo import ManagedMongoDBServer, auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
-from arcticdb_ext import set_config_int
+from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
+from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer, CustomArrayNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
@@ -1610,6 +1610,13 @@ def clear_query_stats():
     yield
     query_stats.disable()
     query_stats.reset_stats()
+
+
+@pytest.fixture(params=[2, 1])
+def all_recursive_metastructure_versions(request):
+    set_config_int("VersionStore.RecursiveNormalizerMetastructure", request.param)
+    yield request.param
+    unset_config_int("VersionStore.RecursiveNormalizerMetastructure")
 
 
 # region Pytest special xfail handling

@@ -15,7 +15,6 @@ from packaging.version import Version
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb_ext.exceptions import UserInputException
-from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 from arcticdb.options import LibraryOptions
 from arcticdb import ReadRequest
 from arcticdb.util.test import assert_frame_equal
@@ -251,7 +250,7 @@ class TestReadIndexRange:
 
 
 class TestWithNormalizers:
-    def test_recursive_throws(self, lmdb_library_static_dynamic):
+    def test_recursive_throws(self, lmdb_library_static_dynamic, all_recursive_metastructure_versions):
         data = {"a": np.arange(5), "b": np.arange(8)}
         lib = lmdb_library_static_dynamic
         lib._nvs.write("sym_recursive", data, recursive_normalizers=True)

@@ -11,3 +11,4 @@ dependencies:
   - pyyaml
   - packaging
   - pyarrow
+  - pytest
