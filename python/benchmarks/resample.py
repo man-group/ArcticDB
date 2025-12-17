@@ -20,8 +20,9 @@ from asv_runner.benchmarks.mark import skip_benchmark
 
 
 class Resample:
-    number = 7
-    rounds = 1
+    warmup_time = 1
+    rounds = 4
+    number = 20
 
     LIB_NAME = "resample"
     CONNECTION_STRING = "lmdb://resample?map_size=5GB"
@@ -34,10 +35,10 @@ class Resample:
         "aggregation",
     ]
     params = [
-        [1_000_000, 10_000_000],
-        [10, 100, 100_000],
-        ["bool", "int", "float", "datetime", "str"],
-        ["sum", "mean", "min", "max", "first", "last", "count"],
+        [1_000_000, 10_000_000], # num_rows
+        [10, 100, 100_000], # downsampling factor
+        ["bool", "int", "float", "datetime", "str"], # col_type
+        ["sum", "mean", "min", "max", "first", "last", "count"], # aggregation
     ]
 
     def __init__(self):
