@@ -124,6 +124,72 @@ def extract_asv_results(lib, json_path):
             json.dump(json_data, out, indent=4, default=str)
 
 
+def analyze_asv_results(lib, hash):
+    """This function is designed to analyze the performance of our ASV benchmarks, so we can keep their runtime under control.
+
+    TODO We could run this inside our CI. We could also track these results inside ASV itself.
+
+    You can test this function against our real results database by running with,
+
+    python transform_asv_results.py \
+--mode=analyze --arcticdb_client_override="s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&path_prefix=asv_results" --hash=abaaa08b
+
+    or using the "analyze ASV results" run configuration stored in .idea/.
+    """
+    assert lib.has_symbol(hash), f"Results for hash {hash} not found in {lib}"
+    benchmark_results = lib.read(hash).data
+    assert benchmark_results.shape > (0, 0)
+    benchmark_results = benchmark_results[["test_name", "results", "result_columns", "durations"]]
+    """
+    Example of the stored data:
+    
+    test_name
+        bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all
+
+    results
+        i-th entry corresponds to the i-th entry of result_columns
+        [[0.02064474750000045, 0.22353983374998165], [['1', '10']], 'bf5e390b01e356685500d464be897fe7cb51531dcd92fccedec980f97f361e3c', 1765845676840, 5.7363, [0.018747, 0.21073], [0.069667, 0.29402], [0.020253, 0.21876], [0.025704, 0.23415], [2, 2], [10, 10]]
+
+    result_columns
+        ['result', 'params', 'version', 'started_at', 'duration', 'stats_ci_99_a', 'stats_ci_99_b', 'stats_q_25', 'stats_q_75', 'stats_number', 'stats_repeat', 'samples', 'profile']
+
+    durations
+        This is the same in each row.
+        
+        {'<setup_cache bi_benchmarks:68>': 11.555371, '<setup_cache basic_functions:49>': 8.773198, '<setup_cache basic_functions:182>': 34.551478, '<setup_cache basic_functions:341>': 29.068089, '<setup_cache comparison_benchmarks:44>': 133.676543, '<setup_cache finalize_staged_data:47>': 19.000038, '<setup_cache finalize_staged_data:100>': 0.980301, '<setup_cache list_snapshots:46>': 40.629586, '<setup_cache list_symbols:29>': 23.854835, '<setup_cache list_versions:44>': 418.163515, '<setup_cache local_query_builder:33>': 8.492626, '<setup_cache real_batch_functions:59>': 3.201688, '<setup_cache real_comparison_benchmarks:76>': 91.077791, '<setup_cache real_finalize_staged_data:42>': 3.188584, '<setup_cache real_list_operations:58>': 3.157586, '<setup_cache real_list_operations:138>': 3.393059, '<setup_cache real_modification_functions:215>': 50.894361, '<setup_cache real_modification_functions:261>': 3.848478, '<setup_cache real_modification_functions:73>': 192.683119, '<setup_cache real_query_builder:76>': 3.191312, '<setup_cache real_read_write:87>': 3.191894, '<setup_cache real_read_write:243>': 3.177817, '<setup_cache real_read_write:212>': 4.189118, '<setup_cache recursive_normalizer:47>': 6.11023, '<setup_cache resample:134>': 4.986128, '<setup_cache version_chain:42>': 585.851281}
+
+    """
+    cache_setup_str = benchmark_results.loc[0].durations
+    cache_setup_dict = json.loads(cache_setup_str.replace("'", '"'))
+    cache_setup_df = pd.DataFrame.from_dict(cache_setup_dict, orient="index", columns=["Duration (s)"])
+    cache_setup_df = cache_setup_df.reset_index().rename(columns={'index': 'Step'})
+    cache_setup_df = cache_setup_df.sort_values(by="Duration (s)", ascending=False)
+
+    print("Time spent outside of benchmarks (excluding build):\n")
+    with pd.option_context('display.max_rows', None, 'display.max_colwidth', None):
+        print(cache_setup_df)
+    print("\n")
+
+    def extract_time(r):
+        """r looks like the "results" mentioned in the docstring above. Using eval as the results can contain nan, inf etc which json.loads cannot parse"""
+        as_list = eval(r)
+        return as_list[4]
+
+    benchmark_results["Duration (s)"] = benchmark_results.results.map(extract_time)
+    benchmark_results = benchmark_results[["test_name", "Duration (s)"]]
+    benchmark_results = benchmark_results.sort_values(by="Duration (s)", ascending=False)
+
+    print("Time spent in benchmarks:\n")
+    with pd.option_context('display.max_rows', None, 'display.max_colwidth', None):
+        print(benchmark_results)
+
+    print(f"\nSummary:")
+    cache_setup_time = cache_setup_df["Duration (s)"].sum() / 60
+    print(f"Total time outside benchmarks (mins): {cache_setup_time}")
+    benchmarks_run_time = benchmark_results["Duration (s)"].sum() / 60
+    print(f"Total time running benchmarks (mins): {benchmarks_run_time}")
+
+
 def get_result_json_path(json_path, sym, json_data):
     env_name = json_data["env_name"]
     machine = json_data["params"]["machine"]
@@ -154,8 +220,13 @@ if __name__ == "__main__":
         default="asv_results",
     )
     parser.add_argument(
+        "--hash",
+        help="Only used for the 'analyze' mode. The 8 character (git rev-parse --short=8 REF) hash of the commit to analyze. Eg --hash=abaaa08b will analyze the benchmarks for that commit.",
+        default=None
+    )
+    parser.add_argument(
         "--mode",
-        help="Mode to run the script in, either 'save' or 'extract', used to save or extract the results",
+        help="Mode to run the script in, 'save', 'extract' or 'analyze'. Analyze generates a report about the time taken to run benchmarks, to help us to keep the CI at a reasonable speed.",
     )
 
     args = parser.parse_args()
@@ -166,5 +237,8 @@ if __name__ == "__main__":
         save_asv_results(results_lib, json_path)
     elif args.mode == "extract":
         extract_asv_results(results_lib, json_path)
+    elif args.mode == "analyze":
+        assert args.hash, "--hash must be present for the analyze mode"
+        analyze_asv_results(results_lib, args.hash)
     else:
-        raise ValueError(f"Invalid mode {args.mode}, must be 'save' or 'extract'")
+        raise ValueError(f"Invalid mode {args.mode}, must be 'save', 'extract' or 'analyze'")
