@@ -940,3 +940,14 @@ jobs:
           COMMANDLINE: ${{ inputs.run_commandline }}
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
           NODE_OPTIONS: --openssl-legacy-provider
+
+  can_merge_conda:
+    name: All conda jobs completed
+    needs: [cpp_tests_linux, cpp_tests_macos, cpp_tests_windows, python_tests_linux, python_tests_macos, python_tests_windows]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled()
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo All conda jobs completed!
