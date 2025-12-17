@@ -542,9 +542,10 @@ void remove_incomplete_segments(
     delete_keys_of_type_if(store, match_stream_id, KeyType::APPEND_DATA, common_prefix);
 }
 
+// Load_up_to is not inclusive
 std::vector<AppendMapEntry> load_via_list(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data,
-        const std::optional<AtomKey> load_up_to
+        const std::optional<AtomKey>& load_up_to
 ) {
     using namespace arcticdb::pipelines;
 

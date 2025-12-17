@@ -111,7 +111,7 @@ std::pair<uint64_t, std::optional<AtomKey>> total_rows_up_to(
         const std::optional<AtomKey>& load_up_to = std::nullopt);
 
 std::vector<AppendMapEntry> load_via_list(
-            const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data, const std::optional<AtomKey> load_up_to = std::nullopt
+            const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data, const std::optional<AtomKey>& load_up_to = std::nullopt
     );
 
 std::vector<AtomKey> write_parallel_impl(
