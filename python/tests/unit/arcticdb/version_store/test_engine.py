@@ -19,6 +19,11 @@ from arcticdb.util.test import random_seed_context
 
 
 def gen_params():
+    # Note: We use sorted() and deterministic selection instead of random.sample() to ensure
+    # consistent test collection order across pytest-xdist workers. pytest-xdist requires that
+    # all workers collect tests in the same order, and using unordered containers (like sets)
+    # or random sampling can cause "Different tests were collected between workers" errors.
+    # See: https://pytest-xdist.readthedocs.io/en/stable/known-limitations.html
     with random_seed_context():
         # colnums
         p = [list(range(2, 5))]
@@ -29,11 +34,19 @@ def gen_params():
         p.append(list(chain(*[list(combinations(["a", "b", "c"], c)) for c in range(1, 4)])))
         # tsbounds
         p.append([(j, i) for i in range(periods) for j in range(i)])
-        result = sorted(random.sample(list(product(*p)), 10))
+        # Sort the product list first to ensure deterministic ordering across workers
+        all_params = sorted(list(product(*p)))
+        # Use deterministic selection: take first 10 after sorting
+        result = sorted(all_params[:10])
     return result
 
 
 def gen_params_non_contiguous():
+    # Note: We use sorted() and deterministic selection instead of random.sample() to ensure
+    # consistent test collection order across pytest-xdist workers. pytest-xdist requires that
+    # all workers collect tests in the same order, and using unordered containers (like sets)
+    # or random sampling can cause "Different tests were collected between workers" errors.
+    # See: https://pytest-xdist.readthedocs.io/en/stable/known-limitations.html
     with random_seed_context():
         # colnums
         p = [list(range(2, 5))]
@@ -44,7 +57,10 @@ def gen_params_non_contiguous():
         p.append(list(chain(*[list(combinations([2, 5, 7], c)) for c in range(1, 4)])))
         # bounds
         p.append([(j, i) for i in range(20, 29) for j in range(i)])
-        result = random.sample(list(product(*p)), 10)
+        # Sort the product list first to ensure deterministic ordering across workers
+        all_params = sorted(list(product(*p)))
+        # Use deterministic selection: take first 10 after sorting
+        result = sorted(all_params[:10])
     return result
 
 
