@@ -84,7 +84,7 @@ class ArrowNumeric:
     def time_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
-    @skip_benchmark
+    
     def peakmem_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
@@ -92,7 +92,7 @@ class ArrowNumeric:
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
-    @skip_benchmark
+
     def peakmem_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
@@ -122,13 +122,10 @@ class ArrowStrings:
 
     def _generate_table(self, num_rows, num_cols, unique_string_count):
         rng = np.random.default_rng()
-        strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))
-        df = pd.DataFrame(
-            {f"col{idx}": rng.choice(strings, num_rows) for idx in range(num_cols)},
-            index=pd.date_range("1970-01-01", freq="ns", periods=num_rows),
-        )
-        df.index.name = "ts"
-        return pa.Table.from_pandas(df)
+        strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True, kind="ascii"))
+        names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
+        index = pd.date_range("1970-01-01", freq="ns", periods=num_rows)
+        return pa.Table.from_arrays([index] + [rng.choice(strings, num_rows) for _ in range(num_cols)], names=names)
 
     def _setup_cache(self):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
@@ -171,7 +168,6 @@ class ArrowStrings:
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
 
-    @skip_benchmark
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
@@ -184,7 +180,6 @@ class ArrowStrings:
             arrow_string_format_default=arrow_string_format,
         )
 
-    @skip_benchmark
     def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self.lib.read(
             self.symbol_name(rows, unique_string_count),
