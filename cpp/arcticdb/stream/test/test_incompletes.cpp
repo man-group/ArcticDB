@@ -170,3 +170,42 @@ TEST_P(LoadViaListTest, LoadWithOptionalLimit) {
 }
 
 INSTANTIATE_TEST_SUITE_P(LoadViaList, LoadViaListTest, ::testing::Values(std::nullopt, 2, 1, 0, 100));
+
+TEST(TotalRowsUpToTest, TotalRowsUpTo) {
+    using namespace arcticdb;
+
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"sym"};
+
+    std::vector test_frames = {
+            get_test_simple_frame(stream_id, 10, 0),
+            get_test_simple_frame(stream_id, 15, 10),
+            get_test_simple_frame(stream_id, 20, 25)
+    };
+
+    for (auto& frame : test_frames) {
+        append_incomplete(store, stream_id, frame.frame_, true);
+    }
+
+    auto entries = load_via_list(store, stream_id, false);
+    ASSERT_EQ(entries.size(), 3);
+
+    auto [rows, last_loaded_opt] = total_rows_up_to(store, stream_id, entries[0].key());
+    ASSERT_EQ(rows, 0);
+    ASSERT_FALSE(last_loaded_opt.has_value());
+
+    auto [rows1, last_loaded_opt1] = total_rows_up_to(store, stream_id, entries[1].key());
+    ASSERT_EQ(rows1, 20);
+    ASSERT_TRUE(last_loaded_opt1.has_value());
+    ASSERT_EQ(*last_loaded_opt1, entries[0].key());
+
+    auto [rows2, last_loaded_opt2] = total_rows_up_to(store, stream_id, entries[2].key());
+    ASSERT_EQ(rows2, 35);
+    ASSERT_TRUE(last_loaded_opt2.has_value());
+    ASSERT_EQ(*last_loaded_opt2, entries[0].key());
+
+    auto [rows_all, last_loaded_opt_all] = total_rows_up_to(store, stream_id);
+    ASSERT_EQ(rows_all, 45);
+    ASSERT_TRUE(last_loaded_opt_all.has_value());
+    ASSERT_EQ(last_loaded_opt_all, entries[0].key());
+}
