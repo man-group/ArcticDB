@@ -105,6 +105,33 @@ void remove_incomplete_segments(
         const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix
 );
 
+/**
+ * Returns the number of rows loaded and the last loaded key from the append_data chain.
+ *
+ * @param load_up_to Optional key to limit loading. If specified, only entries up to (but not including) this key are
+ * loaded
+ * @return A pair containing:
+ *         - uint64_t: Total number of rows of loaded entries.
+ *         - std::optional<AtomKey>: The top key of the append_data chain that was counted, or nullopt if no rows were
+ * counted
+ */
+std::pair<uint64_t, std::optional<AtomKey>> total_rows_up_to(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id,
+        const std::optional<AtomKey>& load_up_to = std::nullopt
+);
+
+/**
+ * Loads entries from the append_data chain.
+ *
+ * @param load_data If true, loads the segment data; if false, loads only metadata
+ * @param load_up_to Optional key to limit loading. If specified, only entries up to (but not including) this key are
+ * loaded
+ */
+std::vector<AppendMapEntry> load_via_list(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data,
+        const std::optional<AtomKey>& load_up_to = std::nullopt
+);
+
 std::vector<AtomKey> write_parallel_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id,
         const std::shared_ptr<pipelines::InputFrame>& frame, const WriteIncompleteOptions& options

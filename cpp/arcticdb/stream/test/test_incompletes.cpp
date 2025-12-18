@@ -123,3 +123,89 @@ TEST(Append, MergeDescriptorsNoPromote) {
     );
     ASSERT_EQ(result, true);
 }
+
+class LoadViaListTest : public ::testing::TestWithParam<std::optional<size_t>> {};
+
+TEST_P(LoadViaListTest, LoadWithOptionalLimit) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    const auto key_index = GetParam();
+
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"sym"};
+
+    std::vector test_frames = {
+            get_test_simple_frame(stream_id, 10, 0),
+            get_test_simple_frame(stream_id, 15, 10),
+            get_test_simple_frame(stream_id, 20, 25)
+    };
+
+    for (auto& frame : test_frames) {
+        append_incomplete(store, stream_id, frame.frame_, true);
+    }
+
+    auto all_keys = load_via_list(store, stream_id, false);
+    for (size_t i = 0; i < test_frames.size(); ++i) {
+        ASSERT_EQ(all_keys[i].total_rows_, test_frames[test_frames.size() - i - 1].frame_->num_rows);
+    }
+
+    std::optional<AtomKey> limit_key;
+    size_t expected_keys = test_frames.size();
+    if (key_index.has_value()) {
+        if (*key_index >= test_frames.size()) {
+            // Non-existent key should load all
+            limit_key = AtomKeyBuilder().start_index(1).end_index(3).creation_ts(2).build("sym", KeyType::APPEND_DATA);
+        } else {
+            expected_keys = *key_index;
+            limit_key = all_keys[*key_index].key();
+        }
+    }
+
+    auto entries = load_via_list(store, stream_id, false, limit_key);
+    ASSERT_EQ(entries.size(), expected_keys);
+    for (size_t i = 0; i < entries.size(); ++i) {
+        ASSERT_EQ(entries[i].key(), all_keys[i].key());
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(LoadViaList, LoadViaListTest, ::testing::Values(std::nullopt, 2, 1, 0, 100));
+
+TEST(TotalRowsUpToTest, TotalRowsUpTo) {
+    using namespace arcticdb;
+
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"sym"};
+
+    std::vector test_frames = {
+            get_test_simple_frame(stream_id, 10, 0),
+            get_test_simple_frame(stream_id, 15, 10),
+            get_test_simple_frame(stream_id, 20, 25)
+    };
+
+    for (auto& frame : test_frames) {
+        append_incomplete(store, stream_id, frame.frame_, true);
+    }
+
+    auto entries = load_via_list(store, stream_id, false);
+    ASSERT_EQ(entries.size(), 3);
+
+    auto [rows, last_loaded_opt] = total_rows_up_to(store, stream_id, entries[0].key());
+    ASSERT_EQ(rows, 0);
+    ASSERT_FALSE(last_loaded_opt.has_value());
+
+    auto [rows1, last_loaded_opt1] = total_rows_up_to(store, stream_id, entries[1].key());
+    ASSERT_EQ(rows1, 20);
+    ASSERT_TRUE(last_loaded_opt1.has_value());
+    ASSERT_EQ(*last_loaded_opt1, entries[0].key());
+
+    auto [rows2, last_loaded_opt2] = total_rows_up_to(store, stream_id, entries[2].key());
+    ASSERT_EQ(rows2, 35);
+    ASSERT_TRUE(last_loaded_opt2.has_value());
+    ASSERT_EQ(*last_loaded_opt2, entries[0].key());
+
+    auto [rows_all, last_loaded_opt_all] = total_rows_up_to(store, stream_id);
+    ASSERT_EQ(rows_all, 45);
+    ASSERT_TRUE(last_loaded_opt_all.has_value());
+    ASSERT_EQ(last_loaded_opt_all, entries[0].key());
+}
