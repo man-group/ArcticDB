@@ -264,16 +264,47 @@ def assert_frame_equal_with_arrow(left, right, **kwargs):
     assert_frame_equal(left, right, **kwargs)
 
 
-unicode_symbol = "\u00a0"  # start of latin extensions
-unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+def random_ascii_string(length: int) -> str:
+    return "".join(random.choices(string.ascii_letters + string.digits, k=length))
+
+
+def random_ascii_strings(count, max_length):
+    return [random_ascii_string(random.randrange(max_length + 1)) for _ in range(count)]
+
+
+def random_unicode_string(length: int) -> str:
+    unicode_symbol = "\u00a0"  # start of latin extensions
+    unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+    return "".join(random.choices(string.ascii_uppercase + unicode_symbols, k=length))
 
 
 def random_string(length: int):
-    if random.randint(0, 3) == 0:
-        # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
-        return "".join(random.choice(string.ascii_uppercase + unicode_symbols) for _ in range(length))
+    # (probably) Give a unicode string one time in three, we have special handling in C++ for unicode
+    return random_unicode_string(length) if random.randint(0, 3) == 0 else random_ascii_string(length)
+
+
+def random_strings_of_length(num, length, unique=False, kind="mixed"):
+    kind = kind.lower()
+    if kind == "ascii":
+        out = [random_ascii_string(length) for _ in range(num)]
+    elif kind == "unicode":
+        out = [random_unicode_string(length) for _ in range(num)]
+    elif kind == "mixed":
+        out = [random_string(length) for _ in range(num)]
     else:
-        return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length))
+        raise ValueError(f"Unknown kind of strings: {kind}. Accepted values are: ascii, unicode, mixed")
+    return list(set(out)) if unique else out
+
+
+def random_strings_of_length_with_nan(num, length):
+    out = []
+    for i in range(num):
+        if i % 3 == 1:
+            out.append(np.nan)
+        else:
+            out.append("".join(random.choices(string.ascii_uppercase + string.digits, k=length)))
+
+    return out
 
 
 def get_sample_dataframe(size=1000, seed=0, str_size=10):
@@ -508,36 +539,6 @@ def get_pickle():
         str(random_string(100)),
         {"a": list(random_integers(100000, np.int32))},
     )[np.random.randint(0, 2)]
-
-
-def random_ascii_strings(count, max_length):
-    result = []
-    for _ in range(count):
-        length = random.randrange(max_length + 1)
-        result.append("".join(random.choice(string.ascii_letters) for _ in range(length)))
-    return result
-
-
-def random_strings_of_length(num, length, unique=False):
-    out = []
-    for i in range(num):
-        out.append(random_string(length))
-
-    if unique:
-        return list(set(out))
-    else:
-        return out
-
-
-def random_strings_of_length_with_nan(num, length):
-    out = []
-    for i in range(num):
-        if i % 3 == 1:
-            out.append(np.nan)
-        else:
-            out.append("".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(length)))
-
-    return out
 
 
 def random_floats(num):
