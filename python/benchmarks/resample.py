@@ -35,7 +35,7 @@ class Resample:
         "aggregation",
     ]
     params = [
-        [1_000_000, 10_000_000], # num_rows
+        [10_000_000, 20_000_000], # num_rows
         [10, 100, 100_000], # downsampling factor
         ["bool", "int", "float", "datetime", "str"], # col_type
         ["sum", "mean", "min", "max", "first", "last", "count"], # aggregation
