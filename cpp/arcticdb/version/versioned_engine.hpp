@@ -42,6 +42,8 @@ enum class Slicing { NoSlicing, RowSlicing };
 class VersionedEngine {
 
   public:
+    virtual ~VersionedEngine() = default;
+
     virtual VersionedItem update_internal(
             const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputFrame>& frame, bool upsert,
             bool dynamic_schema, bool prune_previous_versions
@@ -112,6 +114,12 @@ class VersionedEngine {
     ) = 0;
 
     virtual size_t compact_symbol_list_internal() = 0;
+
+    virtual std::variant<VersionedItem, CompactionError> compact_incomplete_dynamic(
+            const StreamId& stream_id,
+            const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+            const CompactIncompleteParameters& parameters
+    ) = 0;
 
     virtual IndexRange get_index_range(const StreamId& stream_id, const VersionQuery& version_query) = 0;
 

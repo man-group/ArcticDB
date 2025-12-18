@@ -332,6 +332,15 @@ class VariantBuffer {
         );
     }
 
+    const uint8_t* data() const {
+        return util::variant_match(
+                buffer_,
+                [](const BufferView& bv) { return bv.data(); },
+                [](const std::shared_ptr<Buffer>& buf) -> const uint8_t* { return buf->data(); },
+                [](const std::monostate) -> const uint8_t* { util::raise_rte("Uninitialized buffer"); }
+        );
+    }
+
     [[nodiscard]] size_t preamble_bytes() const {
         if (std::holds_alternative<std::shared_ptr<Buffer>>(buffer_)) {
             return std::get<std::shared_ptr<Buffer>>(buffer_)->preamble_bytes();

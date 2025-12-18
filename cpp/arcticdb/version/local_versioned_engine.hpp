@@ -356,7 +356,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
             const CompactIncompleteParameters& parameters
-    );
+    ) override;
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion

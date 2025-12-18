@@ -573,7 +573,7 @@ set(arcticdb_srcs
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
 # Disable default api so both UTF-8 and UTF-32 can be supported
-target_compile_definitions(arcticdb_core_object PUBLIC PCRE2_CODE_UNIT_WIDTH=0)
+target_compile_definitions(arcticdb_core_object PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
 
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_core_object")
@@ -708,8 +708,6 @@ if (WIN32)
     )
 endif()
 
-add_compile_definitions(ENTT_ID_TYPE=std::uint64_t)
-
 set (arcticdb_core_libraries
         pybind11::module # Transitively includes Python::Module or Python::Python as appropriate
         arcticdb_proto
@@ -817,7 +815,7 @@ target_include_directories(arcticdb_core_object
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
 # Disable default api so both UTF-8 and UTF-32 can be supported
-target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0)
+target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
 
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
@@ -832,6 +830,8 @@ target_link_libraries(arcticdb_core PRIVATE
         ${arcticdb_core_libraries}
         ${AWSSDK_LINK_LIBRARIES}
         )
+
+target_compile_definitions(arcticdb_core PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
