@@ -16,18 +16,21 @@ from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
 from benchmarks.common import generate_pseudo_random_dataframe
-from asv_runner.benchmarks.mark import skip_benchmark
+from asv_runner.benchmarks.mark import skip_benchmark, SkipNotImplemented
 
 
 class ArrowNumeric:
-    number = 20
-    warmup_time = 0
+    number = 30
+    warmup_time = 1
     timeout = 6000
-    rounds = 2
+    rounds = 4
     connection_string = "lmdb://arrow_numeric?map_size=20GB"
     lib_name_prewritten = "arrow_numeric_prewritten"
     lib_name_fresh = "arrow_numeric_fresh"
-    params = ([100_000, 10_000_000], [None, "middle"])
+    params = (
+        [100_000, 10_000_000],  # num_rows
+        [None, "middle"]  # date_ranges
+    )
     param_names = ["rows", "date_range"]
 
     def symbol_name(self, num_rows: int):
@@ -98,7 +101,7 @@ class ArrowNumeric:
 
 
 class ArrowStrings:
-    number = 20
+    number = 30
     warmup_time = 1
     timeout = 6000
     rounds = 4
@@ -121,7 +124,8 @@ class ArrowStrings:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
     def _generate_table(self, num_rows, num_cols, unique_string_count):
-        rng = np.random.default_rng()
+        # Use fixed seed for reproducible benchmarks
+        rng = np.random.default_rng(seed=42)
         strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))
         df = pd.DataFrame(
             {f"col{idx}": rng.choice(strings, num_rows) for idx in range(num_cols)},
@@ -170,12 +174,16 @@ class ArrowStrings:
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+        else:
+            raise SkipNotImplemented(f"Only runs for date_range=None and CATEGORICAL string format")
 
     @skip_benchmark
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+        else:
+            raise SkipNotImplemented(f"Only runs for date_range=None and CATEGORICAL string format")
 
     def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self.lib.read(
