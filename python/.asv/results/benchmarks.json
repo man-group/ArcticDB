@@ -4049,7 +4049,7 @@
         "warmup_time": 0
     },
     "resample.Resample.time_resample": {
-        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            self.skipped = True\n            raise NotImplementedError(f\"{aggregation} not supported on columns of type {col_type}\")\n    \n        self.skipped = False\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "resample.Resample.time_resample",
         "number": 20,
@@ -4092,7 +4092,7 @@
         "setup_cache_key": "resample:47",
         "type": "time",
         "unit": "seconds",
-        "version": "1f835087b54bb1d48a11dcbdb503bbbc4c57d6c5f54b6f0f6cf22c68c2187a5c",
+        "version": "ce482344e844d70c65f71aebd7486d303d5f5c6370e1603234ffd7bb12d49435",
         "warmup_time": 1
     },
     "resample.ResampleWide.peakmem_resample_wide": {
@@ -4100,7 +4100,7 @@
         "name": "resample.ResampleWide.peakmem_resample_wide",
         "param_names": [],
         "params": [],
-        "setup_cache_key": "resample:134",
+        "setup_cache_key": "resample:125",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -4116,7 +4116,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:134",
+        "setup_cache_key": "resample:125",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",

@@ -82,41 +82,32 @@ class Resample:
                 lib.append(sym, df)
 
     def teardown(self, num_rows, downsampling_factor, col_type, aggregation):
-        del self.lib
-        del self.ac
+        if not self.skipped:
+            del self.lib
+            del self.ac
 
     def setup(self, num_rows, downsampling_factor, col_type, aggregation):
+        if (
+            col_type == "datetime"
+            and aggregation == "sum"
+            or col_type == "str"
+            and aggregation in ["sum", "mean", "min", "max"]
+        ):
+            self.skipped = True
+            raise NotImplementedError(f"{aggregation} not supported on columns of type {col_type}")
+
+        self.skipped = False
         self.ac = Arctic(self.CONNECTION_STRING)
         self.lib = self.ac[self.LIB_NAME]
         self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit="us"))
         self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
-        if (
-            col_type == "datetime"
-            and aggregation == "sum"
-            or col_type == "str"
-            and aggregation in ["sum", "mean", "min", "max"]
-        ):
-            pass
-            # Use this when upgrading to ASV 0.6.0 or later
-            # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
-        else:
-            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
+        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
     @skip_benchmark
     def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
-        if (
-            col_type == "datetime"
-            and aggregation == "sum"
-            or col_type == "str"
-            and aggregation in ["sum", "mean", "min", "max"]
-        ):
-            pass
-            # Use this when upgrading to ASV 0.6.0 or later
-            # raise SkipNotImplemented(f"{aggregation} not supported on columns of type {col_type}")
-        else:
-            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
+        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
 
 class ResampleWide:
