@@ -822,13 +822,13 @@ target_include_directories(arcticdb_core_object
 if(NOT ${ARCTICDB_USING_CONDA})
     # `semimap.h` is at `third_party/semimap/semimap.h`, so we need `third_party` in the path
     # to allow <semimap/semimap.h> to resolve correctly
-    target_include_directories(arcticdb_core_object
-            PRIVATE
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
-            )
+    set(THIRD_PARTY_INCLUDE_DIRS
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+    )
+    target_include_directories(arcticdb_core_object PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
 endif()
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
@@ -1107,12 +1107,7 @@ if(${TEST})
         )
         # Add third_party include directories for test targets (only used for vcpkg builds)
         if(NOT ${ARCTICDB_USING_CONDA})
-            target_include_directories(test_unit_arcticdb PRIVATE
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
-                    )
+            target_include_directories(test_unit_arcticdb PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
         endif()
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
@@ -1147,12 +1142,7 @@ if(${TEST})
                 )
         # Add third_party include directories for test targets (only used for vcpkg builds)
         if(NOT ${ARCTICDB_USING_CONDA})
-            target_include_directories(test_unit_arcticdb PRIVATE
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
-                    )
+            target_include_directories(test_unit_arcticdb PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
         endif()
     endif()
 
@@ -1186,12 +1176,7 @@ if(${TEST})
             )
     # Add third_party include directories for benchmark targets (only used for vcpkg builds)
     if(NOT ${ARCTICDB_USING_CONDA})
-        target_include_directories(benchmarks PRIVATE
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
-                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
-                )
+        target_include_directories(benchmarks PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
     endif()
 
     set(rapidcheck_srcs
@@ -1255,12 +1240,7 @@ if(${TEST})
         target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
         # Add third_party include directories for rapidcheck test targets (only used for vcpkg builds)
         if(NOT ${ARCTICDB_USING_CONDA})
-            target_include_directories(arcticdb_rapidcheck_tests PRIVATE
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
-                    )
+            target_include_directories(arcticdb_rapidcheck_tests PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
         endif()
     else()
         target_link_libraries(arcticdb_rapidcheck_tests
@@ -1273,12 +1253,7 @@ if(${TEST})
             )
         # Add third_party include directories for rapidcheck test targets (only used for vcpkg builds)
         if(NOT ${ARCTICDB_USING_CONDA})
-            target_include_directories(arcticdb_rapidcheck_tests PRIVATE
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
-                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
-                    )
+            target_include_directories(arcticdb_rapidcheck_tests PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
         endif()
     endif()
 
