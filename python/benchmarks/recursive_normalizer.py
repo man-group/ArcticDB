@@ -22,16 +22,10 @@ from benchmarks.common import AsvBase
 
 class LMDBRecursiveNormalizer(AsvBase):
 
-    rounds = 1
-    number = 3
-    repeat = 1
-    min_run_count = 1
-    warmup_time = 0
-
-    timeout = 1200
+    rounds = 4
 
     param_names = ["num_dict_entries", "num_symbols"]
-    params = [[100], [5]]
+    params = [[1000], [5]]
 
     library_manager = TestLibraryManager(storage=Storage.LMDB, name_benchmark="NESTED_DICT_READ")
 

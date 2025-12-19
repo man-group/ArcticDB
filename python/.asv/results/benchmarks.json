@@ -3829,14 +3829,13 @@
         ],
         "params": [
             [
-                "100"
+                "1000"
             ],
             [
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:47",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "6ebace9b5a59b1db035f08ba6a4e4515369078acd1351be79e1e1da39149d62a"
@@ -3850,14 +3849,13 @@
         ],
         "params": [
             [
-                "100"
+                "1000"
             ],
             [
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:47",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "14f44356279caba67537192e46173ed71ca40f1d5337c4c174bbed4743630f39"
@@ -3871,98 +3869,94 @@
         ],
         "params": [
             [
-                "100"
+                "1000"
             ],
             [
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:47",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "957507bae59ff9d4b3aa774bbb1a3c2e432b7ed26f01e03815fbf40df1d0139f"
     },
     "recursive_normalizer.LMDBRecursiveNormalizer.time_read_batch_nested_dict": {
         "code": "class LMDBRecursiveNormalizer:\n    def time_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.read_lib.read_batch([self.get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = self.get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, self.get_data(num_dict_entry), recursive_normalizers=True)\n    \n        manager.log_info()",
-        "min_run_count": 1,
+        "min_run_count": 2,
         "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_read_batch_nested_dict",
-        "number": 3,
+        "number": 0,
         "param_names": [
             "num_dict_entries",
             "num_symbols"
         ],
         "params": [
             [
-                "100"
+                "1000"
             ],
             [
                 "5"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 4,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:47",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:41",
         "type": "time",
         "unit": "seconds",
         "version": "0d6bc02f5a66c0847c116a220f09ed0cef6251d2680aa04165601879c86d3487",
-        "warmup_time": 0
+        "warmup_time": -1
     },
     "recursive_normalizer.LMDBRecursiveNormalizer.time_read_nested_dict": {
         "code": "class LMDBRecursiveNormalizer:\n    def time_read_nested_dict(self, num_dict_entry, num_symbols):\n        self.read_lib.read(self.get_symbol_name(num_dict_entry, 0))\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = self.get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, self.get_data(num_dict_entry), recursive_normalizers=True)\n    \n        manager.log_info()",
-        "min_run_count": 1,
+        "min_run_count": 2,
         "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_read_nested_dict",
-        "number": 3,
+        "number": 0,
         "param_names": [
             "num_dict_entries",
             "num_symbols"
         ],
         "params": [
             [
-                "100"
+                "1000"
             ],
             [
                 "5"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 4,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:47",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:41",
         "type": "time",
         "unit": "seconds",
         "version": "a24513c766ee3691ac7962e278c643b22841d59f55a1b394137d23b4bd4488c8",
-        "warmup_time": 0
+        "warmup_time": -1
     },
     "recursive_normalizer.LMDBRecursiveNormalizer.time_write_nested_dict": {
         "code": "class LMDBRecursiveNormalizer:\n    def time_write_nested_dict(self, num_dict_entry, num_symbols):\n        self.read_lib._nvs.write(\n            f\"nested_dict_time_write_nested_dict_{num_dict_entry}\",\n            self.get_data(num_dict_entry),\n            recursive_normalizers=True,\n        )\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = self.get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, self.get_data(num_dict_entry), recursive_normalizers=True)\n    \n        manager.log_info()",
-        "min_run_count": 1,
+        "min_run_count": 2,
         "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_write_nested_dict",
-        "number": 3,
+        "number": 0,
         "param_names": [
             "num_dict_entries",
             "num_symbols"
         ],
         "params": [
             [
-                "100"
+                "1000"
             ],
             [
                 "5"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 4,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:47",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:41",
         "type": "time",
         "unit": "seconds",
         "version": "d4e54b4dfdcbb8375d1c5065f88e58ba53e2613eabe92ee833b8f9230f597120",
-        "warmup_time": 0
+        "warmup_time": -1
     },
     "resample.ResampleWide.peakmem_resample_wide": {
         "code": "class ResampleWide:\n    def peakmem_resample_wide(self):\n        self.lib.read(self.SYM, query_builder=self.query_builder)\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        aggs = dict()\n        for col in self.COLS:\n            aggs[col] = \"last\"\n        self.query_builder = QueryBuilder().resample(\"30us\").agg(aggs)\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        num_rows = 3000\n        index = pd.date_range(pd.Timestamp(0, unit=\"us\"), freq=\"us\", periods=num_rows)\n        data = dict()\n        for col in self.COLS:\n            data[col] = 100 * rng.random(num_rows, dtype=np.float64)\n        df = pd.DataFrame(data, index=index)\n        lib.write(self.SYM, df)",
