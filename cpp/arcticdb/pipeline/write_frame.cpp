@@ -89,10 +89,12 @@ Column WriteToSegmentTask::slice_column(
     // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
     // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
     // multiples of the type size
-    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
+    auto source_column_data = source_column.data();
+    const auto byte_blocks_at = source_column_data.buffer().byte_blocks_at(first_byte, bytes);
     if (is_sequence_type(source_column.type().data_type())) {
-        const auto& block_offsets = source_column.data().buffer().block_offsets();
-        auto first_block_offset = source_column.data().buffer().block_and_offset(first_byte).block_index_;
+        const auto& buffer = source_column_data.buffer();
+        const auto& block_offsets = buffer.block_offsets();
+        auto first_block_offset = source_column_data.buffer().block_and_offset(first_byte).block_index_;
         auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
         Column res(
                 make_scalar_type(DataType::UTF_DYNAMIC64),

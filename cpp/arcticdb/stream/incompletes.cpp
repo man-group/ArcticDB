@@ -153,11 +153,11 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
     const auto num_rows = frame->num_rows;
-    auto index_tensor = std::move(frame->opt_index_tensor());
+    auto index_tensor = frame->opt_index_tensor();
     const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
 
-    auto field_tensors = std::move(frame->field_tensors());
+    auto field_tensors = frame->field_tensors();
     auto output = std::visit(
             [&](const auto& idx) {
                 using IdxType = std::decay_t<decltype(idx)>;
