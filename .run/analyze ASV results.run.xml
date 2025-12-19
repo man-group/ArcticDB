@@ -1,0 +1,25 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="analyze ASV results" type="PythonConfigurationType" factoryName="Python">
+    <module name="project" />
+    <option name="ENV_FILES" value="" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="PARENT_ENVS" value="true" />
+    <envs>
+      <env name="PYTHONUNBUFFERED" value="1" />
+    </envs>
+    <option name="SDK_HOME" value="" />
+    <option name="WORKING_DIRECTORY" value="$PROJECT_DIR$/build_tooling" />
+    <option name="IS_MODULE_SDK" value="true" />
+    <option name="ADD_CONTENT_ROOTS" value="true" />
+    <option name="ADD_SOURCE_ROOTS" value="true" />
+    <option name="RUN_TOOL" value="" />
+    <option name="SCRIPT_NAME" value="$PROJECT_DIR$/build_tooling/transform_asv_results.py" />
+    <option name="PARAMETERS" value="--mode=analyze --arcticdb_client_override=&quot;s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-benchmark-results?aws_auth=true&amp;path_prefix=asv_results&quot; --hash=abaaa08b" />
+    <option name="SHOW_COMMAND_LINE" value="false" />
+    <option name="EMULATE_TERMINAL" value="false" />
+    <option name="MODULE_MODE" value="false" />
+    <option name="REDIRECT_INPUT" value="false" />
+    <option name="INPUT_FILE" value="" />
+    <method v="2" />
+  </configuration>
+</component>
