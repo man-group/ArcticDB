@@ -17,6 +17,7 @@
 #include <string>
 #include <numeric>
 #include <ranges>
+#include <folly/String.h>
 
 namespace arcticdb::storage {
 
