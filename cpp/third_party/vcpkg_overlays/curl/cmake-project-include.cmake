@@ -1,1 +1,0 @@
-../../../vcpkg/ports/curl/cmake-project-include.cmake

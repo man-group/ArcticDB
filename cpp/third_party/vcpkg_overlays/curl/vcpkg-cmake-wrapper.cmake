@@ -1,1 +1,0 @@
-../../../vcpkg/ports/curl/vcpkg-cmake-wrapper.cmake
