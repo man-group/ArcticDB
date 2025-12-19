@@ -2,7 +2,6 @@ from datetime import datetime
 import hashlib
 import logging
 import os
-import re
 import subprocess
 import sys
 from typing import List
