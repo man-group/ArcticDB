@@ -1105,6 +1105,15 @@ if(${TEST})
 	        COMMAND ${CMAKE_COMMAND} -E $<$<NOT:$<BOOL:$<TARGET_RUNTIME_DLLS:test_unit_arcticdb>>>:true> copy_if_different $<TARGET_RUNTIME_DLLS:test_unit_arcticdb> $<TARGET_FILE_DIR:test_unit_arcticdb>
 	        COMMAND_EXPAND_LISTS
         )
+        # Add third_party include directories for test targets (only used for vcpkg builds)
+        if(NOT ${ARCTICDB_USING_CONDA})
+            target_include_directories(test_unit_arcticdb PRIVATE
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+                    )
+        endif()
     else()
         set(COMMON_PUBLIC_TEST_LIBRARIES
                 arcticdb_core_static
@@ -1136,6 +1145,15 @@ if(${TEST})
                 ${LIBBSONCXX_STATIC_INCLUDE_DIRS}
                 ${BITMAGIC_INCLUDE_DIRS}
                 )
+        # Add third_party include directories for test targets (only used for vcpkg builds)
+        if(NOT ${ARCTICDB_USING_CONDA})
+            target_include_directories(test_unit_arcticdb PRIVATE
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+                    )
+        endif()
     endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
@@ -1166,6 +1184,15 @@ if(${TEST})
             ${AWSSDK_LINK_LIBRARIES}
             arcticdb_core_static
             )
+    # Add third_party include directories for benchmark targets (only used for vcpkg builds)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        target_include_directories(benchmarks PRIVATE
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+                $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+                )
+    endif()
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -1226,6 +1253,15 @@ if(${TEST})
 	        COMMAND_EXPAND_LISTS
         )
         target_compile_options(arcticdb_rapidcheck_tests PRIVATE /FI "util/test/gtest.hpp")
+        # Add third_party include directories for rapidcheck test targets (only used for vcpkg builds)
+        if(NOT ${ARCTICDB_USING_CONDA})
+            target_include_directories(arcticdb_rapidcheck_tests PRIVATE
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+                    )
+        endif()
     else()
         target_link_libraries(arcticdb_rapidcheck_tests
             PUBLIC
@@ -1235,6 +1271,15 @@ if(${TEST})
             PRIVATE
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
             )
+        # Add third_party include directories for rapidcheck test targets (only used for vcpkg builds)
+        if(NOT ${ARCTICDB_USING_CONDA})
+            target_include_directories(arcticdb_rapidcheck_tests PRIVATE
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+                    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+                    )
+        endif()
     endif()
 
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
