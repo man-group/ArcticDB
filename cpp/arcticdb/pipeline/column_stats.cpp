@@ -5,7 +5,7 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
-#include <third_party/semimap/semimap.h>
+#include <semimap/semimap.h>
 
 #include <charconv>
 
