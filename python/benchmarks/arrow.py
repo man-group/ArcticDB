@@ -84,14 +84,12 @@ class ArrowNumeric:
     def time_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
-    
     def peakmem_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
     @skip_benchmark
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
-
 
     def peakmem_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
