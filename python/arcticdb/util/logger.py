@@ -44,18 +44,18 @@ class GitHubSanitizingHandler(logging.StreamHandler):
 loggers: Dict[str, logging.Logger] = {}
 
 
-def get_logger(bencmhark_cls: Union[str, Any] = None):
+def get_logger(benchmark_cls: Union[str, Any] = None):
     """
     Creates logger instance with associated console handler.
     The logger name can be either passed as string or class,
     or if not automatically will assume the caller module name
     """
     logLevel = logging.INFO
-    if bencmhark_cls:
-        if isinstance(bencmhark_cls, str):
-            value = bencmhark_cls
+    if benchmark_cls:
+        if isinstance(benchmark_cls, str):
+            value = benchmark_cls
         else:
-            value = type(bencmhark_cls).__name__
+            value = type(benchmark_cls).__name__
         name = value
     else:
         frame = inspect.stack()[1]
