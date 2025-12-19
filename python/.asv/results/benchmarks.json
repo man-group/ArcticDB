@@ -1385,7 +1385,7 @@
         "warmup_time": 0
     },
     "list_versions.ListVersions.peakmem_list_versions": {
-        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        if snapshot is None or num_snapshots > 0:\n            self.lib.list_versions(\n                symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n            )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(\n            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n        )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots)\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "list_versions.ListVersions.peakmem_list_versions",
         "param_names": [
             "num_symbols",
@@ -1398,8 +1398,8 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "10",
+                "100"
             ],
             [
                 "1",
@@ -1407,7 +1407,6 @@
             ],
             [
                 "0",
-                "10",
                 "100"
             ],
             [
@@ -1427,14 +1426,14 @@
                 "False"
             ]
         ],
-        "setup_cache_key": "list_versions:44",
-        "timeout": 6000,
+        "setup_cache_key": "list_versions:45",
+        "timeout": 500,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7196504c08aa080e91f3cbb9cbd8228eea01a4b78ecb20f5509bbc67634f8508"
+        "version": "0b22fe02492964326a874117066b225091c3f78c38abc40a11d1ab0fd5508db0"
     },
     "list_versions.ListVersions.time_list_versions": {
-        "code": "class ListVersions:\n    def time_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        if snapshot is None or num_snapshots > 0:\n            self.lib.list_versions(\n                symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n            )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ListVersions:\n    def time_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(\n            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n        )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots)\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "list_versions.ListVersions.time_list_versions",
         "number": 5,
@@ -1449,8 +1448,8 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "10",
+                "100"
             ],
             [
                 "1",
@@ -1458,7 +1457,6 @@
             ],
             [
                 "0",
-                "10",
                 "100"
             ],
             [
@@ -1481,12 +1479,12 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_versions:44",
-        "timeout": 6000,
+        "setup_cache_key": "list_versions:45",
+        "timeout": 500,
         "type": "time",
         "unit": "seconds",
-        "version": "ee6666cf1919afefb16b4814886b3b80160b921cb6ecbba442f0d473627ec943",
-        "warmup_time": 0
+        "version": "3dd6b3ba40a4ceed62e7fcdf93d58859911a81e2bb01b6d99dd3e03f4719ef01",
+        "warmup_time": 0.1
     },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {
         "code": "class LocalQueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, num_rows):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 10.0]\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
