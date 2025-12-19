@@ -204,6 +204,17 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/)
 # for IDE resolution otherwise it is lost
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+# Add `third_party` include directories (only used for vcpkg builds) so that headers can
+# be included without a compile-time check on `ARCTICDB_USING_CONDA` in the source files.
+if(NOT ${ARCTICDB_USING_CONDA})
+    # `semimap.h` is at `third_party/semimap/semimap.h`, so we need `third_party` in the path
+    # to allow <semimap/semimap.h> to resolve correctly
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/lmdbcxx)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/recycle/src)
+    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/Remotery/lib)
+endif()
+
 add_subdirectory(arcticdb)
 
 # arcticdb_core_static is used by other projects so we expose the headers via `arcticdb/.../abc.hpp`.
