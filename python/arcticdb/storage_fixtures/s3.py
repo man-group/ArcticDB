@@ -41,7 +41,12 @@ from .utils import (
 )
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
-from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
+from arcticdb_ext.storage import (
+    AWSAuthMethod,
+    NativeVariantStorage,
+    GCPXMLSettings as NativeGCPXMLSettings,
+    S3Settings as NativeS3Settings,
+)
 from arcticdb_ext.tools import S3Tool
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
@@ -525,6 +530,9 @@ def real_s3_sts_from_environment_variables(
         logger.error(f"Error creating access key: {e}")
         raise e
 
+    out.native_config = NativeVariantStorage(
+        NativeS3Settings(AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER, profile_name, False)
+    )
     out.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
     out.aws_profile = profile_name
     real_s3_sts_write_local_credentials(out, config_file_path)

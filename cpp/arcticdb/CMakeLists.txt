@@ -247,6 +247,7 @@ set(arcticdb_srcs
         entity/descriptor_item.hpp
         entity/field_collection.hpp
         entity/field_collection_proto.hpp
+        entity/python_bindings_common.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
@@ -273,6 +274,7 @@ set(arcticdb_srcs
         python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
+        python/python_bindings_common.hpp
         python/python_utils.hpp
         pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
@@ -329,6 +331,7 @@ set(arcticdb_srcs
         storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_settings.hpp
+        storage/python_bindings_common.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
         storage/storage.hpp
@@ -457,6 +460,7 @@ set(arcticdb_srcs
         entity/metrics.cpp
         entity/performance_tracing.cpp
         entity/protobuf_mappings.cpp
+        entity/python_bindings_common.cpp
         entity/types.cpp
         entity/type_utils.cpp
         entity/types_proto.cpp
@@ -478,6 +482,7 @@ set(arcticdb_srcs
         pipeline/string_pool_utils.cpp
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
+        python/python_bindings_common.cpp
         python/normalization_checks.cpp
         python/python_strings.cpp
         python/python_utils.cpp
@@ -528,6 +533,7 @@ set(arcticdb_srcs
         storage/s3/s3_storage_tool.cpp
         storage/s3/s3_client_wrapper.cpp
         storage/s3/s3_client_wrapper.hpp
+        storage/python_bindings_common.cpp
         storage/storage_factory.cpp
         storage/storage_utils.cpp
         stream/aggregator.cpp
