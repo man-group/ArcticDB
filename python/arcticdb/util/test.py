@@ -272,10 +272,14 @@ def random_ascii_strings(count, max_length):
     return [random_ascii_string(random.randrange(max_length + 1)) for _ in range(count)]
 
 
-def random_unicode_string(length: int) -> str:
+def unicode_symbols():
     unicode_symbol = "\u00a0"  # start of latin extensions
-    unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
-    return "".join(random.choices(string.ascii_uppercase + unicode_symbols, k=length))
+    return "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
+
+
+def random_unicode_string(length: int) -> str:
+
+    return "".join(random.choices(string.ascii_uppercase + unicode_symbols(), k=length))
 
 
 def random_string(length: int):
@@ -297,14 +301,7 @@ def random_strings_of_length(num, length, unique=False, kind="mixed"):
 
 
 def random_strings_of_length_with_nan(num, length):
-    out = []
-    for i in range(num):
-        if i % 3 == 1:
-            out.append(np.nan)
-        else:
-            out.append("".join(random.choices(string.ascii_uppercase + string.digits, k=length)))
-
-    return out
+    return [np.nan if i % 3 == 1 else random_ascii_string(length) for i in range(num)]
 
 
 def get_sample_dataframe(size=1000, seed=0, str_size=10):

@@ -75,7 +75,7 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:118",
+        "setup_cache_key": "arrow:116",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -111,7 +111,7 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:118",
+        "setup_cache_key": "arrow:116",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
