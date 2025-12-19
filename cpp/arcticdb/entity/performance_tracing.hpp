@@ -32,11 +32,7 @@
 
 #ifdef USE_REMOTERY
 
-#ifdef ARCTICDB_USING_CONDA
-#include <remotery/Remotery.h>
-#else
 #include <Remotery.h>
-#endif
 
 class RemoteryInstance {
   public:

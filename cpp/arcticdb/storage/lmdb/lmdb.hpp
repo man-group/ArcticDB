@@ -6,9 +6,5 @@
 // This suppresses the warning.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-#ifdef ARCTICDB_USING_CONDA
 #include <lmdb++.h>
-#else
-#include <third_party/lmdbcxx/lmdb++.h>
-#endif
 #pragma GCC diagnostic pop
