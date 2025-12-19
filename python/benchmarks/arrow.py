@@ -14,9 +14,9 @@ from arcticdb import Arctic, OutputFormat, ArrowOutputStringFormat
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
+from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.common import generate_pseudo_random_dataframe
-from asv_runner.benchmarks.mark import skip_benchmark
 
 
 class ArrowNumeric:
@@ -80,7 +80,6 @@ class ArrowNumeric:
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
-    @skip_benchmark
     def time_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
@@ -88,7 +87,6 @@ class ArrowNumeric:
     def peakmem_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
-    @skip_benchmark
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
@@ -167,11 +165,15 @@ class ArrowStrings:
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+        else:
+            raise SkipNotImplemented
 
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+        else:
+            raise SkipNotImplemented
 
     def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self.lib.read(
