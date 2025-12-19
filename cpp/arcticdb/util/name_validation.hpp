@@ -9,10 +9,11 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
-#include <arcticdb/util/error_code.hpp>
+#include <string>
 
 namespace arcticdb {
+
+class Store;
 
 // entity/serialized_key.hpp expects the symbol to be <255 chars
 constexpr size_t MAX_SYMBOL_LENGTH = std::numeric_limits<uint8_t>::max() - 1;
@@ -22,7 +23,7 @@ constexpr size_t MAX_SYMBOL_LENGTH = std::numeric_limits<uint8_t>::max() - 1;
 [[nodiscard]] CheckOutcome verify_symbol_key(const StreamId& symbol_key);
 
 // Similar to verify_symbol_key above.
-[[nodiscard]] CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id);
+[[nodiscard]] CheckOutcome verify_snapshot_id(const entity::SnapshotId& snapshot_id);
 
 // Does strict checks on library names and raises UserInputException if it encounters an error.
 // Should be checked only when writing new libraries to allow for backwards compatibility
