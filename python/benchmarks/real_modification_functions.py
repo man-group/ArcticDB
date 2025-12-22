@@ -68,7 +68,7 @@ class AWSLargeAppendTests(AsvBase):
         """
         Returns initial timestamp and index frequency
         """
-        return (pd.Timestamp("2-2-1986"), "s")
+        return pd.Timestamp("2-2-1986"), "s"
 
     def setup_cache(self):
         return self.initialize_cache(

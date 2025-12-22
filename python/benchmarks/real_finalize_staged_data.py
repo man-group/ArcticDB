@@ -15,9 +15,8 @@ from benchmarks.common import AsvBase
 
 class AWSFinalizeStagedData(AsvBase):
     """
-    Checks finalizing staged data. Note, that staged symbols can be finalized only twice,
-    therefore certain design decisions must be taken in advance so each process sets up
-    environment for exactly one test
+    Checks finalizing staged data. Staged symbols can be finalized only once,
+    so each process sets up the environment for exactly one test.
     """
 
     rounds = 1
@@ -59,14 +58,14 @@ class AWSFinalizeStagedData(AsvBase):
 
         self.lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)
 
-        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, self.df_cache.TIME_UNIT)  # Synchronize index frequency
+        initial_timestamp: TimestampNumber = TimestampNumber(0, self.df_cache.TIME_UNIT)  # Synchronize index frequency
 
         df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)
         list_of_chunks = [10000] * num_chunks
         self.symbol = f"symbol_{os.getpid()}"
 
         self.lib.write(self.symbol, data=df, prune_previous_versions=True)
-        stage_chunks(self.lib, self.symbol, self.df_cache, INITIAL_TIMESTAMP, list_of_chunks)
+        stage_chunks(self.lib, self.symbol, self.df_cache, initial_timestamp, list_of_chunks)
 
     def teardown(self, cache: CachedDFGenerator, param: int):
         self.get_library_manager().clear_all_modifiable_libs_from_this_process()
