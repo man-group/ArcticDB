@@ -27,7 +27,7 @@ class AWSFinalizeStagedData(AsvBase):
 
     timeout = 1200
 
-    params = [500, 1000]  # Test data [10, 20]
+    params = [10, 20]
     param_names = ["num_chunks"]
 
     library_manager = TestLibraryManager(Storage.AMAZON, "FINALIZE")
