@@ -127,7 +127,7 @@ def extract_asv_results(lib, json_path):
 def analyze_asv_results(lib, hash):
     """This function is designed to analyze the performance of our ASV benchmarks, so we can keep their runtime under control.
 
-    TODO We could run this inside our CI. We could also track these results inside ASV itself.
+    TODO We could also track these results inside ASV itself.
 
     You can test this function against our real results database by running with,
 
