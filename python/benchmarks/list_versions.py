@@ -47,7 +47,9 @@ class ListVersions:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def check_if_skipped_parameter(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):
+    def check_if_skipped_parameter(
+        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
+    ):
         """At the time of writing there are two choices for each parameter. This is 128 parameterizations in total if
         we do not skip any.
 
@@ -100,20 +102,18 @@ class ListVersions:
         pass
 
     def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):
-        self.check_if_skipped_parameter(num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots)
+        self.check_if_skipped_parameter(
+            num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
+        )
         self.ac = Arctic("lmdb://list_versions")
         self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]
 
     def time_list_versions(
         self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
     ):
-        self.lib.list_versions(
-            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots
-        )
+        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
 
     def peakmem_list_versions(
         self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
     ):
-        self.lib.list_versions(
-            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots
-        )
+        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)

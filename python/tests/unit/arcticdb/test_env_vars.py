@@ -44,25 +44,17 @@ def test_bad_format(key, value, mocks):
         setter.assert_not_called()
 
 
-@pytest.mark.parametrize("input_val", [
-    "y", "yes", "t", "true", "on", "1",
-    "YES", "True", "ON"
-])
+@pytest.mark.parametrize("input_val", ["y", "yes", "t", "true", "on", "1", "YES", "True", "ON"])
 def test_strtobool_true(input_val):
     assert strtobool(input_val) is True
 
 
-@pytest.mark.parametrize("input_val", [
-    "n", "no", "f", "false", "off", "0",
-    "NO", "False", "OFF"
-])
+@pytest.mark.parametrize("input_val", ["n", "no", "f", "false", "off", "0", "NO", "False", "OFF"])
 def test_strtobool_false(input_val):
     assert strtobool(input_val) is False
 
 
-@pytest.mark.parametrize("invalid_input", [
-    "maybe", "2", "none", "", "blue", "not-on"
-])
+@pytest.mark.parametrize("invalid_input", ["maybe", "2", "none", "", "blue", "not-on"])
 def test_strtobool_invalid(invalid_input):
     with pytest.raises(ValueError, match=f"invalid truth value {invalid_input!r}"):
         strtobool(invalid_input)
