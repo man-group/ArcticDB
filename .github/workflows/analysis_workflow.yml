@@ -2,8 +2,8 @@ name: Build with analysis tools
 on:
   workflow_dispatch:
     inputs:
-      run_all_benchmarks:
-        description: Run all benchmarks
+      run_all_tags:
+        description: Run against all tags
         type: boolean
         default: false
       dev_image_tag:
@@ -50,7 +50,7 @@ jobs:
       - name: Get tags
         id: get_tags
         run: | 
-          python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.run_all_benchmarks == true && '--run_all_benchmarks' || ''}}
+          python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.run_all_tags == true && '--run_all_tags' || ''}}
     outputs:
       matrix: ${{ steps.get_tags.outputs.commits }}
 
@@ -66,7 +66,6 @@ jobs:
     secrets: inherit
     with:
       commit: ${{ matrix.commits }}
-      run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
       run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
       suite_to_run: ${{  github.event_name == 'schedule' && 'ALL' || inputs.suite_to_run || 'LMDB'}}
