@@ -342,7 +342,7 @@ class ChunkedBufferImpl {
 
     uint8_t* bytes_at(size_t pos_bytes, size_t required) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        util::check(
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
                 pos + required <= block->physical_bytes(),
                 "Block overflow, position {} is greater than block capacity {}",
                 pos + required,
@@ -357,7 +357,7 @@ class ChunkedBufferImpl {
 
     uint8_t& operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        util::check(
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
                 pos < block->physical_bytes(),
                 "Block overflow, position {} is greater than block capacity {}",
                 pos,
@@ -390,19 +390,16 @@ class ChunkedBufferImpl {
     [[nodiscard]] uint8_t* data() { return const_cast<uint8_t*>(const_cast<const ChunkedBufferImpl*>(this)->data()); }
 
     void check_bytes(size_t pos_bytes, size_t required_bytes) const {
-        if (pos_bytes + required_bytes > bytes()) {
-            std::string err = fmt::format(
-                    "Cursor overflow in chunked_buffer ptr_cast, cannot read {} bytes from a buffer of size {} with "
-                    "cursor "
-                    "at {}, as it would require {} bytes. ",
-                    required_bytes,
-                    bytes(),
-                    pos_bytes,
-                    pos_bytes + required_bytes
-            );
-            ARCTICDB_DEBUG(log::storage(), err);
-            throw std::invalid_argument(err);
-        }
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                pos_bytes + required_bytes <= bytes(),
+                "Cursor overflow in chunked_buffer ptr_cast, cannot read {} bytes from a buffer of size {} with "
+                "cursor "
+                "at {}, as it would require {} bytes. ",
+                required_bytes,
+                bytes(),
+                pos_bytes,
+                pos_bytes + required_bytes
+        );
     }
 
     // Returns a vector of continuous buffers, each designated by a pointer and size

@@ -114,8 +114,8 @@ static void BM_iterate_with_scalar_at(benchmark::State& state) {
     [[maybe_unused]] auto acc = 0ull;
     for (auto _ : state) {
         // Starting col from 1 to skip the index
-        for (auto col=1; col<=num_cols; ++col) {
-            for (auto row=0; row<num_rows; ++row) {
+        for (auto col = 1; col <= num_cols; ++col) {
+            for (auto row = 0; row < num_rows; ++row) {
                 acc += segment.scalar_at<uint64_t>(row, col).value_or(0);
             }
         }
@@ -130,12 +130,14 @@ static void BM_iterate_with_iterator(benchmark::State& state) {
     [[maybe_unused]] auto acc = 0ull;
     for (auto _ : state) {
         // Starting col from 1 to skip the index
-        for (auto col=1; col<=num_cols; ++col) {
+        for (auto col = 1; col <= num_cols; ++col) {
             auto data = segment.column(col).data();
             using tdt = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-            std::for_each(data.cbegin<tdt, IteratorType::REGULAR, IteratorDensity::DENSE>(), data.cend<tdt, IteratorType::REGULAR, IteratorDensity::DENSE>(), [&](auto v) {
-                acc += v;
-            });
+            std::for_each(
+                    data.cbegin<tdt, IteratorType::REGULAR, IteratorDensity::DENSE>(),
+                    data.cend<tdt, IteratorType::REGULAR, IteratorDensity::DENSE>(),
+                    [&](auto v) { acc += v; }
+            );
         }
     }
 }
