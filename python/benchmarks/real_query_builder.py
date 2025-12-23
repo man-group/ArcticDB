@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from logging import Logger
 import pandas as pd
-from arcticdb.util.environment_setup import (
+from .environment_setup import (
     DataFrameGenerator,
     TestLibraryManager,
     LibraryPopulationPolicy,

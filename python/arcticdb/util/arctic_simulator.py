@@ -15,7 +15,7 @@ from arcticdb.util.test import (
     assert_frame_equal_rebuild_index_first,
     assert_series_equal_pandas_1,
 )
-from arcticdb.util.utils import (
+from arcticdb.util.test_utils import (
     ARCTICDB_NA_VALUE_BOOL,
     ARCTICDB_NA_VALUE_FLOAT,
     ARCTICDB_NA_VALUE_INT,

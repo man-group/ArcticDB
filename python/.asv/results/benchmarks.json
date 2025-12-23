@@ -1020,83 +1020,55 @@
         "version": "04b12bd96d5626c3cbd842567a904be81f4798b8a55eef94563304659ef22fec"
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, param: int):\n        self.logger.info(f\"LIBRARY: {self.lib}\")\n        self.logger.info(f\"Created Symbol: {self.symbol}\")\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, param: int):\n        self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.lib_name)\n        self.symbol = f\"symbol{param}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache(CachedDFGenerator(350000, [5]))\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage) if is_storage_enabled(storage) else None\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
         "param_names": [
-            "param1"
+            "num_chunks",
+            "storage"
         ],
         "params": [
             [
-                "1000"
+                "10",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:47",
-        "timeout": 600,
+        "setup_cache_key": "finalize_staged_data:45",
+        "timeout": 100,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b49303c7a22a40468340ba6846719d83029e19a7355bb1d0e330142132a132b3"
+        "version": "5ee99dfd98b2ece801832a1292d5ae4e97dfd0c263291cf1f213b4681a418a7a"
     },
     "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, param: int):\n        self.logger.info(f\"LIBRARY: {self.lib}\")\n        self.logger.info(f\"Created Symbol: {self.symbol}\")\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, param: int):\n        self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.lib_name)\n        self.symbol = f\"symbol{param}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache(CachedDFGenerator(350000, [5]))\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-time\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-time\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage) if is_storage_enabled(storage) else None\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
         "min_run_count": 1,
         "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
         "number": 1,
         "param_names": [
-            "param1"
+            "num_chunks",
+            "storage"
         ],
         "params": [
             [
-                "1000"
+                "10",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
-        "repeat": 5,
+        "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:47",
-        "timeout": 600,
+        "setup_cache_key": "finalize_staged_data:45",
+        "timeout": 100,
         "type": "time",
         "unit": "seconds",
-        "version": "b083f4862ad8234395f2d583c00eca4ee85bd17a2142e225946d02fbebbb849c",
-        "warmup_time": 0
-    },
-    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedDataWiderDataframeX3:\n    def peakmem_finalize_staged_data(self, param: int):\n        if not SLOW_TESTS:\n            raise SkipNotImplemented(\"Slow tests are skipped\")\n        super().peakmem_finalize_staged_data(param)\n\n    def setup(self, param: int):\n        if not SLOW_TESTS:\n            raise SkipNotImplemented(\"Slow tests are skipped\")\n        super().setup(param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        if not SLOW_TESTS:\n            return  # Avoid setup when skipping\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50])  # 3 times wider DF with bigger string columns\n        start = time.time()\n        self._setup_cache(cachedDF)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data",
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "1000"
-            ]
-        ],
-        "setup_cache_key": "finalize_staged_data:100",
-        "timeout": 600,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "78d99e44cce890e09c89b0a8e4c1420cd237ac7eec4bb678c96618827baef718"
-    },
-    "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data": {
-        "code": "class FinalizeStagedDataWiderDataframeX3:\n    def time_finalize_staged_data(self, param: int):\n        if not SLOW_TESTS:\n            raise SkipNotImplemented(\"Slow tests are skipped\")\n        super().time_finalize_staged_data(param)\n\n    def setup(self, param: int):\n        if not SLOW_TESTS:\n            raise SkipNotImplemented(\"Slow tests are skipped\")\n        super().setup(param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        if not SLOW_TESTS:\n            return  # Avoid setup when skipping\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50])  # 3 times wider DF with bigger string columns\n        start = time.time()\n        self._setup_cache(cachedDF)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 1,
-        "name": "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data",
-        "number": 1,
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "1000"
-            ]
-        ],
-        "repeat": 5,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:100",
-        "timeout": 600,
-        "type": "time",
-        "unit": "seconds",
-        "version": "6c8fcb770b3ba6cd93b63b830a169dd3afd65e5cf007496395938a6f8e10cf82",
+        "version": "e979cb744bb36e87f3ee506b864aef2cbf6a059b6fb6472b8464901bad7f3d02",
         "warmup_time": 0
     },
     "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list": {
@@ -2192,48 +2164,6 @@
         "version": "9b06683aaf9b2112fce975aaad4ccdf9ad266b297384fb73f01948a23ed9c622",
         "warmup_time": 0
     },
-    "real_finalize_staged_data.AWSFinalizeStagedData.peakmem_finalize_staged_data": {
-        "code": "class AWSFinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        self.logger.info(f\"Library: {self.lib}\")\n        self.logger.info(f\"Symbol: {self.symbol}\")\n        assert self.symbol in self.lib.get_staged_symbols()\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache, num_chunks: int):\n        self.df_cache: CachedDFGenerator = cache\n        self.logger = self.get_logger()\n    \n        self.lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n    \n        initial_timestamp: TimestampNumber = TimestampNumber(0, self.df_cache.TIME_UNIT)  # Synchronize index frequency\n    \n        df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)\n        list_of_chunks = [10000] * num_chunks\n        self.symbol = f\"symbol_{os.getpid()}\"\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, self.df_cache, initial_timestamp, list_of_chunks)\n\n    def setup_cache(self):\n        # Preconditions for this test\n        assert AWSFinalizeStagedData.number == 1\n        assert AWSFinalizeStagedData.repeat == 1\n        assert AWSFinalizeStagedData.rounds == 1\n        assert AWSFinalizeStagedData.warmup_time == 0\n    \n        manager = self.get_library_manager()\n        manager.clear_all_benchmark_libs()\n        manager.log_info()\n    \n        df_cache = CachedDFGenerator(500000, [5])\n        return df_cache",
-        "name": "real_finalize_staged_data.AWSFinalizeStagedData.peakmem_finalize_staged_data",
-        "param_names": [
-            "num_chunks"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "setup_cache_key": "real_finalize_staged_data:41",
-        "timeout": 1200,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "a00d9c9615264370b9fab0b1d3825d2efef06d758c65b1dcbfa07257cdcea304"
-    },
-    "real_finalize_staged_data.AWSFinalizeStagedData.time_finalize_staged_data": {
-        "code": "class AWSFinalizeStagedData:\n    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        self.logger.info(f\"Library: {self.lib}\")\n        self.logger.info(f\"Symbol: {self.symbol}\")\n        assert self.symbol in self.lib.get_staged_symbols()\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache, num_chunks: int):\n        self.df_cache: CachedDFGenerator = cache\n        self.logger = self.get_logger()\n    \n        self.lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n    \n        initial_timestamp: TimestampNumber = TimestampNumber(0, self.df_cache.TIME_UNIT)  # Synchronize index frequency\n    \n        df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)\n        list_of_chunks = [10000] * num_chunks\n        self.symbol = f\"symbol_{os.getpid()}\"\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, self.df_cache, initial_timestamp, list_of_chunks)\n\n    def setup_cache(self):\n        # Preconditions for this test\n        assert AWSFinalizeStagedData.number == 1\n        assert AWSFinalizeStagedData.repeat == 1\n        assert AWSFinalizeStagedData.rounds == 1\n        assert AWSFinalizeStagedData.warmup_time == 0\n    \n        manager = self.get_library_manager()\n        manager.clear_all_benchmark_libs()\n        manager.log_info()\n    \n        df_cache = CachedDFGenerator(500000, [5])\n        return df_cache",
-        "min_run_count": 1,
-        "name": "real_finalize_staged_data.AWSFinalizeStagedData.time_finalize_staged_data",
-        "number": 1,
-        "param_names": [
-            "num_chunks"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_finalize_staged_data:41",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "58aba0e13e6088bd71237d44226cc07f8a6beed8e283d9c80620873c0f0d4728",
-        "warmup_time": 0
-    },
     "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
         "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.setup_library()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        self.lib._nvs.version_store._clear_symbol_list_keys()  # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        self.get_library_manager().log_info()  # Always log the ArcticURIs",
         "name": "real_list_operations.AWSListSymbols.peakmem_list_symbols",
@@ -2246,7 +2176,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "real_list_operations:58",
+        "setup_cache_key": "real_list_operations:57",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2269,7 +2199,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:58",
+        "setup_cache_key": "real_list_operations:57",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2293,7 +2223,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:58",
+        "setup_cache_key": "real_list_operations:57",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2312,7 +2242,7 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2330,7 +2260,7 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2348,7 +2278,7 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2371,7 +2301,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2395,7 +2325,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2419,7 +2349,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2443,7 +2373,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2467,7 +2397,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2491,7 +2421,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2515,7 +2445,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:138",
+        "setup_cache_key": "real_list_operations:137",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3164,7 +3094,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3182,7 +3112,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3200,7 +3130,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3218,7 +3148,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3236,7 +3166,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3254,7 +3184,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3277,7 +3207,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3301,7 +3231,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3325,7 +3255,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3349,7 +3279,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3373,7 +3303,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3397,7 +3327,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:87",
+        "setup_cache_key": "real_read_write:86",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3416,7 +3346,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3434,7 +3364,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3452,7 +3382,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3470,7 +3400,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3488,7 +3418,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3506,7 +3436,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3529,7 +3459,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3553,7 +3483,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3577,7 +3507,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3601,7 +3531,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3625,7 +3555,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3649,7 +3579,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:243",
+        "setup_cache_key": "real_read_write:242",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3668,7 +3598,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3686,7 +3616,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3704,7 +3634,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3722,7 +3652,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3740,7 +3670,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3758,7 +3688,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3781,7 +3711,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3805,7 +3735,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3829,7 +3759,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3853,7 +3783,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3877,7 +3807,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3901,7 +3831,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:212",
+        "setup_cache_key": "real_read_write:211",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",

@@ -14,7 +14,8 @@ import platform
 from typing import Optional
 
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryDescriptor
-from arcticdb.adapters.s3_library_adapter import strtobool, USE_AWS_CRED_PROVIDERS_TOKEN
+from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
+from arcticdb.util.utils import strtobool
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import UserInputException

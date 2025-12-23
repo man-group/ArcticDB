@@ -19,7 +19,7 @@ from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
 )
-from arcticdb.util.utils import DFGenerator, generate_random_series, set_seed, supported_types_list
+from arcticdb.util.test_utils import DFGenerator, generate_random_series, set_seed, supported_types_list
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
