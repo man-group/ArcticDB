@@ -1143,8 +1143,7 @@
                 "100"
             ],
             [
-                "<Storage.LMDB: 2>",
-                "<Storage.AMAZON: 1>"
+                "<Storage.LMDB: 2>"
             ]
         ],
         "setup_cache_key": "finalize_staged_data:43",
@@ -1168,8 +1167,7 @@
                 "100"
             ],
             [
-                "<Storage.LMDB: 2>",
-                "<Storage.AMAZON: 1>"
+                "<Storage.LMDB: 2>"
             ]
         ],
         "repeat": 1,

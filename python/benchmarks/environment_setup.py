@@ -68,9 +68,17 @@ class LibraryType(Enum):
 
 
 def storages_for_asv() -> Tuple[Storage, ...]:
-    storages = [Storage.LMDB]
+    """Decide which storages to use for ASV testing based on environment variables.
 
-    if strtobool(os.getenv("ARCTICDB_ASV_USE_AWS", "0")):
+    ARCTICDB_STORAGE_LMDB (default: True): Test against LMDB
+    ARCTICDB_STORAGE_AWS_S3 (default: False): Test against AWS
+    """
+    storages = []
+
+    if strtobool(os.getenv("ARCTICDB_STORAGE_LMDB", "1")):
+        storages.append(Storage.LMDB)
+
+    if strtobool(os.getenv("ARCTICDB_STORAGE_AWS_S3", "0")):
         storages.append(Storage.AMAZON)
 
     return tuple(storages)
@@ -97,7 +105,7 @@ def create_library(storage: Storage) -> Library:
     Then write,
 
     ```aws.env
-    ARCTICDB_ASV_USE_AWS=1
+    ARCTICDB_STORAGE_AWS_S3=1
     ARCTICDB_REAL_S3_ACCESS_KEY=<redacted>
     ARCTICDB_REAL_S3_BUCKET=<bucket-name>
     ARCTICDB_REAL_S3_CLEAR=0

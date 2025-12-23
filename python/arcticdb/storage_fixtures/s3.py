@@ -15,7 +15,6 @@ import sys
 import platform
 import pprint
 from tempfile import mkdtemp
-from urllib.parse import urlparse
 import boto3
 import time
 import random
