@@ -2,7 +2,6 @@ name: __benchmark_commits
 on:
   workflow_call:
     inputs:
-      run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
@@ -128,14 +127,14 @@ jobs:
             echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request_target'
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
-        if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
+        if: github.event_name == 'pull_request_target'
         shell: bash -el {0}
         run: |
           python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
