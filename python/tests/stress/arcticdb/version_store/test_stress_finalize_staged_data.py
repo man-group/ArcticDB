@@ -9,15 +9,13 @@ As of the Change Date specified in that file, in accordance with the Business So
 import gc
 import sys
 import time
-import numpy as np
 from typing import List
 import numpy as np
-import pandas as pd
 import pytest
 
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from arcticdb.config import set_log_level
-from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
+from arcticdb.util.test_utils import CachedDFGenerator, TimestampNumber, stage_chunks
 
 
 from tests.util.mark import MACOS, REAL_S3_TESTS_MARK, SKIP_CONDA_MARK, SLOW_TESTS_MARK
