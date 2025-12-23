@@ -1563,11 +1563,11 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings,
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=3),
-        data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]},
+        data={"a": [f"{unicode_symbols()}abc", f"abc{unicode_symbols()}", "abc"], "b": [1, 2, 3]},
     )
     lib.write(sym, df, dynamic_strings=dynamic_strings)
 
-    pattern = "^" + unicode_symbols + "abc$"
+    pattern = "^" + unicode_symbols() + "abc$"
     q = QueryBuilder()
     q = q[q["a"].regex_match(pattern)]
     expected = df[df.a.str.contains(pattern)]
