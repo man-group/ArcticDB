@@ -5,8 +5,8 @@ on:
       benchmark_all_tags: {required: true, type: boolean, description: Run benchmarks for all tags or just the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
-      suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
-      suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
+      storage:            {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
+      suite_overwrite:    {required: false, type: string, default: '', description: User defined tests to run}
 jobs:
   start_ec2_runner:
     uses: ./.github/workflows/ec2_runner_jobs.yml
@@ -100,12 +100,17 @@ jobs:
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
-            if [ "${{ inputs.suite_to_run }}" == "REAL" ]; then
+            if [ "${{ inputs.storage }}" == "REAL" ]; then
               # ASV tests with real storage starts with 'real_' in the test name
-              SUITE='^(real_).*'
-            elif [ "${{ inputs.suite_to_run }}" == "ALL" ]; then
+              # aseaton: We are currently refactoring away from this pattern to control the storages by environment variables
+              # instead. finalize_staged_data is the first one in the new pattern.
+              SUITE='(^real_.*|^finalize_staged_data.*)'
+              echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
+              echo "ARCTICDB_STORAGE_LMDB=0" >> $GITHUB_ENV
+            elif [ "${{ inputs.storage }}" == "ALL" ]; then
               # Select all tests
               SUITE='^.*'
+              echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
             else
               # LMDB tests are other tests not starting with 'real_'
               SUITE='^(?!real_).*'

@@ -14,7 +14,7 @@ import pytest
 
 from arcticdb.exceptions import UnsortedDataException, UserInputException
 from arcticdb.util.test import dataframe_dump_to_log, assert_frame_equal
-from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
+from arcticdb.util.test_utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from tests.stress.arcticdb.version_store.test_stress_finalize_staged_data import generate_chunk_sizes
 

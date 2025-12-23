@@ -13,7 +13,7 @@ import pytest
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.util.utils import verify_dynamically_added_columns
+from arcticdb.util.test_utils import verify_dynamically_added_columns
 from arcticdb.version_store.library import Library
 from arcticdb_ext.exceptions import SchemaException, NormalizationException
 

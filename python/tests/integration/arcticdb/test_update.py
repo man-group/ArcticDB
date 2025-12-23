@@ -23,12 +23,12 @@ from arcticdb_ext.exceptions import ArcticException as ArcticNativeException
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
-from arcticdb.util.utils import DFGenerator, TimestampNumber, set_seed
+from arcticdb.util.test_utils import DFGenerator, TimestampNumber, set_seed
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
 from arcticdb.util.test import assert_frame_equal, sample_dataframe
-from arcticdb_ext.version_store import DataError, NoSuchVersionException
+from arcticdb_ext.version_store import DataError
 from tests.util.mark import LINUX
 
 logger = get_logger()

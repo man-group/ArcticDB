@@ -24,7 +24,7 @@ from typing import Generator, List, Tuple
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import get_sample_dataframe, random_string
-from arcticdb.util.utils import DFGenerator
+from arcticdb.util.test_utils import DFGenerator
 from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore

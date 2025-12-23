@@ -2,16 +2,16 @@ name: Build with analysis tools
 on:
   workflow_dispatch:
     inputs:
-      benchmark_all_tags:
-        description: Run benchmarks against all tags in the repo rather than just the HEAD commit
+      run_all_benchmarks:
+        description: Run all benchmarks
         type: boolean
         default: false
       dev_image_tag:
         description: Tag of the ArcticDB development image to use for benchmark and code coverage flows
         type: string
         default: latest
-      suite_to_run:
-          description: Run LMDB suite or REAL storage (or both - ALL)
+      storage:
+          description: Storage to run benchmarks against
           type: choice
           options:
             - 'LMDB'
@@ -72,7 +72,7 @@ jobs:
       commit: ${{ matrix.commits }}
       benchmark_all_tags: ${{ inputs.benchmark_all_tags || false }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
-      suite_to_run: ${{  github.event_name == 'schedule' && 'ALL' || inputs.suite_to_run || 'LMDB'}}
+      storage: ${{  github.event_name == 'schedule' && 'ALL' || inputs.storage || 'LMDB'}}
       suite_overwrite: ${{ inputs.suite_overwrite || ''}}
 
   publish_benchmark_results_to_gh_pages:  
@@ -132,7 +132,7 @@ jobs:
     name: Executes asv tests checks
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    container:     
+    container:
       image: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag || 'latest' }}
       volumes:
         - /:/mnt

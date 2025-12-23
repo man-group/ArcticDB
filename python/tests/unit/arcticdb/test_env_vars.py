@@ -10,6 +10,7 @@ import pytest
 
 from unittest.mock import patch
 from arcticdb.tools import set_config_from_env_vars, _ARCTICDB_ENV_VAR_PREFIX, _ARCTIC_NATIVE_ENV_VAR_PREFIX
+from arcticdb.util.utils import strtobool
 
 _MODULE = set_config_from_env_vars.__module__  # Insulate the tests from any move of the function
 
@@ -41,3 +42,25 @@ def test_bad_format(key, value, mocks):
 
     for setter in mocks.values():
         setter.assert_not_called()
+
+
+@pytest.mark.parametrize("input_val", ["y", "yes", "t", "true", "on", "1", "YES", "True", "ON"])
+def test_strtobool_true(input_val):
+    assert strtobool(input_val) is True
+
+
+@pytest.mark.parametrize("input_val", ["n", "no", "f", "false", "off", "0", "NO", "False", "OFF"])
+def test_strtobool_false(input_val):
+    assert strtobool(input_val) is False
+
+
+@pytest.mark.parametrize("invalid_input", ["maybe", "2", "none", "", "blue", "not-on"])
+def test_strtobool_invalid(invalid_input):
+    assert not strtobool(invalid_input)
+
+
+def test_strtobool_type_error():
+    with pytest.raises(AttributeError):
+        strtobool(None)
+    with pytest.raises(AttributeError):
+        strtobool(1)
