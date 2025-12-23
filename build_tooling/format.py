@@ -43,10 +43,21 @@ def lint_python(in_place: bool, specific_file: str = None):
     else:
         path = "python/"
 
-    if in_place:
-        return subprocess.run(["black", "-l", "120", path]).returncode
-    else:
-        return subprocess.run(["black", "-l", "120", "--check", path]).returncode
+    command = [
+        "black",
+        "-l",
+        "120",
+        "--extend-exclude",
+        "/(.asv)/"
+    ]
+
+    if not in_place:
+        command.append("--check")
+
+    command.append(path)
+
+    print(f"Running {command}")
+    return subprocess.run(command).returncode
 
 
 def lint_cpp(in_place: bool, specific_file: str = None):
