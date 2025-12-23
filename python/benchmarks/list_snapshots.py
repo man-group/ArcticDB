@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 from arcticdb import Arctic
 
-from arcticdb.util.utils import CachedDFGenerator
+from arcticdb.util.test_utils import CachedDFGenerator
 from benchmarks.common import *
 
 

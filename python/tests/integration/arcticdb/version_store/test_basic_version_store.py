@@ -31,7 +31,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
-from arcticdb.util.utils import generate_random_numpy_array, generate_random_series
+from arcticdb.util.test_utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException

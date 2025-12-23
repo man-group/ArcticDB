@@ -16,7 +16,7 @@ from arcticdb_ext.exceptions import InternalException, NormalizationException, S
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.config import set_log_level
-from arcticdb.util.utils import generate_random_numpy_array, supported_types_list
+from arcticdb.util.test_utils import generate_random_numpy_array, supported_types_list
 from arcticdb.util.logger import get_logger
 from tests.util.mark import WINDOWS
 

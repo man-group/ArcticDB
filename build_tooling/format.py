@@ -34,9 +34,11 @@ def install_tools():
 def lint_python(in_place: bool, specific_file: str = None):
     try:
         import black
-        assert black.__version__ == black_version
     except ImportError:
         raise RuntimeError("black not installed. Run this script with --install-tools then try again")
+
+    assert black.__version__ == black_version, (f"Black version should be {black.__version__} but was {black_version}. "
+                                                f"Run this script with --install-tools then try again")
 
     if specific_file:
         path = specific_file

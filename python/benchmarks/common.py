@@ -16,7 +16,7 @@ import os
 import bz2
 import urllib.request
 
-from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy
+from .environment_setup import TestLibraryManager, LibraryPopulationPolicy
 from arcticdb.util.logger import get_logger
 from arcticdb_ext import set_config_string
 

@@ -8,10 +8,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from logging import Logger
 import numpy as np
-import pandas as pd
 
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import (
+from .environment_setup import (
     DataFrameGenerator,
     TestLibraryManager,
     LibraryPopulationPolicy,
@@ -20,7 +19,7 @@ from arcticdb.util.environment_setup import (
     populate_library_if_missing,
 )
 from arcticdb.util.logger import get_logger as _get_logger
-from arcticdb.util.utils import DFGenerator, DataRangeUtils, TimestampNumber
+from arcticdb.util.test_utils import DFGenerator, DataRangeUtils, TimestampNumber
 import arcticdb.toolbox.query_stats as qs
 from benchmarks.common import AsvBase
 

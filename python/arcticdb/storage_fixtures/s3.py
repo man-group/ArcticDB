@@ -15,7 +15,6 @@ import sys
 import platform
 import pprint
 from tempfile import mkdtemp
-from urllib.parse import urlparse
 import boto3
 import time
 import random
@@ -303,7 +302,10 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
         self.native_config = native_config
 
     def __str__(self):
-        return f"{type(self).__name__}[{self.default_bucket or self.endpoint}]"
+        return (
+            f"{type(self).__name__}[endpoint={self.endpoint}, bucket={self.default_bucket}, prefix={self.default_prefix}, "
+            f"use_raw_prefix={self.use_raw_prefix}]"
+        )
 
     def _boto(self, service: str, key: Key, api="client"):
         ctor = getattr(boto3, api)
@@ -364,7 +366,11 @@ class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
 
 
 def real_s3_from_environment_variables(
-    shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
+    shared_path: bool,
+    native_config: Optional[NativeVariantStorage] = None,
+    additional_suffix: str = "",
+    validate=False,
+    log=False,
 ) -> BaseS3StorageFixtureFactory:
     out = BaseS3StorageFixtureFactory(native_config=native_config)
     out.endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT", "")
@@ -379,6 +385,28 @@ def real_s3_from_environment_variables(
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
+
+    if log:
+        logger.info(
+            f"Real S3 fixture created {out}. shared_path={shared_path}, default_prefix={out.default_prefix}, "
+            f"clean_on_exit={out.clean_bucket_on_fixture_exit}"
+        )
+
+    if validate:
+        missing = []
+        if not out.endpoint:
+            missing.append("ARCTICDB_REAL_S3_ENDPOINT")
+        if not out.region:
+            missing.append("ARCTICDB_REAL_S3_REGION")
+        if not out.default_bucket:
+            missing.append("ARCTICDB_REAL_S3_BUCKET")
+        if not access_key:
+            missing.append("ARCTICDB_REAL_S3_ACCESS_KEY")
+        if not secret_key:
+            missing.append("ARCTICDB_REAL_S3_SECRET_KEY")
+
+        assert not missing, f"Environment variables {missing} not set but required to use real S3 fixtures"
+
     return out
 
 
