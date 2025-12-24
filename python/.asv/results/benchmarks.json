@@ -3951,8 +3951,7 @@
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:44",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:37",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "6ec31003ea6670c43aa00db693244e61d4b6ceb6298814e23f665dbfc229256e"
@@ -3972,8 +3971,7 @@
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:44",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:37",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "cc0880433edb88fcfa2c4c4d63c6f92b2708ba046243089f64df269258a347d0"
@@ -3993,17 +3991,16 @@
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:44",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:37",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "12d31fb08531c21063cc68bf66c26acc2582107b2efd7871f625b5852425390a"
     },
     "recursive_normalizer.LMDBRecursiveNormalizer.time_read_batch_nested_dict": {
         "code": "class LMDBRecursiveNormalizer:\n    def time_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "min_run_count": 1,
+        "min_run_count": 2,
         "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_read_batch_nested_dict",
-        "number": 3,
+        "number": 0,
         "param_names": [
             "num_dict_entries",
             "num_symbols"
@@ -4016,11 +4013,10 @@
                 "5"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:44",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:37",
         "type": "time",
         "unit": "seconds",
         "version": "605a38cfd184c507f8e9b798c7c29d7056c1c10caa61b16c5ac1215d8976233c",
@@ -4028,9 +4024,9 @@
     },
     "recursive_normalizer.LMDBRecursiveNormalizer.time_read_nested_dict": {
         "code": "class LMDBRecursiveNormalizer:\n    def time_read_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read(get_symbol_name(num_dict_entry, 0))\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "min_run_count": 1,
+        "min_run_count": 2,
         "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_read_nested_dict",
-        "number": 3,
+        "number": 0,
         "param_names": [
             "num_dict_entries",
             "num_symbols"
@@ -4043,11 +4039,10 @@
                 "5"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:44",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:37",
         "type": "time",
         "unit": "seconds",
         "version": "847fd46008b28ca19d2092a4d3cd44d4f789a9b0af6a213806db5a6ea114bf06",
@@ -4055,9 +4050,9 @@
     },
     "recursive_normalizer.LMDBRecursiveNormalizer.time_write_nested_dict": {
         "code": "class LMDBRecursiveNormalizer:\n    def time_write_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib._nvs.write(\n            f\"nested_dict_time_write_nested_dict_{num_dict_entry}\",\n            get_data(num_dict_entry),\n            recursive_normalizers=True,\n        )\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "min_run_count": 1,
+        "min_run_count": 2,
         "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_write_nested_dict",
-        "number": 3,
+        "number": 0,
         "param_names": [
             "num_dict_entries",
             "num_symbols"
@@ -4070,11 +4065,10 @@
                 "5"
             ]
         ],
-        "repeat": 1,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:44",
-        "timeout": 1200,
+        "setup_cache_key": "recursive_normalizer:37",
         "type": "time",
         "unit": "seconds",
         "version": "1e1e6b68b8d06e4a643b0c210429964623fb36a4cc9a793682299470712f024a",
