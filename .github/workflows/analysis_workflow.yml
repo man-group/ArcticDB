@@ -75,6 +75,7 @@ jobs:
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
     if: ${{ github.event_name != 'pull_request_target' }} # only publish for the scheduled master builds
+    #if: ${{ github.event_name != 'pull_request_target' && github.event_name != 'workflow_dispatch'}} # only publish for the scheduled master builds
     needs: [benchmark_commits]
     runs-on: ubuntu-22.04
     container:
@@ -102,9 +103,10 @@ jobs:
             ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
             ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
 
-      - uses: actions/checkout@v3.3.0
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          fetch-tags: true
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
 
