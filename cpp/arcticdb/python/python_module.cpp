@@ -27,6 +27,7 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/python/python_bindings_common.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
@@ -291,27 +292,6 @@ void register_instrumentation(py::module&& m) {
 #endif
 }
 
-void register_metrics(py::module&& m) {
-
-    auto prometheus = m.def_submodule("prometheus");
-    py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(prometheus, "Instance");
-
-    py::class_<arcticdb::MetricsConfig, std::shared_ptr<arcticdb::MetricsConfig>>(prometheus, "MetricsConfig")
-            .def(py::init<
-                    const std::string&,
-                    const std::string&,
-                    const std::string&,
-                    const std::string&,
-                    const std::string&,
-                    const arcticdb::MetricsConfig::Model>());
-
-    py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
-            .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)
-            .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
-            .value("PULL", arcticdb::MetricsConfig::Model::PULL)
-            .export_values();
-}
-
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
 /// @see arcticdb::ITypeHandler
 void register_type_handlers() {
@@ -379,7 +359,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_configs_map_api(m);
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));
-    register_metrics(m.def_submodule("metrics"));
+    register_metrics(m.def_submodule("metrics"), false);
     register_type_handlers();
 
     register_termination_handler();
