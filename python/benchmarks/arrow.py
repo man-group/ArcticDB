@@ -21,11 +21,8 @@ from benchmarks.common import generate_pseudo_random_dataframe
 
 
 class ArrowNumeric:
-    number = 20
-    warmup_time = 0
-    timeout = 6000
-    rounds = 2
-    connection_string = "lmdb://arrow_numeric?map_size=20GB"
+    timeout = 600
+    connection_string = "lmdb://arrow_numeric"
     lib_name_prewritten = "arrow_numeric_prewritten"
     lib_name_fresh = "arrow_numeric_fresh"
     params = ([1_000_000, 10_000_000], [None, "middle"])
@@ -95,14 +92,11 @@ class ArrowNumeric:
 
 
 class ArrowStrings:
-    number = 20
-    warmup_time = 1
-    timeout = 6000
-    rounds = 4
-    connection_string = "lmdb://arrow_strings?map_size=20GB"
+    timeout = 600
+    connection_string = "lmdb://arrow_strings"
     lib_name_prewritten = "arrow_strings_prewritten"
     lib_name_fresh = "arrow_strings_fresh"
-    params = ([10_000, 1_000_000], [None, "middle"], [1, 100, 100_000], list(ArrowOutputStringFormat))
+    params = ([100_000, 1_000_000], [None, "middle"], [100, 10_000], list(ArrowOutputStringFormat))
     param_names = ["rows", "date_range", "unique_string_count", "arrow_string_format"]
     num_cols = 10
 
@@ -177,7 +171,13 @@ class ArrowStrings:
         else:
             raise SkipNotImplemented
 
+    def _check_should_run_benchmark(self, *, date_range, arrow_string_format):
+        # No need to run against all arrow_string_format to check the date_range filtering
+        if date_range and arrow_string_format != ArrowOutputStringFormat.LARGE_STRING:
+            raise SkipNotImplemented
+
     def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
         self.lib.read(
             self.symbol_name(rows, unique_string_count),
             date_range=self.date_range,
@@ -185,6 +185,7 @@ class ArrowStrings:
         )
 
     def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
+        self._check_should_run_benchmark(date_range=date_range, arrow_string_format=arrow_string_format)
         self.lib.read(
             self.symbol_name(rows, unique_string_count),
             date_range=self.date_range,
