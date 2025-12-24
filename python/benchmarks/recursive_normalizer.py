@@ -26,13 +26,6 @@ def get_symbol_name(dict_entry, symbol_idx):
 
 
 class LMDBRecursiveNormalizer:
-    rounds = 1
-    number = 3
-    repeat = 1
-    min_run_count = 1
-
-    timeout = 1200
-
     param_names = ["num_dict_entries", "num_symbols"]
     params = [[1000], [5]]
 
