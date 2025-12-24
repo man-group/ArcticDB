@@ -5,6 +5,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import subprocess
+from collections import defaultdict
 
 import pandas as pd
 
@@ -110,11 +112,46 @@ def save_asv_results(lib, json_path):
         lib.write(commit_hash, df)
 
 
+def is_tag_commit(commit_id):
+    is_tag = subprocess.run(
+        ["git", "describe", "--contains", commit_id],
+        check=False,
+        capture_output=True
+    )
+
+    return is_tag.returncode == 0
+
+
+def is_master_or_tag_commit(commit_id, branch="master"):
+    is_master = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit_id, branch],
+        check=False,
+        capture_output=True
+    )
+
+    if is_master.returncode == 0:
+        return True, "master"
+    elif is_master.returncode == 1:
+        return is_tag_commit(commit_id), "tag"
+    else:
+        return False, "error"
+
+
 def extract_asv_results(lib, json_path):
     syms = lib.list_symbols()
+    interesting_commits = []
+    counts = defaultdict(int)
+    for s in syms:
+        is_interesting, commit_type = is_master_or_tag_commit(s)
+        if is_interesting:
+            interesting_commits.append(s)
+        counts[commit_type] += 1
 
-    for sym in syms:
+    print(f"Loaded {len(syms)} results of types {json.dumps(counts)}. Those on master and tags will be published, the rest skipped.")
+
+    for sym in interesting_commits:
         print(f"Processing {sym}...")
+
         results_df = lib.read(sym).data
         json_data = df_to_asv_json(results_df)
         full_json_path = get_result_json_path(json_path, sym, json_data)
