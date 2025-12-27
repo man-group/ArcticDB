@@ -809,8 +809,27 @@ target_include_directories(arcticdb_core_object
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        # Proto files are generated in the parent build directory
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../proto/arcticc/pb2/proto/>
+        # For IDE resolution
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
         ${arcticdb_core_includes}
         )
+
+# Add `third_party` include directories (only used for vcpkg builds) so that headers can
+# be included without a compile-time check on `ARCTICDB_USING_CONDA` in the source files.
+if(NOT ${ARCTICDB_USING_CONDA})
+    # `semimap.h` is at `third_party/semimap/semimap.h`, so we need `third_party` in the path
+    # to allow <semimap/semimap.h> to resolve correctly
+    set(THIRD_PARTY_INCLUDE_DIRS
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/lmdbcxx>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/recycle/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/../third_party/Remotery/lib>
+    )
+    target_include_directories(arcticdb_core_object PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
+endif()
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
@@ -1118,6 +1137,10 @@ if(${TEST})
                 ${BITMAGIC_INCLUDE_DIRS}
                 )
     endif()
+    # Add third_party include directories for test targets (only used for vcpkg builds)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        target_include_directories(test_unit_arcticdb PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
+    endif()
 
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
@@ -1147,6 +1170,10 @@ if(${TEST})
             ${AWSSDK_LINK_LIBRARIES}
             arcticdb_core_static
             )
+    # Add third_party include directories for benchmark targets (only used for vcpkg builds)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        target_include_directories(benchmarks PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
+    endif()
 
     set(rapidcheck_srcs
             column_store/test/rapidcheck_column_store.cpp
@@ -1216,6 +1243,10 @@ if(${TEST})
             PRIVATE
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
             )
+    endif()
+    # Add third_party include directories for rapidcheck test targets (only used for vcpkg builds)
+    if(NOT ${ARCTICDB_USING_CONDA})
+        target_include_directories(arcticdb_rapidcheck_tests PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
     endif()
 
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
