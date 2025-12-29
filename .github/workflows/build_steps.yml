@@ -380,7 +380,7 @@ jobs:
       - name: Select Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.14'
 
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
@@ -514,9 +514,11 @@ jobs:
       - name: Select Python (Linux)
         if: matrix.os == 'linux'
         run: |
-          #there are cp313 and cp313t
+          #there are cp313 and cp313t (and similar for cp314+)
           if [[ "${{env.python_impl_name}}" == "cp313" ]]; then
             echo /opt/python/cp313-cp313/bin >> $GITHUB_PATH;
+          elif [[ "${{env.python_impl_name}}" == "cp314" ]]; then
+            echo /opt/python/cp314-cp314/bin >> $GITHUB_PATH;
           else
             echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH;
           fi
