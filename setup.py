@@ -31,21 +31,22 @@ def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
 
+
 def cleanup_vcpkg_artifacts():
     cpp_dir = Path("cpp")
     if not cpp_dir.exists():
         return
-    
+
     vcpkg_dir = cpp_dir / "vcpkg"
     if not vcpkg_dir.exists():
         return
-    
+
     def safe_remove_directory(dir_path):
         # To handle Windows symbolic links
         if not dir_path.exists():
             print(f"Directory not found (skipping): {dir_path}")
             return
-        
+
         try:
             if os.path.islink(str(dir_path)):
                 target = os.readlink(str(dir_path))
@@ -53,10 +54,10 @@ def cleanup_vcpkg_artifacts():
                     target_path = Path(target)
                 else:
                     target_path = dir_path.parent / target
-                
+
                 os.unlink(str(dir_path))
                 print(f"Removed symbolic link: {dir_path}")
-                
+
                 if target_path.exists() and target_path.is_dir():
                     shutil.rmtree(str(target_path))
                     print(f"Removed target directory: {target_path}")
@@ -65,7 +66,7 @@ def cleanup_vcpkg_artifacts():
                 print(f"Removed: {dir_path}")
         except Exception as e:
             print(f"Warning: Could not remove {dir_path}: {e}")
-    
+
     safe_remove_directory(vcpkg_dir / "buildtrees")
     safe_remove_directory(vcpkg_dir / "downloads")
     safe_remove_directory(vcpkg_dir / "packages")
@@ -73,7 +74,7 @@ def cleanup_vcpkg_artifacts():
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0", "7": ">=1.75.1"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [
@@ -108,6 +109,10 @@ class CompileProto(Command):
             elif not ARCTICDB_USING_CONDA and python >= (3, 13) and proto_ver < "5":
                 # Not compatible with protobuf<5.26.1 as
                 # Python 3.13 requires GRPCIO >= 1.66.2, which requires protobuf >=5.26.1 https://github.com/grpc/grpc/blob/6fa8043bf9befb070b846993b59a3348248e6566/requirements.txt#L4
+                print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
+            elif not ARCTICDB_USING_CONDA and python >= (3, 14) and proto_ver < "6":
+                # Not compatible with protobuf<6.31.1 as
+                # Python 3.14 requires GRPCIO >= 1.75.1, which requires protobuf >=6.31.1 https://github.com/grpc/grpc/blob/v1.75.1/requirements.txt
                 print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             elif not ARCTICDB_USING_CONDA and python <= (3, 8) and proto_ver == "6":
                 # Python 3.8 is not compatible with protobuf 6
@@ -210,7 +215,7 @@ class CMakeBuild(build_ext):
             cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
         _log_and_run(*cmd, cwd="cpp")
-        
+
         cleanup_vcpkg_artifacts()
 
         search = f"cpp/out/{preset}-build"
