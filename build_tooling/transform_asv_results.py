@@ -126,7 +126,7 @@ def is_master_or_tag_commit(commit_id, branch="master"):
     is_master = subprocess.run(
         ["git", "merge-base", "--is-ancestor", commit_id, branch],
         check=False,
-        capture_output=True
+        capture_output=False
     )
 
     if is_master.returncode == 0:
