@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import os
 
 import pandas as pd
 
@@ -165,11 +166,6 @@ def analyze_asv_results(lib, hash):
     cache_setup_df = cache_setup_df.reset_index().rename(columns={'index': 'Step'})
     cache_setup_df = cache_setup_df.sort_values(by="Duration (s)", ascending=False)
 
-    print("Time spent outside of benchmarks (excluding build):\n")
-    with pd.option_context('display.max_rows', None, 'display.max_colwidth', None):
-        print(cache_setup_df)
-    print("\n")
-
     def extract_time(r):
         """r looks like the "results" mentioned in the docstring above. Using eval as the results can contain nan, inf etc which json.loads cannot parse"""
         as_list = eval(r)
@@ -179,15 +175,28 @@ def analyze_asv_results(lib, hash):
     benchmark_results = benchmark_results[["test_name", "Duration (s)"]]
     benchmark_results = benchmark_results.sort_values(by="Duration (s)", ascending=False)
 
-    print("Time spent in benchmarks:\n")
-    with pd.option_context('display.max_rows', None, 'display.max_colwidth', None):
-        print(benchmark_results)
-
-    print(f"\nSummary:")
     cache_setup_time = cache_setup_df["Duration (s)"].sum() / 60
-    print(f"Total time outside benchmarks (mins): {cache_setup_time}")
     benchmarks_run_time = benchmark_results["Duration (s)"].sum() / 60
-    print(f"Total time running benchmarks (mins): {benchmarks_run_time}")
+
+    summary_content = ["### Time spent outside of benchmarks (excluding build)\n",
+                       cache_setup_df.to_markdown(index=False),
+                       "\n### Time spent in benchmarks\n",
+                       benchmark_results.to_markdown(index=False),
+                       "\n### Summary\n",
+                       f"* **Total time outside benchmarks (mins):** {cache_setup_time:.2f}",
+                       f"* **Total time running benchmarks (mins):** {benchmarks_run_time:.2f}"]
+
+    final_output = "\n".join(summary_content)
+
+    summary_file_path = os.environ.get('GITHUB_STEP_SUMMARY')
+
+    if summary_file_path:
+        # If running in Github, write to the summary
+        print("Check the workflow Summary page for a report on the time spent running ASV benchmarks.")
+        with open(summary_file_path, "a") as f:
+            f.write(final_output + "\n")
+    else:
+        print(final_output)
 
 
 def get_result_json_path(json_path, sym, json_data):
