@@ -3936,9 +3936,9 @@
         "version": "a26f1ab74733278e53ed0c0913f466bfdb150dd2fa8d5a481715bfa3caf2f978",
         "warmup_time": 0
     },
-    "recursive_normalizer.LMDBRecursiveNormalizer.peakmem_read_batch_nested_dict": {
-        "code": "class LMDBRecursiveNormalizer:\n    def peakmem_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "name": "recursive_normalizer.LMDBRecursiveNormalizer.peakmem_read_batch_nested_dict",
+    "recursive_normalizer.LMDBRecursiveNormalizerRead.peakmem_read_batch_nested_dict": {
+        "code": "class LMDBRecursiveNormalizerRead:\n    def peakmem_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            data = get_data(num_dict_entry)\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)",
+        "name": "recursive_normalizer.LMDBRecursiveNormalizerRead.peakmem_read_batch_nested_dict",
         "param_names": [
             "num_dict_entries",
             "num_symbols"
@@ -3951,14 +3951,14 @@
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:37",
+        "setup_cache_key": "recursive_normalizer:36",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "6ec31003ea6670c43aa00db693244e61d4b6ceb6298814e23f665dbfc229256e"
+        "version": "16dc7deb22ab10bbfebcb212e39030a1d8cb11a9b96418ebbd26fa1c2895ba3a"
     },
-    "recursive_normalizer.LMDBRecursiveNormalizer.peakmem_read_nested_dict": {
-        "code": "class LMDBRecursiveNormalizer:\n    def peakmem_read_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read(get_symbol_name(num_dict_entry, 0))\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "name": "recursive_normalizer.LMDBRecursiveNormalizer.peakmem_read_nested_dict",
+    "recursive_normalizer.LMDBRecursiveNormalizerRead.peakmem_read_nested_dict": {
+        "code": "class LMDBRecursiveNormalizerRead:\n    def peakmem_read_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read(get_symbol_name(num_dict_entry, 0))\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            data = get_data(num_dict_entry)\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)",
+        "name": "recursive_normalizer.LMDBRecursiveNormalizerRead.peakmem_read_nested_dict",
         "param_names": [
             "num_dict_entries",
             "num_symbols"
@@ -3971,35 +3971,15 @@
                 "5"
             ]
         ],
-        "setup_cache_key": "recursive_normalizer:37",
+        "setup_cache_key": "recursive_normalizer:36",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "cc0880433edb88fcfa2c4c4d63c6f92b2708ba046243089f64df269258a347d0"
+        "version": "43ceef75cd18db9646dfe1635071f294e5faaf811066e3c31a632c0a4a05dd8c"
     },
-    "recursive_normalizer.LMDBRecursiveNormalizer.peakmem_write_nested_dict": {
-        "code": "class LMDBRecursiveNormalizer:\n    def peakmem_write_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib._nvs.write(\n            f\"nested_dict_peakmem_write_nested_dict_{num_dict_entry}\",\n            get_data(num_dict_entry),\n            recursive_normalizers=True,\n        )\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "name": "recursive_normalizer.LMDBRecursiveNormalizer.peakmem_write_nested_dict",
-        "param_names": [
-            "num_dict_entries",
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "1000"
-            ],
-            [
-                "5"
-            ]
-        ],
-        "setup_cache_key": "recursive_normalizer:37",
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "12d31fb08531c21063cc68bf66c26acc2582107b2efd7871f625b5852425390a"
-    },
-    "recursive_normalizer.LMDBRecursiveNormalizer.time_read_batch_nested_dict": {
-        "code": "class LMDBRecursiveNormalizer:\n    def time_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
+    "recursive_normalizer.LMDBRecursiveNormalizerRead.time_read_batch_nested_dict": {
+        "code": "class LMDBRecursiveNormalizerRead:\n    def time_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            data = get_data(num_dict_entry)\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)",
         "min_run_count": 2,
-        "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_read_batch_nested_dict",
+        "name": "recursive_normalizer.LMDBRecursiveNormalizerRead.time_read_batch_nested_dict",
         "number": 0,
         "param_names": [
             "num_dict_entries",
@@ -4016,16 +3996,16 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:37",
+        "setup_cache_key": "recursive_normalizer:36",
         "type": "time",
         "unit": "seconds",
-        "version": "605a38cfd184c507f8e9b798c7c29d7056c1c10caa61b16c5ac1215d8976233c",
+        "version": "bdd744509146dd4994139db5d82b087b93ec5c51109a23283b955b546efc13f1",
         "warmup_time": -1
     },
-    "recursive_normalizer.LMDBRecursiveNormalizer.time_read_nested_dict": {
-        "code": "class LMDBRecursiveNormalizer:\n    def time_read_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read(get_symbol_name(num_dict_entry, 0))\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
+    "recursive_normalizer.LMDBRecursiveNormalizerRead.time_read_nested_dict": {
+        "code": "class LMDBRecursiveNormalizerRead:\n    def time_read_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read(get_symbol_name(num_dict_entry, 0))\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            data = get_data(num_dict_entry)\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)",
         "min_run_count": 2,
-        "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_read_nested_dict",
+        "name": "recursive_normalizer.LMDBRecursiveNormalizerRead.time_read_nested_dict",
         "number": 0,
         "param_names": [
             "num_dict_entries",
@@ -4042,36 +4022,48 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:37",
+        "setup_cache_key": "recursive_normalizer:36",
         "type": "time",
         "unit": "seconds",
-        "version": "847fd46008b28ca19d2092a4d3cd44d4f789a9b0af6a213806db5a6ea114bf06",
+        "version": "9e8238a61a6de72778522f023e8d65de5be7558826343557dec84e06baa42663",
         "warmup_time": -1
     },
-    "recursive_normalizer.LMDBRecursiveNormalizer.time_write_nested_dict": {
-        "code": "class LMDBRecursiveNormalizer:\n    def time_write_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib._nvs.write(\n            f\"nested_dict_time_write_nested_dict_{num_dict_entry}\",\n            get_data(num_dict_entry),\n            recursive_normalizers=True,\n        )\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(\"lmdb://recursive_normalizer\").get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(\"lmdb://recursive_normalizer\")\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)",
-        "min_run_count": 2,
-        "name": "recursive_normalizer.LMDBRecursiveNormalizer.time_write_nested_dict",
-        "number": 0,
+    "recursive_normalizer.LMDBRecursiveNormalizerWrite.peakmem_write_nested_dict": {
+        "code": "class LMDBRecursiveNormalizerWrite:\n    def peakmem_write_nested_dict(self, num_dict_entry):\n        assert len(self.data) == num_dict_entry\n        self.lib._nvs.write(\n            f\"nested_dict_peakmem_write_nested_dict_{num_dict_entry}\",\n            self.data,\n            recursive_normalizers=True,\n        )\n\n    def setup(self, num_dict_entry):\n        self.lib = Arctic(LMDBRecursiveNormalizerWrite.ARCTIC_URI).get_library(\"lib\")\n        self.data = get_data(num_dict_entry)\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerWrite.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        ac.create_library(\"lib\")",
+        "name": "recursive_normalizer.LMDBRecursiveNormalizerWrite.peakmem_write_nested_dict",
         "param_names": [
-            "num_dict_entries",
-            "num_symbols"
+            "num_dict_entries"
         ],
         "params": [
             [
                 "1000"
-            ],
+            ]
+        ],
+        "setup_cache_key": "recursive_normalizer:80",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "9dcfed4cee0cbe00634c7e5f8eb217fe11cbb4069242637e41d00a1ff99aed4c"
+    },
+    "recursive_normalizer.LMDBRecursiveNormalizerWrite.time_write_nested_dict": {
+        "code": "class LMDBRecursiveNormalizerWrite:\n    def time_write_nested_dict(self, num_dict_entry):\n        assert len(self.data) == num_dict_entry\n        self.lib._nvs.write(\n            f\"nested_dict_time_write_nested_dict_{num_dict_entry}\",\n            self.data,\n            recursive_normalizers=True,\n        )\n\n    def setup(self, num_dict_entry):\n        self.lib = Arctic(LMDBRecursiveNormalizerWrite.ARCTIC_URI).get_library(\"lib\")\n        self.data = get_data(num_dict_entry)\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerWrite.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        ac.create_library(\"lib\")",
+        "min_run_count": 2,
+        "name": "recursive_normalizer.LMDBRecursiveNormalizerWrite.time_write_nested_dict",
+        "number": 0,
+        "param_names": [
+            "num_dict_entries"
+        ],
+        "params": [
             [
-                "5"
+                "1000"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "recursive_normalizer:37",
+        "setup_cache_key": "recursive_normalizer:80",
         "type": "time",
         "unit": "seconds",
-        "version": "1e1e6b68b8d06e4a643b0c210429964623fb36a4cc9a793682299470712f024a",
+        "version": "a2dfcb01776d52d843c514b129d2256a8031360caa00bc24b890b6dad9246191",
         "warmup_time": -1
     },
     "resample.Resample.time_resample": {
