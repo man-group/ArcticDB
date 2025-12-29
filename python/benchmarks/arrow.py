@@ -62,6 +62,8 @@ class ArrowNumeric:
         del self.ac
 
     def setup(self, rows, date_range):
+        np.random.seed(42)
+        random.seed(42)
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
         self.lib._nvs._set_allow_arrow_input()
