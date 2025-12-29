@@ -87,6 +87,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -150,6 +151,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -213,6 +215,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -278,6 +281,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -363,6 +367,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -448,6 +453,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -538,6 +544,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -676,6 +683,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -810,6 +818,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -941,6 +950,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -1022,6 +1032,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
@@ -1122,6 +1133,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
           version: v0.12.0
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
