@@ -7,13 +7,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import pandas as pd
-from functools import lru_cache
 
 from arcticdb.util.logger import get_logger
 from arcticdb import Arctic
 
 
-@lru_cache(maxsize=None)
 def get_data(num_dict_entry):
     return {
         f"{i}": {"a": pd.DataFrame({"a": [1, 2, 3]}), "b": pd.DataFrame({"b": [1, 2, 3, 4, 5, 6]})}
@@ -25,9 +23,10 @@ def get_symbol_name(dict_entry, symbol_idx):
     return f"nested_dict_sym_{dict_entry}_{symbol_idx}"
 
 
-class LMDBRecursiveNormalizer:
+class LMDBRecursiveNormalizerRead:
     param_names = ["num_dict_entries", "num_symbols"]
     params = [[1000], [5]]
+    ARCTIC_URI = "lmdb://recursive_normalizer_read"
 
     def __init__(self):
         self.logger = get_logger()
@@ -35,7 +34,7 @@ class LMDBRecursiveNormalizer:
         self.lib = None
 
     def setup_cache(self):
-        ac = Arctic("lmdb://recursive_normalizer")
+        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)
         if "lib" in ac:
             ac.delete_library("lib")
 
@@ -43,12 +42,13 @@ class LMDBRecursiveNormalizer:
 
         max_num_symbols = max(self.params[1])
         for num_dict_entry in self.params[0]:
+            data = get_data(num_dict_entry)
             for symbol_idx in range(max_num_symbols):
                 symbol_name = get_symbol_name(num_dict_entry, symbol_idx)
-                lib._nvs.write(symbol_name, get_data(num_dict_entry), recursive_normalizers=True)
+                lib._nvs.write(symbol_name, data, recursive_normalizers=True)
 
     def setup(self, num_dict_entry, num_symbols):
-        self.lib = Arctic("lmdb://recursive_normalizer").get_library("lib")
+        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library("lib")
 
     def teardown(self, num_dict_entry, num_symbols):
         pass
@@ -65,16 +65,44 @@ class LMDBRecursiveNormalizer:
     def peakmem_read_batch_nested_dict(self, num_dict_entry, num_symbols):
         self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])
 
-    def time_write_nested_dict(self, num_dict_entry, num_symbols):
+
+class LMDBRecursiveNormalizerWrite:
+    param_names = ["num_dict_entries"]
+    params = [[1000]]
+    ARCTIC_URI = "lmdb://recursive_normalizer_write"
+
+    def __init__(self):
+        self.logger = get_logger()
+        self.ac = None
+        self.lib = None
+        self.data = None
+
+    def setup_cache(self):
+        ac = Arctic(LMDBRecursiveNormalizerWrite.ARCTIC_URI)
+        if "lib" in ac:
+            ac.delete_library("lib")
+
+        ac.create_library("lib")
+
+    def setup(self, num_dict_entry):
+        self.lib = Arctic(LMDBRecursiveNormalizerWrite.ARCTIC_URI).get_library("lib")
+        self.data = get_data(num_dict_entry)
+
+    def teardown(self, num_dict_entry):
+        pass
+
+    def time_write_nested_dict(self, num_dict_entry):
+        assert len(self.data) == num_dict_entry
         self.lib._nvs.write(
             f"nested_dict_time_write_nested_dict_{num_dict_entry}",
-            get_data(num_dict_entry),
+            self.data,
             recursive_normalizers=True,
         )
 
-    def peakmem_write_nested_dict(self, num_dict_entry, num_symbols):
+    def peakmem_write_nested_dict(self, num_dict_entry):
+        assert len(self.data) == num_dict_entry
         self.lib._nvs.write(
             f"nested_dict_peakmem_write_nested_dict_{num_dict_entry}",
-            get_data(num_dict_entry),
+            self.data,
             recursive_normalizers=True,
         )
