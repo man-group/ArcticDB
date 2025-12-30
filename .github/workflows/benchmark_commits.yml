@@ -127,7 +127,7 @@ jobs:
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
-          python -m asv run --show-stderr --bench $SUITE ${{ inputs.commit }}^!
+          python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
           exit_code=$?
           python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
           exit $exit_code
