@@ -124,7 +124,7 @@ jobs:
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
-        shell: bash -el {0}
+        shell: bash -l {0}
         run: | 
           git config --global --add safe.directory .
           python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
@@ -134,7 +134,7 @@ jobs:
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
-        shell: bash -el {0}
+        shell: bash -l {0}
         run: |
           python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
           exit_code=$?
