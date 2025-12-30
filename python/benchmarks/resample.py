@@ -20,6 +20,8 @@ from asv_runner.benchmarks.mark import skip_benchmark
 
 
 class Resample:
+    number = 10
+
     LIB_NAME = "resample"
     CONNECTION_STRING = "lmdb://resample"
     ROWS_PER_SEGMENT = 100_000
