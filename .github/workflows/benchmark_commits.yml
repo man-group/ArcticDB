@@ -128,19 +128,18 @@ jobs:
         run: | 
           git config --global --add safe.directory .
           python -m asv run --show-stderr --bench $SUITE ${{ inputs.commit }}^!
-        continue-on-error: true  # custom failure reporting below
-
-      - name: ASV Failure Report
-        if: always()
-        shell: bash -el {0}
-        run: |
-          python build_tooling/summarize_asv_run.py
+          exit_code=$?
+          python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
+          exit $exit_code
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
           python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
+          exit_code=$?
+          python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
+          exit $exit_code
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
