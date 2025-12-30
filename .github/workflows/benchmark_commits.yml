@@ -131,7 +131,7 @@ jobs:
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
+          python -m asv continuous --no-interleave-rounds -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
