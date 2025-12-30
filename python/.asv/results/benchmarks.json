@@ -4208,7 +4208,7 @@
         "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            self.skipped = True\n            raise NotImplementedError(f\"{aggregation} not supported on columns of type {col_type}\")\n    \n        self.skipped = False\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "resample.Resample.time_resample",
-        "number": 10,
+        "number": 5,
         "param_names": [
             "num_rows",
             "downsampling_factor",
