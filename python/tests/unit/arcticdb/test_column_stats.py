@@ -14,7 +14,6 @@ from arcticdb_ext.exceptions import SchemaException, StorageException, UserInput
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException
 
-
 pytestmark = pytest.mark.pipeline
 
 

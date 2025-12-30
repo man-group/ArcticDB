@@ -6,7 +6,6 @@ import subprocess
 import sys
 from typing import List
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ASV Linter")
 
@@ -153,11 +152,9 @@ def perform_asv_checks() -> int:
         else:
             logger.warning(f"Old file hash: [{orig_hash}]")
             logger.warning(f"New file hash: [{new_hash}]")
-            error(
-                f"""\n\n There are changes in asv test versions. 
+            error(f"""\n\n There are changes in asv test versions. 
 Open file {benchmark_config} compare with previous version and             
-make sure you submit the file  in git repo"""
-            )
+make sure you submit the file  in git repo""")
             err = 1
 
     return err

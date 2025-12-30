@@ -21,7 +21,7 @@ import sys
 import subprocess
 
 
-black_version = "24.8.0"
+black_version = "25.11.0"
 clang_format_version = "19.1.2"
 
 

@@ -17,7 +17,6 @@ from arcticdb import KeyType, Size, Arctic
 from arcticdb.options import EnterpriseLibraryOptions
 from arcticdb.version_store.admin_tools import AdminTools, sum_sizes
 
-
 logger = get_logger()
 
 

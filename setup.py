@@ -14,7 +14,6 @@ from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
-
 # experimental flag to indicate that we want
 # the dependencies from a conda
 ARCTICDB_USING_CONDA = os.environ.get("ARCTICDB_USING_CONDA", "0")
@@ -74,7 +73,7 @@ def cleanup_vcpkg_artifacts():
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0", "7": ">=1.75.1"}
+    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [

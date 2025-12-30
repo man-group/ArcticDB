@@ -24,7 +24,6 @@ from arcticdb.util.tasks import (
     run_scenario,
 )
 
-
 LARGE_DF_SIZE = 100000
 ITERATIONS = 10
 SLEEP = 1

@@ -5,7 +5,6 @@ from subprocess import run, PIPE
 from arcticdb_ext.log import LogLevel
 from tests.util.mark import MACOS
 
-
 _LEVELS = tuple(LogLevel.__entries)
 
 

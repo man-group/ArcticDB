@@ -11,7 +11,6 @@ import traceback
 
 import pytest
 
-
 MACOS = sys.platform == "darwin"
 XFAILMESSAGE = "This is due issue 9692682845 - has_library may return error on Mac_OS"
 ERROR_MARKER = (
