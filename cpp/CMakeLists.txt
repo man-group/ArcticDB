@@ -198,22 +198,12 @@ python_utils_dump_vars_if_enabled("After Pybind")
 python_utils_check_include_dirs("accepted by pybind")
 python_utils_check_version_is_as_expected()
 
-#proto files are generated there so it's necessary to include them
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/)
-# for IDE resolution otherwise it is lost
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+# proto files are generated there so it's necessary to include them
+# Note: These will be added to targets via target_include_directories in arcticdb/CMakeLists.txt
 
 # Add `third_party` include directories (only used for vcpkg builds) so that headers can
 # be included without a compile-time check on `ARCTICDB_USING_CONDA` in the source files.
-if(NOT ${ARCTICDB_USING_CONDA})
-    # `semimap.h` is at `third_party/semimap/semimap.h`, so we need `third_party` in the path
-    # to allow <semimap/semimap.h> to resolve correctly
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/lmdbcxx)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/recycle/src)
-    include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/Remotery/lib)
-endif()
+# Note: These will be added to targets via target_include_directories in arcticdb/CMakeLists.txt
 
 add_subdirectory(arcticdb)
 
@@ -221,8 +211,8 @@ add_subdirectory(arcticdb)
 # We plan to introduce a new target that exposes only a "public" subset of headers from this project
 # soon instead, as exposing all headers is fragile for consumers.
 target_include_directories(arcticdb_core_static PUBLIC
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
-        "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/>"
-        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>"
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/proto/arcticc/pb2/proto/>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>"
 )
