@@ -11,12 +11,13 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 import numpy as np
 import pandas as pd
+import itertools
 
 from arcticdb import Arctic
 from arcticdb import QueryBuilder
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
-from asv_runner.benchmarks.mark import skip_benchmark
+from asv_runner.benchmarks.mark import skip_for_params
 
 
 class Resample:
@@ -33,11 +34,17 @@ class Resample:
         "aggregation",
     ]
     params = [
-        [10_000_000],  # num_rows
+        [3_000_000, 10_000_000],  # num_rows
         [10, 100, 100_000],  # downsampling factor
         ["bool", "int", "float", "datetime", "str"],  # col_type
         ["sum", "mean", "min", "max", "first", "last", "count"],  # aggregation
     ]
+
+    # Peakmem params are tuned for the machine that runs the tests. It has 16 CPU threads and 24 IO threads. Having too
+    # much segments on leads to variability of ~20% in the processing pipeline because of the scheduling. 3_000_000 rows
+    # are 30 segments, a bit more than the number of IO threads but still not enough to cause large variability
+    PEAKMEM_PARAMS = list(filter(lambda x: x[0] == 3_000_000, itertools.product(*params)))
+    TIME_PARAMS = list(filter(lambda x: x[0] != 3_000_000, itertools.product(*params)))
 
     def __init__(self):
         self.logger = get_logger()
@@ -100,10 +107,11 @@ class Resample:
         self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit="us"))
         self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
+    @skip_for_params(PEAKMEM_PARAMS)
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
-    @skip_benchmark
+    @skip_for_params(TIME_PARAMS)
     def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
