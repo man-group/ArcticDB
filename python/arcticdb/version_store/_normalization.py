@@ -157,8 +157,9 @@ _SUPPORTED_NATIVE_RETURN_TYPES = Union[FrameData]
 def _accept_array_string(v):
     # TODO remove this once arctic keeps the string type under the hood
     # and does not transform string into bytes
-    # Use isinstance to also support numpy string types (np.str_, np.bytes_)
-    return isinstance(v, (str, bytes))
+    # Use strict type equality to support numpy string types (np.str_, np.bytes_)
+    # but not arbitrary subclasses (see issue #704)
+    return type(v) in (str, bytes, np.str_, np.bytes_)
 
 
 def _is_nan(element):
@@ -188,8 +189,9 @@ def get_sample_from_non_empty_arr(arr, arr_name):
 
 def coerce_string_column_to_fixed_length_array(arr, to_type, string_max_len):
     # in python3 all text will be treated as unicode
-    # Use issubclass to also support numpy string types (np.str_)
-    if issubclass(to_type, str):
+    # Use strict type equality to support numpy string types (np.str_)
+    # but not arbitrary subclasses (see issue #704)
+    if to_type in (str, np.str_):
         if sys.platform == "win32":
             # See https://sourceforge.net/p/numpy/mailman/numpy-discussion/thread/1139250278.7538.52.camel%40localhost.localdomain/#msg11998404
             # Different wchar size on Windows is not compatible with our current internal representation of Numpy strings
