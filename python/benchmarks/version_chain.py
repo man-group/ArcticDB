@@ -158,14 +158,14 @@ class IterateVersionChain:
         self.load_all(self.symbol(num_versions))
 
     def time_list_undeleted_versions(self, num_versions, caching, deleted):
-        self.lib.list_versions(symbol=self.symbol(num_versions, deleted))
+        self.lib.list_versions(symbol=self.symbol(num_versions))
 
     def time_read_v0(self, num_versions, caching, deleted):
-        self.read_v0(self.symbol(num_versions, deleted))
+        self.read_v0(self.symbol(num_versions))
 
     def time_read_from_epoch(self, num_versions, caching, deleted):
-        self.read_from_epoch(self.symbol(num_versions, deleted))
+        self.read_from_epoch(self.symbol(num_versions))
 
     def time_read_alternating(self, num_versions, caching, deleted):
-        self.read_from_epoch(self.symbol(num_versions, deleted))
-        self.read_v0(self.symbol(num_versions, deleted))
+        self.read_from_epoch(self.symbol(num_versions))
+        self.read_v0(self.symbol(num_versions))
