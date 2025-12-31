@@ -66,21 +66,18 @@ class LibraryType(Enum):
     MODIFIABLE = "MODIFIABLE"
 
 
-def storages_for_asv() -> Tuple[Storage, ...]:
+def is_storage_enabled(storage: Storage) -> bool:
     """Decide which storages to use for ASV testing based on environment variables.
 
     ARCTICDB_STORAGE_LMDB (default: True): Test against LMDB
     ARCTICDB_STORAGE_AWS_S3 (default: False): Test against AWS
     """
-    storages = []
-
-    if strtobool(os.getenv("ARCTICDB_STORAGE_LMDB", "1")):
-        storages.append(Storage.LMDB)
-
-    if strtobool(os.getenv("ARCTICDB_STORAGE_AWS_S3", "0")):
-        storages.append(Storage.AMAZON)
-
-    return tuple(storages)
+    if storage == Storage.LMDB:
+        return strtobool(os.getenv("ARCTICDB_STORAGE_LMDB", "1"))
+    elif storage == Storage.AMAZON:
+        return strtobool(os.getenv("ARCTICDB_STORAGE_AWS_S3", "0"))
+    else:
+        raise RuntimeError(f"Only LMDB and AMAZON storages are supported, received {storage}")
 
 
 def create_library(storage: Storage) -> Library:
@@ -89,13 +86,10 @@ def create_library(storage: Storage) -> Library:
 
     Notes
 
-
     LMDB: ASV creates a temp directory for each run and then sets current working directory to it
     After the end of the test it removes all files and subfolders created there.
 
     AWS:
-
-    If you are working locally, you should remember to do the same.
 
     Example local setup:
 
