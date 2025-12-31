@@ -11,7 +11,6 @@ from typing import List
 from arcticdb import Arctic, QueryBuilder
 from arcticdb.version_store.library import UpdatePayload, WritePayload, ReadRequest
 from arcticdb.util.test import config_context
-from arcticdb_ext.version_store import DataError
 from asv_runner.benchmarks.mark import skip_benchmark
 
 import pandas as pd
@@ -25,23 +24,23 @@ WIDE_DF_COLS = 30_000
 # We use larger dataframes for non-batch methods
 PARAMS = [1_000_000, 1_500_000]
 PARAM_NAMES = ["rows"]
-BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
+BATCH_PARAMS = ([25_000, 50_000], [100, 200])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
 DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
-    number = 5
-    warmup_time = 0
-    timeout = 6000
+    sample_time = 0.1
     rounds = 1
-    CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
+
+    params = PARAMS
+    param_names = PARAM_NAMES
+
+    CONNECTION_STRING = "lmdb://basic_functions"
     ULTRA_SHORT_WIDE_DF_ROWS = 1
     WIDE_DF_ROWS = WIDE_DF_ROWS
     WIDE_DF_COLS = WIDE_DF_COLS
     DATE_RANGE = DATE_RANGE
-    params = PARAMS
-    param_names = PARAM_NAMES
 
     def __init__(self):
         self.logger = get_logger()
@@ -90,6 +89,7 @@ class BasicFunctions:
     def setup(self, rows):
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
 
+        # TODO aseaton this is a mess, most of the benchmarks don't need this dataframe. It might also affect peakmem
         self.df = generate_pseudo_random_dataframe(rows)
         self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)
 
@@ -167,11 +167,9 @@ class BasicFunctions:
 
 class BatchBasicFunctions:
     rounds = 1
-    number = 1
+    sample_time = 0.1
     repeat = 3
-    warmup_time = 0
-    timeout = 6000
-    CONNECTION_STRING = "lmdb://batch_basic_functions?map_size=20GB"
+    CONNECTION_STRING = "lmdb://batch_basic_functions"
     DATE_RANGE = DATE_RANGE
     params = BATCH_PARAMS
     param_names = BATCH_PARAM_NAMES
@@ -292,7 +290,7 @@ class ModificationFunctions:
     timeout = 6000
     ARCTIC_DIR = "modification_functions"
     ARCTIC_DIR_ORIGINAL = "modification_functions_original"
-    CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}?map_size=20GB"
+    CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}"
     WIDE_DF_ROWS = WIDE_DF_ROWS
     WIDE_DF_COLS = WIDE_DF_COLS
 
