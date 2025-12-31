@@ -7,13 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import time
-from arcticdb.util.environment_setup import (
+from .environment_setup import (
     TestLibraryManager,
     LibraryPopulationPolicy,
     LibraryType,
     Storage,
     populate_library,
-    populate_library_if_missing,
 )
 from benchmarks.common import AsvBase
 

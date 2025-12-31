@@ -13,7 +13,7 @@ from arcticdb import Arctic
 import pandas as pd
 import numpy as np
 
-from arcticdb.util.environment_setup import LibraryPopulationPolicy, LibraryType, Storage, TestLibraryManager
+from .environment_setup import LibraryPopulationPolicy, LibraryType, Storage, TestLibraryManager
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_string, random_integers, random_dates
 
