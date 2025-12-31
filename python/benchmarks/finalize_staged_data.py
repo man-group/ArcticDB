@@ -6,11 +6,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import time
 
-from arcticdb.arctic import Arctic
-from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 from arcticdb.util.test_utils import CachedDFGenerator, TimestampNumber, stage_chunks
-from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
-from .environment_setup import storages_for_asv, create_library
+from arcticdb.version_store.library import StagedDataFinalizeMethod
+from asv_runner.benchmarks.mark import SkipNotImplemented
+
+from .environment_setup import is_storage_enabled, create_library, Storage
 from .common import get_logger
 
 
@@ -26,7 +26,7 @@ class FinalizeStagedData:
     warmup_time = 0
     timeout = 100
 
-    storages = storages_for_asv()
+    storages = [Storage.LMDB, Storage.AMAZON]
     num_chunks = [10, 100]
 
     params = [num_chunks, storages]
@@ -45,8 +45,9 @@ class FinalizeStagedData:
         cachedDF = CachedDFGenerator(350000, [5])
         lib_for_storage = dict()
         for storage in self.storages:
-            lib = create_library(storage)
-            self._prepopulate_library(lib, cachedDF)
+            lib = create_library(storage) if is_storage_enabled(storage) else None
+            if lib:
+                self._prepopulate_library(lib, cachedDF)
             lib_for_storage[storage] = lib
 
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
@@ -65,6 +66,8 @@ class FinalizeStagedData:
 
     def setup(self, lib_for_storage, num_chunks, storage):
         self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
         self.symbol = _symbol_name(num_chunks)
 
     def time_finalize_staged_data(self, *args):
