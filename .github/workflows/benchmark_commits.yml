@@ -136,7 +136,7 @@ jobs:
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -l {0}
         run: |
-          python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
+          python -m asv continuous --show-stderr --bench $SUITE origin/master HEAD -f 1.15
           exit_code=$?
           python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
           exit $exit_code
