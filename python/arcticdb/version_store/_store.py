@@ -3875,13 +3875,13 @@ def _log_warning_on_writing_empty_dataframe(dataframe, symbol):
         empty_column_type = pd.DataFrame({"a": []}).dtypes["a"] if is_dataframe else pd.Series([]).dtype
         current_dtypes = list(dataframe.dtypes.items()) if is_dataframe else [(dataframe.name, dataframe.dtype)]
         log.warning(
-            'Writing empty dataframe to ArcticDB for symbol "{}". The dtypes of empty columns depend on the'
-            "Pandas version being used. This can lead to unexpected behavior in the processing pipeline. For"
-            " example if the empty columns are of object dtype they cannot be part of numeric computations in"
-            "the processing pipeline such as filtering (qb = qb[qb['empty_column'] < 5]) or projection"
-            "(qb = qb.apply('new', qb['empty_column'] + 5)). Pandas version is: {}, the default dtype for empty"
-            ' column is: {}. Column types in the original input: {}. Parameter "coerce_columns" can be used'
-            " to explicitly set the types of dataframe columns",
+            'Writing empty dataframe to ArcticDB for symbol "{}". The dtypes of empty columns depend on the '
+            "Pandas version being used. This can lead to unexpected behavior when using the QueryBuilder. For "
+            "example, if the empty columns are of object dtype they cannot be part of numeric computations "
+            "such as filtering `qb = qb[qb['empty_column'] < 5]` or projection "
+            "`qb = qb.apply('new', qb['empty_column'] + 5)`. Pandas version is: {}, the default dtype for empty "
+            'column is: {}. Column types in the original input: {}. Parameter "coerce_columns" can be used '
+            "to explicitly set the types of dataframe columns",
             symbol,
             PANDAS_VERSION,
             empty_column_type,
