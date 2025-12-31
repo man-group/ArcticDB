@@ -544,7 +544,8 @@ def random_floats(num):
 
 def random_dates(num):
     base_date = np.datetime64("2017-01-01")
-    return np.array([base_date + random.randint(0, 100) for _ in range(num)])
+    offsets = np.random.randint(low=0, high=100, size=num)
+    return base_date + offsets
 
 
 def dataframe_for_date(dt, identifiers):

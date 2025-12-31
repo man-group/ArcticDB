@@ -21,7 +21,7 @@ from .common import *
 
 
 class IterateVersionChain:
-    timeout = 6000
+    timeout = 1000
     sample_time = 2
     rounds = 2
 
@@ -68,7 +68,6 @@ class IterateVersionChain:
         # Step 1 - write 99% of the versions to one library
         # Step 2 - copy the library directory
         # Step 3 - delete the symbol on the copy. Write the remaining versions to both source and copy.
-        start_time = time.time()
         adb._ext.set_config_int("VersionMap.ReloadInterval", sys.maxsize)
 
         for num_versions in num_versions_list:
