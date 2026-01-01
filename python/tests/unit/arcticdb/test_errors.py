@@ -6,7 +6,6 @@ from arcticdb.exceptions import *  # keep as wildcard so all_exception_types bel
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException
 from tests.util.mark import SLOW_TESTS_MARK
 
-
 test_raise_params = [(NormalizationError.E_UPDATE_NOT_SUPPORTED, NormalizationException)]
 
 specific_exception_types = [

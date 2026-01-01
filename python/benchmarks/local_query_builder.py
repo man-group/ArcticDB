@@ -12,7 +12,6 @@ from arcticdb.version_store.processing import QueryBuilder
 
 from .common import *
 
-
 PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
 
 

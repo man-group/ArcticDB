@@ -15,7 +15,6 @@ from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
 
-
 pytestmark = pytest.mark.pipeline
 
 

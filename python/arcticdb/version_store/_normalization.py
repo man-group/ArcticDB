@@ -58,7 +58,6 @@ PICKLE_PROTOCOL = 4
 from pandas._libs.tslib import Timestamp
 from pandas._libs.tslibs.timezones import get_timezone
 
-
 try:
     from pandas._libs.tslibs.timezones import is_utc as check_is_utc_if_newer_pandas
 except ImportError:
