@@ -58,8 +58,8 @@ py::tuple to_tuple(const s3::S3Settings& settings) {
     );
 }
 
-void register_common_bindings(py::module& storage, bool local_bindings) {
-
+void register_common_storage_bindings(py::module& storage, BindingScope scope) {
+    bool local_bindings = (scope == BindingScope::LOCAL);
     py::enum_<s3::AWSAuthMethod>(storage, "AWSAuthMethod", py::module_local(local_bindings))
             .value("DISABLED", s3::AWSAuthMethod::DISABLED)
             .value("DEFAULT_CREDENTIALS_PROVIDER_CHAIN", s3::AWSAuthMethod::DEFAULT_CREDENTIALS_PROVIDER_CHAIN)

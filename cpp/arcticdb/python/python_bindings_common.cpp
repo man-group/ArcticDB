@@ -4,7 +4,16 @@
 
 namespace py = pybind11;
 
-namespace arcticdb::apy {
+namespace arcticdb {
+
+enum class MetricsConfigPickleOrder : uint32_t {
+    HOST = 0,
+    PORT = 1,
+    JOB_NAME = 2,
+    INSTANCE = 3,
+    PROMETHEUS_ENV = 4,
+    MODEL = 5
+};
 
 py::tuple to_tuple(const MetricsConfig& config) {
     return py::make_tuple(
@@ -24,10 +33,10 @@ MetricsConfig metrics_config_from_tuple(const py::tuple& t) {
     };
 }
 
-} // namespace arcticdb::apy
+} // namespace arcticdb
 
-void register_metrics(py::module&& m, bool local_bindings) {
-
+void register_metrics(py::module&& m, arcticdb::BindingScope scope) {
+    bool local_bindings = (scope == arcticdb::BindingScope::LOCAL);
     auto prometheus = m.def_submodule("prometheus");
     py::class_<arcticdb::PrometheusInstance, std::shared_ptr<arcticdb::PrometheusInstance>>(
             prometheus, "Instance", py::module_local(local_bindings)
@@ -44,8 +53,8 @@ void register_metrics(py::module&& m, bool local_bindings) {
                     const std::string&,
                     const arcticdb::MetricsConfig::Model>())
             .def(py::pickle(
-                    [](const arcticdb::MetricsConfig& config) { return arcticdb::apy::to_tuple(config); },
-                    [](py::tuple t) { return arcticdb::apy::metrics_config_from_tuple(t); }
+                    [](const arcticdb::MetricsConfig& config) { return arcticdb::to_tuple(config); },
+                    [](py::tuple t) { return arcticdb::metrics_config_from_tuple(t); }
             ));
 
     py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel", py::module_local(local_bindings))
@@ -54,5 +63,5 @@ void register_metrics(py::module&& m, bool local_bindings) {
             .value("PULL", arcticdb::MetricsConfig::Model::PULL)
             .export_values();
 
-    prometheus.def("metrics_config_from_tuple", &arcticdb::apy::metrics_config_from_tuple);
+    prometheus.def("metrics_config_from_tuple", &arcticdb::metrics_config_from_tuple);
 }

@@ -19,7 +19,8 @@ namespace py = pybind11;
 
 namespace arcticdb::entity::apy {
 
-void register_common_entity_bindings(py::module& m, bool local_bindings) {
+void register_common_entity_bindings(py::module& m, BindingScope scope) {
+    bool local_bindings = (scope == BindingScope::LOCAL);
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(m, "AtomKey", py::module_local(local_bindings))
             .def(py::init())
             .def(py::init<StreamId, VersionId, timestamp, ContentHash, IndexValue, IndexValue, KeyType>())

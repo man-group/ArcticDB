@@ -4,6 +4,7 @@
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/storage/s3/s3_settings.hpp>
 #include <arcticdb/storage/common.hpp>
+#include <arcticdb/python/python_bindings_common.hpp>
 
 namespace arcticdb::storage::apy {
 
@@ -32,7 +33,7 @@ s3::GCPXMLSettings gcp_settings(const pybind11::tuple& t);
 s3::S3Settings s3_settings(const pybind11::tuple& t);
 pybind11::tuple to_tuple(const s3::GCPXMLSettings& settings);
 pybind11::tuple to_tuple(const s3::S3Settings& settings);
-void register_common_bindings(pybind11::module& m, bool local_bindings);
+void register_common_storage_bindings(pybind11::module& m, BindingScope scope);
 NativeVariantStorage reconstruct_native_variant_storage_py_tuple(const pybind11::tuple& t);
 
 } // namespace arcticdb::storage::apy
