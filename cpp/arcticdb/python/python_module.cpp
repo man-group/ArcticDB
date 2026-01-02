@@ -330,36 +330,35 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
-    auto base_exception =
-            py::register_exception<arcticdb::ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
+    auto base_exception = py::register_exception<ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
     register_error_code_ecosystem(exceptions, base_exception);
 
-    arcticdb::async::register_bindings(m);
-    arcticdb::codec::register_bindings(m);
-    arcticdb::column_store::register_bindings(m);
+    async::register_bindings(m);
+    codec::register_bindings(m);
+    column_store::register_bindings(m);
 
     auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
-    auto no_data_found_exception = py::register_exception<arcticdb::storage::NoDataFoundException>(
+    auto no_data_found_exception = py::register_exception<storage::NoDataFoundException>(
             storage_submodule, "NoDataFoundException", base_exception.ptr()
     );
-    arcticdb::storage::apy::register_bindings(storage_submodule, base_exception);
+    storage::apy::register_bindings(storage_submodule, base_exception);
 
-    arcticdb::stream::register_bindings(m);
-    arcticdb::toolbox::apy::register_bindings(m, base_exception);
-    arcticdb::util::register_bindings(m);
+    stream::register_bindings(m);
+    toolbox::apy::register_bindings(m, base_exception);
+    util::register_bindings(m);
 
-    m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
+    m.def("get_version_string", &get_arcticdb_version_string);
 
     auto version_submodule = m.def_submodule("version_store", "Versioned storage implementation apis");
-    arcticdb::version_store::register_bindings(version_submodule, base_exception);
-    py::register_exception<arcticdb::NoSuchVersionException>(
+    version_store::register_bindings(version_submodule, base_exception);
+    py::register_exception<NoSuchVersionException>(
             version_submodule, "NoSuchVersionException", no_data_found_exception.ptr()
     );
 
     register_configs_map_api(m);
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));
-    register_metrics(m.def_submodule("metrics"), false);
+    register_metrics(m.def_submodule("metrics"), BindingScope::GLOBAL);
     register_type_handlers();
 
     register_termination_handler();

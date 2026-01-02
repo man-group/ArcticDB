@@ -9,7 +9,19 @@ namespace arcticdb::storage::apy {
 using namespace python_util;
 
 s3::GCPXMLSettings gcp_settings(const py::tuple& t) {
-    util::check(t.size() == 11, "Invalid GCPXMLSettings pickle objects, expected 11 attributes but was {}", t.size());
+    static size_t py_object_size = 11;
+    util::check(
+            t.size() >= py_object_size,
+            "Invalid GCPXMLSettings pickle objects, expected at least {} attributes but was {}",
+            py_object_size,
+            t.size()
+    );
+    util::warn(
+            t.size() > py_object_size,
+            "GCPXMLSettings py tuple expects {} attributes but has {}. Will continue by ignoring extra attributes.",
+            py_object_size,
+            t.size()
+    );
     return s3::GCPXMLSettings{
             t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
             t[static_cast<uint32_t>(GCPXMLSettingsPickleOrder::CA_CERT_PATH)].cast<std::string>(),
@@ -25,7 +37,14 @@ s3::GCPXMLSettings gcp_settings(const py::tuple& t) {
 }
 
 s3::S3Settings s3_settings(const py::tuple& t) {
-    util::check(t.size() == 4, "Invalid S3Settings pickle objects");
+    static size_t py_object_size = 4;
+    util::check(t.size() >= py_object_size, "Invalid S3Settings pickle objects");
+    util::warn(
+            t.size() > py_object_size,
+            "S3Settings py tuple expects {} attributes but has {}. Will continue by ignoring extra attributes.",
+            py_object_size,
+            t.size()
+    );
     return s3::S3Settings{
             t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_AUTH)].cast<s3::AWSAuthMethod>(),
             t[static_cast<uint32_t>(S3SettingsPickleOrder::AWS_PROFILE)].cast<std::string>(),
@@ -58,8 +77,8 @@ py::tuple to_tuple(const s3::S3Settings& settings) {
     );
 }
 
-void register_common_bindings(py::module& storage, bool local_bindings) {
-
+void register_common_storage_bindings(py::module& storage, BindingScope scope) {
+    bool local_bindings = (scope == BindingScope::LOCAL);
     py::enum_<s3::AWSAuthMethod>(storage, "AWSAuthMethod", py::module_local(local_bindings))
             .value("DISABLED", s3::AWSAuthMethod::DISABLED)
             .value("DEFAULT_CREDENTIALS_PROVIDER_CHAIN", s3::AWSAuthMethod::DEFAULT_CREDENTIALS_PROVIDER_CHAIN)

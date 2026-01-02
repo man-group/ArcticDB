@@ -145,7 +145,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
-    entity::apy::register_common_entity_bindings(version, false);
+    entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
     py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
             .def(py::init())

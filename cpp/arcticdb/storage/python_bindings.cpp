@@ -93,7 +93,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
 
     storage.def("create_library_index", &create_library_index);
 
-    register_common_bindings(storage, false);
+    register_common_storage_bindings(storage, BindingScope::GLOBAL);
 
     py::class_<S3Override>(storage, "S3Override")
             .def(py::init<>())

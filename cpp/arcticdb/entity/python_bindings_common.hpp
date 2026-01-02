@@ -8,10 +8,10 @@
 
 #pragma once
 
-#include <pybind11/pybind11.h>
+#include <arcticdb/python/python_bindings_common.hpp>
 
 namespace arcticdb::entity::apy {
 
-void register_common_entity_bindings(pybind11::module& m, bool local_bindings);
+void register_common_entity_bindings(pybind11::module& m, BindingScope scope);
 
 } // namespace arcticdb::entity::apy
