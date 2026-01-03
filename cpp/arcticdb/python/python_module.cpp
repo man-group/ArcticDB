@@ -330,8 +330,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
-    auto base_exception =
-            py::register_exception<ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
+    auto base_exception = py::register_exception<ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
     register_error_code_ecosystem(exceptions, base_exception);
 
     async::register_bindings(m);
