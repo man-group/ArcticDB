@@ -36,7 +36,6 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
-
 pytestmark = pytest.mark.pipeline
 
 

@@ -24,7 +24,6 @@ from arcticdb.util.utils import (
 )
 from arcticdb.version_store.library import Library
 
-
 logger = get_logger()
 
 

@@ -14,7 +14,6 @@ import pytest
 
 from arcticdb_ext.exceptions import InternalException
 
-
 pytestmark = pytest.mark.pipeline
 
 

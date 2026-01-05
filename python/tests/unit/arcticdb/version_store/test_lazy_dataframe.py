@@ -14,7 +14,6 @@ import pytest
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
 from arcticdb.util.test import assert_frame_equal
 
-
 pytestmark = pytest.mark.pipeline
 
 

@@ -973,14 +973,12 @@ class CustomArrayNormalizer(CustomNormalizer):
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
             sym = "sym"
             compat.old_lib.execute(
-                [
-                    f"""
+                [f"""
 from arcticdb_ext.storage import KeyType
 lib._nvs.write('sym', {{"a": df_1, "b" * 95: df_2, "c" * 100: df_2}}, recursive_normalizers=True, pickle_on_failure=True)
 lib_tool = lib._nvs.library_tool()
 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
-"""
-                ],
+"""],
                 dfs=dfs,
             )
 
@@ -1007,16 +1005,14 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, "sym")) == 1
 
             compat.old_lib.execute(
-                [
-                    """
+                ["""
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
 expected = {'a': df_1, 'b' * 95: df_2, 'c' * 100: df_2}
 assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
-"""
-                ],
+"""],
                 dfs=dfs,
             )
 
@@ -1059,8 +1055,7 @@ with pytest.raises(KeyError):
                 """
             )
             compat.old_lib.execute(
-                [
-                    f"""
+                [f"""
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 import numpy as np
@@ -1087,8 +1082,7 @@ def equals(x, y):
 register_normalizer(CustomArrayNormalizer())
 
 {read_lines}
-"""
-                ],
+"""],
                 dfs=dfs,
             )
 
@@ -1102,8 +1096,7 @@ register_normalizer(CustomArrayNormalizer())
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]})}
 
             compat.old_lib.execute(
-                [
-                    f"""
+                [f"""
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticdb_ext.storage import KeyType
@@ -1121,8 +1114,7 @@ data = {{
     "e": (1, 2, 3), # tuple must be pickled
 }}
 lib._nvs.write("sym", data, recursive_normalizers=True)
-"""
-                ],
+"""],
                 dfs=dfs,
             )
 

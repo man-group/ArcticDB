@@ -179,7 +179,9 @@ class Flattener:
                 "type_name": type_name,
                 "leaf": False,
                 "symbol": shortened_symbol,
-                "__VER__": 2,  # Purposefully to be different from V1 so exception KeyError is raised if old releases try to read V2 metastructures
+                "__VER__": (
+                    2
+                ),  # Purposefully to be different from V1 so exception KeyError is raised if old releases try to read V2 metastructures
                 "sub_keys": None,
                 "data": None,
                 "normalizer_format": norm_format,

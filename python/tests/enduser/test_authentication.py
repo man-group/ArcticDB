@@ -10,7 +10,6 @@ from arcticdb.util.logger import get_logger, GitHubSanitizingException
 from tests.util.mark import REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
 from tests.util.storage_test import real_gcp_credentials, real_s3_credentials
 
-
 logger = get_logger()
 
 
@@ -45,10 +44,8 @@ def check_creds_file_exists_on_machine():
         default_path = home_dir / ".aws" / "credentials"
 
     if default_path.exists():
-        pytest.skip(
-            "The test can be executed only on machine \
-                    where no AWS credentials file exists"
-        )
+        pytest.skip("The test can be executed only on machine \
+                    where no AWS credentials file exists")
 
 
 def execute_uri_test(uri: str, expected: List[str], access: str, secret: str):

@@ -84,9 +84,7 @@ def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, any_
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
         # Create library using old version and write pickled Pandas 1 metadata
-        compat.old_ac.execute(
-            [
-                f"""
+        compat.old_ac.execute([f"""
 from packaging import version
 pandas_version = version.parse(pd.__version__)
 assert pandas_version < version.Version("2.0.0")
@@ -95,9 +93,7 @@ idx = pd.Int64Index([1, 2, 3])
 df.index = idx
 lib = ac.get_library("{lib_name}")
 lib.write("sym", df, metadata={{"abc": df}})
-"""
-            ]
-        )
+"""])
 
         pandas_version = version.parse(pd.__version__)
         assert pandas_version >= version.Version("2.0.0")
@@ -134,17 +130,13 @@ def test_compat_snapshot_metadata_read_write(old_venv_and_arctic_uri, lib_name):
             curr.lib.snapshot(snap, metadata=snap_meta)
 
         # Check we can read the snapshot metadata with an old client, and write snapshot metadata with the old client
-        compat.old_lib.execute(
-            [
-                """
+        compat.old_lib.execute(["""
 snaps = lib.list_snapshots()
 meta = snaps["snap"]
 assert meta is not None
 assert meta == {"key": "value"}
 lib.snapshot("old_snap", metadata={"old_key": "old_value"})
-"""
-            ]
-        )
+"""])
 
         # Check the modern client can read the snapshot metadata written by the old client
         with compat.current_version() as curr:
@@ -167,14 +159,10 @@ def test_compat_snapshot_metadata_read(old_venv_and_arctic_uri, lib_name):
             curr.lib.write(sym, df)
 
         # Check we can read the snapshot metadata with an old client, and write snapshot metadata with the old client
-        compat.old_lib.execute(
-            [
-                """
+        compat.old_lib.execute(["""
 snaps = lib.list_snapshots()
 lib.snapshot("old_snap", metadata={"old_key": "old_value"})
-"""
-            ]
-        )
+"""])
 
         # Check the modern client can read the snapshot metadata written by the old client
         with compat.current_version() as curr:
@@ -198,8 +186,7 @@ def test_compat_timestamp_metadata(old_venv_and_arctic_uri, lib_name, zone_name)
         # v0 - no timezone
         # v1 - pytz
         compat.old_lib.execute(
-            [
-                f"""
+            [f"""
 import pytz
 timestamp_no_tz = pd.Timestamp(year=2025, month=1, day=1)
 timestamp_pytz = pd.Timestamp(year=2025, month=1, day=1, tz=pytz.timezone({repr(zone_name)}))
@@ -207,8 +194,7 @@ lib.write({repr(sym)}, df, metadata=timestamp_no_tz)
 lib.write_metadata({repr(sym)}, timestamp_pytz)
 assert lib.read_metadata({repr(sym)}, as_of=0).metadata == timestamp_no_tz
 assert lib.read_metadata({repr(sym)}, as_of=1).metadata == timestamp_pytz
-"""
-            ],
+"""],
             dfs={"df": df},
         )
 
@@ -227,18 +213,14 @@ assert lib.read_metadata({repr(sym)}, as_of=1).metadata == timestamp_pytz
             assert lib.read_metadata(sym, as_of=3).metadata == timestamp_pytz
             assert lib.read_metadata(sym, as_of=4).metadata == timestamp_pytz
 
-        compat.old_lib.execute(
-            [
-                f"""
+        compat.old_lib.execute([f"""
 import pytz
 timestamp_no_tz = pd.Timestamp(year=2025, month=1, day=1)
 timestamp_pytz = pd.Timestamp(year=2025, month=1, day=1, tz=pytz.timezone({repr(zone_name)}))
 assert lib.read_metadata({repr(sym)}, as_of=2).metadata == timestamp_no_tz
 assert lib.read_metadata({repr(sym)}, as_of=3).metadata == timestamp_pytz
 assert lib.read_metadata({repr(sym)}, as_of=4).metadata == timestamp_pytz
-"""
-            ]
-        )
+"""])
 
 
 def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, any_output_format):
@@ -259,23 +241,19 @@ def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, any_output_fo
         if version.Version(old_venv.version) >= version.Version("5.1.0"):
             # In version 5.1.0 (with commit a3b7545) we moved the streaming incomplete python API to the library tool.
             compat.old_lib.execute(
-                [
-                    """
+                ["""
 lib_tool = lib.library_tool()
 lib_tool.append_incomplete("sym", df_1)
 lib_tool.append_incomplete("sym", df_2)
-"""
-                ],
+"""],
                 dfs={"df_1": df_1, "df_2": df_2},
             )
         else:
             compat.old_lib.execute(
-                [
-                    """
+                ["""
 lib._nvs.append("sym", df_1, incomplete=True)
 lib._nvs.append("sym", df_2, incomplete=True)
-"""
-                ],
+"""],
                 dfs={"df_1": df_1, "df_2": df_2},
             )
 

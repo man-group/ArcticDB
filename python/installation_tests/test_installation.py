@@ -33,7 +33,6 @@ from arcticdb.util.test import (
 from arcticdb.version_store.processing import QueryBuilder
 from client_utils import delete_library
 
-
 PRE_4_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("4.0.0")
 PRE_5_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
 PRE_5_2_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.2.0")

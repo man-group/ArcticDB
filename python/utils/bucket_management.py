@@ -17,7 +17,6 @@ from azure.storage.blob import BlobServiceClient
 from azure.storage.blob import BlobProperties
 from arcticdb.util.logger import get_logger
 
-
 logger = get_logger()
 
 
