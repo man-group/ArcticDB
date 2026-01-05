@@ -12,6 +12,7 @@ import time
 import numpy as np
 import pandas as pd
 import itertools
+import random
 
 from arcticdb import Arctic
 from arcticdb import QueryBuilder
@@ -55,6 +56,8 @@ class Resample:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
     def _setup_cache(self):
+        random.seed(42)
+        np.random.seed(42)
         ac = Arctic(self.CONNECTION_STRING)
         ac.delete_library(self.LIB_NAME)
         lib = ac.create_library(self.LIB_NAME)

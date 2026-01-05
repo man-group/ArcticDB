@@ -4240,7 +4240,7 @@
                 "'count'"
             ]
         ],
-        "setup_cache_key": "resample:52",
+        "setup_cache_key": "resample:53",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "20835daa6c6fd2af13420212c35b87cdac7153f782b2bc02cb2535131bd654d8"
@@ -4286,7 +4286,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:52",
+        "setup_cache_key": "resample:53",
         "type": "time",
         "unit": "seconds",
         "version": "5a8f9ae968dbf11481dbe381bcb072c86f46190c9e10951ab2ec80ad9c9f116e",
@@ -4297,7 +4297,7 @@
         "name": "resample.ResampleWide.peakmem_resample_wide",
         "param_names": [],
         "params": [],
-        "setup_cache_key": "resample:126",
+        "setup_cache_key": "resample:129",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "53f042192048c92d282637c1bbcee9e52dacec9086c534782de30d7ff67e77eb"
@@ -4312,7 +4312,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:126",
+        "setup_cache_key": "resample:129",
         "type": "time",
         "unit": "seconds",
         "version": "ece714f981e8de31ee8296644624bf8f5fb895e6bf48d64a6ae2a9c50c5db7a2",
