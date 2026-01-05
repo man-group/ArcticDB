@@ -27,3 +27,6 @@ fbc2a76bdbf56c0181b38caa76863b1e4c5e5bec
 
 # Apply consistent code formatting to the repo
 7acd347e3a035b635fd71c1bde2b54e0135ac8db
+
+# Formating for upgrading Black to 25.11.0
+760d70e710eaca8bf27d3682be5809817bbb72b8
