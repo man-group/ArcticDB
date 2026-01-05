@@ -15,7 +15,6 @@ from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
 from arcticdb_ext.version_store import InternalOutputFormat, InternalArrowOutputStringFormat
 
-
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
 
 

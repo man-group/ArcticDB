@@ -23,7 +23,6 @@ from arcticdb.version_store.processing import QueryBuilder
 from benchmarks.common import AsvBase, generate_benchmark_df
 from benchmarks.local_query_builder import PARAMS_QUERY_BUILDER
 
-
 # region Setup classes
 
 

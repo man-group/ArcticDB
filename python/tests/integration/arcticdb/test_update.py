@@ -31,7 +31,6 @@ from arcticdb.util.test import assert_frame_equal, sample_dataframe
 from arcticdb_ext.version_store import DataError, NoSuchVersionException
 from tests.util.mark import LINUX
 
-
 logger = get_logger()
 
 SEED = 1001

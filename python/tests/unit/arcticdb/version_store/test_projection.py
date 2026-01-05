@@ -15,7 +15,6 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
-
 pytestmark = pytest.mark.pipeline
 
 

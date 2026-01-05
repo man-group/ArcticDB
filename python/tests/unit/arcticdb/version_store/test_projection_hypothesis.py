@@ -22,7 +22,6 @@ from arcticdb.util.hypothesis import (
     numeric_type_strategies,
 )
 
-
 pytestmark = pytest.mark.pipeline
 
 

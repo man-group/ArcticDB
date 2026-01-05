@@ -24,7 +24,6 @@ from arcticdb.arctic import Arctic
 from client_utils import StorageTypes, create_arctic_client
 from logger import get_logger
 
-
 logger = get_logger()
 
 

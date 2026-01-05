@@ -18,7 +18,6 @@ import pandas as pd
 
 from benchmarks.common import *
 
-
 # Common parameters between BasicFunctions and ModificationFunctions
 WIDE_DF_ROWS = 5_000
 WIDE_DF_COLS = 30_000

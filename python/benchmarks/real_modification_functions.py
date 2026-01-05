@@ -16,7 +16,6 @@ from arcticdb.version_store.library import Library
 from benchmarks.common import AsvBase
 from arcticdb.util.test import config_context
 
-
 # region Setup classes
 
 WIDE_DATAFRAME_NUM_COLS = 30_000

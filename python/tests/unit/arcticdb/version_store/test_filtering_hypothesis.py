@@ -38,7 +38,6 @@ from arcticdb.util.hypothesis import (
 )
 from arcticdb.util._versions import IS_NUMPY_ONE
 
-
 pytestmark = pytest.mark.pipeline
 
 

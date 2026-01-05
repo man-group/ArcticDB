@@ -22,7 +22,6 @@ from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store.library import Library
 
-
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = "arcticdb-asv-real-storage"
 GCP_S3_DEFAULT_BUCKET = "arcticdb-asv-real-storage"
