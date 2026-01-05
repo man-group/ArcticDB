@@ -20,7 +20,6 @@ from hypothesis import settings, HealthCheck, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
 from hypothesis.extra.pandas import column, data_frames, range_indexes
 
-
 _function_scoped_fixture = getattr(HealthCheck, "function_scoped_fixture", None)
 
 

@@ -16,7 +16,6 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 
-
 pytestmark = pytest.mark.pipeline
 
 

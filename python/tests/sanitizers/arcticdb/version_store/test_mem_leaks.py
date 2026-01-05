@@ -34,7 +34,6 @@ from tests.util.mark import (
 )
 from tests.util.marking import marks
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("Sanitizer_tests")
 

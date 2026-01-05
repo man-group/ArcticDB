@@ -16,7 +16,6 @@ import logging
 from dataclasses import dataclass
 from typing import List, Optional, Union
 
-
 log = logging.getLogger("missing_empty_tests")
 log.setLevel(logging.INFO)
 

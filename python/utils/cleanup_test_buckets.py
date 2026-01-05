@@ -21,7 +21,6 @@ from bucket_management import (
     s3_client,
 )
 
-
 logger = get_logger()
 
 now = datetime.now(timezone.utc)

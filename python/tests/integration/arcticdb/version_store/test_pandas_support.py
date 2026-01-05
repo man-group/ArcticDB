@@ -15,7 +15,6 @@ from pandas import DataFrame, DatetimeIndex
 
 from arcticdb.util.test import assert_frame_equal
 
-
 # In the following lines, the naming convention is
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 

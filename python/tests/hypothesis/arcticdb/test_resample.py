@@ -15,7 +15,6 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.util.logger import get_logger
 
-
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 # Make sure the start date is pre-epoch so that we can test pre-epoch dates. Not all C++ libraries handle pre-epoch well.

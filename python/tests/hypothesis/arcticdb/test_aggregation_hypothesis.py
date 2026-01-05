@@ -23,7 +23,6 @@ from arcticdb.util.hypothesis import (
     supported_string_dtypes,
 )
 
-
 pytestmark = pytest.mark.pipeline
 
 

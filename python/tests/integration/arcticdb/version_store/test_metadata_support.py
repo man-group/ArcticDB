@@ -27,7 +27,6 @@ from arcticdb.util.test import assert_frame_equal, distinct_timestamps
 
 from tests.util.mark import ZONE_INFO_MARK
 
-
 # In the following lines, the naming convention is
 # test_rt_df stands for roundtrip dataframe (implicitly pandas given file name)
 
@@ -35,7 +34,7 @@ from tests.util.mark import ZONE_INFO_MARK
 @pytest.mark.storage
 def test_rt_df_with_small_meta(object_and_mem_and_lmdb_version_store):
     lib = object_and_mem_and_lmdb_version_store
-    #  type: (NativeVersionStore)->None
+    # type: (NativeVersionStore)->None
 
     df = DataFrame(data=["A", "B", "C"])
     meta = {"abc": "def", "xxx": "yyy"}
