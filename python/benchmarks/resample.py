@@ -20,12 +20,10 @@ from asv_runner.benchmarks.mark import skip_benchmark
 
 
 class Resample:
-    warmup_time = 1
-    rounds = 4
-    number = 20
+    number = 5
 
     LIB_NAME = "resample"
-    CONNECTION_STRING = "lmdb://resample?map_size=5GB"
+    CONNECTION_STRING = "lmdb://resample"
     ROWS_PER_SEGMENT = 100_000
 
     param_names = [
@@ -35,7 +33,7 @@ class Resample:
         "aggregation",
     ]
     params = [
-        [10_000_000, 20_000_000],  # num_rows
+        [10_000_000],  # num_rows
         [10, 100, 100_000],  # downsampling factor
         ["bool", "int", "float", "datetime", "str"],  # col_type
         ["sum", "mean", "min", "max", "first", "last", "count"],  # aggregation
@@ -111,13 +109,8 @@ class Resample:
 
 
 class ResampleWide:
-    number = 5
-    rounds = 1
-    timeout = 1200  # Because of recent issue, avoid timeout error
-    warmup_time = 0
-
     LIB_NAME = "resample_wide"
-    CONNECTION_STRING = "lmdb://resample_wide?map_size=5GB"
+    CONNECTION_STRING = "lmdb://resample_wide"
     SYM = "resample_wide"
     NUM_COLS = 30_000
     COLS = [f"col_{idx}" for idx in range(NUM_COLS)]
