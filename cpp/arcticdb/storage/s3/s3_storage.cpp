@@ -129,7 +129,9 @@ bool S3Storage::do_iterate_type_until_match(
                 return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
             };
 
-    auto path_info = s3::detail::calculate_path_info(root_folder_, key_type, prefix_handler, prefix, FlatBucketizer::bucketize_length(key_type));
+    auto path_info = s3::detail::calculate_path_info(
+            root_folder_, key_type, prefix_handler, prefix, FlatBucketizer::bucketize_length(key_type)
+    );
 
     return detail::do_iterate_type_impl(key_type, visitor, bucket_name_, client(), path_info);
 }
@@ -141,7 +143,9 @@ void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefi
                 return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
             };
 
-    auto path_info = s3::detail::calculate_path_info(root_folder_, key_type, prefix_handler, prefix, FlatBucketizer::bucketize_length(key_type));
+    auto path_info = s3::detail::calculate_path_info(
+            root_folder_, key_type, prefix_handler, prefix, FlatBucketizer::bucketize_length(key_type)
+    );
 
     detail::do_visit_object_sizes_for_type_impl(key_type, visitor, bucket_name_, client(), path_info);
 }

@@ -242,7 +242,9 @@ bool NfsBackedStorage::do_iterate_type_until_match(
         }
     };
 
-    auto path_info = s3::detail::calculate_path_info(root_folder_, key_type, iter_prefix_handler, prefix, NfsBucketizer::bucketize_length(key_type));
+    auto path_info = s3::detail::calculate_path_info(
+            root_folder_, key_type, iter_prefix_handler, prefix, NfsBucketizer::bucketize_length(key_type)
+    );
 
     return s3::detail::do_iterate_type_impl(key_type, func, bucket_name_, *s3_client_, path_info);
 }
@@ -266,7 +268,9 @@ void NfsBackedStorage::do_visit_object_sizes(
         }
     };
 
-    auto path_info = s3::detail::calculate_path_info(root_folder_, key_type, iter_prefix_handler, prefix, NfsBucketizer::bucketize_length(key_type));
+    auto path_info = s3::detail::calculate_path_info(
+            root_folder_, key_type, iter_prefix_handler, prefix, NfsBucketizer::bucketize_length(key_type)
+    );
 
     s3::detail::do_visit_object_sizes_for_type_impl(key_type, func, bucket_name_, *s3_client_, path_info);
 }

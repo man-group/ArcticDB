@@ -501,7 +501,8 @@ inline PathInfo calculate_path_info(
 }
 
 inline bool do_iterate_type_impl(
-        KeyType key_type, const IterateTypePredicate& visitor, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info
+        KeyType key_type, const IterateTypePredicate& visitor, const std::string& bucket_name,
+        const S3ClientInterface& s3_client, const PathInfo& path_info
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
 
@@ -549,7 +550,8 @@ inline bool do_iterate_type_impl(
 }
 
 inline void do_visit_object_sizes_for_type_impl(
-        KeyType key_type, const ObjectSizesVisitor& visitor, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info
+        KeyType key_type, const ObjectSizesVisitor& visitor, const std::string& bucket_name,
+        const S3ClientInterface& s3_client, const PathInfo& path_info
 ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
     ARCTICDB_RUNTIME_DEBUG(
