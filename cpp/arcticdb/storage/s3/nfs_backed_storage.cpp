@@ -242,9 +242,9 @@ bool NfsBackedStorage::do_iterate_type_until_match(
         }
     };
 
-    return s3::detail::do_iterate_type_impl(
-            key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, iter_prefix_handler, prefix
-    );
+    auto path_info = s3::detail::calculate_path_info(root_folder_, key_type, iter_prefix_handler, prefix, NfsBucketizer::bucketize_length(key_type));
+
+    return s3::detail::do_iterate_type_impl(key_type, func, bucket_name_, *s3_client_, path_info);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
@@ -266,9 +266,9 @@ void NfsBackedStorage::do_visit_object_sizes(
         }
     };
 
-    s3::detail::do_visit_object_sizes_for_type_impl(
-            key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, iter_prefix_handler, prefix, func
-    );
+    auto path_info = s3::detail::calculate_path_info(root_folder_, key_type, iter_prefix_handler, prefix, NfsBucketizer::bucketize_length(key_type));
+
+    s3::detail::do_visit_object_sizes_for_type_impl(key_type, func, bucket_name_, *s3_client_, path_info);
 }
 
 } // namespace arcticdb::storage::nfs_backed

@@ -467,23 +467,20 @@ inline PrefixHandler default_prefix_handler() {
 }
 
 struct PathInfo {
-    PathInfo(std::string prefix, std::string key_type_dir, size_t path_to_key_size) :
+    PathInfo(std::string prefix, size_t path_to_key_size) :
         key_prefix_(std::move(prefix)),
-        key_type_dir_(std::move(key_type_dir)),
         path_to_key_size_(path_to_key_size) {}
 
     std::string key_prefix_;
-    std::string key_type_dir_;
     size_t path_to_key_size_;
 };
 
-template<class KeyBucketizer>
-PathInfo calculate_path_info(
+inline PathInfo calculate_path_info(
         const std::string& root_folder, KeyType key_type, const PrefixHandler& prefix_handler,
-        const std::string& prefix, KeyBucketizer&& bucketizer
+        const std::string& prefix, const size_t bucketize_length
 ) {
     auto key_type_dir = key_type_folder(root_folder, key_type);
-    const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
+    const auto path_to_key_size = key_type_dir.size() + 1 + bucketize_length;
     // if prefix is empty, add / to avoid matching both 'log' and 'logc' when key_type_dir is {root_folder}/log
     if (prefix.empty()) {
         key_type_dir += "/";
@@ -500,18 +497,14 @@ PathInfo calculate_path_info(
     );
     auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
 
-    return {key_prefix, key_type_dir, path_to_key_size};
+    return {key_prefix, path_to_key_size};
 }
 
-template<class KeyBucketizer>
-bool do_iterate_type_impl(
-        KeyType key_type, const IterateTypePredicate& visitor, const std::string& root_folder,
-        const std::string& bucket_name, const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer,
-        const PrefixHandler& prefix_handler = default_prefix_handler(), const std::string& prefix = std::string{}
+inline bool do_iterate_type_impl(
+        KeyType key_type, const IterateTypePredicate& visitor, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
 
-    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::move(bucketizer));
     ARCTICDB_RUNTIME_DEBUG(
             log::storage(), "Iterating over objects in bucket {} with prefix {}", bucket_name, path_info.key_prefix_
     );
@@ -555,16 +548,10 @@ bool do_iterate_type_impl(
     return false;
 }
 
-template<class KeyBucketizer>
-void do_visit_object_sizes_for_type_impl(
-        KeyType key_type, const std::string& root_folder, const std::string& bucket_name,
-        const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer, const PrefixHandler& prefix_handler,
-        const std::string& prefix, const ObjectSizesVisitor& visitor
+inline void do_visit_object_sizes_for_type_impl(
+        KeyType key_type, const ObjectSizesVisitor& visitor, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info
 ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
-
-    auto path_info =
-            calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::forward<KeyBucketizer>(bucketizer));
     ARCTICDB_RUNTIME_DEBUG(
             log::storage(),
             "Calculating sizes for objects in bucket {} with prefix {}",
