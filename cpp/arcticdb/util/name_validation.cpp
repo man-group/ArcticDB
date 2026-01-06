@@ -33,8 +33,9 @@ const auto UNSUPPORTED_S3_CHARS = std::set<char>{'*', '<', '>'};
         return Error{
                 throw_error<ErrorCode::E_NAME_TOO_LONG>,
                 fmt::format(
-                        "The {} length exceeds the max supported length. {} length: {}, Max Supported Length: {}",
+                        "The {} length {} exceeds the max supported length. {} length: {}, Max Supported Length: {}",
                         name_type_for_error,
+                        name,
                         name_type_for_error,
                         name.size(),
                         MAX_SYMBOL_LENGTH
