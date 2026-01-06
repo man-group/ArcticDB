@@ -97,6 +97,7 @@ jobs:
         with:
           version: "v0.10.0"
           token: ${{ secrets.GITHUB_TOKEN }}
+          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Setup macOS build environment
         if: matrix.os == 'macos'
