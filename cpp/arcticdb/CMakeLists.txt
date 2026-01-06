@@ -929,7 +929,7 @@ install(TARGETS arcticdb_ext
         RUNTIME DESTINATION . COMPONENT Python_Lib)
 
 # Improves portability (in setup.py) by creating an explicit target that manually installs the library
-if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT ${ARCTICDB_KEEP_DEBUG_SYMBOLS})
     add_custom_command(OUTPUT arcticdb_ext.gz
             COMMAND bash -c "gzip -c $<TARGET_FILE:arcticdb_ext> >arcticdb_ext.gz"
             DEPENDS arcticdb_ext)
