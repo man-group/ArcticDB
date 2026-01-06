@@ -240,9 +240,6 @@ class BatchBasicFunctions:
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-    def time_read_batch_pure(self, rows, num_symbols):
-        self.lib.read_batch(self.read_reqs)
-
     def peakmem_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
