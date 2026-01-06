@@ -87,8 +87,14 @@ std::size_t decode_ndarray(
             return;
         }
 
-        auto data_begin = (is_empty_array || is_fully_sparse) ? nullptr : static_cast<uint8_t*>(data_sink.allocate_data(data_size));
-        util::check(is_empty_array || is_fully_sparse || data_begin != nullptr, "Failed to allocate data of size {}", data_size);
+        auto data_begin = (is_empty_array || is_fully_sparse)
+                                  ? nullptr
+                                  : static_cast<uint8_t*>(data_sink.allocate_data(data_size));
+        util::check(
+                is_empty_array || is_fully_sparse || data_begin != nullptr,
+                "Failed to allocate data of size {}",
+                data_size
+        );
         auto data_out = data_begin;
         auto data_in = input;
         auto num_blocks = field.values_size();

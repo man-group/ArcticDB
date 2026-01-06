@@ -443,14 +443,11 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             const auto& data_type = data_types[idx];
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    array.null_count() == 0,
-                    "Column '{}' contains null values, which are not currently supported",
-                    record_batch->names()[idx]
-            );
+            // arrow_array_buffers[0] is the validity bitmap. It may be nullptr if there are no null values
+            // arrow_array_buffers[1] is the actual column data buffer.
+            // arrow_array_buffers[i] for i>1 are extra buffers used only for certain types.
+            // E.g. the strings buffer for a variable lenght encoded string array.
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
-            // arrow_array_buffers[0] seems to be the validity bitmap, and may be NULL if there are no null values
-            // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
                 // Arrow bool columns are packed bitsets
@@ -473,6 +470,21 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 } else {
                     column.buffer().add_external_block(data, bytes);
                 }
+            }
+
+            if (array.null_count() > 0) {
+                schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                        !index_column_position.has_value() || idx != *index_column_position,
+                        "Index column '{}' cannot contain null values, but {} nulls were found",
+                        column_names[idx],
+                        array.null_count()
+                );
+                ChunkedBuffer bitmap_buffer;
+                // arrow_array_buffers[0] is the validity bitmap
+                bitmap_buffer.add_external_packed_block(arrow_array_buffers[0].data<uint8_t>(), array.size(), 0);
+                column.set_extra_buffer(
+                        start_row * get_type_size(data_type), ExtraBufferType::BITMAP, std::move(bitmap_buffer)
+                );
             }
         }
         start_row += record_batch->nb_rows();
