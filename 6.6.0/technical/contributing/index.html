@@ -1,0 +1,2595 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://docs.arcticdb.io/6.6.0/technical/contributing/">
+      
+      
+        <link rel="prev" href="../migration/">
+      
+      
+        <link rel="next" href="../upgrade_storage/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../images/ArcticDB Logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Contributing - ArcticDB</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Aspekta:300,300i,400,400i,700,700i%7CGeist+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Aspekta";--md-code-font:"Geist Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/material.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/mkdocstrings-python.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="arcticdb" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#contribution-licensing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're not viewing the latest version.
+  <a href="../../..">
+    <strong>Click here to go to latest.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ArcticDB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Contributing
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../.." class="md-tabs__link">
+          
+  
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../tutorials/fundamentals/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-tabs__link">
+          
+  
+  
+  Notebooks
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../api/" class="md-tabs__link">
+          
+  
+  
+  Python API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
+
+    </a>
+    ArcticDB
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Home
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frequently Asked Questions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../licensing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Licensing FAQs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/fundamentals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fundamentals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/parallel_writes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parallel Writes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/snapshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/lmdb_and_in_memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    In-memory Backends
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/data_organisation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Organisation Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/library_sizes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Sizes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Storage Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started with AWS S3
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Permissions with AWS S3
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../azure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started with Azure Blob Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Information
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Technical Information
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../on_disk_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    On-Disk Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arctic Migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../upgrade_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrade Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_4" id="__nav_2_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../lib_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../runtime_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../error_messages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Messages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notebooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Notebooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intro Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LazyDataFrame Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Querybuilder Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resample Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_concat/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Symbol Concat Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AWS Blockchain Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_snapshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_equity_analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Equity Analytics Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_equity_options/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Equity Options Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_billion_row_challenge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1 Billion Row Challenge Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pythagorean Won Loss Formula Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_staged_data_with_tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Staged Data Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_recursive_normalizers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recursive normalizer Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../notebooks/ArcticDB_demo_read_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Python API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/arctic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arctic
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/arctic_uri/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arctic URI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/library_types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Related Objects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DataFrame Processing Operations API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/admin_tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Query Stats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+
+
+
+                  
+
+
+  
+  
+
+
+<h1 id="contribution-licensing">Contribution Licensing<a class="headerlink" href="#contribution-licensing" title="Permanent link">&para;</a></h1>
+<p>Since this project is distributed under the terms of the <a href="https://github.com/man-group/ArcticDB/blob/master/LICENSE.txt">BSL license</a>,
+contributions that you make are licensed under the same terms.
+For us to be able to accept your contributions, we will need explicit confirmation from you that you are able and
+willing to provide them under these terms, and the mechanism we use to do this is the <a href="https://github.com/man-group/ArcticDB/blob/master/Individual%20Contributor%20License%20Agreement.md">ArcticDB Individual Contributor License Agreement</a>.</p>
+<p><strong>Individuals</strong> - To participate under these terms, please include the following line as the last line of the commit
+message for each commit in your contribution.
+You must use your real name (no pseudonyms, and no anonymous contributions).</p>
+<div class="highlight"><pre><span></span><code>Signed-Off By: Random J. Developer &lt;random@developer.example.org&gt;. By including this sign-off line I agree to the terms of the Contributor License Agreement.
+</code></pre></div>
+<p><strong>Corporations</strong> - For corporations who wish to make contributions to ArcticDB, please contact info@arcticdb.io and
+we will arrange for the CLA to be sent to the signing authority within your corporation.</p>
+<h1 id="docker-quickstart">Docker Quickstart<a class="headerlink" href="#docker-quickstart" title="Permanent link">&para;</a></h1>
+<p>This quickstart builds a release using build dependencies from vcpkg.
+ArcticDB releases on PyPi use vcpkg dependencies in the manner as described below.</p>
+<p>Note the below instructions will build a Linux X86_64 release.</p>
+<h4 id="1-start-the-arcticdb-build-docker-image">1) Start the ArcticDB build docker image<a class="headerlink" href="#1-start-the-arcticdb-build-docker-image" title="Permanent link">&para;</a></h4>
+<p>Run in a Linux terminal:</p>
+<div class="highlight"><pre><span></span><code>docker<span class="w"> </span>pull<span class="w"> </span>ghcr.io/man-group/cibuildwheel_manylinux:2.12.1-3a897
+docker<span class="w"> </span>run<span class="w"> </span>-it<span class="w"> </span>ghcr.io/man-group/cibuildwheel_manylinux:2.12.1-3a897
+</code></pre></div>
+<blockquote>
+<p>:warning: The below instructions do not have to be run in the provided docker image. They can be run against any Python installation on any Linux distribution as long as the basic build <a href="#setting-up-linux">dependencies are available</a>.</p>
+<p>If running outside the provided docker image, please change <code>/opt/python/cp39-cp39/bin/python3</code> in the examples below
+to an appropriate path for Python.</p>
+</blockquote>
+<h4 id="2-check-out-arcticdb-including-submodules">2) Check out ArcticDB including submodules<a class="headerlink" href="#2-check-out-arcticdb-including-submodules" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span>
+git<span class="w"> </span>clone<span class="w"> </span>https://github.com/man-group/ArcticDB.git
+<span class="nb">cd</span><span class="w"> </span>ArcticDB
+git<span class="w"> </span>submodule<span class="w"> </span>init<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>git<span class="w"> </span>submodule<span class="w"> </span>update
+</code></pre></div>
+<h4 id="3-kick-off-the-build">3) Kick off the build<a class="headerlink" href="#3-kick-off-the-build" title="Permanent link">&para;</a></h4>
+<div class="highlight"><pre><span></span><code><span class="nv">MY_PYTHON</span><span class="o">=</span>/opt/python/cp39-cp39/bin/python3<span class="w">  </span><span class="c1"># change if outside docker container/building against a different python</span>
+<span class="nv">$MY_PYTHON</span><span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>pip<span class="w"> </span>setuptools<span class="w"> </span>wheel<span class="w"> </span>grpcio-tools
+<span class="nv">ARCTIC_CMAKE_PRESET</span><span class="o">=</span>skip<span class="w"> </span><span class="nv">$MY_PYTHON</span><span class="w"> </span>setup.py<span class="w"> </span>develop
+<span class="c1"># Change the below Python_EXECUTABLE value to build against a different Python version</span>
+cmake<span class="w"> </span>-DPython_EXECUTABLE<span class="o">=</span><span class="nv">$MY_PYTHON</span><span class="w"> </span>-DTEST<span class="o">=</span>off<span class="w"> </span>--preset<span class="w"> </span>linux-debug<span class="w"> </span>cpp
+<span class="nb">pushd</span><span class="w"> </span>cpp
+cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class="w"> </span>linux-debug
+<span class="nb">popd</span>
+</code></pre></div>
+<h4 id="4-run-arcticdb">4) Run ArcticDB<a class="headerlink" href="#4-run-arcticdb" title="Permanent link">&para;</a></h4>
+<p>Ensure the below is run in the Git project root:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># PYTHONPATH first part = Python module, second part compiled C++ binary</span>
+<span class="nv">PYTHONPATH</span><span class="o">=</span><span class="sb">`</span><span class="nb">pwd</span><span class="sb">`</span>/python:<span class="sb">`</span><span class="nb">pwd</span><span class="sb">`</span>/cpp/out/linux-debug-build/arcticdb/<span class="w"> </span><span class="nv">$MY_PYTHON</span>
+</code></pre></div>
+<p>Now, inside the Python shell:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+</code></pre></div>
+<p>Rather than setting the <code>PYTHONPATH</code> environment variable, you could install the appropriate paths into your Python environment by running (note that this will invoke the build tooling so will compile any changed files since the last compilation):</p>
+<div class="highlight"><pre><span></span><code><span class="nv">$MY_PYTHON</span><span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-ve<span class="w"> </span>.
+</code></pre></div>
+<p>Note that as this will copy the binary to your Python installation this will have to be run after each and every change of a C++ file.</p>
+<h1 id="building-using-mamba-and-conda-forge">Building using mamba and conda-forge<a class="headerlink" href="#building-using-mamba-and-conda-forge" title="Permanent link">&para;</a></h1>
+<p>This section uses build dependencies from <a href="https://conda-forge.org/">conda-forge</a>.
+It is a pre-requisite for releasing ArcticDB on conda-forge.</p>
+<p><strong>⚠️ At the time of writing, installing ArcticDB with this setup under Windows is not possible
+due to a linkage problems with libprotobuf.
+See: https://github.com/man-group/ArcticDB/pull/449</strong></p>
+<ul>
+<li><a href="https://mamba.readthedocs.io/en/latest/installation.html">Install <code>mamba</code></a></li>
+<li>Create the <code>arcticdb</code> environment from its specification (<code>environment-dev.yml</code>):</li>
+</ul>
+<div class="highlight"><pre><span></span><code>mamba<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment-dev.yml
+</code></pre></div>
+<ul>
+<li>Activate the <code>arcticdb</code> environment (you will need to do this for every new shell session):</li>
+</ul>
+<div class="highlight"><pre><span></span><code>mamba<span class="w"> </span>activate<span class="w"> </span>arcticdb
+</code></pre></div>
+<h4 id="building-cmake-targets">Building CMake targets<a class="headerlink" href="#building-cmake-targets" title="Permanent link">&para;</a></h4>
+<p><a href="https://github.com/man-group/ArcticDB/blob/master/cpp/CMakePresets.json">Several CMake presets</a> are defined for build types, OS's, and build system.</p>
+<p>For instance:</p>
+<ul>
+<li>for debug build on Linux with mamba and conda-forge, use:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">ARCTICDB_USING_CONDA</span><span class="o">=</span><span class="m">1</span>
+cmake<span class="w"> </span>-DTEST<span class="o">=</span>off<span class="w"> </span>--preset<span class="w"> </span>linux-conda-debug<span class="w"> </span>cpp
+<span class="nb">cd</span><span class="w"> </span>cpp
+
+<span class="c1"># You might need to use fewer threads than what&#39;s possible on your machine</span>
+<span class="c1"># to not have it swap and freeze (e.g. we use 1 here).</span>
+cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class="w"> </span>linux-conda-debug<span class="w"> </span>-j<span class="w"> </span><span class="m">1</span>
+</code></pre></div>
+<ul>
+<li>for release build on MacOS with mamba and conda-forge, use:</li>
+</ul>
+<p><div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">ARCTICDB_USING_CONDA</span><span class="o">=</span><span class="m">1</span>
+cmake<span class="w"> </span>-DTEST<span class="o">=</span>off<span class="w"> </span>--preset<span class="w"> </span>macos-conda-release<span class="w"> </span>cpp
+<span class="nb">cd</span><span class="w"> </span>cpp
+
+<span class="c1"># You might need to use fewer threads than what&#39;s possible your machine</span>
+<span class="c1"># not to have it swap and freeze (e.g. we use 1 here).</span>
+cmake<span class="w"> </span>--build<span class="w"> </span>--preset<span class="w"> </span>linux-conda-debug<span class="w"> </span>-j<span class="w"> </span><span class="m">1</span>
+</code></pre></div>
+  <strong>Note:</strong> If you don't use presets, you may want to set some useful environment variables:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># To define the number of threads to use</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">CMAKE_BUILD_PARALLEL_LEVEL</span><span class="o">=</span><span class="m">1</span>
+<span class="c1"># To enable C++ tests</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">ARCTICDB_BUILD_CPP_TESTS</span><span class="o">=</span><span class="m">1</span>
+</code></pre></div>
+<h4 id="building-and-installing-the-python-package">Building and installing the Python Package<a class="headerlink" href="#building-and-installing-the-python-package" title="Permanent link">&para;</a></h4>
+<ul>
+<li>Build and install ArcticDB in the <code>arcticdb</code> environment using dependencies installed in this environment.
+   We recommend using the <a href="https://setuptools.pypa.io/en/latest/userguide/development_mode.html"><code>editable</code> installation</a> for development:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">ARCTICDB_USING_CONDA</span><span class="o">=</span><span class="m">1</span>
+<span class="c1"># Adapt the CMake preset to your setup.</span>
+<span class="nb">export</span><span class="w"> </span><span class="nv">ARCTIC_CMAKE_PRESET</span><span class="o">=</span>linux-conda-debug
+python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>--no-build-isolation<span class="w"> </span>--no-deps<span class="w"> </span>--verbose<span class="w"> </span>--editable<span class="w"> </span>.
+</code></pre></div>
+<ul>
+<li>Use ArcticDB from Python:</li>
+</ul>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span> <span class="nn">arcticdb</span> <span class="kn">import</span> <span class="n">Arctic</span>
+</code></pre></div>
+<h1 id="faq">FAQ<a class="headerlink" href="#faq" title="Permanent link">&para;</a></h1>
+<h4 id="how-do-i-build-against-different-python-versions">How do I build against different Python versions?<a class="headerlink" href="#how-do-i-build-against-different-python-versions" title="Permanent link">&para;</a></h4>
+<p>Run <code>cmake</code> (configure, not build) with either:</p>
+<ol>
+<li>A different version of Python as the <em>first</em> version of Python on your PATH or...</li>
+<li>Point the <code>Python_EXECUTABLE</code> CMake variable to a different Python binary</li>
+</ol>
+<p>Note that to build the ArcticDB C++ tests <strong>you must have the Python static library available in your installation!</strong></p>
+<h4 id="how-do-i-run-the-python-tests">How do I run the Python tests?<a class="headerlink" href="#how-do-i-run-the-python-tests" title="Permanent link">&para;</a></h4>
+<p>See <a href="#running-python-tests">running tests below</a>.</p>
+<h4 id="how-do-i-run-the-c-tests">How do I run the C++ tests?<a class="headerlink" href="#how-do-i-run-the-c-tests" title="Permanent link">&para;</a></h4>
+<p>See <a href="#running-c-tests">running tests below</a>.</p>
+<h4 id="how-do-i-specify-how-many-cores-to-build-using">How do I specify how many cores to build using?<a class="headerlink" href="#how-do-i-specify-how-many-cores-to-build-using" title="Permanent link">&para;</a></h4>
+<p>This is determined auto-magically by CMake at build time, but can be manually set by passing in <code>--parallel &lt;num cores&gt;</code> into the build command.</p>
+<h1 id="detailed-build-information">Detailed Build Information<a class="headerlink" href="#detailed-build-information" title="Permanent link">&para;</a></h1>
+<h2 id="docker-image-construction">Docker Image Construction<a class="headerlink" href="#docker-image-construction" title="Permanent link">&para;</a></h2>
+<p>The above docker image is built from <a href="https://github.com/pypa/manylinux">ManyLinux</a>.
+Build script is located <a href="https://github.com/man-group/ArcticDB/blob/master/build_tooling/build_many_linux_image.sh">here</a>.</p>
+<p>GitHub output <a href="https://github.com/man-group/ArcticDB/pkgs/container/cibuildwheel_manylinux">here</a>.</p>
+<p><strong>We recommend you use this image for compilation and testing!</strong></p>
+<h2 id="setting-up-linux">Setting up Linux<a class="headerlink" href="#setting-up-linux" title="Permanent link">&para;</a></h2>
+<p>The codebase and build system can work with any reasonably recent Linux distribution with at least
+GCC 11 and CMake 3.12 (these instructions assume 3.21+).</p>
+<p>A development install of Python 3.6+ (with <code>libpython.a</code> or <code>.so</code> and full headers) is also necessary.
+See <a href="#pybind11-configuration">pybind11 configuration</a>.</p>
+<p>We require a Mongo executable for a couple of Python tests on Linux. You can check whether you have
+it with <code>mongod --version</code>.</p>
+<p>Search the internet for "mongo installation Linux" for instructions for your distro if you do not
+already have <code>mongod</code> available.</p>
+<h3 id="dependencies-by-distro">Dependencies by distro<a class="headerlink" href="#dependencies-by-distro" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Distro</th>
+<th>Versions reported to work</th>
+<th>Packages</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ubuntu</td>
+<td>20.04, 22.04</td>
+<td>build-essential g++-11 libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev libcurl4-openssl-dev python3-dev</td>
+</tr>
+<tr>
+<td>Centos</td>
+<td>7</td>
+<td>devtoolset-11-gcc-c++ openssl-devel cyrus-sasl-devel devtoolset-11-libatomic-devel libcurl-devel python3-devel</td>
+</tr>
+</tbody>
+</table>
+<h2 id="setting-up-windows">Setting up Windows<a class="headerlink" href="#setting-up-windows" title="Permanent link">&para;</a></h2>
+<p>We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v142 or newer) and tools
+(Windows SDK, CMake, Python).</p>
+<p>The Python that comes with Visual Studio is sufficient for creating release builds, but for debug builds, you will have
+to separately download from <a href="https://www.python.org/downloads/windows/">Python.org</a>.</p>
+<p>After building <code>arcticdb_ext</code>, you need to symlink to the <code>.pyd</code> for the Python tests to run against it:</p>
+<div class="highlight"><pre><span></span><code><span class="c"># From the root of the ArcticDB git root checkout, in an administrator powershell session</span>
+<span class="c"># Change Python version as appropriate - below is for Python 3.11.</span>
+<span class="nb">New-Item</span> <span class="n">-Path</span> <span class="p">.\</span><span class="n">python</span><span class="p">\</span><span class="n">arcticdb_ext</span><span class="p">.</span><span class="n">cp311-win_amd64</span><span class="p">.</span><span class="n">pyd</span> <span class="n">-ItemType</span> <span class="n">SymbolicLink</span> <span class="n">-Value</span> <span class="p">.\</span><span class="n">cpp</span><span class="p">\</span><span class="n">out</span><span class="p">\</span><span class="n">windows-cl-debug-build</span><span class="p">\</span><span class="n">arcticdb</span><span class="p">\</span><span class="n">arcticdb_ext</span><span class="p">.</span><span class="n">cp311-win_amd64</span><span class="p">.</span><span class="n">pyd</span>
+</code></pre></div>
+<h2 id="running-python-tests">Running Python tests<a class="headerlink" href="#running-python-tests" title="Permanent link">&para;</a></h2>
+<p>With <code>python</code> pointing to a Python interpeter with <code>ArcticDB</code> installed/on the <code>PYTHON_PATH</code>:</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>-m<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>arcticdb<span class="o">[</span>Testing<span class="o">]</span>
+python<span class="w"> </span>-m<span class="w"> </span>pytest<span class="w"> </span>python/tests
+</code></pre></div>
+<h2 id="running-c-tests">Running C++ tests<a class="headerlink" href="#running-c-tests" title="Permanent link">&para;</a></h2>
+<p>Configure ArcticDB with TEST=ON (default is OFF):</p>
+<div class="highlight"><pre><span></span><code>cmake<span class="w"> </span>-DPython_EXECUTABLE<span class="o">=</span>&lt;path<span class="w"> </span>to<span class="w"> </span>python&gt;<span class="w"> </span>-DTEST<span class="o">=</span>ON<span class="w"> </span>--preset<span class="w"> </span>linux-debug<span class="w"> </span>cpp
+</code></pre></div>
+<p>Or you can set the following environment variable:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">ARCTICDB_BUILD_CPP_TESTS</span><span class="o">=</span><span class="m">1</span>
+</code></pre></div>
+<p>Note that <code>&lt;path to python&gt;</code> must point to a Python that is compatible with <a href="https://cmake.org/cmake/help/latest/module/FindPython.html">Development.Embed</a>. This will probably be the result of installing <code>python3-devel</code> from your dependency manager.</p>
+<p>Inside the provided docker image, <code>python3-devel</code> resolves to Python 3.6 installed at <code>/usr/bin/python3</code>, so the resulting command will be:</p>
+<div class="highlight"><pre><span></span><code>cmake<span class="w"> </span>-DPython_EXECUTABLE<span class="o">=</span>/usr/bin/python3<span class="w"> </span>-DTEST<span class="o">=</span>ON<span class="w"> </span>--preset<span class="w"> </span>linux-debug<span class="w"> </span>cpp
+</code></pre></div>
+<p>Then build and run the tests:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>cpp/out/linux-debug-build
+make<span class="w"> </span>-j<span class="w"> </span><span class="m">1</span><span class="w"> </span>arcticdb_rapidcheck_tests
+make<span class="w"> </span>-j<span class="w"> </span><span class="m">1</span><span class="w"> </span>test_unit_arcticdb
+make<span class="w"> </span><span class="nb">test</span>
+</code></pre></div>
+<h2 id="cibuildwheel">CIBuildWheel<a class="headerlink" href="#cibuildwheel" title="Permanent link">&para;</a></h2>
+<p>Our source repo works with <a href="https://github.com/pypa/cibuildwheel">CIBuildWheel</a> which runs the compilation and tests
+against all supported Python versions in isolated environments.
+Please follow their documentation.</p>
+<h1 id="configurations">Configurations<a class="headerlink" href="#configurations" title="Permanent link">&para;</a></h1>
+<h2 id="cmake-presets">CMake presets<a class="headerlink" href="#cmake-presets" title="Permanent link">&para;</a></h2>
+<p>To make it easier to set and share all the environment variables, config and commands, we recommend using the <a href="https://cmake.org/cmake/help/latest/manual/cmake-presets.7.html">CMake
+presets</a> feature.</p>
+<p>Recent versions of some popular C++ IDEs support reading/importing these presets:
+* <a href="https://devblogs.microsoft.com/cppblog/cmake-presets-integration-in-visual-studio-and-visual-studio-code/">Visual Studio &amp; Code</a>
+* <a href="https://www.jetbrains.com/help/clion/cmake-presets.html">CLion</a></p>
+<p>And it's equally easy to use on the command line.</p>
+<p>We already ship a <code>CMakePresets.json</code> in the cpp directory, which is used by our builds.
+You can add a <code>CMakeUserPresets.json</code> in the same directory for local overrides.
+Inheritance is supported.</p>
+<p>If you're working on Linux but not using our Docker image, you may want to create a preset with these <code>cacheVariables</code>:
+* <code>CMAKE_MAKE_PROGRAM</code> - <code>make</code> or <code>ninja</code> should work
+* <code>CMAKE_C_COMPILER</code> and <code>CMAKE_CXX_COMPILER</code> - If your preferred compiler is not <code>cc</code> and <code>cxx</code></p>
+<p>More examples:</p>
+<details>
+<summary>Windows Preset to specify a Python version</summary>
+
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;version&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;configurePresets&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alt-vcpkg-debug:py3.10&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;inherits&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;windows-cl-debug&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;cacheVariables&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;Python_ROOT_DIR&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\Program Files\\Python310&quot;</span>
+<span class="w">      </span><span class="p">},</span>
+<span class="w">      </span><span class="nt">&quot;environment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">        </span><span class="nt">&quot;PATH&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\Users\\me\\AppData\\Roaming\\Python\\Python310\\Scripts;C:\\Program Files\\Python310;$penv{PATH}&quot;</span><span class="p">,</span>
+<span class="w">        </span><span class="nt">&quot;PYTHONPATH&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;C:\\Program Files\\Python310\\Lib;C:\\Users\\me\\AppData\\Roaming\\Python\\Python310\\site-packages&quot;</span>
+<span class="w">      </span><span class="p">}</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nt">&quot;buildPresets&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">{</span>
+<span class="w">      </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alt-vcpkg-debug:py3.10&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;configurePreset&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alt-vcpkg-debug:py3.10&quot;</span><span class="p">,</span>
+<span class="w">      </span><span class="nt">&quot;inheritConfigureEnvironment&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">]</span>
+<span class="p">}</span>
+</code></pre></div>
+</details>
+
+<h2 id="vcpkg-caching">vcpkg caching<a class="headerlink" href="#vcpkg-caching" title="Permanent link">&para;</a></h2>
+<p>We use <a href="https://vcpkg.io/">vcpkg</a> to manage the C++ dependencies.</p>
+<p>Compiling the dependencies uses a lot of disk space.
+Once CMake configuration is done, you can remove the <code>cpp\vcpkg\buildtrees</code> folder.</p>
+<p>You may also want to configure some caches:
+* <a href="https://learn.microsoft.com/en-us/vcpkg/users/binarycaching">Binary caching</a>
+* <a href="https://learn.microsoft.com/en-us/vcpkg/users/assetcaching">Asset caching</a></p>
+<h2 id="pybind11-configuration">pybind11 configuration<a class="headerlink" href="#pybind11-configuration" title="Permanent link">&para;</a></h2>
+<p>We augmented pybind11's <a href="https://pybind11.readthedocs.io/en/stable/compiling.html#building-with-cmake">Python discovery</a>
+with our own <a href="https://github.com/man-group/ArcticDB/blob/master/cpp/CMake/PythonUtils.cmake">PythonUtils</a> to improve
+diagnostics.
+Please pay attention to warning messages from <code>PythonUtils.cmake</code> in the CMake output which highlights any configuration
+issues with Python.</p>
+<p>We compile against the first <code>python</code> on the <code>PATH</code> by default.</p>
+<p>To override that, use one of the following CMake variables*:</p>
+<ul>
+<li>
+<p><code>Python_ROOT_DIR</code> - The common path "prefix" for a particular Python install.
+  Usually, the <code>python</code> executable is in the same directory or the <code>bin</code> <em>sub</em>directory.
+  This directory should also contain the <code>include</code> and <code>lib(rary)</code> <em>sub</em>directories.<br>
+  E.g. <code>/usr</code> for a system-wide install on *nix;
+  <code>/opt/pythonXX</code> for a locally-managed Python install;
+  <code>/home/user/my_virtualenv</code> for a virtual env;
+  <code>C:\Program Files\PythonXX</code> for a Windows Python install</p>
+</li>
+<li>
+<p><code>Python_EXECUTABLE</code> - The path to the Python executable. (CMake 3.15+)
+  CMake will try to extract the <code>include</code> and <code>library</code> paths by running this program.
+  This differs from the default behaviour of <a href="https://cmake.org/cmake/help/latest/module/FindPython.html">FindPython</a>.</p>
+</li>
+</ul>
+<p>(* Note CMake variables are set with <code>-D</code> on the CMake command line or with the <code>cacheVariables</code> key in <code>CMake*Presets.json</code>.
+   The names are case-sensitive.</p>
+<p>(Only) <code>Python_ROOT_DIR</code> can also be set as an environment variable.
+   Setting the others in the environment might have no effect.)</p>
+<h1 id="development-guidelines">Development Guidelines<a class="headerlink" href="#development-guidelines" title="Permanent link">&para;</a></h1>
+<p>ArcticDB has a lot of write-time options to configure how the data is stored on disk.
+When adding new features, it is important to test not only the simplest case, but also how the new feature interacts with these various options.
+This section serves as a guide as to what should be considered when adding a new feature.</p>
+<h2 id="backwards-compatibility">Backwards compatibility<a class="headerlink" href="#backwards-compatibility" title="Permanent link">&para;</a></h2>
+<h3 id="data-stored-on-disk">Data stored on disk<a class="headerlink" href="#data-stored-on-disk" title="Permanent link">&para;</a></h3>
+<p>Due to ArcticDB being a purely client-side database, it is possible for data to be written by clients that are of later versions than clients that need to read the same data.
+If the change is breaking, such that older clients will not be able to read the data, then this should be clearly documented both in the PR and in the online documentation.
+If possible, a version number should also be added such that future changes in the same area will display a more clear error message.</p>
+<h3 id="api">API<a class="headerlink" href="#api" title="Permanent link">&para;</a></h3>
+<p>Any changes to the API (including when exceptions are thrown and the type of the exception) must be weighed up against the change breaking behaviour for existing users.
+Please make this as clear to reviewers as possible by ensuring <strong>API changes are clearly described in the PR description</strong>. 
+If the change is breaking, please also ensure that that is appropriately highlighted in the PR description as well.
+This is particularly true of the <code>NativeVersionStore</code> API, as this has many users inside Man Group.</p>
+<h3 id="snapshots">Snapshots<a class="headerlink" href="#snapshots" title="Permanent link">&para;</a></h3>
+<p>Symbols are almost completely decoupled from one another in ArcticDB.
+The major feature for which this is not the case is snapshots.
+Whenever a change involves deleting any keys from the storage, care must be taken that those keys are not in fact still needed by a snapshot.
+Similarly, any operation that modifies a snapshot, including deleting it, must ensure that any keys for which this snapshot was the last reference are also deleted.
+See the <a href="../../tutorials/snapshots/">tutorial</a> and <a href="../../api/library/#arcticdb.version_store.library.Library.snapshot">API documentation</a> for more details.</p>
+<h2 id="batch-methods">Batch methods<a class="headerlink" href="#batch-methods" title="Permanent link">&para;</a></h2>
+<p>Almost all of the major reading and writing methods have batch equivalents.
+If a feature is added for the non-batch version, it should almost always work with the batch version as well.
+We should also strive for consistency of behaviour across the batch methods in circumstances that could be encountered by any of them.
+e.g. <code>read_batch</code> and <code>read_metadata_batch</code> should have the same behaviour if the specified version does not exist.</p>
+<h2 id="dynamic-schema">Dynamic schema<a class="headerlink" href="#dynamic-schema" title="Permanent link">&para;</a></h2>
+<p>Static schema is much simpler than dynamic schema, and so features added and only tested with static schema may not "just work" with dynamic schema.
+In particular, the following cases should be considered:</p>
+<ul>
+<li>A column that <strong>is not</strong> present in an initial call to <code>write</code> <strong>is</strong> present in a subsequent call to <code>append</code>.</li>
+<li>A column that <strong>is</strong> present in an initial call to <code>write</code> <strong>is not</strong> present in a subsequent call to <code>append</code>.</li>
+<li>A numeric column with a "small" type (e.g. <code>uint8</code>) is appended to with a numeric column of a larger type (e.g. int16), and vice versa.</li>
+</ul>
+<h2 id="segmentation">Segmentation<a class="headerlink" href="#segmentation" title="Permanent link">&para;</a></h2>
+<p>Most tests are written with small amounts of data to keep the runtime down as low as possible.
+However, many bugs are only exposed when data being written is column-sliced and/or row-sliced.
+Using test fixtures configured to slice into small data segments (e.g. 2x2) can help to catch these issues early.</p>
+<h2 id="data-sub-selection">Data sub-selection<a class="headerlink" href="#data-sub-selection" title="Permanent link">&para;</a></h2>
+<p>Many use cases of ArcticDB involve writing huge symbols with hundreds of thousands of columns or billions of rows.
+In these cases, methods for reading data will almost never be called without some parameters to cut down the amount of data returned to the user. The most commonly used are:</p>
+<ul>
+<li>The stand-alone methods <code>head</code> and <code>tail</code>*</li>
+<li><code>columns</code> - select only a subset of the columns</li>
+<li><code>date_range</code> and <code>row_range</code> - select a contiguous range of rows</li>
+<li>More advanced filtering - see section on processing pipeline</li>
+</ul>
+<h2 id="processing-pipeline">Processing pipeline<a class="headerlink" href="#processing-pipeline" title="Permanent link">&para;</a></h2>
+<p>Reading data using only <code>columns</code>, <code>date_range</code>, and <code>row_range</code> arguments is heavily optimised to avoid copying data in memory unnecessarily.
+ Any read-like method provided with the <code>query_builder</code> optional argument, or equivalently, lazy reads with further processing applied, takes quite a different code path, as we do not know the shape of the output data a priori.
+ While it is not necessary to exhaustively test all new features against every possible analytics operations, it is generally worth having a test using a simple filter that excludes some of the data that would otherwise be returned to the user.</p>
+<h2 id="sparse-columns">Sparse columns<a class="headerlink" href="#sparse-columns" title="Permanent link">&para;</a></h2>
+<p>The majority of data written into ArcticDB uses dense columns, meaning that within a given row-slice, every row has an associated value in every column (even if that value is <code>NaN</code>).
+The concept of sparse columns is implemented as well, where columns may have values missing for none, some, or all rows within a row-slice.
+Any read-like method should be able to handle both types of stored column.</p>
+<h2 id="pickling">Pickling<a class="headerlink" href="#pickling" title="Permanent link">&para;</a></h2>
+<p>When data that cannot be normalized to a supported data type in ArcticDB, it can still be stored using <code>write_pickle</code> and similar.
+There are many operations that cannot be performed on pickled data, such as <code>append</code>, <code>update</code>, <code>date_range</code> search, and many more.
+It is important that if a user attempts an operation that is not supported with pickled data, that they receive a helpful error message.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
