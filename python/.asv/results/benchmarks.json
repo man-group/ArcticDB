@@ -4204,8 +4204,49 @@
         "version": "a2dfcb01776d52d843c514b129d2256a8031360caa00bc24b890b6dad9246191",
         "warmup_time": -1
     },
+    "resample.Resample.peakmem_resample": {
+        "code": "class Resample:\n    @skip_for_params(TIME_PARAMS)\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            self.skipped = True\n            raise NotImplementedError(f\"{aggregation} not supported on columns of type {col_type}\")\n    \n        self.skipped = False\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "resample.Resample.peakmem_resample",
+        "param_names": [
+            "num_rows",
+            "downsampling_factor",
+            "col_type",
+            "aggregation"
+        ],
+        "params": [
+            [
+                "3000000",
+                "10000000"
+            ],
+            [
+                "10",
+                "100",
+                "100000"
+            ],
+            [
+                "'bool'",
+                "'int'",
+                "'float'",
+                "'datetime'",
+                "'str'"
+            ],
+            [
+                "'sum'",
+                "'mean'",
+                "'min'",
+                "'max'",
+                "'first'",
+                "'last'",
+                "'count'"
+            ]
+        ],
+        "setup_cache_key": "resample:53",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "20835daa6c6fd2af13420212c35b87cdac7153f782b2bc02cb2535131bd654d8"
+    },
     "resample.Resample.time_resample": {
-        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            self.skipped = True\n            raise NotImplementedError(f\"{aggregation} not supported on columns of type {col_type}\")\n    \n        self.skipped = False\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class Resample:\n    @skip_for_params(PEAKMEM_PARAMS)\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            self.skipped = True\n            raise NotImplementedError(f\"{aggregation} not supported on columns of type {col_type}\")\n    \n        self.skipped = False\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "resample.Resample.time_resample",
         "number": 5,
@@ -4217,6 +4258,7 @@
         ],
         "params": [
             [
+                "3000000",
                 "10000000"
             ],
             [
@@ -4244,10 +4286,10 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:45",
+        "setup_cache_key": "resample:53",
         "type": "time",
         "unit": "seconds",
-        "version": "ce482344e844d70c65f71aebd7486d303d5f5c6370e1603234ffd7bb12d49435",
+        "version": "5a8f9ae968dbf11481dbe381bcb072c86f46190c9e10951ab2ec80ad9c9f116e",
         "warmup_time": -1
     },
     "resample.ResampleWide.peakmem_resample_wide": {
@@ -4255,7 +4297,7 @@
         "name": "resample.ResampleWide.peakmem_resample_wide",
         "param_names": [],
         "params": [],
-        "setup_cache_key": "resample:118",
+        "setup_cache_key": "resample:129",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "53f042192048c92d282637c1bbcee9e52dacec9086c534782de30d7ff67e77eb"
@@ -4270,7 +4312,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:118",
+        "setup_cache_key": "resample:129",
         "type": "time",
         "unit": "seconds",
         "version": "ece714f981e8de31ee8296644624bf8f5fb895e6bf48d64a6ae2a9c50c5db7a2",
