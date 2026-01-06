@@ -172,13 +172,13 @@ def find_ca_certs():
 ###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
     container, constr, path_prefix, _ = real_azure_credentials(shared_path)
-    ca_certs_file = find_ca_certs()
     uri = f"azure://Container={container};Path_prefix={path_prefix}"
-    assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
     if sys.platform.lower().startswith("linux"):
+        ca_certs_file = find_ca_certs()
+        assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
         uri += f";CA_cert_path={ca_certs_file}"
-    url += f";{constr}"
-    return url
+    uri += f";{constr}"
+    return uri
 
 
 class PersistentTestType(Enum):
