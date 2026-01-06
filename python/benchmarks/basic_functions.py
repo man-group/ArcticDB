@@ -21,7 +21,7 @@ from benchmarks.common import *
 WIDE_DF_ROWS = 5_000
 WIDE_DF_COLS = 30_000
 # We use larger dataframes for non-batch methods
-PARAMS = [1_000_000, 1_500_000]
+PARAMS = [1_000_000, 10_000_000]
 PARAM_NAMES = ["rows"]
 BATCH_PARAMS = ([25_000, 50_000], [100, 200])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
@@ -88,7 +88,6 @@ class BasicFunctions:
     def setup(self, rows):
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
 
-        # TODO aseaton this is a mess, most of the benchmarks don't need this dataframe. It might also affect peakmem
         self.df = generate_pseudo_random_dataframe(rows)
         self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)
 
@@ -167,7 +166,7 @@ class BasicFunctions:
 class BatchBasicFunctions:
     rounds = 1
     sample_time = 0.1
-    repeat = 3
+
     CONNECTION_STRING = "lmdb://batch_basic_functions"
     DATE_RANGE = DATE_RANGE
     params = BATCH_PARAMS
