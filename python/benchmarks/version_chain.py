@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import shutil
 
 from arcticdb import Arctic
@@ -24,9 +25,11 @@ class IterateVersionChain:
     sample_time = 1
     rounds = 1
 
-    CONNECTION_STRING_UNDELETED = "lmdb://version_chain"
-    CONNECTION_STRING_TAIL_DELETED = "lmdb://version_chain_tail_deleted"
-    DELETION_POINT = 0.99 # delete the symbol after writing this proportion of the versions
+    DIR_UNDELETED = "version_chain"
+    DIR_TAIL_DELETED = "version_chain_tail_deleted"
+    CONNECTION_STRING_UNDELETED = f"lmdb://{DIR_UNDELETED}"
+    CONNECTION_STRING_TAIL_DELETED = f"lmdb://{DIR_TAIL_DELETED}"
+    DELETION_POINT = 0.99  # delete the symbol after writing this proportion of the versions
     LIB_NAME = "lib"
 
     params = ([25_000], ["forever", "default", "never"], [True, False])
@@ -77,8 +80,8 @@ class IterateVersionChain:
         del lib
         del ac
 
-        shutil.rmtree("version_chain_deleted", ignore_errors=True)
-        shutil.copytree("version_chain", "version_chain_tail_deleted")
+        shutil.rmtree(IterateVersionChain.DIR_TAIL_DELETED, ignore_errors=True)
+        shutil.copytree(IterateVersionChain.DIR_UNDELETED, IterateVersionChain.DIR_TAIL_DELETED)
 
         ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)
         lib = ac[IterateVersionChain.LIB_NAME]
@@ -108,7 +111,6 @@ class IterateVersionChain:
             assert len(lib.list_versions(symbol)) == num_versions - deletion_point
 
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
-        print("IterateVersionChain: Setup cache took (s) :", time.time() - start_time, file=sys.stderr)
 
     def load_all(self, symbol):
         # Getting tombstoned versions requires a LOAD_ALL
@@ -141,9 +143,9 @@ class IterateVersionChain:
             pass
 
         if deleted:
-            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)
-        else:
             ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)
+        else:
+            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)
         self.lib = ac[IterateVersionChain.LIB_NAME]
 
         if caching != "never":
