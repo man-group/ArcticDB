@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import sys
 import time
 from typing import List
 from shutil import copytree, rmtree
@@ -40,10 +41,9 @@ class ModificationFunctions:
 
     class LargeAppendDataModify:
         """
-        This class will hold a cache of append large dataframes
-        The purpose of this cache is to create dataframes
-        which timestamps are sequenced over time so that
-        overlap does not occur
+        This class will hold a cache of append large dataframes.
+
+        This cache is to create dataframes with timestamps sequenced over time so that overlap does not occur.
         """
 
         def __init__(self, num_rows_list: List[int], number_elements: int):
@@ -132,7 +132,7 @@ class ModificationFunctions:
 
         # Used by time_delete_multiple_versions
         for i in range(100):
-            self.lib.write("sym_delete_multiple", pd.DataFrame(), prune_previous_versions=False)
+            self.lib.write("sym_delete_multiple", pd.DataFrame({"a": [0]}), prune_previous_versions=False)
 
     def teardown(self, lad: LargeAppendDataModify, rows):
         rmtree(ModificationFunctions.ARCTIC_DIR)
