@@ -120,34 +120,44 @@ void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_no_batching_impl(keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
+IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
+    return [&v = visitor, prefix](VariantKey&& key) {
+        if (prefix.empty()) {
+            return v(std::move(key));
+        }
+        const auto &stream_id = variant_key_id(key);
+        const auto string_id = util::variant_match(
+                stream_id, [](const StringId &id) { return id; }, [](NumericId id) { return std::to_string(id); }
+        );
+        if (string_id.starts_with(prefix)) {
+            return v(std::move(key));
+        } else {
+            return false;
+        }
+    };
+}
+
 bool S3Storage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
-    auto prefix_handler =
-            [](const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType
-            ) {
-                return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-            };
-
     auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, prefix_handler, prefix, FlatBucketizer::bucketize_length(key_type)
+            root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
     );
-
-    return detail::do_iterate_type_impl(key_type, visitor, bucket_name_, client(), path_info);
+    const IterateTypePredicate primary_visitor = directory_bucket_ ? prefix_matching_visitor(visitor, prefix) : visitor;
+    const std::optional<IterateTypePredicate> fallback_visitor = directory_bucket_ ? std::optional<IterateTypePredicate>() : prefix_matching_visitor(visitor, prefix);
+    detail::Visitor final_visitor{primary_visitor, fallback_visitor};
+    auto res =  detail::do_iterate_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
+    if (final_visitor.directory_bucket_) {
+        directory_bucket_ = final_visitor.directory_bucket_;
+    }
+    return res;
 }
 
 void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
-    auto prefix_handler =
-            [](const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType
-            ) {
-                return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
-            };
-
     auto path_info = s3::detail::calculate_path_info(
-            root_folder_, key_type, prefix_handler, prefix, FlatBucketizer::bucketize_length(key_type)
+            root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
     );
-
-    detail::do_visit_object_sizes_for_type_impl(key_type, visitor, bucket_name_, client(), path_info);
+    detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, client(), path_info, visitor);
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {

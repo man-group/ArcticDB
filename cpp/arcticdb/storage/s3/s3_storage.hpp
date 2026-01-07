@@ -24,8 +24,6 @@
 
 namespace arcticdb::storage::s3 {
 
-using PrefixHandler = std::function<std::string(const std::string&, const std::string&, const KeyDescriptor&, KeyType)>;
-
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage : public Storage, AsyncStorage {
@@ -92,6 +90,10 @@ class S3Storage : public Storage, AsyncStorage {
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
+    // Directory (aka express) buckets in AWS only support ListObjectsV2 requests with prefixes ending in a '/'
+    // delimiter. Until we have proper feature detection, just cache if this is the case after the first failed listing
+    // operation with a prefix that does not end in a '/'
+    bool directory_bucket_;
 };
 
 class GCPXMLStorage : public S3Storage {
