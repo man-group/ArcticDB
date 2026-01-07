@@ -33,9 +33,6 @@ class BasicFunctions:
     param_names = PARAM_NAMES
 
     CONNECTION_STRING = "lmdb://basic_functions"
-    ULTRA_SHORT_WIDE_DF_ROWS = 1
-    WIDE_DF_ROWS = 5_000
-    WIDE_DF_COLS = 30_000
     DATE_RANGE = DATE_RANGE
 
     def __init__(self):
@@ -58,22 +55,6 @@ class BasicFunctions:
             lib = self.ac[lib]
             lib.write(f"sym", self.dfs[rows])
 
-        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)
-        self.ac.delete_library(lib_name)
-        lib = self.ac.create_library(lib_name)
-        lib.write(
-            "short_wide_sym",
-            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),
-        )
-
-        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)
-        self.ac.delete_library(lib_name)
-        lib = self.ac.create_library(lib_name)
-        lib.write(
-            "ultra_short_wide_sym",
-            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),
-        )
-
     def teardown(self, rows):
         for lib in self.ac.list_libraries():
             if "prewritten" in lib:
@@ -86,7 +67,6 @@ class BasicFunctions:
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
 
         self.df = generate_pseudo_random_dataframe(rows)
-        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)
 
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.fresh_lib = self.get_fresh_lib()
@@ -101,33 +81,11 @@ class BasicFunctions:
     def peakmem_write(self, rows):
         self.fresh_lib.write(f"sym", self.df)
 
-    def time_write_short_wide(self, rows):
-        self.fresh_lib.write("short_wide_sym", self.df_short_wide)
-
-    def peakmem_write_short_wide(self, rows):
-        self.fresh_lib.write("short_wide_sym", self.df_short_wide)
-
     def time_read(self, rows):
         self.lib.read(f"sym").data
 
     def peakmem_read(self, rows):
         self.lib.read(f"sym").data
-
-    def time_read_short_wide(self, rows):
-        lib = self.ac[get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)]
-        lib.read("short_wide_sym").data
-
-    def peakmem_read_short_wide(self, rows):
-        lib = self.ac[get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)]
-        lib.read("short_wide_sym").data
-
-    def time_read_ultra_short_wide(self, rows):
-        lib = self.ac[get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)]
-        lib.read("ultra_short_wide_sym").data
-
-    def peakmem_read_ultra_short_wide(self, rows):
-        lib = self.ac[get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)]
-        lib.read("ultra_short_wide_sym").data
 
     def time_read_with_columns(self, rows):
         COLS = ["value"]
@@ -158,6 +116,81 @@ class BasicFunctions:
     def peakmem_write_staged(self, rows):
         self.fresh_lib.write(f"sym", self.df, staged=True)
         self.fresh_lib._nvs.compact_incomplete(f"sym", False, False)
+
+
+class ShortWideWrite:
+    CONNECTION_STRING = "lmdb://short_wide_write"
+    ROWS = 5_000
+    COLS = 30_000
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def setup(self):
+        self.ac = Arctic(ShortWideWrite.CONNECTION_STRING)
+        self.lib = self.ac.create_library("lib")
+        self.df = generate_random_floats_dataframe(ShortWideWrite.ROWS, ShortWideWrite.COLS)
+
+    def teardown(self):
+        self.ac.delete_library("lib")
+
+    def time_write(self):
+        self.lib.write("sym", self.df)
+
+    def peakmem_write(self):
+        self.lib.write("sym", self.df)
+
+
+class UltraShortWideWrite:
+    CONNECTION_STRING = "lmdb://ultra_short_wide_write"
+    COLS = 30_000
+    ROWS = 1
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def setup(self):
+        self.ac = Arctic(UltraShortWideWrite.CONNECTION_STRING)
+        self.lib = self.ac.create_library("lib")
+        self.df = generate_random_floats_dataframe(UltraShortWideWrite.ROWS, UltraShortWideWrite.COLS)
+
+    def teardown(self):
+        self.ac.delete_library("lib")
+
+    def time_write(self):
+        self.lib.write("sym", self.df)
+
+    def peakmem_write(self):
+        self.lib.write("sym", self.df)
+
+
+class ShortWideRead:
+    CONNECTION_STRING = "lmdb://short_wide_read"
+    ROWS = [1, 5_000]
+    COLS = 30_000
+
+    params = ROWS
+    param_names = ["rows"]
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def setup_cache(self):
+        ac = Arctic(ShortWideRead.CONNECTION_STRING)
+        lib = ac.create_library("lib")
+        for r in ShortWideRead.ROWS:
+            df = generate_random_floats_dataframe(r, ShortWideRead.COLS)
+            lib.write(f"sym_{r}", df)
+
+    def setup(self, rows):
+        ac = Arctic(ShortWideRead.CONNECTION_STRING)
+        self.lib = ac["lib"]
+
+    def time_read(self, rows):
+        self.lib.read(f"sym_{rows}")
+
+    def peakmem_read(self, rows):
+        self.lib.read(f"sym_{rows}")
 
 
 class BatchBasicFunctions:
