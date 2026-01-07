@@ -125,9 +125,9 @@ IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor
         if (prefix.empty()) {
             return v(std::move(key));
         }
-        const auto &stream_id = variant_key_id(key);
+        const auto& stream_id = variant_key_id(key);
         const auto string_id = util::variant_match(
-                stream_id, [](const StringId &id) { return id; }, [](NumericId id) { return std::to_string(id); }
+                stream_id, [](const StringId& id) { return id; }, [](NumericId id) { return std::to_string(id); }
         );
         if (string_id.starts_with(prefix)) {
             return v(std::move(key));
@@ -144,9 +144,10 @@ bool S3Storage::do_iterate_type_until_match(
             root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
     );
     const IterateTypePredicate primary_visitor = directory_bucket_ ? prefix_matching_visitor(visitor, prefix) : visitor;
-    const std::optional<IterateTypePredicate> fallback_visitor = directory_bucket_ ? std::optional<IterateTypePredicate>() : prefix_matching_visitor(visitor, prefix);
+    const std::optional<IterateTypePredicate> fallback_visitor =
+            directory_bucket_ ? std::optional<IterateTypePredicate>() : prefix_matching_visitor(visitor, prefix);
     detail::Visitor final_visitor{primary_visitor, fallback_visitor};
-    auto res =  detail::do_iterate_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
+    auto res = detail::do_iterate_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
     if (final_visitor.directory_bucket_) {
         directory_bucket_ = final_visitor.directory_bucket_;
     }

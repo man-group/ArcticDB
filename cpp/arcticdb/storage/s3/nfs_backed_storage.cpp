@@ -243,9 +243,7 @@ bool NfsBackedStorage::do_iterate_type_until_match(
         }
     };
     s3::detail::Visitor final_visitor{visitor_with_prefix_filtering};
-    return s3::detail::do_iterate_type_impl(
-            key_type, bucket_name_, *s3_client_, path_info, final_visitor
-    );
+    return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {

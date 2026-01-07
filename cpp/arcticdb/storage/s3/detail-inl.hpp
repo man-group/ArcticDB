@@ -502,9 +502,10 @@ inline PathInfo calculate_path_info(
 }
 
 struct Visitor {
-    Visitor(const IterateTypePredicate& primary_visitor, const std::optional<IterateTypePredicate> fallback_visitor = std::nullopt):
-    primary_visitor_(primary_visitor),
-    fallback_visitor_(fallback_visitor) {};
+    Visitor(const IterateTypePredicate& primary_visitor,
+            const std::optional<IterateTypePredicate> fallback_visitor = std::nullopt) :
+        primary_visitor_(primary_visitor),
+        fallback_visitor_(fallback_visitor) {};
     IterateTypePredicate primary_visitor_;
     std::optional<IterateTypePredicate> fallback_visitor_;
     // Directory (aka express) buckets in AWS only support ListObjectsV2 requests with prefixes ending in a '/'
@@ -547,18 +548,21 @@ inline bool do_iterate_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
-            if (error.GetErrorType() == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') && visitor.fallback_visitor_.has_value()) {
+            if (error.GetErrorType() == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') &&
+                visitor.fallback_visitor_.has_value()) {
                 log::storage().debug(
-                        "Storage does not support prefix matches not ending in delimiter '/'. Falling back to iterating all keys of type {} and prefix matching in memory.",
+                        "Storage does not support prefix matches not ending in delimiter '/'. Falling back to "
+                        "iterating all keys of type {} and prefix matching in memory.",
                         key_type
-                        );
+                );
                 visitor.directory_bucket_ = true;
                 visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
                 visitor.fallback_visitor_ = std::nullopt;
                 const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
                 PathInfo truncated_path_info{
                         last_slash_pos == std::string::npos ? "" : path_info.key_prefix_.substr(0, last_slash_pos + 1),
-                        path_info.path_to_key_size_};
+                        path_info.path_to_key_size_
+                };
                 return do_iterate_type_impl(key_type, bucket_name, s3_client, truncated_path_info, visitor);
             }
             log::storage().warn(
