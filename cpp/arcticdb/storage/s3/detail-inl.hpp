@@ -529,8 +529,14 @@ void adjust_for_directory_bucket_limitations(KeyType key_type, PathInfo& path_in
             "iterating all keys of type {} and prefix matching in memory.",
             key_type
     );
+    // It is possible that should_retry_with_directory_bucket_limitations returned true for some other reason when we
+    // are not in a directory bucket. In that case, the next call to do_iterate_type_impl/
+    // do_visit_object_sizes_for_type_impl should fail in the same way. Then we will raise, and the directory_bucket_
+    // field of the calling S3Storage object will not be modified.
     visitor.directory_bucket_ = true;
     visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
+    // Needed to avoid infinite recursion in case should_retry_with_directory_bucket_limitations returned true for a
+    // reason other than being in a directory bucket
     visitor.fallback_visitor_ = std::nullopt;
     const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
     path_info.key_prefix_ =

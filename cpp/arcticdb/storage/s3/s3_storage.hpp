@@ -93,7 +93,7 @@ class S3Storage : public Storage, AsyncStorage {
     // Directory (aka express) buckets in AWS only support ListObjectsV2 requests with prefixes ending in a '/'
     // delimiter. Until we have proper feature detection, just cache if this is the case after the first failed listing
     // operation with a prefix that does not end in a '/'
-    bool directory_bucket_;
+    bool directory_bucket_{false};
 };
 
 class GCPXMLStorage : public S3Storage {
