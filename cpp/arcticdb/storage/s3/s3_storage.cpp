@@ -121,16 +121,11 @@ void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
 }
 
 IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
-    return [&v = visitor, prefix](VariantKey&& key) {
+    return [&](VariantKey&& key) {
         if (prefix.empty()) {
-            return v(std::move(key));
-        }
-        const auto& stream_id = variant_key_id(key);
-        const auto string_id = util::variant_match(
-                stream_id, [](const StringId& id) { return id; }, [](NumericId id) { return std::to_string(id); }
-        );
-        if (string_id.starts_with(prefix)) {
-            return v(std::move(key));
+            return visitor(std::move(key));
+        } else if (variant_key_id_starts_with(key, prefix)) {
+            return visitor(std::move(key));
         } else {
             return false;
         }
@@ -155,16 +150,11 @@ bool S3Storage::do_iterate_type_until_match(
 }
 
 ObjectSizesVisitor prefix_matching_object_sizes_visitor(const ObjectSizesVisitor& visitor, const std::string& prefix) {
-    return [&v = visitor, prefix](const VariantKey& key, CompressedSize size) {
+    return [&](const VariantKey& key, CompressedSize size) {
         if (prefix.empty()) {
-            v(key, size);
-        }
-        const auto& stream_id = variant_key_id(key);
-        const auto string_id = util::variant_match(
-                stream_id, [](const StringId& id) { return id; }, [](NumericId id) { return std::to_string(id); }
-        );
-        if (string_id.starts_with(prefix)) {
-            v(key, size);
+            visitor(key, size);
+        } else if (variant_key_id_starts_with(key, prefix)) {
+            visitor(key, size);
         }
     };
 }

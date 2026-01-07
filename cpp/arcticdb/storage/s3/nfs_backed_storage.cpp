@@ -227,17 +227,12 @@ bool NfsBackedStorage::do_iterate_type_until_match(
     // because we are doing sharding through subdirectories
     // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
     // so it cannot be hashed to the correct shard
-    const IterateTypePredicate visitor_with_prefix_filtering = [&v = visitor, prefix = prefix](VariantKey&& k) {
+    const IterateTypePredicate visitor_with_prefix_filtering = [&visitor, &prefix](VariantKey&& k) {
         auto key = unencode_object_id(k);
         if (prefix.empty()) {
-            return v(std::move(key));
-        }
-        const auto& stream_id = variant_key_id(key);
-        const auto string_id = util::variant_match(
-                stream_id, [](const StringId& id) { return id; }, [](NumericId id) { return std::to_string(id); }
-        );
-        if (string_id.starts_with(prefix)) {
-            return v(std::move(key));
+            return visitor(std::move(key));
+        } else if (variant_key_id_starts_with(key, prefix)) {
+            return visitor(std::move(key));
         } else {
             return false;
         }
@@ -263,20 +258,13 @@ void NfsBackedStorage::do_visit_object_sizes(
     // because we are doing sharding through subdirectories
     // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
     // so it cannot be hashed to the correct shard
-    const ObjectSizesVisitor visitor_with_prefix_filtering = [&v = visitor, prefix = prefix](
-                                                                     const VariantKey& k, CompressedSize size
-                                                             ) {
+    const ObjectSizesVisitor visitor_with_prefix_filtering = [&visitor,
+                                                              &prefix](const VariantKey& k, CompressedSize size) {
         auto key = unencode_object_id(k);
         if (prefix.empty()) {
-            v(key, size);
-        } else {
-            const auto& stream_id = variant_key_id(key);
-            const auto string_id = util::variant_match(
-                    stream_id, [](const StringId& id) { return id; }, [](NumericId id) { return std::to_string(id); }
-            );
-            if (string_id.starts_with(prefix)) {
-                v(key, size);
-            }
+            visitor(key, size);
+        } else if (variant_key_id_starts_with(key, prefix)) {
+            visitor(key, size);
         }
     };
     s3::detail::Visitor<ObjectSizesVisitor> final_visitor{visitor_with_prefix_filtering};
