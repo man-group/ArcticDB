@@ -514,8 +514,31 @@ struct Visitor {
     bool directory_bucket_{false};
 };
 
+template<typename Predicate>
+bool should_retry_with_directory_bucket_limitations(
+        Aws::S3::S3Errors error, const PathInfo& path_info, const Visitor<Predicate>& visitor
+) {
+    return error == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') &&
+           visitor.fallback_visitor_.has_value();
+}
+
+template<typename Predicate>
+void adjust_for_directory_bucket_limitations(KeyType key_type, PathInfo& path_info, Visitor<Predicate>& visitor) {
+    log::storage().debug(
+            "Storage does not support prefix matches not ending in delimiter '/'. Falling back to "
+            "iterating all keys of type {} and prefix matching in memory.",
+            key_type
+    );
+    visitor.directory_bucket_ = true;
+    visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
+    visitor.fallback_visitor_ = std::nullopt;
+    const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
+    path_info.key_prefix_ =
+            last_slash_pos == std::string::npos ? "" : path_info.key_prefix_.substr(0, last_slash_pos + 1);
+}
+
 inline bool do_iterate_type_impl(
-        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info,
+        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
         Visitor<IterateTypePredicate>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
@@ -548,22 +571,9 @@ inline bool do_iterate_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
-            if (error.GetErrorType() == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') &&
-                visitor.fallback_visitor_.has_value()) {
-                log::storage().debug(
-                        "Storage does not support prefix matches not ending in delimiter '/'. Falling back to "
-                        "iterating all keys of type {} and prefix matching in memory.",
-                        key_type
-                );
-                visitor.directory_bucket_ = true;
-                visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
-                visitor.fallback_visitor_ = std::nullopt;
-                const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
-                PathInfo truncated_path_info{
-                        last_slash_pos == std::string::npos ? "" : path_info.key_prefix_.substr(0, last_slash_pos + 1),
-                        path_info.path_to_key_size_
-                };
-                return do_iterate_type_impl(key_type, bucket_name, s3_client, truncated_path_info, visitor);
+            if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
+                adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
+                return do_iterate_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
             }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
@@ -581,7 +591,7 @@ inline bool do_iterate_type_impl(
 }
 
 inline void do_visit_object_sizes_for_type_impl(
-        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info,
+        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
         Visitor<ObjectSizesVisitor>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
@@ -612,24 +622,9 @@ inline void do_visit_object_sizes_for_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
-            if (error.GetErrorType() == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') &&
-                visitor.fallback_visitor_.has_value()) {
-                log::storage().debug(
-                        "Storage does not support prefix matches not ending in delimiter '/'. Falling back to "
-                        "iterating all keys of type {} and prefix matching in memory.",
-                        key_type
-                );
-                visitor.directory_bucket_ = true;
-                visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
-                visitor.fallback_visitor_ = std::nullopt;
-                const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
-                PathInfo truncated_path_info{
-                        last_slash_pos == std::string::npos ? "" : path_info.key_prefix_.substr(0, last_slash_pos + 1),
-                        path_info.path_to_key_size_
-                };
-                return do_visit_object_sizes_for_type_impl(
-                        key_type, bucket_name, s3_client, truncated_path_info, visitor
-                );
+            if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
+                adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
+                return do_visit_object_sizes_for_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
             }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
