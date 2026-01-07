@@ -6,11 +6,13 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 def strtobool(val: str) -> bool:
-    """Convert a string representation of truth to True or False."""
+    """Convert a string representation of truth to True or False.
+
+    If the string is not one of the values below we return False.
+
+    This function raises if and only if `val` is not a `str`, in which case it raises an AttributeError.
+    """
+    if not isinstance(val, str):
+        raise AttributeError(f"Expected isinstance(val, str) but type(val)=[{type(val)}]")
     val = val.lower()
-    if val in ("y", "yes", "t", "true", "on", "1"):
-        return True
-    elif val in ("n", "no", "f", "false", "off", "0"):
-        return False
-    else:
-        raise ValueError(f"invalid truth value {val!r}")
+    return val in ("y", "yes", "t", "true", "on", "1")
