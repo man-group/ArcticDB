@@ -242,7 +242,7 @@ bool NfsBackedStorage::do_iterate_type_until_match(
             return false;
         }
     };
-    s3::detail::Visitor final_visitor{visitor_with_prefix_filtering};
+    s3::detail::Visitor<IterateTypePredicate> final_visitor{visitor_with_prefix_filtering};
     return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
 }
 
@@ -279,10 +279,9 @@ void NfsBackedStorage::do_visit_object_sizes(
             }
         }
     };
+    s3::detail::Visitor<ObjectSizesVisitor> final_visitor{visitor_with_prefix_filtering};
 
-    s3::detail::do_visit_object_sizes_for_type_impl(
-            key_type, bucket_name_, *s3_client_, path_info, visitor_with_prefix_filtering
-    );
+    s3::detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
 }
 
 } // namespace arcticdb::storage::nfs_backed

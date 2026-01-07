@@ -501,13 +501,13 @@ inline PathInfo calculate_path_info(
     return {std::move(key_prefix), path_to_key_size};
 }
 
+template<typename Predicate>
 struct Visitor {
-    Visitor(const IterateTypePredicate& primary_visitor,
-            const std::optional<IterateTypePredicate> fallback_visitor = std::nullopt) :
+    Visitor(const Predicate& primary_visitor, const std::optional<Predicate> fallback_visitor = std::nullopt) :
         primary_visitor_(primary_visitor),
         fallback_visitor_(fallback_visitor) {};
-    IterateTypePredicate primary_visitor_;
-    std::optional<IterateTypePredicate> fallback_visitor_;
+    Predicate primary_visitor_;
+    std::optional<Predicate> fallback_visitor_;
     // Directory (aka express) buckets in AWS only support ListObjectsV2 requests with prefixes ending in a '/'
     // delimiter. Until we have proper feature detection, just cache if this is the case after the first failed listing
     // operation with a prefix that does not end in a '/'
@@ -516,7 +516,7 @@ struct Visitor {
 
 inline bool do_iterate_type_impl(
         KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info,
-        Visitor& visitor
+        Visitor<IterateTypePredicate>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
 
@@ -582,7 +582,7 @@ inline bool do_iterate_type_impl(
 
 inline void do_visit_object_sizes_for_type_impl(
         KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, const PathInfo& path_info,
-        const ObjectSizesVisitor& visitor
+        Visitor<ObjectSizesVisitor>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
     ARCTICDB_RUNTIME_DEBUG(
@@ -607,11 +607,30 @@ inline void do_visit_object_sizes_for_type_impl(
                 auto key = name.substr(path_info.path_to_key_size_);
                 auto k = variant_key_from_bytes(reinterpret_cast<uint8_t*>(key.data()), key.size(), key_type);
 
-                visitor(k, size);
+                visitor.primary_visitor_(k, size);
             }
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
+            if (error.GetErrorType() == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') &&
+                visitor.fallback_visitor_.has_value()) {
+                log::storage().debug(
+                        "Storage does not support prefix matches not ending in delimiter '/'. Falling back to "
+                        "iterating all keys of type {} and prefix matching in memory.",
+                        key_type
+                );
+                visitor.directory_bucket_ = true;
+                visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
+                visitor.fallback_visitor_ = std::nullopt;
+                const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
+                PathInfo truncated_path_info{
+                        last_slash_pos == std::string::npos ? "" : path_info.key_prefix_.substr(0, last_slash_pos + 1),
+                        path_info.path_to_key_size_
+                };
+                return do_visit_object_sizes_for_type_impl(
+                        key_type, bucket_name, s3_client, truncated_path_info, visitor
+                );
+            }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
                     key_type,

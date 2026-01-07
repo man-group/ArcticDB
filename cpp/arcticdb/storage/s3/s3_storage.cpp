@@ -146,7 +146,7 @@ bool S3Storage::do_iterate_type_until_match(
     const IterateTypePredicate primary_visitor = directory_bucket_ ? prefix_matching_visitor(visitor, prefix) : visitor;
     const std::optional<IterateTypePredicate> fallback_visitor =
             directory_bucket_ ? std::optional<IterateTypePredicate>() : prefix_matching_visitor(visitor, prefix);
-    detail::Visitor final_visitor{primary_visitor, fallback_visitor};
+    detail::Visitor<IterateTypePredicate> final_visitor{primary_visitor, fallback_visitor};
     auto res = detail::do_iterate_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
     if (final_visitor.directory_bucket_) {
         directory_bucket_ = final_visitor.directory_bucket_;
@@ -154,11 +154,35 @@ bool S3Storage::do_iterate_type_until_match(
     return res;
 }
 
+ObjectSizesVisitor prefix_matching_object_sizes_visitor(const ObjectSizesVisitor& visitor, const std::string& prefix) {
+    return [&v = visitor, prefix](const VariantKey& key, CompressedSize size) {
+        if (prefix.empty()) {
+            v(key, size);
+        }
+        const auto& stream_id = variant_key_id(key);
+        const auto string_id = util::variant_match(
+                stream_id, [](const StringId& id) { return id; }, [](NumericId id) { return std::to_string(id); }
+        );
+        if (string_id.starts_with(prefix)) {
+            v(key, size);
+        }
+    };
+}
+
 void S3Storage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
     auto path_info = s3::detail::calculate_path_info(
             root_folder_, key_type, true, prefix, FlatBucketizer::bucketize_length(key_type)
     );
-    detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, client(), path_info, visitor);
+    const ObjectSizesVisitor primary_visitor =
+            directory_bucket_ ? prefix_matching_object_sizes_visitor(visitor, prefix) : visitor;
+    const std::optional<ObjectSizesVisitor> fallback_visitor =
+            directory_bucket_ ? std::optional<ObjectSizesVisitor>()
+                              : prefix_matching_object_sizes_visitor(visitor, prefix);
+    detail::Visitor<ObjectSizesVisitor> final_visitor{primary_visitor, fallback_visitor};
+    detail::do_visit_object_sizes_for_type_impl(key_type, bucket_name_, client(), path_info, final_visitor);
+    if (final_visitor.directory_bucket_) {
+        directory_bucket_ = final_visitor.directory_bucket_;
+    }
 }
 
 bool S3Storage::do_key_exists(const VariantKey& key) {
