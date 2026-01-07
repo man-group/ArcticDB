@@ -19,11 +19,15 @@ def _symbol_name(num_chunks):
 
 
 class FinalizeStagedData:
-    number = 1
     rounds = 1
-    repeat = 1
+    repeat = 1  # Safe to increase if needed, each `setup` creates the staged data
     min_run_count = 1
+
+    # We need to run each benchmark just once after setup to make sure there is staged data
+    # so it is not safe to change these.
+    number = 1
     warmup_time = 0
+
     timeout = 100
 
     storages = [Storage.LMDB, Storage.AMAZON]
@@ -37,38 +41,38 @@ class FinalizeStagedData:
         self.logger = get_logger()
         self.lib = None
         self.symbol = None
+        # FUTURE rip out the CachedDFGenerator
+        self.df_generator = CachedDFGenerator(350000, [5])
 
     def setup_cache(self):
-        start = time.time()
-
-        # FUTURE rip out the CachedDFGenerator
-        cachedDF = CachedDFGenerator(350000, [5])
         lib_for_storage = dict()
         for storage in self.storages:
             lib = create_library(storage) if is_storage_enabled(storage) else None
-            if lib:
-                self._prepopulate_library(lib, cachedDF)
             lib_for_storage[storage] = lib
 
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
         return lib_for_storage
-
-    def _prepopulate_library(self, lib, df_generator):
-        for param in self.num_chunks:
-            initial_timestamp = TimestampNumber(0, df_generator.TIME_UNIT)
-
-            list_of_chunks = [10_000] * param
-
-            for suffix in ("-time", "-mem"):
-                symbol = _symbol_name(param) + suffix
-                stage_chunks(lib, symbol, df_generator, initial_timestamp, list_of_chunks)
-                self.logger.info(f"Created Symbol: {symbol}")
 
     def setup(self, lib_for_storage, num_chunks, storage):
         self.lib = lib_for_storage[storage]
         if self.lib is None:
             raise SkipNotImplemented
+
+        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state
+        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)
+
+        list_of_chunks = [10_000] * num_chunks
+
+        for suffix in ("-time", "-mem"):
+            symbol = _symbol_name(num_chunks) + suffix
+            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)
+            self.logger.info(f"Created Symbol: {symbol}")
         self.symbol = _symbol_name(num_chunks)
+
+    def teardown(self, lib_for_storage, num_chunks, storage):
+        if self.lib is None:
+            return
+        assert len(self.lib.list_symbols()) == 1  # check that the benchmark actually did something
+        self.lib._nvs.version_store.clear()
 
     def time_finalize_staged_data(self, *args):
         staged_symbols = self.lib.get_staged_symbols()
