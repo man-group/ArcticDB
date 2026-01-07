@@ -76,6 +76,10 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob"
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           strategy_branch: "${{matrix.os}}_${{env.python_impl_name}}"
           persistent_storage: ${{ inputs.persistent_storage }}
         
@@ -112,6 +116,10 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob"
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           persistent_storage: ${{ inputs.persistent_storage }}
       
       - name: Clean the storage
