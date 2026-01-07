@@ -127,8 +127,7 @@ def create_library(storage: Storage) -> Library:
     else:
         raise RuntimeError(f"storage {storage} not implemented for benchmark {__file__}")
 
-    if lib_name in ac:
-        ac.delete_library(lib_name)
+    ac.delete_library(lib_name)
 
     return ac.create_library(lib_name)
 
