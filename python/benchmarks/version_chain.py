@@ -21,7 +21,7 @@ from .common import *
 
 
 class IterateVersionChain:
-    timeout = 6000
+    timeout = 300
     sample_time = 1
     rounds = 1
 
