@@ -102,8 +102,8 @@ def real_azure_credentials(shared_path: bool = True):
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "")
-    constr = (os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),)
-    container = (os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"),)
+    constr = os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING")
+    container = os.getenv("ARCTICDB_REAL_AZURE_CONTAINER")
 
     clear = os.getenv("ARCTICDB_REAL_AZURE_CLEAR", "").lower() in ("true", "1")
 

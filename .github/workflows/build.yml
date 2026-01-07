@@ -214,7 +214,7 @@ jobs:
   pre_seed_cleanup:
     needs: [storage_type]
     # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -225,7 +225,7 @@ jobs:
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup, storage_type]
     # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
     strategy:
       fail-fast: false
       matrix:
@@ -251,7 +251,7 @@ jobs:
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup, storage_type]
     # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
     strategy:
       fail-fast: false
       matrix:
@@ -378,7 +378,7 @@ jobs:
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows, storage_type]
     # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
+    if: ${{ needs.storage_type.outputs.storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -403,7 +403,7 @@ jobs:
   persistent_storage_verify_windows:
     needs: [common_config, storage_type]
     # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
+    if: ${{ needs.storage_type.outputs.storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -432,7 +432,7 @@ jobs:
       always() &&
       !failure() &&
       !cancelled() &&
-      ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+      ${{ needs.storage_type.outputs.storage != 'no' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
