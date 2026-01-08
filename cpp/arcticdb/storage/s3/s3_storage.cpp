@@ -121,15 +121,7 @@ void GCPXMLStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
 }
 
 IterateTypePredicate prefix_matching_visitor(const IterateTypePredicate& visitor, const std::string& prefix) {
-    return [&](VariantKey&& key) {
-        if (prefix.empty()) {
-            return visitor(std::move(key));
-        } else if (variant_key_id_starts_with(key, prefix)) {
-            return visitor(std::move(key));
-        } else {
-            return false;
-        }
-    };
+    return [&](VariantKey&& key) { return detail::visit_if_prefix_matches(visitor, prefix, std::move(key)); };
 }
 
 bool S3Storage::do_iterate_type_until_match(
@@ -151,11 +143,7 @@ bool S3Storage::do_iterate_type_until_match(
 
 ObjectSizesVisitor prefix_matching_object_sizes_visitor(const ObjectSizesVisitor& visitor, const std::string& prefix) {
     return [&](const VariantKey& key, CompressedSize size) {
-        if (prefix.empty()) {
-            visitor(key, size);
-        } else if (variant_key_id_starts_with(key, prefix)) {
-            visitor(key, size);
-        }
+        detail::object_sizes_visit_if_prefix_matches(visitor, prefix, key, size);
     };
 }
 

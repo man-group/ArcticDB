@@ -70,7 +70,9 @@ class MockS3Client : public S3ClientInterface {
             const std::optional<std::string>& continuation_token
     ) const override;
 
-    void add_list_objects_failure(Aws::S3::S3Errors error, bool retryable);
+    void add_list_objects_failure_retryable(Aws::S3::S3Errors error);
+
+    void add_list_objects_failure_unretryable(Aws::S3::S3Errors error);
 
   private:
     // We store a std::nullopt for deleted segments.

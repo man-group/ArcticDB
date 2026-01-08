@@ -501,6 +501,26 @@ inline PathInfo calculate_path_info(
     return {std::move(key_prefix), path_to_key_size};
 }
 
+inline bool visit_if_prefix_matches(const IterateTypePredicate& visitor, const std::string& prefix, VariantKey&& key) {
+    if (prefix.empty()) {
+        return visitor(std::move(key));
+    } else if (variant_key_id_starts_with(key, prefix)) {
+        return visitor(std::move(key));
+    } else {
+        return false;
+    }
+}
+
+inline void object_sizes_visit_if_prefix_matches(
+        const ObjectSizesVisitor& visitor, const std::string& prefix, const VariantKey& key, CompressedSize size
+) {
+    if (prefix.empty()) {
+        visitor(key, size);
+    } else if (variant_key_id_starts_with(key, prefix)) {
+        visitor(key, size);
+    }
+}
+
 template<typename Predicate>
 struct Visitor {
     Visitor(const Predicate& primary_visitor, const std::optional<Predicate> fallback_visitor = std::nullopt) :

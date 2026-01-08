@@ -17,8 +17,12 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-void MockS3Client::add_list_objects_failure(Aws::S3::S3Errors error, bool retryable) {
-    list_objects_failures_.emplace_back(error, retryable);
+void MockS3Client::add_list_objects_failure_retryable(Aws::S3::S3Errors error) {
+    list_objects_failures_.emplace_back(error, true);
+}
+
+void MockS3Client::add_list_objects_failure_unretryable(Aws::S3::S3Errors error) {
+    list_objects_failures_.emplace_back(error, false);
 }
 
 std::string MockS3Client::get_failure_trigger(

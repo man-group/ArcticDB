@@ -418,7 +418,7 @@ TEST_F(S3StorageFixture, test_matching_key_type_prefix_list) {
 // error. We then retry effectively without the prefix, which should succeed
 TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
     auto* mock_s3_client = dynamic_cast<MockS3Client*>(&store.client());
-    mock_s3_client->add_list_objects_failure(Aws::S3::S3Errors::INVALID_REQUEST, false);
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
     std::string prefix("symbol_");
     auto symbols = std::set<std::string>();
     for (int i = 10; i < 25; ++i) {
@@ -434,10 +434,10 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
 
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
     auto* mock_s3_client = dynamic_cast<MockS3Client*>(&store.client());
-    mock_s3_client->add_list_objects_failure(Aws::S3::S3Errors::INVALID_REQUEST, false);
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
     // This simulates the case where the invalid request response was not due to a directory bucket, but because of
     // something else. In this case we should raise
-    mock_s3_client->add_list_objects_failure(Aws::S3::S3Errors::INVALID_REQUEST, false);
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
     std::string prefix("symbol_");
     auto symbols = std::set<std::string>();
     for (int i = 10; i < 25; ++i) {

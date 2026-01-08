@@ -227,15 +227,8 @@ bool NfsBackedStorage::do_iterate_type_until_match(
     // because we are doing sharding through subdirectories
     // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
     // so it cannot be hashed to the correct shard
-    const IterateTypePredicate visitor_with_prefix_filtering = [&visitor, &prefix](VariantKey&& k) {
-        auto key = unencode_object_id(k);
-        if (prefix.empty()) {
-            return visitor(std::move(key));
-        } else if (variant_key_id_starts_with(key, prefix)) {
-            return visitor(std::move(key));
-        } else {
-            return false;
-        }
+    const IterateTypePredicate visitor_with_prefix_filtering = [&visitor, &prefix](VariantKey&& key) {
+        return s3::detail::visit_if_prefix_matches(visitor, prefix, unencode_object_id(key));
     };
     s3::detail::Visitor<IterateTypePredicate> final_visitor{visitor_with_prefix_filtering};
     return s3::detail::do_iterate_type_impl(key_type, bucket_name_, *s3_client_, path_info, final_visitor);
@@ -259,13 +252,8 @@ void NfsBackedStorage::do_visit_object_sizes(
     // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
     // so it cannot be hashed to the correct shard
     const ObjectSizesVisitor visitor_with_prefix_filtering = [&visitor,
-                                                              &prefix](const VariantKey& k, CompressedSize size) {
-        auto key = unencode_object_id(k);
-        if (prefix.empty()) {
-            visitor(key, size);
-        } else if (variant_key_id_starts_with(key, prefix)) {
-            visitor(key, size);
-        }
+                                                              &prefix](const VariantKey& key, CompressedSize size) {
+        s3::detail::object_sizes_visit_if_prefix_matches(visitor, prefix, unencode_object_id(key), size);
     };
     s3::detail::Visitor<ObjectSizesVisitor> final_visitor{visitor_with_prefix_filtering};
 
