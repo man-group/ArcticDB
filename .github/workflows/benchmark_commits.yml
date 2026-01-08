@@ -4,7 +4,6 @@ on:
     inputs:
       run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
-      run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
       suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
       suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
@@ -50,8 +49,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
-        
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
@@ -123,7 +121,7 @@ jobs:
             echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request' || inputs.run_all_benchmarks == true
         shell: bash -l {0}
         run: | 
           git config --global --add safe.directory .
@@ -133,7 +131,7 @@ jobs:
           exit $exit_code
 
       - name: Benchmark against master
-        if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
+        if: github.event_name == 'pull_request'
         shell: bash -l {0}
         run: |
           python -m asv run --show-stderr --durations all --bench $SUITE HEAD^! || exit 1
