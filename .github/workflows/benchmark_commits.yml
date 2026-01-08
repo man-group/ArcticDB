@@ -141,7 +141,7 @@ jobs:
           python -m asv compare -s -f 1.15 $(cat master_commit_hash.txt) HEAD > results.txt || exit 1
           
           # Get rid of the master results so we don't re-add them to the database.
-          rm .asv/results/**/$(cat master_commit_hash.txt)*.json
+          rm python/.asv/results/**/$(cat master_commit_hash.txt)*.json || exit 1
           
           grep -q "Benchmarks that have got worse" results.txt
           grep_exit_code=$?
