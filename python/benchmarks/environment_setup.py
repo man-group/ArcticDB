@@ -17,7 +17,7 @@ import tempfile
 import time
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple
+from typing import List, Union, Optional, Iterable, Dict
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -80,7 +80,7 @@ def is_storage_enabled(storage: Storage) -> bool:
         raise RuntimeError(f"Only LMDB and AMAZON storages are supported, received {storage}")
 
 
-def create_library(storage: Storage) -> Library:
+def create_library(storage: Storage) -> Optional[Library]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.
 
@@ -116,6 +116,9 @@ def create_library(storage: Storage) -> Library:
 
     `aws s3 rb s3://<bucket-name> --region eu-west-2`
     """
+    if not is_storage_enabled(storage):
+        return None
+
     lib_name = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
 
     if storage == Storage.LMDB:
@@ -129,6 +132,12 @@ def create_library(storage: Storage) -> Library:
     ac.delete_library(lib_name)
 
     return ac.create_library(lib_name)
+
+
+def create_libraries_across_storages(storages: Iterable[Storage]) -> Dict[Storage, Optional[Library]]:
+    """Create libraries for benchmarking on each of storages. If the storage not is_storage_enabled, the value
+    for that storage will be None."""
+    return {s: create_library(s) for s in storages}
 
 
 class StorageSetup:
