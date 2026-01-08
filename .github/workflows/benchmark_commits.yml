@@ -90,8 +90,12 @@ jobs:
         run: |
           git config --global --add safe.directory .
           python -m pip install --upgrade pip
-          pip install asv virtualenv arcticdb[Testing] "protobuf<6"
+          pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+          
+          # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
+          python -m venv ./tooling_venv
+          ./tooling_venv/bin/pip install "ArcticDB[Testing]"
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
@@ -127,7 +131,7 @@ jobs:
           git config --global --add safe.directory .
           python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
           exit_code=$?
-          python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
+          ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
           exit $exit_code
 
       - name: Benchmark against master
@@ -136,7 +140,7 @@ jobs:
         run: |
           # Look up the most recent master commit stored in our ASV database and compare against it.
           # asv compare exits with code 0 even if there are regressions.
-          python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
           python -m asv run --show-stderr --durations all --bench $SUITE HEAD^! || exit 1
           python -m asv compare -s -f 1.15 $(cat master_commit_hash.txt) HEAD > results.txt || exit 1
           
@@ -149,15 +153,15 @@ jobs:
 
           cat results.txt
 
-          python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
+          ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
           exit $any_worse
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
         run: |
-          python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
-          python build_tooling/transform_asv_results.py --mode analyze \
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode analyze \
           ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}} \
           --hash $(git rev-parse --short=8 ${{inputs.commit}})
 
