@@ -119,10 +119,12 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
     else:
         raise ValueError(f"Invalid storage type: {storage_type}")
 
+
 def remove_http_prefix(endpoint: str) -> str:
     if endpoint is not None and "://" in endpoint:
         endpoint = endpoint.split("://")[1]
     return endpoint
+
 
 def real_s3_credentials(shared_path: bool = True):
     endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_S3_ENDPOINT"))
