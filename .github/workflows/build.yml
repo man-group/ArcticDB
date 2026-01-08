@@ -308,7 +308,7 @@ jobs:
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [cibw_docker_image, common_config, storage_type, persistent_storage_seed_linux]
+    needs: [cibw_docker_image, common_config, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -369,7 +369,7 @@ jobs:
       matrix: ${{needs.common_config.outputs.macos_matrix}}
 
   build-python-wheels-windows:
-    needs: [common_config, storage_type, persistent_storage_seed_windows]
+    needs: [common_config, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -445,7 +445,7 @@ jobs:
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   build-python-wheels-macos:
-    needs: [common_config, storage_type, persistent_storage_seed_macos]
+    needs: [common_config, storage_type]
     strategy:
       fail-fast: false
       matrix:
