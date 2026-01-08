@@ -4,13 +4,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import time
-
 from arcticdb.util.test_utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
-from .environment_setup import is_storage_enabled, create_library, Storage
+from .environment_setup import Storage, create_libraries_across_storages
 from .common import get_logger
 
 
@@ -45,11 +43,7 @@ class FinalizeStagedData:
         self.df_generator = CachedDFGenerator(350000, [5])
 
     def setup_cache(self):
-        lib_for_storage = dict()
-        for storage in self.storages:
-            lib = create_library(storage) if is_storage_enabled(storage) else None
-            lib_for_storage[storage] = lib
-
+        lib_for_storage = create_libraries_across_storages(self.storages)
         return lib_for_storage
 
     def setup(self, lib_for_storage, num_chunks, storage):

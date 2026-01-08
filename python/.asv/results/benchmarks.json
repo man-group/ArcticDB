@@ -1387,7 +1387,7 @@
         "version": "166a93976c1ae0088bbb2477ee1d3e92672e7477a811b64747ee2b97bb078f26"
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0 # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage) if is_storage_enabled(storage) else None\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage)\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
         "param_names": [
             "num_chunks",
@@ -1407,10 +1407,10 @@
         "timeout": 100,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "ab23851bcd0baf5c8685123c65dc895e8947cc6723ad2d92f5350c1cf15e9797"
+        "version": "5ddb79ae543686906083e9c37475bc6dd1bc34c0df79be8ba2f4b5e207ebf05a"
     },
     "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-time\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-time\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0 # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage) if is_storage_enabled(storage) else None\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-time\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-time\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage)\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
         "min_run_count": 1,
         "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
         "number": 1,
@@ -1435,7 +1435,7 @@
         "timeout": 100,
         "type": "time",
         "unit": "seconds",
-        "version": "435a3405f21302de1f4a35b91c8ef68fbdb50754d44a8ce20a68a8c901ce8a0f",
+        "version": "60565d7c36efd236c00f85bd649289308cd7f8013c59833356e58a4ef456eb37",
         "warmup_time": 0
     },
     "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list": {
@@ -1546,70 +1546,85 @@
         "version": "68900e75770793f36f0f940ebab65e148dee97f5c8cebe43c4ebd3ba5350dfbf",
         "warmup_time": 0
     },
-    "list_symbols.ListSymbols.peakmem_list_symbols": {
-        "code": "class ListSymbols:\n    def peakmem_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_symbols\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "list_symbols.ListSymbols.peakmem_list_symbols",
+    "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols": {
+        "code": "class ListSymbolsWithoutCache:\n    def peakmem_list_symbols(self, *args):\n        assert self.test_counter == 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
+        "name": "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols",
         "param_names": [
-            "num_symbols"
+            "num_symbols",
+            "param2"
         ],
         "params": [
             [
-                "500",
+                "100",
                 "1000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "list_symbols:29",
-        "timeout": 6000,
+        "setup_cache_key": "list_symbols:33",
+        "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "16efc69bf586370ed0cce02ce79c1e9f2ee420a0d3e95a49a9140f3bffd4bec3"
+        "version": "60b1e1970f95ad622a5823e088c826fbea6f452fd6ded115c19d4ca36f6bb9c0"
     },
-    "list_symbols.ListSymbols.time_has_symbol": {
-        "code": "class ListSymbols:\n    def time_has_symbol(self, num_symbols):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_symbols\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "list_symbols.ListSymbolsWithoutCache.time_has_symbol": {
+        "code": "class ListSymbolsWithoutCache:\n    def time_has_symbol(self, *args):\n        assert self.test_counter == 1\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 2,
-        "name": "list_symbols.ListSymbols.time_has_symbol",
-        "number": 5,
+        "name": "list_symbols.ListSymbolsWithoutCache.time_has_symbol",
+        "number": 1,
         "param_names": [
-            "num_symbols"
+            "num_symbols",
+            "param2"
         ],
         "params": [
             [
-                "500",
+                "100",
                 "1000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_symbols:29",
-        "timeout": 6000,
+        "setup_cache_key": "list_symbols:33",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "55ed097229031fd1c932964b9321bbc2047989b50369b6be45c54144b0a6045d",
+        "version": "81ff0d14201bf21a8d2731e536447af976714d6ae1f4f59ba759879752014fa6",
         "warmup_time": 0
     },
-    "list_symbols.ListSymbols.time_list_symbols": {
-        "code": "class ListSymbols:\n    def time_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_symbols\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "list_symbols.ListSymbolsWithoutCache.time_list_symbols": {
+        "code": "class ListSymbolsWithoutCache:\n    def time_list_symbols(self, *args):\n        assert self.test_counter == 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 2,
-        "name": "list_symbols.ListSymbols.time_list_symbols",
-        "number": 5,
+        "name": "list_symbols.ListSymbolsWithoutCache.time_list_symbols",
+        "number": 1,
         "param_names": [
-            "num_symbols"
+            "num_symbols",
+            "param2"
         ],
         "params": [
             [
-                "500",
+                "100",
                 "1000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_symbols:29",
-        "timeout": 6000,
+        "setup_cache_key": "list_symbols:33",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "ef02b0e52758b1f2f904c1924ca644e5a212dc6ca38bdffb06508b46c0ef6cf7",
+        "version": "dddd774df43aa2e794c13266b3e037ef85c7c91d45e9da0eb4a818282e6a364c",
         "warmup_time": 0
     },
     "list_versions.ListVersions.peakmem_list_versions": {
@@ -2330,72 +2345,6 @@
         "version": "9b06683aaf9b2112fce975aaad4ccdf9ad266b297384fb73f01948a23ed9c622",
         "warmup_time": 0
     },
-    "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
-        "code": "class AWSListSymbols:\n    def peakmem_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.setup_library()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        self.lib._nvs.version_store._clear_symbol_list_keys()  # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        self.get_library_manager().log_info()  # Always log the ArcticURIs",
-        "name": "real_list_operations.AWSListSymbols.peakmem_list_symbols",
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "setup_cache_key": "real_list_operations:57",
-        "timeout": 1200,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "3a9437f6e472e3d916bef3fc9e15da3e5153d99f515ddd3cce9ef7ce8bb411c2"
-    },
-    "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting": {
-        "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.has_symbol(\"250_sym\")\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.setup_library()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        self.lib._nvs.version_store._clear_symbol_list_keys()  # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        self.get_library_manager().log_info()  # Always log the ArcticURIs",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting",
-        "number": 1,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "repeat": 3,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:57",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "d26278f69868af7bfde10e3af74abadb2aa8221e8445da75b25a788447907739",
-        "warmup_time": 0
-    },
-    "real_list_operations.AWSListSymbols.time_list_symbols": {
-        "code": "class AWSListSymbols:\n    def time_list_symbols(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.list_symbols()\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.setup_library()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        self.lib._nvs.version_store._clear_symbol_list_keys()  # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        self.get_library_manager().log_info()  # Always log the ArcticURIs",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSListSymbols.time_list_symbols",
-        "number": 1,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "repeat": 3,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:57",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "de9dca891016036c2c90b5a76df8ea8470d84eaad532a0c951af7eee9ee28215",
-        "warmup_time": 0
-    },
     "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots": {
         "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "name": "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots",
@@ -2408,7 +2357,7 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2426,7 +2375,7 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2444,7 +2393,7 @@
                 "50"
             ]
         ],
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2467,7 +2416,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2491,7 +2440,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2515,7 +2464,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2539,7 +2488,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2563,7 +2512,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2587,7 +2536,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2611,7 +2560,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:137",
+        "setup_cache_key": "real_list_operations:59",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",

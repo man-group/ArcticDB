@@ -6,54 +6,55 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import time
-from arcticdb import Arctic
-
+from .environment_setup import Storage, create_libraries_across_storages
 from benchmarks.common import *
 
+from arcticdb.version_store.library import WritePayload
 
-class ListSymbols:
-    number = 5
+
+class ListSymbolsWithoutCache:
+    """Measure how long symbol list operations take before the symbol list cache is compacted."""
+
     rounds = 1
-    timeout = 6000
+    number = 1  # run only once within a setup-teardown
+    timeout = 600
     warmup_time = 0
 
-    params = [500, 1000]
-    param_names = ["num_symbols"]
+    storages = [Storage.LMDB, Storage.AMAZON]
+    num_symbols = [100, 1000]
 
-    rows = 50
+    params = [num_symbols, storages]
+    param_names = ["num_symbols", "storage"]
 
     def __init__(self):
         self.logger = get_logger()
+        self.test_counter = (
+            None  # used to ensure each test runs once within a setup-teardown cycle, so that the cache is uncompacted
+        )
 
     def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        lib_for_storage = create_libraries_across_storages(self.storages)
+        return lib_for_storage
 
-    def _setup_cache(self):
-        self.ac = Arctic("lmdb://list_symbols")
+    def teardown(self, *args):
+        self.lib._nvs.version_store.clear()
 
-        num_symbols = ListSymbols.params
-        for syms in num_symbols:
-            lib_name = f"{syms}_num_symbols"
-            self.ac.delete_library(lib_name)
-            lib = self.ac.create_library(lib_name)
-            for sym in range(syms):
-                lib.write(f"{sym}_sym", generate_benchmark_df(ListSymbols.rows))
+    def setup(self, lib_for_storage, num_symbols, storage):
+        self.lib = lib_for_storage[storage]
+        self.test_counter = 1
 
-    def teardown(self, num_symbols):
-        pass
+        simple_df = pd.DataFrame({"a": [1]})
+        write_payloads = [WritePayload(f"{i}", simple_df) for i in range(num_symbols)]
+        self.lib.write_batch(write_payloads)
 
-    def setup(self, num_symbols):
-        self.ac = Arctic("lmdb://list_symbols")
-        self.lib = self.ac[f"{num_symbols}_num_symbols"]
-
-    def time_list_symbols(self, num_symbols):
+    def time_list_symbols(self, *args):
+        assert self.test_counter == 1
         self.lib.list_symbols()
 
-    def peakmem_list_symbols(self, num_symbols):
+    def peakmem_list_symbols(self, *args):
+        assert self.test_counter == 1
         self.lib.list_symbols()
 
-    def time_has_symbol(self, num_symbols):
+    def time_has_symbol(self, *args):
+        assert self.test_counter == 1
         self.lib.has_symbol("250_sym")
