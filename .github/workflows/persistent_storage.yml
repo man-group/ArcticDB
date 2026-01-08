@@ -52,8 +52,8 @@ jobs:
         if: matrix.os == 'linux'
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
 
-      - name: Select Python (Windows)
-        if: matrix.os == 'windows'
+      - name: Select Python (Windows and Mac)
+        if: matrix.os == 'windows' || matrix.os == 'macos'
         uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
@@ -63,13 +63,19 @@ jobs:
         run: |
           pip install pytest arcticdb "protobuf<5"
       
-      # Currently, the oldest "supported" release is 3.0.0
+      # Currently, the oldest "supported" release is 3.0.0 for windows and linux, 6.5.0 for mac 
       # We use this version to test forwards/barwards compatibility 
       # So we expect that libs written by the version that we are build to be readable by arcticdb>=3.0.0 and vice-versa
       # Change this value, if we need to support a newer one in the future
-      - name: Install oldest supported release
+      - name: Install oldest supported release (Windows and Linux)
+        if: matrix.os == 'windows' || matrix.os == 'linux'
         run: |
           pip install pytest arcticdb=="3.0.0" "protobuf<5" "numpy<2"
+
+      - name: Install oldest supported release (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          pip install pytest arcticdb=="6.5.0" "protobuf<5" "numpy<2"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
