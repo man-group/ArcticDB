@@ -63,8 +63,14 @@ def get_csv_df():
     return df, sym
 
 
+def remove_http_prefix(endpoint: str) -> str:
+    if endpoint is not None and "://" in endpoint:
+        endpoint = endpoint.split("://")[1]
+    return endpoint
+
+
 def real_s3_credentials(shared_path: bool = True):
-    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_S3_ENDPOINT"))
     bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
     region = os.getenv("ARCTICDB_REAL_S3_REGION")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
@@ -80,9 +86,7 @@ def real_s3_credentials(shared_path: bool = True):
 
 
 def real_gcp_credentials(shared_path: bool = True):
-    endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    if endpoint is not None and "://" in endpoint:
-        endpoint = endpoint.split("://")[1]
+    endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_GCP_ENDPOINT"))
     bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
     region = os.getenv("ARCTICDB_REAL_GCP_REGION")
     access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
