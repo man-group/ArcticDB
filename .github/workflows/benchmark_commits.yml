@@ -2,7 +2,7 @@ name: __benchmark_commits
 on:
   workflow_call:
     inputs:
-      benchmark_all_tags: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
+      benchmark_all_tags: {required: true, type: boolean, description: Run benchmarks for all tags or just the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
       suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
