@@ -2,7 +2,7 @@ name: __benchmark_commits
 on:
   workflow_call:
     inputs:
-      run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
+      benchmark_all_tags: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
       suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
@@ -121,7 +121,7 @@ jobs:
             echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request' || inputs.benchmark_all_tags == true
         shell: bash -l {0}
         run: | 
           git config --global --add safe.directory .
