@@ -2,9 +2,8 @@ name: __benchmark_commits
 on:
   workflow_call:
     inputs:
-      run_all_benchmarks: {required: true, type: boolean, description: Run all benchmarks or just the one for the given commit}
+      benchmark_all_tags: {required: true, type: boolean, description: Run benchmarks for all tags or just the given commit}
       commit:             {required: true, type: string, description: commit hash that will be benchmarked}
-      run_on_pr_head:     {required: false, default: false, type: boolean, description: Specifies if the benchmark should run on PR head branch}
       dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
       suite_to_run:       {required: true, type: string, default: 'LMDB', description: Default benchmark on 'LMDB' storage (or 'REAL' storage ond 'ALL' for both)}
       suite_overwrite:       {required: false, type: string, default: '', description: User defined tests to run}
@@ -50,8 +49,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
-        
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
@@ -87,13 +85,17 @@ jobs:
         run: |
           micromamba install -y -c conda-forge "libmambapy<2"
 
-      - name: Install ASV
+      - name: Install deps
         shell: bash -el {0}
         run: |
           git config --global --add safe.directory .
           python -m pip install --upgrade pip
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+          
+          # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
+          python -m venv ./tooling_venv
+          ./tooling_venv/bin/pip install "ArcticDB[Testing]"
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
@@ -123,31 +125,43 @@ jobs:
             echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request' || inputs.benchmark_all_tags == true
         shell: bash -l {0}
         run: | 
           git config --global --add safe.directory .
           python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
           exit_code=$?
-          python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
+          ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash ${{ inputs.commit }}
           exit $exit_code
 
       - name: Benchmark against master
-        if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
+        if: github.event_name == 'pull_request'
         shell: bash -l {0}
         run: |
-          python -m asv continuous --show-stderr --bench $SUITE origin/master HEAD -f 1.15
-          exit_code=$?
-          python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
-          exit $exit_code
+          # Look up the most recent master commit stored in our ASV database and compare against it.
+          # asv compare exits with code 0 even if there are regressions.
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
+          python -m asv run --show-stderr --durations all --bench $SUITE HEAD^! || exit 1
+          python -m asv compare -s -f 1.15 $(cat master_commit_hash.txt) HEAD > results.txt || exit 1
+          
+          # Get rid of the master results so we don't re-add them to the database.
+          rm python/.asv/results/**/$(cat master_commit_hash.txt)*.json || exit 1
+          
+          grep -q "Benchmarks that have got worse" results.txt
+          grep_exit_code=$?
+          any_worse=$(( ! grep_exit_code ))
+
+          cat results.txt
+
+          ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
+          exit $any_worse
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
         run: |
-          pip install arcticdb[Testing] "protobuf<6"
-          python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
-          python build_tooling/transform_asv_results.py --mode analyze \
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode analyze \
           ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}} \
           --hash $(git rev-parse --short=8 ${{inputs.commit}})
 

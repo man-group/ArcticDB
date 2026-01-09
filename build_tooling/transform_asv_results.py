@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import os
+import subprocess
+import sys
 
 import pandas as pd
 
@@ -111,18 +113,67 @@ def save_asv_results(lib, json_path):
         lib.write(commit_hash, df)
 
 
+def _extract_asv_results_for_commit(lib, json_path, short_commit):
+    print(f"Processing {short_commit}...")
+    results_df = lib.read(short_commit).data
+    json_data = df_to_asv_json(results_df)
+    full_json_path = get_result_json_path(json_path, short_commit, json_data)
+
+    print(f"Writing {full_json_path}...")
+    with open(full_json_path, "w") as out:
+        json.dump(json_data, out, indent=4, default=str)
+
+
 def extract_asv_results(lib, json_path):
     syms = lib.list_symbols()
-
     for sym in syms:
-        print(f"Processing {sym}...")
-        results_df = lib.read(sym).data
-        json_data = df_to_asv_json(results_df)
-        full_json_path = get_result_json_path(json_path, sym, json_data)
+        _extract_asv_results_for_commit(lib, json_path, sym)
 
-        print(f"Writing {full_json_path}...")
-        with open(full_json_path, "w") as out:
-            json.dump(json_data, out, indent=4, default=str)
+
+def extract_most_recent_result(lib, json_path) -> int:
+    """Look up the 'most recent' ASV results from master and save them as JSON in the given path.
+
+    Fails if we do not have a recent result in the database.
+
+    Write a file "master_commit_hash.txt" containing the commit hash found in the ASV database.
+
+    Returns an integer to be interpreted as an exit code.
+    """
+    subprocess.run(["git", "fetch", "origin", "master"])
+    # "committer" time of the master commit
+    master_date_iso = subprocess.run(["git", "log", "-1", "--format=%ci", "origin/master"], capture_output=True, text=True)
+    master_date_pd = pd.Timestamp(master_date_iso.stdout.strip())
+    print(f"origin/master last commit was at {master_date_pd}")
+
+    n = 0
+    stored_commit_ts = master_date_pd
+
+    # Scan back over master commits origin/master~N until either:
+    # - We find one in the ASV database
+    # - We do not find any results in the ASV database for a commit at least 2 days old
+    # We run benchmarks on master nightly, so 2 days should be plenty for the master results to become available
+    while master_date_pd - stored_commit_ts < pd.Timedelta(days=2):
+        master_commit_hash = subprocess.run(["git", "rev-parse", f"origin/master~{n}"], capture_output=True, text=True)
+        commit = master_commit_hash.stdout.strip()
+        short_commit = commit[:8]
+        stored_commit_iso = subprocess.run(["git", "log", "-1", "--format=%ci", f"origin/master~{n}"], capture_output=True, text=True)
+        stored_commit_ts = pd.Timestamp(stored_commit_iso.stdout.strip())
+
+        print(f"Looking up commit {short_commit} from time {stored_commit_ts} in ASV database. This is {master_date_pd - stored_commit_ts} older than origin/master")
+
+        if lib.has_symbol(short_commit):
+            print(f"Found ASV results for master~{n} from time {stored_commit_ts}")
+            _extract_asv_results_for_commit(lib, json_path, short_commit)
+            with open("master_commit_hash.txt", "w") as f:
+                f.write(short_commit)
+            return 0
+        else:
+            print(f"ASV results for {short_commit} from time {stored_commit_ts} not found")
+
+        n += 1
+    else:
+        print(f"No ASV results for master found in the last 2 days.")
+        return 1
 
 
 def analyze_asv_results(lib, hash):
@@ -235,7 +286,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--mode",
-        help="Mode to run the script in, 'save', 'extract' or 'analyze'. Analyze generates a report about the time taken to run benchmarks, to help us to keep the CI at a reasonable speed.",
+        help="Mode to run the script in, 'save', 'extract', 'extract-recent' or 'analyze'. Analyze generates a report about the time taken to run benchmarks, to help us to keep the CI at a reasonable speed.",
     )
 
     args = parser.parse_args()
@@ -246,8 +297,10 @@ if __name__ == "__main__":
         save_asv_results(results_lib, json_path)
     elif args.mode == "extract":
         extract_asv_results(results_lib, json_path)
+    elif args.mode == "extract-recent":
+        sys.exit(extract_most_recent_result(results_lib, json_path))
     elif args.mode == "analyze":
         assert args.hash, "--hash must be present for the analyze mode"
         analyze_asv_results(results_lib, args.hash)
     else:
-        raise ValueError(f"Invalid mode {args.mode}, must be 'save', 'extract' or 'analyze'")
+        raise ValueError(f"Invalid mode {args.mode}, must be 'save', 'extract', 'extract-recent' or 'analyze'")

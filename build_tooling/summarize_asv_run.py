@@ -40,13 +40,13 @@ def main(commit_hash: str):
                 summary.write(f"| `{f}` |\n")
             summary.write("\n> Check the 'Benchmark given commit' step logs for specific tracebacks.")
         else:
-            summary.write("✅ All benchmarks passed successfully!\n")
+            summary.write("✅ All benchmarks executed successfully!\n")
 
     if failures:
         print("Check the workflow Summary page for a report on ASV failures.")
         sys.exit(1)
     else:
-        print("There were no ASV failures to report.")
+        print("There were no ASV execution failures to report.")
         sys.exit(0)
 
 
