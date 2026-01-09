@@ -88,24 +88,6 @@ class AWSVersionSymbols(AsvBase):
         assert (expected_num_versions - 1) >= len(symbols_list), mes
         assert last_snapshot_names_dict[num_syms] is not None
 
-    def time_list_versions(self, last_snapshot_names_dict, num_syms):
-        self.lib.list_versions()
-
-    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):
-        self.lib.list_versions(latest_only=True)
-
-    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):
-        self.lib.list_versions(skip_snapshots=True)
-
-    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):
-        self.lib.list_versions(latest_only=True, skip_snapshots=True)
-
-    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):
-        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])
-
-    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):
-        self.lib.list_versions()
-
     def time_list_snapshots(self, last_snapshot_names_dict, num_syms):
         self.lib.list_snapshots()
 
