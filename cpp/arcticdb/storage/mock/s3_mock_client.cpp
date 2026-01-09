@@ -209,8 +209,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         auto res = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
                 failure.first, "Simulated error", "Simulated error message for list_objects", failure.second
         ));
-        // We don't want to make the real implementation of list_objects non-const, hence the const_cast
-        const_cast<std::deque<std::pair<Aws::S3::S3Errors, bool>>&>(list_objects_failures_).pop_front();
+        list_objects_failures_.pop_front();
         return {res};
     }
     std::scoped_lock<std::mutex> lock(mutex_);

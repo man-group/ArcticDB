@@ -85,7 +85,7 @@ class MockS3Client : public S3ClientInterface {
     // Failing listing operations based on symbol names isn't sufficient for testing the express bucket fallback
     // mechanism. Allow setting a list of failure modes for list_objects calls. This list will be popped from until
     // empty, at which point the listing operation will succeed.
-    std::deque<std::pair<Aws::S3::S3Errors, bool>> list_objects_failures_;
+    mutable std::deque<std::pair<Aws::S3::S3Errors, bool>> list_objects_failures_;
 };
 
 } // namespace arcticdb::storage::s3
