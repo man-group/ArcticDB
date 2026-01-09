@@ -32,7 +32,7 @@ constexpr int SUMMARY_AGE_BUCKETS = 5;
 
 class MetricsConfig {
   public:
-    enum class Model { NO_INIT, PUSH, PULL };
+    enum class Model { NO_INIT = 0, PUSH = 1, PULL = 2 };
     MetricsConfig() : model_(Model::NO_INIT) {}
 
     MetricsConfig(

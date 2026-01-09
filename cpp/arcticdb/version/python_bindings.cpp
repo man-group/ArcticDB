@@ -25,6 +25,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/entity/python_bindings_common.hpp>
 
 namespace arcticdb::version_store {
 
@@ -144,51 +145,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
-    py::class_<AtomKey, std::shared_ptr<AtomKey>>(version, "AtomKey")
-            .def(py::init())
-            .def(py::init<StreamId, VersionId, timestamp, ContentHash, IndexValue, IndexValue, KeyType>())
-            .def("change_id", &AtomKey::change_id)
-            .def_property_readonly("id", &AtomKey::id)
-            .def_property_readonly("version_id", &AtomKey::version_id)
-            .def_property_readonly("creation_ts", &AtomKey::creation_ts)
-            .def_property_readonly("content_hash", &AtomKey::content_hash)
-            .def_property_readonly("start_index", &AtomKey::start_index)
-            .def_property_readonly("end_index", &AtomKey::end_index)
-            .def_property_readonly("type", [](const AtomKey& self) { return self.type(); })
-            .def(pybind11::self == pybind11::self)
-            .def(pybind11::self != pybind11::self)
-            .def("__repr__", &AtomKey::view_human)
-            .def(py::self < py::self)
-            .def(py::pickle(
-                    [](const AtomKey& key) {
-                        constexpr int serialization_version = 0;
-                        return py::make_tuple(
-                                serialization_version,
-                                key.id(),
-                                key.version_id(),
-                                key.creation_ts(),
-                                key.content_hash(),
-                                key.start_index(),
-                                key.end_index(),
-                                key.type()
-                        );
-                    },
-                    [](py::tuple t) {
-                        util::check(t.size() >= 7, "Invalid AtomKey pickle object!");
-
-                        [[maybe_unused]] const int serialization_version = t[0].cast<int>();
-                        AtomKey key(
-                                t[1].cast<StreamId>(),
-                                t[2].cast<VersionId>(),
-                                t[3].cast<timestamp>(),
-                                t[4].cast<ContentHash>(),
-                                t[5].cast<IndexValue>(),
-                                t[6].cast<IndexValue>(),
-                                t[7].cast<KeyType>()
-                        );
-                        return key;
-                    }
-            ));
+    entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
     py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
             .def(py::init())
@@ -367,12 +324,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("__str__", &storage::KeyNotFoundInStageResultInfo::to_string)
             .def(py::self == py::self)
             .def(py::self != py::self);
-
-    // TODO: add repr.
-    py::class_<VersionedItem>(version, "VersionedItem")
-            .def_property_readonly("symbol", &VersionedItem::symbol)
-            .def_property_readonly("timestamp", &VersionedItem::timestamp)
-            .def_property_readonly("version", &VersionedItem::version);
 
     py::class_<DescriptorItem>(version, "DescriptorItem")
             .def_property_readonly("symbol", &DescriptorItem::symbol)
