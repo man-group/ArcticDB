@@ -41,14 +41,14 @@ parser = ArgumentParser(
     description="Add a list of commits that need to be benchmarked to the GitHub output"
 )
 parser.add_argument(
-    "--run_all_benchmarks",
-    help="Should we get the tags and commits for all benchmarks, or just the current one",
+    "--run_all_tags",
+    help="Should run benchmarks on all tags, or just HEAD",
     action="store_true",
 )
 
 args = parser.parse_args()
 
-if args.run_all_benchmarks:
+if args.run_all_tags:
     tags = get_git_tags()
     commits = [get_commit_from_tag(tag) for tag in tags]
 else:

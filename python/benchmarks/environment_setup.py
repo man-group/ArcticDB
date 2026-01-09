@@ -1,24 +1,30 @@
-import copy
+"""
+Copyright 2025 Man Group Operations Limited
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+"""
+
+import random
+import string
 from abc import ABC, abstractmethod
 from datetime import timedelta
 from enum import Enum
-import inspect
 import logging
 import multiprocessing
 import os
 import socket
 import tempfile
 import time
-import re
 import pandas as pd
 import numpy as np
-from typing import Any, Dict, List, Union
+from typing import List, Union, Tuple
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
 from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
-from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
+from arcticdb.util.test_utils import DFGenerator, ListGenerators, TimestampNumber
+from arcticdb.util.utils import strtobool
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store.library import Library
 
@@ -60,6 +66,71 @@ class LibraryType(Enum):
     MODIFIABLE = "MODIFIABLE"
 
 
+def is_storage_enabled(storage: Storage) -> bool:
+    """Decide which storages to use for ASV testing based on environment variables.
+
+    ARCTICDB_STORAGE_LMDB (default: True): Test against LMDB
+    ARCTICDB_STORAGE_AWS_S3 (default: False): Test against AWS
+    """
+    if storage == Storage.LMDB:
+        return strtobool(os.getenv("ARCTICDB_STORAGE_LMDB", "1"))
+    elif storage == Storage.AMAZON:
+        return strtobool(os.getenv("ARCTICDB_STORAGE_AWS_S3", "0"))
+    else:
+        raise RuntimeError(f"Only LMDB and AMAZON storages are supported, received {storage}")
+
+
+def create_library(storage: Storage) -> Library:
+    """
+    Create a library for a given storage test, for use in ASV benchmarking runs.
+
+    Notes
+
+    LMDB: ASV creates a temp directory for each run and then sets current working directory to it
+    After the end of the test it removes all files and subfolders created there.
+
+    AWS:
+
+    Example local setup:
+
+    `aws s3 mb s3://<bucket-name> --region eu-west-2`
+
+    Then write,
+
+    ```aws.env
+    ARCTICDB_STORAGE_AWS_S3=1
+    ARCTICDB_REAL_S3_ACCESS_KEY=<redacted>
+    ARCTICDB_REAL_S3_BUCKET=<bucket-name>
+    ARCTICDB_REAL_S3_CLEAR=0
+    ARCTICDB_REAL_S3_ENDPOINT=https://s3.eu-west-2.amazonaws.com
+    ARCTICDB_REAL_S3_REGION=eu-west-2
+    ARCTICDB_REAL_S3_SECRET_KEY=<redacted>
+    ```
+
+    then `export $(cat aws.env | xargs)`. Your environment is now ready to run the AWS ASV tests.
+
+    We rely on cleanup scripts in the CI to clean up, by dropping the `ARCTICDB_REAL_S3_BUCKET`. You need to do this
+    manually when working locally to save AWS costs.
+
+    Tear down command:
+
+    `aws s3 rb s3://<bucket-name> --region eu-west-2`
+    """
+    lib_name = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+
+    if storage == Storage.LMDB:
+        ac = Arctic(f"lmdb://tmp/{lib_name}")
+    elif storage == Storage.AMAZON:
+        factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)
+        ac = factory.create_fixture().create_arctic()
+    else:
+        raise RuntimeError(f"storage {storage} not implemented for benchmark {__file__}")
+
+    ac.delete_library(lib_name)
+
+    return ac.create_library(lib_name)
+
+
 class StorageSetup:
     """
     Defined special one time setup for real storages.
@@ -82,7 +153,8 @@ class StorageSetup:
             ## Will only throw exceptions if real tests are executed
             cls._aws_default_factory = real_s3_from_environment_variables(shared_path=True)
             cls._aws_default_factory.default_prefix = None
-            cls._aws_default_factory.default_bucket = AWS_S3_DEFAULT_BUCKET
+            if not cls._aws_default_factory.default_bucket:
+                cls._aws_default_factory.default_bucket = AWS_S3_DEFAULT_BUCKET
             cls._aws_default_factory.clean_bucket_on_fixture_exit = False
 
             # GCP initialization (quick&dirty)
@@ -93,7 +165,8 @@ class StorageSetup:
             # Azure variable setup
             cls._azure_factory = real_azure_from_environment_variables(shared_path=True)
             cls._azure_factory.default_prefix = None
-            cls._azure_factory.default_container = AZURE_DEFAULT_CONTAINER
+            if not cls._azure_factory.default_container:
+                cls._azure_factory.default_container = AZURE_DEFAULT_CONTAINER
             cls._azure_factory.clean_bucket_on_fixture_exit = False
 
     @classmethod

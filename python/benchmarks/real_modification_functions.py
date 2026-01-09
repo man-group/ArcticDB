@@ -10,8 +10,8 @@ import os
 from typing import Dict, List
 import pandas as pd
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import TestLibraryManager, LibraryType, SequentialDataframesGenerator, Storage
-from arcticdb.util.utils import TimestampNumber
+from .environment_setup import TestLibraryManager, LibraryType, SequentialDataframesGenerator, Storage
+from arcticdb.util.test_utils import TimestampNumber
 from arcticdb.version_store.library import Library
 from benchmarks.common import AsvBase
 from arcticdb.util.test import config_context
