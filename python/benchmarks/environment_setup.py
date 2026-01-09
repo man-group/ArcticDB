@@ -80,7 +80,7 @@ def is_storage_enabled(storage: Storage) -> bool:
         raise RuntimeError(f"Only LMDB and AMAZON storages are supported, received {storage}")
 
 
-def create_libraries(storage: Storage, library_names: Iterable[str]) -> List[Optional[Library]]:
+def create_libraries(storage: Storage, library_names: List[str]) -> List[Optional[Library]]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.
 
@@ -117,7 +117,7 @@ def create_libraries(storage: Storage, library_names: Iterable[str]) -> List[Opt
     `aws s3 rb s3://<bucket-name> --region eu-west-2`
     """
     if not is_storage_enabled(storage):
-        return None
+        return [None] * len(library_names)
 
     if storage == Storage.LMDB:
         ac = Arctic(f"lmdb://tmp/{random.randint(0, 100_000)}")

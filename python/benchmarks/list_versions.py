@@ -121,9 +121,9 @@ class ListVersions:
     def time_list_versions(
         self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
     ):
-        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
+        assert self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
 
     def peakmem_list_versions(
         self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
     ):
-        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
+        assert self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
