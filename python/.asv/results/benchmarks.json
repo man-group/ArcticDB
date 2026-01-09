@@ -1387,7 +1387,7 @@
         "version": "166a93976c1ae0088bbb2477ee1d3e92672e7477a811b64747ee2b97bb078f26"
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage)\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
         "param_names": [
             "num_chunks",
@@ -1403,14 +1403,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:47",
+        "setup_cache_key": "finalize_staged_data:45",
         "timeout": 100,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "5ddb79ae543686906083e9c37475bc6dd1bc34c0df79be8ba2f4b5e207ebf05a"
+        "version": "defbeee92bd3cdca701262dd6032fc454c3f47d67b7f38713a7e8f89e5f719fb"
     },
     "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-time\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-time\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = dict()\n        for storage in self.storages:\n            lib = create_library(storage)\n            lib_for_storage[storage] = lib\n    \n        return lib_for_storage",
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-time\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-time\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 1,
         "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
         "number": 1,
@@ -1431,11 +1431,11 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:47",
+        "setup_cache_key": "finalize_staged_data:45",
         "timeout": 100,
         "type": "time",
         "unit": "seconds",
-        "version": "60565d7c36efd236c00f85bd649289308cd7f8013c59833356e58a4ef456eb37",
+        "version": "c3ec2b9e88db58166ea78b66b71354d3b13c8ca077e865208dd8848b788f7f8d",
         "warmup_time": 0
     },
     "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list": {
@@ -1551,7 +1551,7 @@
         "name": "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols",
         "param_names": [
             "num_symbols",
-            "param2"
+            "storage"
         ],
         "params": [
             [
@@ -1563,7 +1563,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "list_symbols:33",
+        "setup_cache_key": "list_symbols:35",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1576,7 +1576,7 @@
         "number": 1,
         "param_names": [
             "num_symbols",
-            "param2"
+            "storage"
         ],
         "params": [
             [
@@ -1591,7 +1591,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_symbols:33",
+        "setup_cache_key": "list_symbols:35",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1605,7 +1605,7 @@
         "number": 1,
         "param_names": [
             "num_symbols",
-            "param2"
+            "storage"
         ],
         "params": [
             [
@@ -1620,7 +1620,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_symbols:33",
+        "setup_cache_key": "list_symbols:35",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1628,9 +1628,10 @@
         "warmup_time": 0
     },
     "list_versions.ListVersions.peakmem_list_versions": {
-        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(\n            num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(\n            storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.lib = lib_for_storage[storage][self._lib_name(num_symbols, num_versions, num_snapshots)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        storages = self.params[0]\n        num_symbols = self.params[1]\n        num_versions = self.params[2]\n        num_snapshots = self.params[3]\n    \n        libs_for_storage = dict()\n    \n        library_names = [self._lib_name(n_symbols, n_versions, n_snaps) for n_symbols, n_versions, n_snaps in\n                         itertools.product(num_symbols, num_versions, num_snapshots)]\n    \n        for storage in storages:\n            if not is_storage_enabled(storage):\n                continue\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            for syms in num_symbols:\n                write_payloads = [WritePayload(self._sym_name(sym), 0) for sym in range(syms)]\n                for versions in num_versions:\n                    for snapshots in num_snapshots:\n                        lib_name = self._lib_name(syms, versions, snapshots)\n                        lib = libs_for_storage[storage][lib_name]\n                        for _ in range(versions):\n                            lib.write_pickle_batch(write_payloads)\n    \n                        for snapshot in range(snapshots):\n                            lib.snapshot(\n                                self._snap_name(snapshot),\n                                versions={self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},\n                            )\n    \n        return libs_for_storage",
         "name": "list_versions.ListVersions.peakmem_list_versions",
         "param_names": [
+            "storage",
             "num_symbols",
             "num_versions",
             "num_snapshots",
@@ -1640,6 +1641,10 @@
             "skip_snapshots"
         ],
         "params": [
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ],
             [
                 "10",
                 "100"
@@ -1669,18 +1674,19 @@
                 "False"
             ]
         ],
-        "setup_cache_key": "list_versions:45",
+        "setup_cache_key": "list_versions:77",
         "timeout": 500,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "4972db24905f7e8485de7b1dac319fe508ae3e67ccfc1e7df6e1a1785e6a68c9"
+        "version": "1c614ec4b70dd94e70011ef171d77f9b143623ed3d19d4a95a4bbaf1c1f1aa47"
     },
     "list_versions.ListVersions.time_list_versions": {
-        "code": "class ListVersions:\n    def time_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(\n            num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ListVersions:\n    def time_list_versions(\n        self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(\n            storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.lib = lib_for_storage[storage][self._lib_name(num_symbols, num_versions, num_snapshots)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        storages = self.params[0]\n        num_symbols = self.params[1]\n        num_versions = self.params[2]\n        num_snapshots = self.params[3]\n    \n        libs_for_storage = dict()\n    \n        library_names = [self._lib_name(n_symbols, n_versions, n_snaps) for n_symbols, n_versions, n_snaps in\n                         itertools.product(num_symbols, num_versions, num_snapshots)]\n    \n        for storage in storages:\n            if not is_storage_enabled(storage):\n                continue\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            for syms in num_symbols:\n                write_payloads = [WritePayload(self._sym_name(sym), 0) for sym in range(syms)]\n                for versions in num_versions:\n                    for snapshots in num_snapshots:\n                        lib_name = self._lib_name(syms, versions, snapshots)\n                        lib = libs_for_storage[storage][lib_name]\n                        for _ in range(versions):\n                            lib.write_pickle_batch(write_payloads)\n    \n                        for snapshot in range(snapshots):\n                            lib.snapshot(\n                                self._snap_name(snapshot),\n                                versions={self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},\n                            )\n    \n        return libs_for_storage",
         "min_run_count": 2,
         "name": "list_versions.ListVersions.time_list_versions",
         "number": 5,
         "param_names": [
+            "storage",
             "num_symbols",
             "num_versions",
             "num_snapshots",
@@ -1690,6 +1696,10 @@
             "skip_snapshots"
         ],
         "params": [
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ],
             [
                 "10",
                 "100"
@@ -1722,11 +1732,11 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_versions:45",
+        "setup_cache_key": "list_versions:77",
         "timeout": 500,
         "type": "time",
         "unit": "seconds",
-        "version": "67c614a576aa3e22c719845e9be88716f06787586c206c37ec5537dac74940af",
+        "version": "8ecb57dc2878202585998df6536c1296abf021dd234dbdac3997fa4298f5983d",
         "warmup_time": 0.1
     },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {
@@ -2381,24 +2391,6 @@
         "unit": "bytes",
         "version": "6959e1346e7402271c3233e74a4ae19545c58e7852dd8d47ceb3aba03d7aef29"
     },
-    "real_list_operations.AWSVersionSymbols.peakmem_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
-        "name": "real_list_operations.AWSVersionSymbols.peakmem_list_versions",
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "25",
-                "50"
-            ]
-        ],
-        "setup_cache_key": "real_list_operations:59",
-        "timeout": 1200,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "56c7e4326a6a5a2b9a71b8fd78003501c0a1d26fa6f1873509fdc6c91cae90af"
-    },
     "real_list_operations.AWSVersionSymbols.time_list_snapshots": {
         "code": "class AWSVersionSymbols:\n    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
         "min_run_count": 1,
@@ -2445,126 +2437,6 @@
         "type": "time",
         "unit": "seconds",
         "version": "d606b05b0bafb3aeb519be7e19b7734b50fa29b03d35930a61771ee689ed9bae",
-        "warmup_time": 0
-    },
-    "real_list_operations.AWSVersionSymbols.time_list_versions": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSVersionSymbols.time_list_versions",
-        "number": 3,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "25",
-                "50"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:59",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "bc1f9261fd04e65738f0494a3823d3670528f33f6d125dab804871c3e0d574a4",
-        "warmup_time": 0
-    },
-    "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only",
-        "number": 3,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "25",
-                "50"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:59",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "08f98136e4ed27c413ae42c38c3f6066c085fae581d54b4bd02716f3374c8347",
-        "warmup_time": 0
-    },
-    "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(latest_only=True, skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots",
-        "number": 3,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "25",
-                "50"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:59",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "549aa0723764402ae84a33d17ba8408505357bbd2b337ba126cf68b019f5bedc",
-        "warmup_time": 0
-    },
-    "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(skip_snapshots=True)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots",
-        "number": 3,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "25",
-                "50"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:59",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "92b243f11776f97959ea3c3902133131c571477249705cc709b1568e687ec0d4",
-        "warmup_time": 0
-    },
-    "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot": {
-        "code": "class AWSVersionSymbols:\n    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
-        "min_run_count": 1,
-        "name": "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot",
-        "number": 3,
-        "param_names": [
-            "num_syms"
-        ],
-        "params": [
-            [
-                "25",
-                "50"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_list_operations:59",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "d074a8a33a65568b0815861b17e7e9fb230f2aae19a78cc56decd8df791e7527",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendTests.time_append_large": {
