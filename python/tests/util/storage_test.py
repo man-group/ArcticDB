@@ -8,6 +8,7 @@ import numpy as np
 import argparse
 import re
 from datetime import datetime
+import ssl
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
@@ -62,8 +63,14 @@ def get_csv_df():
     return df, sym
 
 
+def remove_http_prefix(endpoint: str) -> str:
+    if endpoint is not None and "://" in endpoint:
+        endpoint = endpoint.split("://")[1]
+    return endpoint
+
+
 def real_s3_credentials(shared_path: bool = True):
-    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
+    endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_S3_ENDPOINT"))
     bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
     region = os.getenv("ARCTICDB_REAL_S3_REGION")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
@@ -79,9 +86,7 @@ def real_s3_credentials(shared_path: bool = True):
 
 
 def real_gcp_credentials(shared_path: bool = True):
-    endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    if endpoint is not None and "://" in endpoint:
-        endpoint = endpoint.split("://")[1]
+    endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_GCP_ENDPOINT"))
     bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
     region = os.getenv("ARCTICDB_REAL_GCP_REGION")
     access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
@@ -101,8 +106,8 @@ def real_azure_credentials(shared_path: bool = True):
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "")
-    constr = (os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),)
-    container = (os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"),)
+    constr = os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING")
+    container = os.getenv("ARCTICDB_REAL_AZURE_CONTAINER")
 
     clear = os.getenv("ARCTICDB_REAL_AZURE_CLEAR", "").lower() in ("true", "1")
 
@@ -170,14 +175,14 @@ def find_ca_certs():
 ###  there is no way how arcticdb 3.0 could have had the functions that we are going to implement
 ###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
-    container, constr, path_prefix = real_azure_credentials(shared_path)
-    ca_certs_file = find_ca_certs()
+    container, constr, path_prefix, _ = real_azure_credentials(shared_path)
     uri = f"azure://Container={container};Path_prefix={path_prefix}"
-    assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
     if sys.platform.lower().startswith("linux"):
+        ca_certs_file = find_ca_certs()
+        assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
         uri += f";CA_cert_path={ca_certs_file}"
-    url += f";{constr}"
-    return url
+    uri += f";{constr}"
+    return uri
 
 
 class PersistentTestType(Enum):
@@ -267,7 +272,7 @@ def verify_library(ac):
 
 
 def is_strategy_branch_valid_format(input_string):
-    pattern = r"^(linux|windows)_cp3(6|7|8|9|10|11|12|13).*$"
+    pattern = r"^(linux|windows|macos)_cp3(6|7|8|9|10|11|12|13).*$"
     match = re.match(pattern, input_string)
     return bool(match)
 
