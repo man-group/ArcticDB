@@ -24,8 +24,6 @@
 
 namespace arcticdb::storage::s3 {
 
-using PrefixHandler = std::function<std::string(const std::string&, const std::string&, const KeyDescriptor&, KeyType)>;
-
 const std::string USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_";
 
 class S3Storage : public Storage, AsyncStorage {
@@ -41,6 +39,10 @@ class S3Storage : public Storage, AsyncStorage {
     AsyncStorage* async_api() override { return this; }
 
     bool supports_object_size_calculation() const final;
+
+    // These are only public for testing purposes
+    S3ClientInterface& client() { return *s3_client_; }
+    bool directory_bucket() const { return directory_bucket_; }
 
   protected:
     void do_write(KeySegmentPair& key_seg) final;
@@ -80,7 +82,6 @@ class S3Storage : public Storage, AsyncStorage {
 
     std::string do_key_path(const VariantKey& key) const final { return get_key_path(key); };
 
-    S3ClientInterface& client() { return *s3_client_; }
     const std::string& bucket_name() const { return bucket_name_; }
     const std::string& root_folder() const { return root_folder_; }
 
@@ -92,6 +93,10 @@ class S3Storage : public Storage, AsyncStorage {
     std::string root_folder_;
     std::string bucket_name_;
     std::string region_;
+    // Directory (aka express) buckets in AWS only support ListObjectsV2 requests with prefixes ending in a '/'
+    // delimiter. Until we have proper feature detection, just cache if this is the case after the first failed listing
+    // operation with a prefix that does not end in a '/'
+    bool directory_bucket_{false};
 };
 
 class GCPXMLStorage : public S3Storage {

@@ -61,6 +61,15 @@ inline bool variant_key_id_empty(const VariantKey& vk) {
     );
 }
 
+inline bool variant_key_id_starts_with(const VariantKey& vk, std::string_view prefix) {
+    const auto& stream_id = variant_key_id(vk);
+    return util::variant_match(
+            stream_id,
+            [prefix](const StringId& id) { return id.starts_with(prefix); },
+            [prefix](NumericId id) { return std::to_string(id).starts_with(prefix); }
+    );
+}
+
 } // namespace arcticdb::entity
 
 namespace fmt {

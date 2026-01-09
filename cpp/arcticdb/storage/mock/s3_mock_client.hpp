@@ -70,6 +70,10 @@ class MockS3Client : public S3ClientInterface {
             const std::optional<std::string>& continuation_token
     ) const override;
 
+    void add_list_objects_failure_retryable(Aws::S3::S3Errors error);
+
+    void add_list_objects_failure_unretryable(Aws::S3::S3Errors error);
+
   private:
     // We store a std::nullopt for deleted segments.
     // We need to preserve the deleted keys in the map to ensure a correct thread-safe list_objects operation.
@@ -77,6 +81,11 @@ class MockS3Client : public S3ClientInterface {
     // new writes or deletes and we still need to return a consistent list of symbols.
     std::map<S3Key, std::optional<Segment>> s3_contents_;
     mutable std::mutex mutex_; // Used to guard the map.
+
+    // Failing listing operations based on symbol names isn't sufficient for testing the express bucket fallback
+    // mechanism. Allow setting a list of failure modes for list_objects calls. This list will be popped from until
+    // empty, at which point the listing operation will succeed.
+    mutable std::deque<std::pair<Aws::S3::S3Errors, bool>> list_objects_failures_;
 };
 
 } // namespace arcticdb::storage::s3

@@ -67,12 +67,19 @@ inline void remove_in_store(
     store.remove(std::span(to_remove), opts);
 }
 
-inline std::set<std::string> list_in_store(Storage& store, entity::KeyType key_type = entity::KeyType::TABLE_DATA) {
+inline std::set<std::string> list_in_store(
+        Storage& store, entity::KeyType key_type = entity::KeyType::TABLE_DATA,
+        const std::string& prefix = std::string()
+) {
     auto keys = std::set<std::string>();
-    store.iterate_type(key_type, [&keys](VariantKey&& key) {
-        auto atom_key = std::get<AtomKey>(key);
-        keys.emplace(std::get<StringId>(atom_key.id()));
-    });
+    store.iterate_type(
+            key_type,
+            [&keys](VariantKey&& key) {
+                auto atom_key = std::get<AtomKey>(key);
+                keys.emplace(std::get<StringId>(atom_key.id()));
+            },
+            prefix
+    );
     return keys;
 }
 
