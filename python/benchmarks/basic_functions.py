@@ -16,7 +16,6 @@ import pandas as pd
 
 from benchmarks.common import *
 
-
 # We use larger dataframes for non-batch methods
 PARAMS = [1_000_000, 10_000_000]
 PARAM_NAMES = ["rows"]
