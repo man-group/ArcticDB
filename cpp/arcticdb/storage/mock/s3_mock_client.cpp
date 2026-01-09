@@ -17,6 +17,14 @@ using namespace object_store_utils;
 
 namespace s3 {
 
+void MockS3Client::add_list_objects_failure_retryable(Aws::S3::S3Errors error) {
+    list_objects_failures_.emplace_back(error, true);
+}
+
+void MockS3Client::add_list_objects_failure_unretryable(Aws::S3::S3Errors error) {
+    list_objects_failures_.emplace_back(error, false);
+}
+
 std::string MockS3Client::get_failure_trigger(
         const std::string& s3_object_name, StorageOperation operation_to_fail, Aws::S3::S3Errors error_to_fail_with,
         bool retryable
@@ -196,6 +204,14 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
         const std::string& name_prefix, const std::string& bucket_name,
         const std::optional<std::string>& continuation_token
 ) const {
+    if (!list_objects_failures_.empty()) {
+        auto failure = list_objects_failures_.front();
+        auto res = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                failure.first, "Simulated error", "Simulated error message for list_objects", failure.second
+        ));
+        list_objects_failures_.pop_front();
+        return {res};
+    }
     std::scoped_lock<std::mutex> lock(mutex_);
 
     ListObjectsOutput output;

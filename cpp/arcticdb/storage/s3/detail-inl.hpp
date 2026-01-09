@@ -461,29 +461,21 @@ void do_update_impl(
     do_write_impl(std::move(kvs), root_folder, bucket_name, s3_client, std::forward<KeyBucketizer>(bucketizer));
 }
 
-inline PrefixHandler default_prefix_handler() {
-    return [](const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor& key_descriptor, KeyType
-           ) { return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir; };
-}
-
 struct PathInfo {
-    PathInfo(std::string prefix, std::string key_type_dir, size_t path_to_key_size) :
+    PathInfo(std::string&& prefix, size_t path_to_key_size) :
         key_prefix_(std::move(prefix)),
-        key_type_dir_(std::move(key_type_dir)),
         path_to_key_size_(path_to_key_size) {}
 
     std::string key_prefix_;
-    std::string key_type_dir_;
     size_t path_to_key_size_;
 };
 
-template<class KeyBucketizer>
-PathInfo calculate_path_info(
-        const std::string& root_folder, KeyType key_type, const PrefixHandler& prefix_handler,
-        const std::string& prefix, KeyBucketizer&& bucketizer
+inline PathInfo calculate_path_info(
+        const std::string& root_folder, KeyType key_type, const bool prefix_matching_supported,
+        const std::string& prefix, const size_t bucketize_length
 ) {
     auto key_type_dir = key_type_folder(root_folder, key_type);
-    const auto path_to_key_size = key_type_dir.size() + 1 + bucketizer.bucketize_length(key_type);
+    const auto path_to_key_size = key_type_dir.size() + 1 + bucketize_length;
     // if prefix is empty, add / to avoid matching both 'log' and 'logc' when key_type_dir is {root_folder}/log
     if (prefix.empty()) {
         key_type_dir += "/";
@@ -498,20 +490,85 @@ PathInfo calculate_path_info(
             is_ref_key_class(key_type) ? IndexDescriptorImpl::Type::UNKNOWN : IndexDescriptorImpl::Type::TIMESTAMP,
             FormatType::TOKENIZED
     );
-    auto key_prefix = prefix_handler(prefix, key_type_dir, key_descriptor, key_type);
+    auto key_prefix = [&]() {
+        if (prefix_matching_supported) {
+            return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
+        } else {
+            return key_type_dir;
+        }
+    }();
 
-    return {key_prefix, key_type_dir, path_to_key_size};
+    return {std::move(key_prefix), path_to_key_size};
 }
 
-template<class KeyBucketizer>
-bool do_iterate_type_impl(
-        KeyType key_type, const IterateTypePredicate& visitor, const std::string& root_folder,
-        const std::string& bucket_name, const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer,
-        const PrefixHandler& prefix_handler = default_prefix_handler(), const std::string& prefix = std::string{}
+inline bool visit_if_prefix_matches(const IterateTypePredicate& visitor, const std::string& prefix, VariantKey&& key) {
+    if (prefix.empty()) {
+        return visitor(std::move(key));
+    } else if (variant_key_id_starts_with(key, prefix)) {
+        return visitor(std::move(key));
+    } else {
+        return false;
+    }
+}
+
+inline void object_sizes_visit_if_prefix_matches(
+        const ObjectSizesVisitor& visitor, const std::string& prefix, const VariantKey& key, CompressedSize size
+) {
+    if (prefix.empty()) {
+        visitor(key, size);
+    } else if (variant_key_id_starts_with(key, prefix)) {
+        visitor(key, size);
+    }
+}
+
+template<typename Predicate>
+struct Visitor {
+    Visitor(const Predicate& primary_visitor, const std::optional<Predicate> fallback_visitor = std::nullopt) :
+        primary_visitor_(primary_visitor),
+        fallback_visitor_(fallback_visitor) {};
+    Predicate primary_visitor_;
+    std::optional<Predicate> fallback_visitor_;
+    // Directory (aka express) buckets in AWS only support ListObjectsV2 requests with prefixes ending in a '/'
+    // delimiter. Until we have proper feature detection, just cache if this is the case after the first failed listing
+    // operation with a prefix that does not end in a '/'
+    bool directory_bucket_{false};
+};
+
+template<typename Predicate>
+bool should_retry_with_directory_bucket_limitations(
+        Aws::S3::S3Errors error, const PathInfo& path_info, const Visitor<Predicate>& visitor
+) {
+    return error == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/') &&
+           visitor.fallback_visitor_.has_value();
+}
+
+template<typename Predicate>
+void adjust_for_directory_bucket_limitations(KeyType key_type, PathInfo& path_info, Visitor<Predicate>& visitor) {
+    log::storage().debug(
+            "Storage does not support prefix matches not ending in delimiter '/'. Falling back to "
+            "iterating all keys of type {} and prefix matching in memory.",
+            key_type
+    );
+    // It is possible that should_retry_with_directory_bucket_limitations returned true for some other reason when we
+    // are not in a directory bucket. In that case, the next call to do_iterate_type_impl/
+    // do_visit_object_sizes_for_type_impl should fail in the same way. Then we will raise, and the directory_bucket_
+    // field of the calling S3Storage object will not be modified.
+    visitor.directory_bucket_ = true;
+    visitor.primary_visitor_ = std::move(*visitor.fallback_visitor_);
+    // Needed to avoid infinite recursion in case should_retry_with_directory_bucket_limitations returned true for a
+    // reason other than being in a directory bucket
+    visitor.fallback_visitor_ = std::nullopt;
+    const auto last_slash_pos = path_info.key_prefix_.find_last_of('/');
+    path_info.key_prefix_ =
+            last_slash_pos == std::string::npos ? "" : path_info.key_prefix_.substr(0, last_slash_pos + 1);
+}
+
+inline bool do_iterate_type_impl(
+        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
+        Visitor<IterateTypePredicate>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageIterateType, 0)
 
-    auto path_info = calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::move(bucketizer));
     ARCTICDB_RUNTIME_DEBUG(
             log::storage(), "Iterating over objects in bucket {} with prefix {}", bucket_name, path_info.key_prefix_
     );
@@ -532,7 +589,7 @@ bool do_iterate_type_impl(
 
                 ARCTICDB_DEBUG(log::storage(), "Iterating key {}: {}", variant_key_type(k), variant_key_view(k));
                 ARCTICDB_SUBSAMPLE(S3StorageVisitKey, 0)
-                if (visitor(std::move(k))) {
+                if (visitor.primary_visitor_(std::move(k))) {
                     return true;
                 }
                 ARCTICDB_SUBSAMPLE(S3StorageCursorNext, 0)
@@ -540,6 +597,10 @@ bool do_iterate_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
+            if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
+                adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
+                return do_iterate_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
+            }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
                     key_type,
@@ -555,16 +616,11 @@ bool do_iterate_type_impl(
     return false;
 }
 
-template<class KeyBucketizer>
-void do_visit_object_sizes_for_type_impl(
-        KeyType key_type, const std::string& root_folder, const std::string& bucket_name,
-        const S3ClientInterface& s3_client, KeyBucketizer&& bucketizer, const PrefixHandler& prefix_handler,
-        const std::string& prefix, const ObjectSizesVisitor& visitor
+inline void do_visit_object_sizes_for_type_impl(
+        KeyType key_type, const std::string& bucket_name, const S3ClientInterface& s3_client, PathInfo& path_info,
+        Visitor<ObjectSizesVisitor>& visitor
 ) {
     ARCTICDB_SAMPLE(S3StorageCalculateSizesForType, 0)
-
-    auto path_info =
-            calculate_path_info(root_folder, key_type, prefix_handler, prefix, std::forward<KeyBucketizer>(bucketizer));
     ARCTICDB_RUNTIME_DEBUG(
             log::storage(),
             "Calculating sizes for objects in bucket {} with prefix {}",
@@ -587,11 +643,15 @@ void do_visit_object_sizes_for_type_impl(
                 auto key = name.substr(path_info.path_to_key_size_);
                 auto k = variant_key_from_bytes(reinterpret_cast<uint8_t*>(key.data()), key.size(), key_type);
 
-                visitor(k, size);
+                visitor.primary_visitor_(k, size);
             }
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
+            if (should_retry_with_directory_bucket_limitations(error.GetErrorType(), path_info, visitor)) {
+                adjust_for_directory_bucket_limitations(key_type, path_info, visitor);
+                return do_visit_object_sizes_for_type_impl(key_type, bucket_name, s3_client, path_info, visitor);
+            }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
                     key_type,
