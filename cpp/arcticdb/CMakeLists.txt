@@ -929,7 +929,7 @@ install(TARGETS arcticdb_ext
         RUNTIME DESTINATION . COMPONENT Python_Lib)
 
 # Improves portability (in setup.py) by creating an explicit target that manually installs the library
-if(NOT WIN32 AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" AND NOT ${ARCTICDB_KEEP_DEBUG_SYMBOLS})
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" AND NOT ${ARCTICDB_KEEP_DEBUG_SYMBOLS})
     # This is how we distribute the debug symbols separately on linux:
     # We create a gzipped copy of the .so before stripping it, which is uploaded by workflow here:
     # https://github.com/man-group/ArcticDB/blob/8ae5ef7a884a0bf7451b5da6f486e7eafe76273e/.github/workflows/build.yml#L164
