@@ -143,16 +143,21 @@ def extract_most_recent_result(lib, json_path) -> int:
     # "committer" time of the master commit
     master_date_iso = subprocess.run(["git", "log", "-1", "--format=%ci", "origin/master"], capture_output=True, text=True)
     master_date_pd = pd.Timestamp(master_date_iso.stdout.strip())
-    print(f"origin/master last commit was at {master_date_pd}")
+    print(f"origin/master - last commit was at {master_date_pd}")
 
     n = 0
-    stored_commit_ts = master_date_pd
+    # maximum number of master commits to look through
+    max_lookback = 50
+
+    # Maximum age of results stored in the ASV database
+    # We run benchmarks on master nightly, so 2 days should be plenty for the master results to become available
+    max_cached_result_age = pd.Timedelta(days=2)
+    now = pd.Timestamp.now()
 
     # Scan back over master commits origin/master~N until either:
     # - We find one in the ASV database
-    # - We do not find any results in the ASV database for a commit at least 2 days old
-    # We run benchmarks on master nightly, so 2 days should be plenty for the master results to become available
-    while master_date_pd - stored_commit_ts < pd.Timedelta(days=2):
+    # - We do not find any results in the ASV database that are more recent than max_cached_result_age old
+    while n < max_lookback:
         master_commit_hash = subprocess.run(["git", "rev-parse", f"origin/master~{n}"], capture_output=True, text=True)
         commit = master_commit_hash.stdout.strip()
         short_commit = commit[:8]
@@ -162,7 +167,12 @@ def extract_most_recent_result(lib, json_path) -> int:
         print(f"Looking up commit {short_commit} from time {stored_commit_ts} in ASV database. This is {master_date_pd - stored_commit_ts} older than origin/master")
 
         if lib.has_symbol(short_commit):
-            print(f"Found ASV results for master~{n} from time {stored_commit_ts}")
+            cache_update_ts = pd.Timestamp(lib.read(short_commit).timestamp)
+            print(f"Found ASV results for master~{n} committed at {stored_commit_ts} ASV results recorded at {cache_update_ts}")
+            if now - cache_update_ts > max_cached_result_age:
+                print(f"ASV results for commit {short_commit} have not been updated since {cache_update_ts}, not using them")
+                return 1
+
             _extract_asv_results_for_commit(lib, json_path, short_commit)
             with open("master_commit_hash.txt", "w") as f:
                 f.write(short_commit)
@@ -172,7 +182,7 @@ def extract_most_recent_result(lib, json_path) -> int:
 
         n += 1
     else:
-        print(f"No ASV results for master found in the last 2 days.")
+        print(f"No ASV results for master found for last {max_lookback} commits!")
         return 1
 
 
