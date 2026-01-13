@@ -45,7 +45,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Prebuilt binary availability (for the current version)
 
-|                       | [PyPI (Python 3.8 - 3.14)](https://pypi.org/project/arcticdb/) | [conda-forge (Python 3.10 - 3.14)](https://github.com/conda-forge/arcticdb-feedstock/?tab=readme-ov-file#current-release-info) |
+|                       | [PyPI (Python 3.9 - 3.14)](https://pypi.org/project/arcticdb/) | [conda-forge (Python 3.10 - 3.14)](https://github.com/conda-forge/arcticdb-feedstock/?tab=readme-ov-file#current-release-info) |
 | --------------------- | -- | -- |
 | Linux `x86_64`        | ✔️ | ✔️ |
 | Linux `arm64`         | ➖ | ✔️ |

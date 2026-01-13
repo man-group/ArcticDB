@@ -255,7 +255,7 @@ def unify_xml_for_run(run_id, download_dir):
 
         subversion = python_version[1:]
 
-        assert subversion in ["8", "9", "10", "11", "12", "13", "14"], python_version
+        assert subversion in ["9", "10", "11", "12", "13", "14"], python_version
 
         python_version = f"3.{subversion}"
 

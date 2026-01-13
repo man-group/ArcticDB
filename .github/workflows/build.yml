@@ -229,8 +229,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
+        # This uses old arcticdb versions which won't work on python >= 3.12
+        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -255,8 +255,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
+        # This uses old arcticdb versions which won't work on python >= 3.12
+        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -292,17 +292,11 @@ jobs:
       fail-fast: false
       matrix:
         # For storage runs that are not full matrix will have only one Python version
-        python3: ${{fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11, 12, 13, 14]')}}
+        python3: ${{fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[9, 10, 11, 12, 13, 14]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
             pytest_xdist_mode: "-n logical --dist worksteal"
-          - python3: 8
-            python_deps_ids: ["", -compat38]
-            matrix_override:
-              - ${{fromJson(needs.common_config.outputs.linux_matrix)[0]}}
-              - python_deps_id: -compat38
-                python_deps: requirements-compatibility-py38.txt
           - python3: 11
             python_deps_ids: ["", -compat311]
             matrix_override:
@@ -359,7 +353,7 @@ jobs:
       fail-fast: false
       matrix:
         # For storage runs that are not full matrix will have only one Python version
-        python3: ${{fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11, 12, 13, 14]')}}
+        python3: ${{fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[9, 10, 11, 12, 13, 14]')}}
         include:
           - matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: 3.${{matrix.python3}} Windows
@@ -388,8 +382,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
+        # This uses old arcticdb versions which won't work on python >= 3.12
+        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[9, 10, 11]' || '[11]') }}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -413,8 +407,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
+        # This uses old arcticdb versions which won't work on python >= 3.12
+        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[9, 10, 11]' || '[11]') }}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]

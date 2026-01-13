@@ -142,6 +142,14 @@ jobs:
           nohup rm -rf /mnt/usr/local/lib/android &
         continue-on-error: true
 
+      - name: Remove GitHub default packages (Base Runner)
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false # Time-consuming but doesn't save that much space (4GB)
+          docker-images: false  # We're using docker images we don't want to clear
+
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
         run: rm $(which ccache) || true
