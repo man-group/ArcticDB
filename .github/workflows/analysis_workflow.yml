@@ -28,7 +28,13 @@ on:
         default: false
   
 
-  schedule: # Schedule the job to run at 12 a.m. daily
+  # Run on push to master, just against LMDB backend. This is so that PR builds have recent master benchmark results
+  # to compare against.
+  push:
+    branches:
+      - master
+
+  schedule: # Schedule the job to run at 12 a.m. daily. This run uses all storages.
     - cron: '0 0 * * *'
 
   pull_request:
