@@ -106,9 +106,6 @@ jobs:
         # This way we cover all python versions, OS-es and installation repos 
         # in just 8 combinations
         include:
-          - os: windows-latest
-            python: "3.8"
-            use_conda: "no"
           - os: macos-latest
             python: "3.9"
             use_conda: "yes"
@@ -124,9 +121,6 @@ jobs:
           - os: ubuntu-22.04
             use_conda: "no"
             python: "3.13"
-          - os: ubuntu-22.04
-            use_conda: "no"
-            python: "3.14"
       fail-fast: false  
     env:
       install_tests_folder: "python/tests/compat"

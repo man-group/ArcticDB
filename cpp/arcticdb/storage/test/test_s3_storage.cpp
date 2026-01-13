@@ -13,7 +13,6 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
-#include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
@@ -413,4 +412,41 @@ TEST_F(S3StorageFixture, test_matching_key_type_prefix_list) {
     ASSERT_EQ(list_in_store(store, entity::KeyType::LOG_COMPACTED), log_compacted_symbols);
 
     ASSERT_EQ(list_in_store(store, entity::KeyType::LOG), log_symbols);
+}
+
+// The first call to ListObjectsV2 with a directory bucket and a prefix not ending in the '/' delimiter returns this
+// error. We then retry effectively without the prefix, which should succeed
+TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
+    auto* mock_s3_client = dynamic_cast<MockS3Client*>(&store.client());
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
+    std::string prefix("symbol_");
+    auto symbols = std::set<std::string>();
+    for (int i = 10; i < 25; ++i) {
+        auto symbol_matching_prefix = fmt::format("{}_{}", prefix, i);
+        write_in_store(store, symbol_matching_prefix);
+        symbols.emplace(symbol_matching_prefix);
+        auto symbol_not_matching_prefix = fmt::format("blah_{}_{}", prefix, i);
+        write_in_store(store, symbol_matching_prefix);
+    }
+    ASSERT_EQ(list_in_store(store, KeyType::TABLE_DATA, prefix), symbols);
+    ASSERT_TRUE(store.directory_bucket());
+}
+
+TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
+    auto* mock_s3_client = dynamic_cast<MockS3Client*>(&store.client());
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
+    // This simulates the case where the invalid request response was not due to a directory bucket, but because of
+    // something else. In this case we should raise
+    mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
+    std::string prefix("symbol_");
+    auto symbols = std::set<std::string>();
+    for (int i = 10; i < 25; ++i) {
+        auto symbol_matching_prefix = fmt::format("{}_{}", prefix, i);
+        write_in_store(store, symbol_matching_prefix);
+        symbols.emplace(symbol_matching_prefix);
+        auto symbol_not_matching_prefix = fmt::format("blah_{}_{}", prefix, i);
+        write_in_store(store, symbol_matching_prefix);
+    }
+    ASSERT_THROW(list_in_store(store, KeyType::TABLE_DATA, prefix), UnexpectedS3ErrorException);
+    ASSERT_FALSE(store.directory_bucket());
 }
