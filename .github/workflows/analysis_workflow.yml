@@ -130,7 +130,10 @@ jobs:
     name: Executes asv tests checks
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag || 'latest' }}
+    container:     
+      image: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag || 'latest' }}
+      volumes:
+        - /:/mnt
     env:
         # 0 - uses S3 Cache, 1 - uses GHA cache
         # this way the external PRs can use the GHA cache
@@ -180,7 +183,16 @@ jobs:
         with:
             bucket: "arcticdb-asv-real-storage"
             aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
-            aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"      
+            aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      - name: Free Disk Space (Container)
+        run: |          
+          rm -rf /mnt/usr/local/lib/android 
+          rm -rf /mnt/usr/share/dotnet
+          rm -rf /mnt/usr/local/share/boost
+          rm -rf /mnt/opt/ghc
+          rm -rf /mnt/opt/hostedtoolcache/CodeQL
+          rm -rf /mnt/usr/local/lib/node_modules      
 
       # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
       - name: Setup micromamba
