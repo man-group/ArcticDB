@@ -25,7 +25,7 @@ def get_git_tags():
     pattern = r"^v[0-9]+\.[0-9]+\.[0-9]+$"
     tags = [tag for tag in result.stdout.splitlines() if re.match(pattern, tag)]
     # We are only interested in tags with version 5.3.0 or higher
-    # Because older versions are trying to use depricated Numpy versions
+    # Because older versions are trying to use deprecated Numpy versions
     filtered_tags = [tag for tag in tags if get_version_from_tag(tag) >= (5, 3, 0)]
     return filtered_tags
 
@@ -41,14 +41,14 @@ parser = ArgumentParser(
     description="Add a list of commits that need to be benchmarked to the GitHub output"
 )
 parser.add_argument(
-    "--run_all_benchmarks",
-    help="Should we get the tags and commits for all benchmarks, or just the current one",
+    "--benchmark_all_tags",
+    help="Should we benchmark all tags, or just HEAD",
     action="store_true",
 )
 
 args = parser.parse_args()
 
-if args.run_all_benchmarks:
+if args.benchmark_all_tags:
     tags = get_git_tags()
     commits = [get_commit_from_tag(tag) for tag in tags]
 else:

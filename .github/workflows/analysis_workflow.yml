@@ -2,8 +2,8 @@ name: Build with analysis tools
 on:
   workflow_dispatch:
     inputs:
-      run_all_benchmarks:
-        description: Run all benchmarks
+      benchmark_all_tags:
+        description: Run benchmarks against all tags in the repo rather than just the HEAD commit
         type: boolean
         default: false
       dev_image_tag:
@@ -28,10 +28,16 @@ on:
         default: false
   
 
-  schedule: # Schedule the job to run at 12 a.m. daily
+  # Run on push to master, just against LMDB backend. This is so that PR builds have recent master benchmark results
+  # to compare against.
+  push:
+    branches:
+      - master
+
+  schedule: # Schedule the job to run at 12 a.m. daily. This run uses all storages.
     - cron: '0 0 * * *'
 
-  pull_request_target:
+  pull_request:
     paths-ignore:
     - "**/*.md"
 
@@ -45,15 +51,13 @@ jobs:
         uses: actions/checkout@v3.3.0
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
 
       - name: Get tags
         id: get_tags
         run: | 
-          python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.run_all_benchmarks == true && '--run_all_benchmarks' || ''}}
+          python3 build_tooling/get_commits_for_benchmark.py ${{ inputs.benchmark_all_tags == true && '--benchmark_all_tags' || ''}}
     outputs:
       matrix: ${{ steps.get_tags.outputs.commits }}
-
 
   benchmark_commits:
     needs: [get_commits_to_benchmark]  
@@ -66,15 +70,14 @@ jobs:
     secrets: inherit
     with:
       commit: ${{ matrix.commits }}
-      run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
-      run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
+      benchmark_all_tags: ${{ inputs.benchmark_all_tags || false }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
       suite_to_run: ${{  github.event_name == 'schedule' && 'ALL' || inputs.suite_to_run || 'LMDB'}}
       suite_overwrite: ${{ inputs.suite_overwrite || ''}}
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
-    if: ${{ github.event_name != 'pull_request_target' }} # only publish for the scheduled master builds
+    if: ${{ github.event_name == 'schedule' }} # only publish for the scheduled master builds
     needs: [benchmark_commits]
     runs-on: ubuntu-22.04
     container:
@@ -106,7 +109,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -160,7 +162,6 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs          
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -237,7 +238,6 @@ jobs:
       job_type: cpp-tests
       cmake_preset_type: debug
       matrix: '[{"os": "linux", "distro": "ubuntu-22.04", "container": {"image": "ghcr.io/man-group/arcticdb-dev-clang:latest"}, "cmake_preset_prefix": "linux", "cibw_build_suffix": "manylinux_x86_64", "build_dir": "/tmp/cpp_build_asan", "vcpkg_installed_dir": "/tmp/vcpkg_installed_asan", "vcpkg_packages_dir": "/tmp/vcpkg_packages_asan", "symbols": "*.pdb", "do_not_archive": ["*.o", "*.obj", "*.a", "*.lib"], "test_services": {}, "cmake_extra_args": "''-DARCTICDB_USING_ADDRESS_SANITIZER=ON'', ''-DARCTICDB_USING_UB_SANITIZER=ON''", "envs": "ARCTICDB_USE_SANITIZER=address,leak,undefined"}]'
-      ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
 
   # Temporarily disabled due to too many issues that need to suppressed
   # sanitizer-thread:
@@ -270,7 +270,6 @@ jobs:
   #     - uses: actions/checkout@v3.3.0
   #       with:
   #         submodules: recursive
-  #         ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
 
   #     - name: Get number of CPU cores
   #       uses: SimenB/github-actions-cpu-cores@v1.1.0

@@ -22,8 +22,8 @@ from .common import *
 
 class IterateVersionChain:
     timeout = 6000
-    sample_time = 1
-    rounds = 1
+    sample_time = 2
+    rounds = 2
 
     DIR_UNDELETED = "version_chain"
     DIR_TAIL_DELETED = "version_chain_tail_deleted"
