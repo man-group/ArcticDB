@@ -38,8 +38,8 @@ dependencies:
   - sel(win): libprotobuf==5.29.3=h*_3
   - sel(unix): libprotobuf <7
   - openssl
-  # TODO: understand failures with libcurl>=8.17
-  - libcurl <8.17
+  # TODO: Understand failures with 8.17
+  - libcurl >=8.18
   - bitmagic
   - sparrow-devel==1.4.0
   - spdlog
