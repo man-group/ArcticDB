@@ -81,7 +81,9 @@ def is_storage_enabled(storage: Storage) -> bool:
         raise RuntimeError(f"Only LMDB and AMAZON storages are supported, received {storage}")
 
 
-def create_libraries(storage: Storage, library_names: List[str]) -> List[Optional[Library]]:
+def create_libraries(
+    storage: Storage, library_names: List[str], library_options: LibraryOptions = LibraryOptions()
+) -> List[Optional[Library]]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.
 
@@ -131,12 +133,12 @@ def create_libraries(storage: Storage, library_names: List[str]) -> List[Optiona
     res = []
     for l in library_names:
         ac.delete_library(l)
-        res.append(ac.create_library(l))
+        res.append(ac.create_library(l, library_options=library_options))
 
     return res
 
 
-def create_library(storage: Storage) -> Optional[Library]:
+def create_library(storage: Storage, library_options: LibraryOptions = LibraryOptions()) -> Optional[Library]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.
 
@@ -144,14 +146,19 @@ def create_library(storage: Storage) -> Optional[Library]:
 
     See create_libraries docstring for notes on running locally.
     """
+    if not is_storage_enabled(storage):
+        return None
+
     lib_name = random_ascii_string(10)
-    return create_libraries(storage, [lib_name])[0]
+    return create_libraries(storage, [lib_name], library_options)[0]
 
 
-def create_libraries_across_storages(storages: Iterable[Storage]) -> Dict[Storage, Optional[Library]]:
+def create_libraries_across_storages(
+    storages: Iterable[Storage], library_options: LibraryOptions = LibraryOptions()
+) -> Dict[Storage, Optional[Library]]:
     """Create libraries for benchmarking on each of storages. If the storage not is_storage_enabled, the value
     for that storage will be None."""
-    return {s: create_library(s) for s in storages}
+    return {s: create_library(s, library_options) for s in storages}
 
 
 class StorageSetup:
