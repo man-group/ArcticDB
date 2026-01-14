@@ -10,17 +10,20 @@ import time
 
 from arcticdb import Arctic, QueryBuilder
 from arcticdb.version_store.library import UpdatePayload, WritePayload, ReadRequest
-from asv_runner.benchmarks.mark import skip_benchmark
+from asv_runner.benchmarks.mark import skip_benchmark, SkipNotImplemented
 
 import pandas as pd
 
 from benchmarks.common import *
 
+from arcticdb.util.logger import get_logger
+from benchmarks.common import generate_pseudo_random_dataframe, get_prewritten_lib_name
+from benchmarks.environment_setup import Storage, create_libraries_across_storages, is_storage_enabled, \
+    create_libraries
+
 # We use larger dataframes for non-batch methods
 PARAMS = [1_000_000, 10_000_000]
 PARAM_NAMES = ["rows"]
-BATCH_PARAMS = ([25_000, 50_000], [100, 200])
-BATCH_PARAM_NAMES = ["rows", "num_symbols"]
 DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
@@ -172,100 +175,139 @@ class ShortWideRead:
         self.lib.read(f"sym_{rows}")
 
 
-class BatchBasicFunctions:
+class BatchWrite:
     rounds = 1
     sample_time = 0.1
 
-    CONNECTION_STRING = "lmdb://batch_basic_functions"
-    DATE_RANGE = DATE_RANGE
-    params = BATCH_PARAMS
-    param_names = BATCH_PARAM_NAMES
+    num_rows = [25_000, 50_000]
+    num_symbols = [100, 200]
+    storages = [Storage.LMDB, Storage.AMAZON]
+
+    params = [num_rows, num_symbols, storages]
+    param_names = ["num_rows", "num_symbols", "storage"]
+
+    def __init__(self):
+        self.logger = get_logger()
+        self.lib = None
+        self.df = None
+
+    def setup_cache(self):
+        start = time.time()
+        lib_for_storage = self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        return lib_for_storage
+
+    def _lib_name(self, rows):
+        return f"lib_{rows}"
+
+    def _setup_cache(self):
+        lib_for_storage = create_libraries_across_storages(BatchWrite.storages)
+        return lib_for_storage
+
+    def setup(self, lib_for_storage, rows, num_symbols, storage):
+        self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
+
+        self.df = generate_pseudo_random_dataframe(rows)
+
+    def time_write_batch(self, lib_for_storage, rows, num_symbols, storage):
+        payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
+        self.lib.write_batch(payloads)
+
+    def peakmem_write_batch(self, lib_for_storage, rows, num_symbols, storage):
+        payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
+        self.lib.write_batch(payloads)
+
+
+class BatchFunctions:
+    rounds = 1
+    sample_time = 0.1
+
+    num_rows = [25_000, 50_000]
+    num_symbols = [100, 200]
+    storages = [Storage.LMDB, Storage.AMAZON]
+
+    params = [num_rows, num_symbols, storages]
+    param_names = ["num_rows", "num_symbols", "storage"]
 
     def __init__(self):
         self.logger = get_logger()
 
     def setup_cache(self):
         start = time.time()
-        self._setup_cache()
+        lib_for_storage = self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        return lib_for_storage
+
+    def _lib_name(self, rows):
+        return f"lib_{rows}"
 
     def _setup_cache(self):
-        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
-        rows_values, num_symbols_values = BatchBasicFunctions.params
+        libs_for_storage = dict()
+        library_names = [self._lib_name(rows) for rows in BatchFunctions.num_rows]
+        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in BatchFunctions.num_rows}
 
-        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}
-        for rows in rows_values:
-            lib = get_prewritten_lib_name(rows)
-            self.ac.delete_library(lib)
-            self.ac.create_library(lib)
-            lib = self.ac[lib]
-            for sym in range(num_symbols_values[-1]):
-                lib.write(f"{sym}_sym", self.dfs[rows])
+        for storage in BatchFunctions.storages:
+            libraries = create_libraries(storage, library_names)
+            libs_for_storage[storage] = dict(zip(library_names, libraries))
 
-    def teardown(self, rows, num_symbols):
-        for lib in self.ac.list_libraries():
-            if "prewritten" in lib:
-                continue
-            self.ac.delete_library(lib)
+        for rows in BatchFunctions.num_rows:
+            num_syms = BatchFunctions.num_symbols[-1]
+            df = self.dfs[rows]
+            lib_name = self._lib_name(rows)
+            write_payloads = [WritePayload(f"{i}_sym", df) for i in range(num_syms)]
+            for storage in BatchFunctions.storages:
+                lib = libs_for_storage[storage][lib_name]
+                if not lib:
+                    continue
+                lib.write_batch(write_payloads)
 
-        del self.ac
+        return libs_for_storage
 
-    def setup(self, rows, num_symbols):
-        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
-        self.read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
+    def setup(self, libs_for_storage, rows, num_symbols, storage):
+        self.lib = libs_for_storage[storage][self._lib_name(rows)]
+        if self.lib is None:
+            raise SkipNotImplemented
 
         self.df = generate_pseudo_random_dataframe(rows)
         self.update_df = generate_pseudo_random_dataframe(rows // 2)
-        self.lib = self.ac[get_prewritten_lib_name(rows)]
-        self.fresh_lib = self.get_fresh_lib()
 
-    def get_fresh_lib(self):
-        self.ac.delete_library("fresh_lib")
-        lib = self.ac.create_library("fresh_lib")
-        return lib
-
-    def time_write_batch(self, rows, num_symbols):
-        payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
-        self.fresh_lib.write_batch(payloads)
-
-    def peakmem_write_batch(self, rows, num_symbols):
-        payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
-        self.fresh_lib.write_batch(payloads)
-
-    def time_update_batch(self, rows, num_symbols):
+    def time_update_batch(self, libs_for_storage, rows, num_symbols, storage):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
         results = self.lib.update_batch(payloads)
         assert results[0].version >= 1
         assert results[-1].version >= 1
 
     @skip_benchmark
-    def peakmem_update_batch(self, rows, num_symbols):
+    def peakmem_update_batch(self, libs_for_storage, rows, num_symbols, storage):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
         results = self.lib.update_batch(payloads)
         assert results[0].version >= 1
+        assert results[-1].version >= 1
 
-    def time_read_batch(self, rows, num_symbols):
+    def time_read_batch(self, libs_for_storage, rows, num_symbols, storage):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-    def peakmem_read_batch(self, rows, num_symbols):
+    def peakmem_read_batch(self, libs_for_storage, rows, num_symbols, storage):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-    def time_read_batch_with_columns(self, rows, num_symbols):
+    def time_read_batch_with_columns(self, libs_for_storage, rows, num_symbols, storage):
         COLS = ["value"]
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-    def peakmem_read_batch_with_columns(self, rows, num_symbols):
+    def peakmem_read_batch_with_columns(self, libs_for_storage, rows, num_symbols, storage):
         COLS = ["value"]
         read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-    def time_read_batch_with_date_ranges(self, rows, num_symbols):
-        read_reqs = [ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]
+    def time_read_batch_with_date_ranges(self, libs_for_storage, rows, num_symbols, storage):
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=DATE_RANGE) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-    def peakmem_read_batch_with_date_ranges(self, rows, num_symbols):
-        read_reqs = [ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]
+    def peakmem_read_batch_with_date_ranges(self, libs_for_storage, rows, num_symbols, storage):
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=DATE_RANGE) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
