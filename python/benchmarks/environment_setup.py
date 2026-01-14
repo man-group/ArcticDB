@@ -134,6 +134,7 @@ def create_libraries(storage: Storage, library_names: List[str]) -> List[Optiona
 
     return res
 
+
 def create_library(storage: Storage) -> Optional[Library]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import itertools
 import random
 from arcticdb import WritePayload
@@ -82,8 +83,10 @@ class ListVersions:
 
         libs_for_storage = dict()
 
-        library_names = [self._lib_name(n_symbols, n_versions, n_snaps) for n_symbols, n_versions, n_snaps in
-                         itertools.product(num_symbols, num_versions, num_snapshots)]
+        library_names = [
+            self._lib_name(n_symbols, n_versions, n_snaps)
+            for n_symbols, n_versions, n_snaps in itertools.product(num_symbols, num_versions, num_snapshots)
+        ]
 
         for storage in storages:
             if not is_storage_enabled(storage):
@@ -110,7 +113,18 @@ class ListVersions:
     def teardown(self, *args):
         pass
 
-    def setup(self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):
+    def setup(
+        self,
+        lib_for_storage,
+        storage,
+        num_symbols,
+        num_versions,
+        num_snapshots,
+        symbol,
+        snapshot,
+        latest_only,
+        skip_snapshots,
+    ):
         self.check_if_skipped_parameter(
             storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
         )
@@ -119,11 +133,33 @@ class ListVersions:
             raise SkipNotImplemented
 
     def time_list_versions(
-        self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
+        self,
+        lib_for_storage,
+        storage,
+        num_symbols,
+        num_versions,
+        num_snapshots,
+        symbol,
+        snapshot,
+        latest_only,
+        skip_snapshots,
     ):
-        assert self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
+        assert self.lib.list_versions(
+            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots
+        )
 
     def peakmem_list_versions(
-        self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots
+        self,
+        lib_for_storage,
+        storage,
+        num_symbols,
+        num_versions,
+        num_snapshots,
+        symbol,
+        snapshot,
+        latest_only,
+        skip_snapshots,
     ):
-        assert self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)
+        assert self.lib.list_versions(
+            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots
+        )

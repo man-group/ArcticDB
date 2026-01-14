@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import itertools
 import sys
 
@@ -42,7 +43,10 @@ class Snapshots:
         write_parameters = list(itertools.product(self.num_symbols, self.num_snapshots, self.metadata_entries))
         assert write_parameters
         libs_for_storage = dict()
-        library_names = [get_lib_name(num_syms=n_syms, num_snaps=n_snaps, metadata_size=md_size) for n_syms, n_snaps, md_size in write_parameters]
+        library_names = [
+            get_lib_name(num_syms=n_syms, num_snaps=n_snaps, metadata_size=md_size)
+            for n_syms, n_snaps, md_size in write_parameters
+        ]
         simple_df = pd.DataFrame({"a": [1]})
 
         metadata = {md_size: get_metadata(n_entries=md_size) for md_size in self.metadata_entries}
@@ -74,6 +78,8 @@ class Snapshots:
         if self.lib is None:
             raise SkipNotImplemented
 
-    def time_list_snapshots(self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata):
+    def time_list_snapshots(
+        self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata
+    ):
         res = self.lib.list_snapshots(load_metadata=load_metadata)
         assert len(res) == num_snapshots, f"Expected {num_snapshots} snapshots but were {len(res)}"
