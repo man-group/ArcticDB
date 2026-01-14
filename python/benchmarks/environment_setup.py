@@ -253,6 +253,7 @@ class StorageSetup:
             raise Exception("Unsupported storage type :", storage)
 
 
+# TODO aseaton rip this out
 class TestLibraryManager:
     """
     This class is a thin wrapper around Arctic class. Its goal is to provide natural user
@@ -459,6 +460,7 @@ class DataFrameGenerator(ABC):
         pass
 
 
+# TODO aseaton rip this out
 class VariableSizeDataframe(DataFrameGenerator):
 
     def __init__(self):
@@ -493,6 +495,7 @@ class VariableSizeDataframe(DataFrameGenerator):
         return df
 
 
+# TODO aseaton rip this out
 class LibraryPopulationPolicy:
     """
     By default library population policy uses a list of number of rows per symbol, where numbers would be unique.
@@ -729,6 +732,7 @@ class SequentialDataframesGenerator:
         return next
 
 
+# TODO aseaton rip this out
 class TestsForTestLibraryManager:
     """
     This class contains tests for the framework. All changes to the framework
