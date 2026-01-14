@@ -9,7 +9,7 @@ import pandas as pd
 
 from arcticdb import LibraryOptions
 import arcticdb.toolbox.query_stats as qs
-from arcticdb.util.update_and_defrag import _generate_levels, _generate_date_to_read_from, _update_and_defrag
+from arcticdb.util.append_and_defrag import _generate_levels, _generate_date_to_read_from, _append_and_defrag_idempotent
 from arcticdb.util.test import assert_frame_equal
 
 
@@ -55,42 +55,42 @@ def test_basic_flow_single_symbol(lmdb_library_factory):
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = df
     # First call will upsert with row slice 0-3
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 1
     assert_frame_equal(expected_result, lib.read(sym).data)
     # Second call will combine with existing data as 6 rows > 4 lowest level to produce row slice 0-6
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 1
     assert_frame_equal(expected_result, lib.read(sym).data)
     # Third call will do no compaction to produce row slices 0-6 and 6-9
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 2
     assert_frame_equal(expected_result, lib.read(sym).data)
     # Fourth call will combine with last row slice, but not first to produce row slices 0-6 and 6-12
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 2
     assert_frame_equal(expected_result, lib.read(sym).data)
     # Fifth call will do no compaction to produce row slices 0-6, 6-12, and 12-15
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 3
     assert_frame_equal(expected_result, lib.read(sym).data)
     # Sixth call will compact everything into 1 segment as we now have >16 rows, to produce row slice 0-18
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 1
     assert_frame_equal(expected_result, lib.read(sym).data)
     # At 21 appends we will have 63 rows total and be at the most fragmented state
@@ -99,14 +99,14 @@ def test_basic_flow_single_symbol(lmdb_library_factory):
         ts += pd.Timedelta(1, unit="days")
         df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
         expected_result = pd.concat([expected_result, df])
-        _update_and_defrag(lib, [(sym, df)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
         assert_frame_equal(expected_result, lib.read(sym).data)
     assert len(lib._nvs.read_index(sym)) == 5
     # One more append will take us over 64 rows, and so get sliced on the update call to produce row slices 0-64 and 64-66
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 2
     assert_frame_equal(expected_result, lib.read(sym).data)
     # The next append will actually re-slice the 0-64 into 0-63 and 63-69, as we have to defragment based on date_range,
@@ -114,14 +114,14 @@ def test_basic_flow_single_symbol(lmdb_library_factory):
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 2
     assert_frame_equal(expected_result, lib.read(sym).data)
     # We then reslice again into 0-64 and 64-72
     ts += pd.Timedelta(1, unit="days")
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = pd.concat([expected_result, df])
-    _update_and_defrag(lib, [(sym, df)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
     assert len(lib._nvs.read_index(sym)) == 2
     assert_frame_equal(expected_result, lib.read(sym).data)
 
@@ -141,7 +141,7 @@ def test_basic_flow_multi_symbol(lmdb_library_factory):
     # First call will upsert
     # sym_0: 0-3
     # sym_1: 0-4
-    _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
     assert len(lib._nvs.read_index(sym_0)) == 1
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 1
@@ -154,7 +154,7 @@ def test_basic_flow_multi_symbol(lmdb_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     expected_result_0 = pd.concat([expected_result_0, df_0])
     expected_result_1 = pd.concat([expected_result_1, df_1])
-    _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
     assert len(lib._nvs.read_index(sym_0)) == 1
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 2
@@ -167,7 +167,7 @@ def test_basic_flow_multi_symbol(lmdb_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     expected_result_0 = pd.concat([expected_result_0, df_0])
     expected_result_1 = pd.concat([expected_result_1, df_1])
-    _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
     assert len(lib._nvs.read_index(sym_0)) == 2
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 3
@@ -180,7 +180,7 @@ def test_basic_flow_multi_symbol(lmdb_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     expected_result_0 = pd.concat([expected_result_0, df_0])
     expected_result_1 = pd.concat([expected_result_1, df_1])
-    _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
     assert len(lib._nvs.read_index(sym_0)) == 2
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 1
@@ -193,7 +193,7 @@ def test_basic_flow_multi_symbol(lmdb_library_factory):
         df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
         expected_result_0 = pd.concat([expected_result_0, df_0])
         expected_result_1 = pd.concat([expected_result_1, df_1])
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
     assert len(lib._nvs.read_index(sym_0)) == 4
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 1
@@ -205,7 +205,7 @@ def test_basic_flow_multi_symbol(lmdb_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     expected_result_0 = pd.concat([expected_result_0, df_0])
     expected_result_1 = pd.concat([expected_result_1, df_1])
-    _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
     assert len(lib._nvs.read_index(sym_0)) == 5
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 2
@@ -221,12 +221,12 @@ def test_single_symbol_idempotency(lmdb_library_factory):
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = df
     # First call will upsert with row slice 0-3
-    _update_and_defrag(lib, [(sym, df)], factor)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor)
     assert len(lib._nvs.read_index(sym)) == 1
     assert_frame_equal(expected_result, lib.read(sym).data)
     # If we call again with the same index value then nothing should change
     df = pd.DataFrame({"col": np.arange(rows_per_df, 2 * rows_per_df)}, index=rows_per_df * [ts])
-    _update_and_defrag(lib, [(sym, df)], factor)
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor)
     index = lib._nvs.read_index(sym)
     assert all(version == 0 for version in index["version_id"].to_list())
     assert len(index) == 1
@@ -243,7 +243,7 @@ def test_multi_symbol_idempotency(lmdb_library_factory):
     df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result = df
     # First call will upsert with row slice 0-3
-    _update_and_defrag(lib, [(sym_0, df), (sym_1, df)], factor)
+    _append_and_defrag_idempotent(lib, [(sym_0, df), (sym_1, df)], factor)
     assert len(lib._nvs.read_index(sym_0)) == 1
     assert_frame_equal(expected_result, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_0)) == 1
@@ -253,7 +253,7 @@ def test_multi_symbol_idempotency(lmdb_library_factory):
     df_0 = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result_0 = pd.concat([expected_result, df_0])
     expected_result_1 = expected_result
-    _update_and_defrag(lib, [(sym_0, df_0)], factor)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0)], factor)
     assert len(lib._nvs.read_index(sym_0)) == 1
     assert_frame_equal(expected_result_0, lib.read(sym_0).data)
     assert len(lib._nvs.read_index(sym_1)) == 1
@@ -262,7 +262,7 @@ def test_multi_symbol_idempotency(lmdb_library_factory):
     df_0 = pd.DataFrame({"col": np.arange(rows_per_df, 2 * rows_per_df)}, index=rows_per_df * [ts])
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
     expected_result_1 = pd.concat([expected_result_1, df_1])
-    _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor)
+    _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor)
     index_0 = lib._nvs.read_index(sym_0)
     assert all(version == 1 for version in index_0["version_id"].to_list())
     assert len(index_0) == 1
@@ -271,22 +271,23 @@ def test_multi_symbol_idempotency(lmdb_library_factory):
     assert_frame_equal(expected_result_1, lib.read(sym_1).data)
 
 
-def test_io_count(s3_library_factory):
-    def assert_data_key_ios(stats, expected_reads, expected_writes):
-        try:
-            read_count = stats["S3_GetObject"]["TABLE_DATA"]["count"]
-        except KeyError:
-            read_count = 0
-        try:
-            write_count = stats["S3_PutObject"]["TABLE_DATA"]["count"]
-        except KeyError:
-            write_count = 0
-        assert read_count == expected_reads
-        assert write_count == expected_writes
+def assert_data_key_ios(stats, expected_reads, expected_writes):
+    try:
+        read_count = stats["S3_GetObject"]["TABLE_DATA"]["count"]
+    except KeyError:
+        read_count = 0
+    try:
+        write_count = stats["S3_PutObject"]["TABLE_DATA"]["count"]
+    except KeyError:
+        write_count = 0
+    assert read_count == expected_reads
+    assert write_count == expected_writes
 
+
+def test_io_count_basic(s3_library_factory):
     lib = s3_library_factory(LibraryOptions(rows_per_segment=64))
-    sym_0 = "test_io_count_0"
-    sym_1 = "test_io_count_1"
+    sym_0 = "test_io_count_basic_0"
+    sym_1 = "test_io_count_basic_1"
     rows_per_df_0 = 3
     rows_per_df_1 = 4
     factor = 4  # levels will be [64, 16, 4]
@@ -297,13 +298,13 @@ def test_io_count(s3_library_factory):
     # sym_0: 0-3
     # sym_1: 0-4
     with qs.query_stats():
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
         stats = qs.get_query_stats()["storage_operations"]
     qs.reset_stats()
     assert_data_key_ios(stats, 0, 2)
     # Make the same call again - idempotent so no data keys written the second time
     with qs.query_stats():
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
         stats = qs.get_query_stats()["storage_operations"]
     qs.reset_stats()
     assert_data_key_ios(stats, 0, 0)
@@ -314,7 +315,7 @@ def test_io_count(s3_library_factory):
     df_0 = pd.DataFrame({"col": np.arange(rows_per_df_0)}, index=rows_per_df_0 * [ts])
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     with qs.query_stats():
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
         stats = qs.get_query_stats()["storage_operations"]
     qs.reset_stats()
     # sym_0 will have to read the existing data key to combine it with the new data
@@ -326,7 +327,7 @@ def test_io_count(s3_library_factory):
     df_0 = pd.DataFrame({"col": np.arange(rows_per_df_0)}, index=rows_per_df_0 * [ts])
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     with qs.query_stats():
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
         stats = qs.get_query_stats()["storage_operations"]
     qs.reset_stats()
     # No defrag happening so no data keys will be read
@@ -338,12 +339,39 @@ def test_io_count(s3_library_factory):
     df_0 = pd.DataFrame({"col": np.arange(rows_per_df_0)}, index=rows_per_df_0 * [ts])
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     with qs.query_stats():
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
         stats = qs.get_query_stats()["storage_operations"]
     qs.reset_stats()
     # sym_0 will read 1 data key to defrag
     # sym_1 will read all 3 data keys to defrag
     assert_data_key_ios(stats, 4, 2)
+
+
+def test_io_count_many_iterations(s3_library_factory):
+    lib = s3_library_factory(LibraryOptions(rows_per_segment=64))
+    sym = "test_io_count_many_iterations"
+    rows_per_df = 4
+    factor = 4  # levels will be [64, 16, 4]
+    ts = pd.Timestamp("2025-01-01")
+    df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
+    num_iterations = 32
+    with qs.query_stats():
+        for _ in range(num_iterations):
+            _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
+            ts += pd.Timedelta(1, unit="days")
+            df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
+        stats = qs.get_query_stats()["storage_operations"]
+    qs.reset_stats()
+    # Iterations:
+    # 0:    read 0 data keys, write 1 data key 0-4
+    # 1:    read 1 data keys, write 1 data key 0-8
+    # 2:    read 0 data keys, write 1 data key 0-8, 8-12
+    # 3:    read 2 data keys, write 1 data key 0-16
+    # 4-14: repeat this pattern, so total read 10 data keys, written 15 data keys 0-16, 16-32, 32-48, 48-56, 56-60
+    # 15:   read 5 data keys, write 1 data key 0-64
+    # Cumulative total read 15 and written 16 data keys
+    # 15-31: repeat this pattern for cumulative total read 30 and written 32 data keys
+    assert_data_key_ios(stats, 30, 32)
 
 
 def test_realistic(lmdb_library_factory):
@@ -371,9 +399,9 @@ def test_realistic(lmdb_library_factory):
         df_1 = pd.DataFrame({"col": rng.random(rows_per_df_1)}, index=rows_per_df_1 * [ts])
         expected_0 = pd.concat([expected_0, df_0])
         expected_1 = pd.concat([expected_1, df_1])
-        _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, threshold)
+        _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, threshold)
         if rng.random() <= repeat_probability:
-            _update_and_defrag(lib, [(sym_0, df_0), (sym_1, df_1)], factor, threshold)
+            _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, threshold)
         assert_frame_equal(expected_0, lib.read(sym_0).data)
         assert_frame_equal(expected_1, lib.read(sym_1).data)
         ts += pd.Timedelta(1, unit="days")

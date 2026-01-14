@@ -37,7 +37,7 @@ def _generate_date_to_read_from(
         len(start_rows) == len(start_indexes),
         f"len(start_rows) != len(start_indexes): {len(start_rows)} != {len(start_indexes)}",
     )
-    if not len(levels) or not len(start_rows):
+    if not len(levels) or not len(start_rows) or new_df_row_count == 0:
         return None
     row_counts = list((item[1] - item[0] for item in zip(start_rows, end_rows)))
     for idx, row_count in enumerate(row_counts):
@@ -51,12 +51,83 @@ def _generate_date_to_read_from(
                 )
 
 
-def _update_and_defrag(
+def _append_and_defrag_idempotent(
     lib: Library,
     items: List[Tuple[str, pd.DataFrame]],
     factor: int,
     threshold: float = 0.9,
-):
+) -> None:
+    """
+    Appends provided dataframes to the specified symbols idempotently, and performs an exponential defragmentation of
+    the row slices at the same time based on the rows_per_segment library option and the provided factor. Upserts the
+    data if the symbol does not exist.
+    Caveats:
+    * Data must be a timeseries
+    * Symbols must be append-only
+    * Expects all modifications to the symbols to be using this function
+    * Must not be used from two processes at once against the same symbols
+    * Must use the same `factor` argument on every call to a given symbol
+    * Expects repeated calls with the same index values for a given symbol's dataframe to have the same values in the
+      columns as well
+
+    Parameters
+    ----------
+    lib : `Library`
+        The library containing the symbols to append this data to
+    items : `List[Tuple[str, pd.DataFrame]]`
+        A list of symbol-dataframe pairs to append.
+    factor : `int`
+        The exponent to reduce the fragmentation by at each level. Must be >1.
+        e.g. If the rows_per_segment = 100,000 (the default) and factor is 10, then the row-slice sizes that will
+        trigger defragmentation will be [100,000, 10,000, 1,000, 100, 10]
+    threshold : `float`
+        The threshold at which a row-slice is considered to be close enough to the target row slice count. Must be
+        between 0 and 1.
+        e.g. with a threshold of 0.9 and rows_per_segment = 100,000, any segment with >= 90,000 rows will not be
+        defragmented any further.
+        Warning - setting this parameter to exactly 1 can result in repeated defragmentation of all row-slices due to
+        the implementation of `update`. It is recommended to leave this at the default value.
+
+    Returns
+    -------
+    None
+
+    Examples
+    --------
+    ac = Arctic(URI)
+    lib = ac.create_library("test", LibraryOptions(rows_per_segment=64))
+    sym = "test"
+    factor = 4  # defrag thresholds will be [64, 16, 4]
+    rows_per_df = 4  # append 4 rows in each call
+    ts = pd.Timestamp("2026-01-01")
+    df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
+    # Create the symbol with a single row slice 0-4
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor)
+    # Idempotent, repeating this operation has no effect, sym will still only have 1 version
+    _append_and_defrag_idempotent(lib, [(sym, df)], factor)
+    for _ in range(15):
+        ts += pd.Timedelta(1, unit="days")
+        df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
+        _append_and_defrag_idempotent(lib, [(sym, df)], factor)
+    The row-slice structure after each iteration will be as follows:
+    0: 0-8 as we had 4 rows, and were appending 4 more. This triggers a defrag as 4 + 4 = 8 is >= the smallest defrag
+           threshold of 4
+    1:  0-8, 8-12 no compaction happens this iteration
+    2:  0-16 defrag triggered as we have hit the next defrag threshold of 16
+    3:  0-16, 16-20 no compaction happens this iteration
+    4:  0-16, 16-24 same reasoning as iteration 0
+    5:  0-16, 16-24, 24-28 same reasoning as iteration 1
+    6:  0-16, 16-32 same reasoning as iteration 2
+    7:  0-16, 16-32, 32-36 same reasoning as iteration 3
+    8:  0-16, 16-32, 32-40 same reasoning as iteration 4
+    9:  0-16, 16-32, 32-40, 40-44 same reasoning as iteration 5
+    10: 0-16, 16-32, 32-48 same reasoning as iteration 6
+    11: 0-16, 16-32, 32-48, 48-52 same reasoning as iteration 3
+    12: 0-16, 16-32, 32-48, 48-56 same reasoning as iteration 4
+    13: 0-16, 16-32, 32-48, 48-56, 56-60 same reasoning as iteration 5
+    14: 0-64 defrag triggered as we have hit the next defrag threshold of 64
+    """
+
     class SymbolInfo:
         def __init__(self, symbol: str, append_df: pd.DataFrame, lib: Library):
             self.append_df = append_df
@@ -68,15 +139,25 @@ def _update_and_defrag(
                 index = lib._nvs.read_index(symbol)
                 # To ensure idempotency, we must not append the same data twice
                 start_index_of_new_df = append_df.index[0]
-                end_index_of_existing_df = index["end_index"][-1] - pd.Timedelta(1, unit="ns")
+                # read_index returns timezone-naive timestamps representing UTC in the start_index and end_index columns
+                end_index_of_existing_df = index["end_index"][-1].tz_localize("UTC").tz_localize(
+                    start_index_of_new_df.tz
+                ) - pd.Timedelta(1, unit="ns")
                 if start_index_of_new_df <= end_index_of_existing_df:
                     self.append_df = None
                 else:
+                    # Drop columns we don't need as we're going to do a filter
+                    index.drop(
+                        columns=index.columns.difference(["start_row", "end_row", "start_col", "end_col"]), inplace=True
+                    )
+                    # Drop everything except the first column slice
+                    first_start_col = index["start_col"][0]
+                    index = index[index["start_col"] == first_start_col]
                     # Lazy way to get unique values when there is column slicing (although main use case has dynamic schema enabled anyway)
                     # Index keys will not be very long so not worried about efficiency here
-                    self.start_indexes = index.index.sort_values().drop_duplicates().to_list()
-                    self.start_rows = index["start_row"].sort_values().drop_duplicates().to_list()
-                    self.end_rows = index["end_row"].sort_values().drop_duplicates().to_list()
+                    self.start_indexes = index.index.to_list()
+                    self.start_rows = index["start_row"].to_list()
+                    self.end_rows = index["end_row"].to_list()
             except NoDataFoundException:
                 # Symbol does not exist
                 pass
@@ -98,6 +179,7 @@ def _update_and_defrag(
             else:
                 return None
 
+    check(1 < factor, f"factor must be >1, received {factor}")
     check(0 < threshold <= 1, f"threshold must be in (0, 1], received {threshold}")
     target_rows_per_slice = lib._nvs.lib_cfg().lib_desc.version.write_options.segment_row_size
     if target_rows_per_slice == 0:
