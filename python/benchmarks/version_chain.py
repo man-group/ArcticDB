@@ -22,9 +22,9 @@ from .common import *
 
 class IterateVersionChain:
     timeout = 1000
-    sample_time = 2
-    rounds = 2
-    repeat = (1, 10, 20.0)
+    rounds = 3
+    repeat = 1
+    number = 50
     warmup_time = 0.2
 
     DIR_UNDELETED = "version_chain"
@@ -34,7 +34,7 @@ class IterateVersionChain:
     DELETION_POINT = 0.99  # delete the symbol after writing this proportion of the versions
     LIB_NAME = "lib"
 
-    params = ([50_000], ["forever", "default", "never"], [True, False])
+    params = ([25_000], ["forever", "default", "never"], [True, False])
 
     # In the tail_deleted case we delete the symbol after writing the DELETION_POINT fraction of the versions,
     # so the tail of the version chain is deleted.
