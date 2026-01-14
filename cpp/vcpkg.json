@@ -22,10 +22,6 @@
     },
     "zstd",
     {
-      "name": "libsodium",
-      "platform": "!linux"
-    },
-    {
       "name": "prometheus-cpp",
       "default-features": false,
       "features": [ "push", "pull" ]
