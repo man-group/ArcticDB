@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import itertools
+import multiprocessing
 import sys
 
 from arcticdb import WritePayload
@@ -26,12 +27,18 @@ def get_lib_name(num_syms: int, num_snaps: int, metadata_size: str):
     return f"n_syms-{num_syms}__n_snaps-{num_snaps}__md_size-{metadata_size}"
 
 
+def create_snapshot(lib, i, metadata_size):
+    metadata = get_metadata(metadata_size)
+    lib.snapshot(f"snap_{i}", metadata=metadata)
+
+
 class Snapshots:
     storages = [Storage.LMDB, Storage.AMAZON]
     num_symbols = [1, 1_000]
     num_snapshots = [1, 1_000]
     metadata_entries = [0, 10_000]
     load_metadata = [True, False]
+    timeout = 1_000
 
     params = [storages, num_symbols, num_snapshots, metadata_entries, load_metadata]
     param_names = ["storage", "num_symbols", "num_snapshots", "metadata_entries", "load_metadata"]
@@ -49,8 +56,6 @@ class Snapshots:
         ]
         simple_df = pd.DataFrame({"a": [1]})
 
-        metadata = {md_size: get_metadata(n_entries=md_size) for md_size in self.metadata_entries}
-
         for storage in self.storages:
             libraries = create_libraries(storage, library_names)
             libs_for_storage[storage] = dict(zip(library_names, libraries))
@@ -67,9 +72,9 @@ class Snapshots:
 
                 lib.write_batch(writes)
 
-                # FUTURE could use multiprocessing to write snapshots in parallel if necessary
-                for i in range(n_snaps):
-                    lib.snapshot(f"snap_{i}", metadata=metadata[md_size])
+                inputs = [(lib, i, md_size) for i in range(n_snaps)]
+                with multiprocessing.Pool(10) as p:
+                    p.starmap(create_snapshot, inputs)
 
         return libs_for_storage
 

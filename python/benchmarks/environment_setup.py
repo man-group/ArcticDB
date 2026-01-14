@@ -23,6 +23,7 @@ from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
 from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
+from arcticdb.util.test import random_ascii_string
 from arcticdb.util.test_utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.util.utils import strtobool
 from arcticdb.util.logger import get_logger
@@ -144,7 +145,7 @@ def create_library(storage: Storage) -> Optional[Library]:
     if not is_storage_enabled(storage):
         return None
 
-    lib_name = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+    lib_name = random_ascii_string(10)
     return create_libraries(storage, [lib_name])[0]
 
 

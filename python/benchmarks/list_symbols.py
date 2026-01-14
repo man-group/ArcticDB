@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from asv_runner.benchmarks.mark import SkipNotImplemented
+
 from .environment_setup import Storage, create_libraries_across_storages
 from benchmarks.common import *
 
@@ -28,6 +30,7 @@ class ListSymbolsWithoutCache:
 
     def __init__(self):
         self.logger = get_logger()
+        self.lib = None
         self.test_counter = (
             None  # used to ensure each test runs once within a setup-teardown cycle, so that the cache is uncompacted
         )
@@ -37,10 +40,13 @@ class ListSymbolsWithoutCache:
         return lib_for_storage
 
     def teardown(self, *args):
-        self.lib._nvs.version_store.clear()
+        if self.lib is not None:
+            self.lib._nvs.version_store.clear()
 
     def setup(self, lib_for_storage, num_symbols, storage):
         self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
         self.test_counter = 1
 
         simple_df = pd.DataFrame({"a": [1]})

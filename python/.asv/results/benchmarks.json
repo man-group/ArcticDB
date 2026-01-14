@@ -1072,7 +1072,7 @@
         "warmup_time": 0
     },
     "list_snapshots.Snapshots.time_list_snapshots": {
-        "code": "class Snapshots:\n    def time_list_snapshots(self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata):\n        res = self.lib.list_snapshots(load_metadata=load_metadata)\n        assert len(res) == num_snapshots, f\"Expected {num_snapshots} snapshots but were {len(res)}\"\n\n    def setup(self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata):\n        self.lib = libs_for_storage[storage][get_lib_name(num_symbols, num_snapshots, metadata_entries)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        write_parameters = list(itertools.product(self.num_symbols, self.num_snapshots, self.metadata_entries))\n        assert write_parameters\n        libs_for_storage = dict()\n        library_names = [get_lib_name(num_syms=n_syms, num_snaps=n_snaps, metadata_size=md_size) for n_syms, n_snaps, md_size in write_parameters]\n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        metadata = {md_size: get_metadata(n_entries=md_size) for md_size in self.metadata_entries}\n    \n        for storage in self.storages:\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            if not is_storage_enabled(storage):\n                continue\n    \n            for n_syms, n_snaps, md_size in write_parameters:\n                lib_name = get_lib_name(n_syms, n_snaps, md_size)\n                lib = libs_for_storage[storage][lib_name]\n                print(f\"lib_name={lib_name}, lib={lib}\", file=sys.stderr)\n                if lib is None:\n                    continue\n                writes = [WritePayload(f\"sym_{i}\", simple_df) for i in range(n_syms)]\n    \n                lib.write_batch(writes)\n    \n                # FUTURE could use multiprocessing to write snapshots in parallel if necessary\n                for i in range(n_snaps):\n                    lib.snapshot(f\"snap_{i}\", metadata=metadata[md_size])\n    \n        return libs_for_storage",
+        "code": "class Snapshots:\n    def time_list_snapshots(\n        self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata\n    ):\n        res = self.lib.list_snapshots(load_metadata=load_metadata)\n        assert len(res) == num_snapshots, f\"Expected {num_snapshots} snapshots but were {len(res)}\"\n\n    def setup(self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata):\n        self.lib = libs_for_storage[storage][get_lib_name(num_symbols, num_snapshots, metadata_entries)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        write_parameters = list(itertools.product(self.num_symbols, self.num_snapshots, self.metadata_entries))\n        assert write_parameters\n        libs_for_storage = dict()\n        library_names = [\n            get_lib_name(num_syms=n_syms, num_snaps=n_snaps, metadata_size=md_size)\n            for n_syms, n_snaps, md_size in write_parameters\n        ]\n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        for storage in self.storages:\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            if not is_storage_enabled(storage):\n                continue\n    \n            for n_syms, n_snaps, md_size in write_parameters:\n                lib_name = get_lib_name(n_syms, n_snaps, md_size)\n                lib = libs_for_storage[storage][lib_name]\n                print(f\"lib_name={lib_name}, lib={lib}\", file=sys.stderr)\n                if lib is None:\n                    continue\n                writes = [WritePayload(f\"sym_{i}\", simple_df) for i in range(n_syms)]\n    \n                lib.write_batch(writes)\n    \n                inputs = [(lib, i, md_size) for i in range(n_snaps)]\n                with multiprocessing.Pool(10) as p:\n                    p.starmap(create_snapshot, inputs)\n    \n        return libs_for_storage",
         "min_run_count": 2,
         "name": "list_snapshots.Snapshots.time_list_snapshots",
         "number": 0,
@@ -1108,14 +1108,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "list_snapshots:41",
+        "setup_cache_key": "list_snapshots:49",
+        "timeout": 1000,
         "type": "time",
         "unit": "seconds",
-        "version": "309148eb40ededddd3d5f585164da05e44a1d5210cc95ffccc4dccef3fff591e",
+        "version": "b9cd13f11f301a551950eecab6dc242f09fe6273797c80fc6b13c4ee4e2076c3",
         "warmup_time": -1
     },
     "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols": {
-        "code": "class ListSymbolsWithoutCache:\n    def peakmem_list_symbols(self, *args):\n        assert self.test_counter == 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
+        "code": "class ListSymbolsWithoutCache:\n    def peakmem_list_symbols(self, *args):\n        assert self.test_counter == 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "name": "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols",
         "param_names": [
             "num_symbols",
@@ -1131,14 +1132,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "list_symbols:35",
+        "setup_cache_key": "list_symbols:38",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "60b1e1970f95ad622a5823e088c826fbea6f452fd6ded115c19d4ca36f6bb9c0"
+        "version": "3f62cdeba026ca8087fd2e8560baa42224cd0d7a30a68a4411c7e223a170dcdc"
     },
     "list_symbols.ListSymbolsWithoutCache.time_has_symbol": {
-        "code": "class ListSymbolsWithoutCache:\n    def time_has_symbol(self, *args):\n        assert self.test_counter == 1\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
+        "code": "class ListSymbolsWithoutCache:\n    def time_has_symbol(self, *args):\n        assert self.test_counter == 1\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "list_symbols.ListSymbolsWithoutCache.time_has_symbol",
         "number": 1,
@@ -1159,15 +1160,15 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_symbols:35",
+        "setup_cache_key": "list_symbols:38",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "81ff0d14201bf21a8d2731e536447af976714d6ae1f4f59ba759879752014fa6",
+        "version": "491f406b8426020212cde3385ecc1b9ff2cb88bf5a8d6c925e823972d313ce95",
         "warmup_time": 0
     },
     "list_symbols.ListSymbolsWithoutCache.time_list_symbols": {
-        "code": "class ListSymbolsWithoutCache:\n    def time_list_symbols(self, *args):\n        assert self.test_counter == 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
+        "code": "class ListSymbolsWithoutCache:\n    def time_list_symbols(self, *args):\n        assert self.test_counter == 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "list_symbols.ListSymbolsWithoutCache.time_list_symbols",
         "number": 1,
@@ -1188,15 +1189,15 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_symbols:35",
+        "setup_cache_key": "list_symbols:38",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "dddd774df43aa2e794c13266b3e037ef85c7c91d45e9da0eb4a818282e6a364c",
+        "version": "991c37df157d50375b51076f6ebe43ff5ff504e82d5fac79b15cd980b4efd3bd",
         "warmup_time": 0
     },
     "list_versions.ListVersions.peakmem_list_versions": {
-        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        assert self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(\n            storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.lib = lib_for_storage[storage][self._lib_name(num_symbols, num_versions, num_snapshots)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        storages = self.params[0]\n        num_symbols = self.params[1]\n        num_versions = self.params[2]\n        num_snapshots = self.params[3]\n    \n        libs_for_storage = dict()\n    \n        library_names = [self._lib_name(n_symbols, n_versions, n_snaps) for n_symbols, n_versions, n_snaps in\n                         itertools.product(num_symbols, num_versions, num_snapshots)]\n    \n        for storage in storages:\n            if not is_storage_enabled(storage):\n                continue\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            for syms in num_symbols:\n                write_payloads = [WritePayload(self._sym_name(sym), 0) for sym in range(syms)]\n                for versions in num_versions:\n                    for snapshots in num_snapshots:\n                        lib_name = self._lib_name(syms, versions, snapshots)\n                        lib = libs_for_storage[storage][lib_name]\n                        for _ in range(versions):\n                            lib.write_pickle_batch(write_payloads)\n    \n                        for snapshot in range(snapshots):\n                            lib.snapshot(\n                                self._snap_name(snapshot),\n                                versions={self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},\n                            )\n    \n        return libs_for_storage",
+        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self,\n        lib_for_storage,\n        storage,\n        num_symbols,\n        num_versions,\n        num_snapshots,\n        symbol,\n        snapshot,\n        latest_only,\n        skip_snapshots,\n    ):\n        assert self.lib.list_versions(\n            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n        )\n\n    def setup(\n        self,\n        lib_for_storage,\n        storage,\n        num_symbols,\n        num_versions,\n        num_snapshots,\n        symbol,\n        snapshot,\n        latest_only,\n        skip_snapshots,\n    ):\n        self.check_if_skipped_parameter(\n            storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.lib = lib_for_storage[storage][self._lib_name(num_symbols, num_versions, num_snapshots)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        storages = self.params[0]\n        num_symbols = self.params[1]\n        num_versions = self.params[2]\n        num_snapshots = self.params[3]\n    \n        libs_for_storage = dict()\n    \n        library_names = [\n            self._lib_name(n_symbols, n_versions, n_snaps)\n            for n_symbols, n_versions, n_snaps in itertools.product(num_symbols, num_versions, num_snapshots)\n        ]\n    \n        for storage in storages:\n            if not is_storage_enabled(storage):\n                continue\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            for syms in num_symbols:\n                write_payloads = [WritePayload(self._sym_name(sym), 0) for sym in range(syms)]\n                for versions in num_versions:\n                    for snapshots in num_snapshots:\n                        lib_name = self._lib_name(syms, versions, snapshots)\n                        lib = libs_for_storage[storage][lib_name]\n                        for _ in range(versions):\n                            lib.write_pickle_batch(write_payloads)\n    \n                        for snapshot in range(snapshots):\n                            lib.snapshot(\n                                self._snap_name(snapshot),\n                                versions={self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},\n                            )\n    \n        return libs_for_storage",
         "name": "list_versions.ListVersions.peakmem_list_versions",
         "param_names": [
             "storage",
@@ -1242,14 +1243,14 @@
                 "False"
             ]
         ],
-        "setup_cache_key": "list_versions:77",
+        "setup_cache_key": "list_versions:78",
         "timeout": 500,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e5700225a86b48fc3aaa87cd2e21a47d80550097be0c5db4491a250fdc382e45"
+        "version": "85b027e3b7e31f6c03592d2354402f6eed8251d0848f8670d9450b3428fa75cd"
     },
     "list_versions.ListVersions.time_list_versions": {
-        "code": "class ListVersions:\n    def time_list_versions(\n        self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        assert self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, lib_for_storage, storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.check_if_skipped_parameter(\n            storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.lib = lib_for_storage[storage][self._lib_name(num_symbols, num_versions, num_snapshots)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        storages = self.params[0]\n        num_symbols = self.params[1]\n        num_versions = self.params[2]\n        num_snapshots = self.params[3]\n    \n        libs_for_storage = dict()\n    \n        library_names = [self._lib_name(n_symbols, n_versions, n_snaps) for n_symbols, n_versions, n_snaps in\n                         itertools.product(num_symbols, num_versions, num_snapshots)]\n    \n        for storage in storages:\n            if not is_storage_enabled(storage):\n                continue\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            for syms in num_symbols:\n                write_payloads = [WritePayload(self._sym_name(sym), 0) for sym in range(syms)]\n                for versions in num_versions:\n                    for snapshots in num_snapshots:\n                        lib_name = self._lib_name(syms, versions, snapshots)\n                        lib = libs_for_storage[storage][lib_name]\n                        for _ in range(versions):\n                            lib.write_pickle_batch(write_payloads)\n    \n                        for snapshot in range(snapshots):\n                            lib.snapshot(\n                                self._snap_name(snapshot),\n                                versions={self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},\n                            )\n    \n        return libs_for_storage",
+        "code": "class ListVersions:\n    def time_list_versions(\n        self,\n        lib_for_storage,\n        storage,\n        num_symbols,\n        num_versions,\n        num_snapshots,\n        symbol,\n        snapshot,\n        latest_only,\n        skip_snapshots,\n    ):\n        assert self.lib.list_versions(\n            symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n        )\n\n    def setup(\n        self,\n        lib_for_storage,\n        storage,\n        num_symbols,\n        num_versions,\n        num_snapshots,\n        symbol,\n        snapshot,\n        latest_only,\n        skip_snapshots,\n    ):\n        self.check_if_skipped_parameter(\n            storage, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n        )\n        self.lib = lib_for_storage[storage][self._lib_name(num_symbols, num_versions, num_snapshots)]\n        if self.lib is None:\n            raise SkipNotImplemented\n\n    def setup_cache(self):\n        storages = self.params[0]\n        num_symbols = self.params[1]\n        num_versions = self.params[2]\n        num_snapshots = self.params[3]\n    \n        libs_for_storage = dict()\n    \n        library_names = [\n            self._lib_name(n_symbols, n_versions, n_snaps)\n            for n_symbols, n_versions, n_snaps in itertools.product(num_symbols, num_versions, num_snapshots)\n        ]\n    \n        for storage in storages:\n            if not is_storage_enabled(storage):\n                continue\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n            for syms in num_symbols:\n                write_payloads = [WritePayload(self._sym_name(sym), 0) for sym in range(syms)]\n                for versions in num_versions:\n                    for snapshots in num_snapshots:\n                        lib_name = self._lib_name(syms, versions, snapshots)\n                        lib = libs_for_storage[storage][lib_name]\n                        for _ in range(versions):\n                            lib.write_pickle_batch(write_payloads)\n    \n                        for snapshot in range(snapshots):\n                            lib.snapshot(\n                                self._snap_name(snapshot),\n                                versions={self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},\n                            )\n    \n        return libs_for_storage",
         "min_run_count": 2,
         "name": "list_versions.ListVersions.time_list_versions",
         "number": 5,
@@ -1300,11 +1301,11 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "list_versions:77",
+        "setup_cache_key": "list_versions:78",
         "timeout": 500,
         "type": "time",
         "unit": "seconds",
-        "version": "5d436458b8d15351a45a0f04520bbe84311e9e0460a3c8f8457690a546d771b5",
+        "version": "2238d0faf29b5206ab9dd61d1acea68ae7883b8ac95bc8c0fafaefb85ff1527b",
         "warmup_time": 0.1
     },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {
