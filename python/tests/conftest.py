@@ -238,6 +238,14 @@ def lmdb_library_factory(lmdb_storage, lib_name):
     return f
 
 
+@pytest.fixture
+def s3_library_factory(s3_storage, lib_name):
+    def f(library_options: LibraryOptions = LibraryOptions()):
+        return s3_storage.create_arctic().create_library(lib_name, library_options=library_options)
+
+    return f
+
+
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
 @pytest.fixture(scope="session")
 def s3_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
