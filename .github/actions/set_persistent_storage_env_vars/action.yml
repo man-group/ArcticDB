@@ -3,8 +3,8 @@ description: 'Set the necessary variables for Persistent storage tests'
 inputs:
   bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
   bucket_gcp:        {default: 'arcticdb-github', type: string, description: The name of the GCP bucket that we will test against}
-  endpoint:          {default: 'https://s3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
-  endpoint_gcp:      {default: 'https://storage.googleapis.com', type: string, description: The address of the GCP endpoint}
+  endpoint:          {default: 's3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
+  endpoint_gcp:      {default: 'storage.googleapis.com', type: string, description: The address of the GCP endpoint}
   region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
   aws_access_key:    {required: true, type: string, description: The value for the AWS Access key}      
   aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}
