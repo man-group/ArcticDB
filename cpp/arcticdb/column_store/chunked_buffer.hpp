@@ -1,6 +1,6 @@
 
 
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2026 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
