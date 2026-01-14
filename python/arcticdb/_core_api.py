@@ -7,14 +7,9 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 # Treat everything here as public APIs!!!!
 # Any breaking change made here may break downstream repos and requires bumping major version!!!!
 
-from arcticdb_ext.storage import NativeVariantStorage
+from arcticdb_ext.storage import NativeVariantStorage, NativeVariantStorageContentType, NoDataFoundException, KeyType
 from arcticdb_ext.metrics.prometheus import MetricsConfig
+from arcticdb_ext.version_store import AtomKey, RefKey
+from arcticdb_ext.exceptions import StorageException, ArcticException
+from arcticdb_ext import set_config_int
 from arcticdb.version_store._store import _env_config_from_lib_config as env_config_from_lib_config
-
-
-def convert_native_variant_storage_to_py_tuple(native_cfg: NativeVariantStorage):
-    return native_cfg.__getstate__()
-
-
-def convert_metrics_config_to_py_tuple(metrics_cfg: MetricsConfig):
-    return metrics_cfg.__getstate__()

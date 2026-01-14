@@ -2,6 +2,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/library_index.hpp>
+#include <arcticdb/storage/s3/s3_settings.hpp>
 
 namespace py = pybind11;
 
@@ -79,6 +80,11 @@ py::tuple to_tuple(const s3::S3Settings& settings) {
 
 void register_common_storage_bindings(py::module& storage, BindingScope scope) {
     bool local_bindings = (scope == BindingScope::LOCAL);
+    py::enum_<NativeVariantStorageContentType>(storage, "NativeVariantStorageContentType", py::module_local(local_bindings))
+            .value("EMPTY", NativeVariantStorageContentType::EMPTY)
+            .value("S3", NativeVariantStorageContentType::S3)
+            .value("GCPXML", NativeVariantStorageContentType::GCPXML);
+
     py::enum_<s3::AWSAuthMethod>(storage, "AWSAuthMethod", py::module_local(local_bindings))
             .value("DISABLED", s3::AWSAuthMethod::DISABLED)
             .value("DEFAULT_CREDENTIALS_PROVIDER_CHAIN", s3::AWSAuthMethod::DEFAULT_CREDENTIALS_PROVIDER_CHAIN)
@@ -89,7 +95,10 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
             .value("GCPXML", s3::NativeSettingsType::GCPXML);
 
     py::class_<s3::S3Settings>(storage, "S3Settings", py::module_local(local_bindings))
-            .def(py::init<s3::AWSAuthMethod, const std::string&, bool>())
+            .def(py::init<s3::AWSAuthMethod, const std::string&, bool>(),
+                 py::arg("aws_auth"),
+                 py::arg("aws_profile"),
+                 py::arg("use_internal_client_wrapper_for_testing"))
             .def(py::pickle(
                     [](const s3::S3Settings& settings) { return to_tuple(settings); },
                     [](py::tuple t) { return s3_settings(t); }
@@ -129,12 +138,23 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
                                 [](const auto&) -> py::tuple { util::raise_rte("Invalid native storage setting type"); }
                         );
                     },
-                    [](py::tuple t) { return reconstruct_native_variant_storage_py_tuple(t); }
+                    [](py::tuple t) {
+                        util::check(t.size() >= 1, "Expected at least one attribute in Native Settings pickle");
+                        auto type = t[static_cast<uint32_t>(S3SettingsPickleOrder::TYPE)].cast<s3::NativeSettingsType>();
+                        switch (type) {
+                        case s3::NativeSettingsType::S3:
+                                return NativeVariantStorage(s3_settings(t));
+                        case s3::NativeSettingsType::GCPXML:
+                                return NativeVariantStorage(gcp_settings(t));
+                        }
+                        util::raise_rte("Inaccessible");
+                    }
             ))
             .def("update", &NativeVariantStorage::update)
             .def("as_s3_settings", &NativeVariantStorage::as_s3_settings)
             .def("as_gcpxml_settings", &NativeVariantStorage::as_gcpxml_settings)
-            .def("__repr__", &NativeVariantStorage::to_string);
+            .def("__repr__", &NativeVariantStorage::to_string)
+            .def_property_readonly("setting_type", &NativeVariantStorage::setting_type);
 
     py::implicitly_convertible<NativeVariantStorage::VariantStorageConfig, NativeVariantStorage>();
 
@@ -206,16 +226,4 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
             .value("WRITE", OpenMode::WRITE)
             .value("DELETE", OpenMode::DELETE);
 }
-
-NativeVariantStorage reconstruct_native_variant_storage_py_tuple(const py::tuple& t) {
-    util::check(t.size() >= 1, "Expected at least one attribute in Native Settings pickle");
-    auto type = t[static_cast<uint32_t>(S3SettingsPickleOrder::TYPE)].cast<s3::NativeSettingsType>();
-    switch (type) {
-    case s3::NativeSettingsType::S3:
-        return NativeVariantStorage(s3_settings(t));
-    case s3::NativeSettingsType::GCPXML:
-        return NativeVariantStorage(gcp_settings(t));
-    }
-    util::raise_rte("Inaccessible");
-};
 } // namespace arcticdb::storage::apy

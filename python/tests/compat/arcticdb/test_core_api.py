@@ -1,21 +1,20 @@
-from arcticdb._core_api import NativeVariantStorage, MetricsConfig, env_config_from_lib_config
+from arcticdb._core_api import NativeVariantStorage, MetricsConfig, env_config_from_lib_config, NativeVariantStorageContentType
 from arcticdb_ext.storage import AWSAuthMethod, S3Settings as NativeS3Settings, GCPXMLSettings as NativeGCPXMLSettings
 from arcticdb_ext.metrics.prometheus import MetricsConfigModel
 from arcticdb_ext.storage import create_mem_config_resolver, LibraryIndex, OpenMode
 
-
-def test_convert_native_variant_storage_to_py_tuple_s3():
-    s3_settings = NativeS3Settings(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "abc", True)
+def test_native_variant_storage_s3_accessors():
+    s3_settings = NativeS3Settings(aws_auth=AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, aws_profile="abc", use_internal_client_wrapper_for_testing=True)
     native_setting = NativeVariantStorage(s3_settings)
-    py_tuples = native_setting.__getstate__()
-    assert len(py_tuples) == 4
-    assert py_tuples[0].value == 0
-    assert py_tuples[1].value == s3_settings.aws_auth.value
-    assert py_tuples[2] == s3_settings.aws_profile
-    assert py_tuples[3] == s3_settings.use_internal_client_wrapper_for_testing
+    
+    assert native_setting.setting_type == NativeVariantStorageContentType.S3
+    
+    retrieved_s3 = native_setting.as_s3_settings()
+    assert retrieved_s3.aws_auth == s3_settings.aws_auth
+    assert retrieved_s3.aws_profile == s3_settings.aws_profile
+    assert retrieved_s3.use_internal_client_wrapper_for_testing == s3_settings.use_internal_client_wrapper_for_testing
 
-
-def test_convert_native_variant_storage_to_py_tuple_gcp():
+def test_native_variant_storage_gcp_accessors():
     gcp_settings = NativeGCPXMLSettings()
     gcp_settings.bucket = "bucket"
     gcp_settings.endpoint = "endpoint"
@@ -28,29 +27,38 @@ def test_convert_native_variant_storage_to_py_tuple_gcp():
     gcp_settings.ca_cert_path = "ca_cert_path"
     gcp_settings.ca_cert_dir = "ca_cert_dir"
     native_setting = NativeVariantStorage(gcp_settings)
-    py_tuples = native_setting.__getstate__()
-    assert len(py_tuples) == 11
-    assert py_tuples[0].value == 1
-    assert py_tuples[1].value == gcp_settings.aws_auth.value
-    assert py_tuples[2] == gcp_settings.ca_cert_path
-    assert py_tuples[3] == gcp_settings.ca_cert_dir
-    assert py_tuples[4] == gcp_settings.ssl
-    assert py_tuples[5] == gcp_settings.https
-    assert py_tuples[6] == gcp_settings.prefix
-    assert py_tuples[7] == gcp_settings.endpoint
-    assert py_tuples[8] == gcp_settings.secret
-    assert py_tuples[9] == gcp_settings.access
-    assert py_tuples[10] == gcp_settings.bucket
+    
+    assert native_setting.setting_type == NativeVariantStorageContentType.GCPXML
+    
+    retrieved_gcp = native_setting.as_gcpxml_settings()
+    assert retrieved_gcp.aws_auth == gcp_settings.aws_auth
+    assert retrieved_gcp.ca_cert_path == gcp_settings.ca_cert_path
+    assert retrieved_gcp.ca_cert_dir == gcp_settings.ca_cert_dir
+    assert retrieved_gcp.ssl == gcp_settings.ssl
+    assert retrieved_gcp.https == gcp_settings.https
+    assert retrieved_gcp.prefix == gcp_settings.prefix
+    assert retrieved_gcp.endpoint == gcp_settings.endpoint
+    assert retrieved_gcp.secret == gcp_settings.secret
+    assert retrieved_gcp.access == gcp_settings.access
+    assert retrieved_gcp.bucket == gcp_settings.bucket
 
+def test_native_variant_storage_empty_accessor():
+    native_setting = NativeVariantStorage()
+    
+    assert native_setting.setting_type == NativeVariantStorageContentType.EMPTY
 
 def test_aws_auth_method_value():
     assert AWSAuthMethod.DISABLED.value == 0
     assert AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN.value == 1
     assert AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER.value == 2
 
+def test_native_variant_storage_setting_type_value():
+    assert NativeVariantStorageContentType.EMPTY.value == 0
+    assert NativeVariantStorageContentType.S3.value == 1
+    assert NativeVariantStorageContentType.GCPXML.value == 2
 
-def test_convert_metrics_config_to_py_tuple():
-    config = {
+def test_metrics_config_accessors():
+    config_values = {
         "host": "host",
         "port": "port",
         "job": "job",
@@ -59,28 +67,25 @@ def test_convert_metrics_config_to_py_tuple():
         "metrics_config_model": MetricsConfigModel.PULL,
     }
     prom_conf = MetricsConfig(
-        config["host"],
-        config["port"],
-        config["job"],
-        config["instance"],
-        config["prometheus_env"],
-        config["metrics_config_model"],
+        "host",
+        "port",
+        "job",
+        "instance",
+        "prometheus_env",
+        MetricsConfigModel.PULL,
     )
-    py_tuples = prom_conf.__getstate__()
-    assert len(py_tuples) == 6
-    assert py_tuples[0] == config["host"]
-    assert py_tuples[1] == config["port"]
-    assert py_tuples[2] == config["job"]
-    assert py_tuples[3] == config["instance"]
-    assert py_tuples[4] == config["prometheus_env"]
-    assert py_tuples[5].value == config["metrics_config_model"].value
-
+    
+    assert prom_conf.host == config_values["host"]
+    assert prom_conf.port == config_values["port"]
+    assert prom_conf.job_name == config_values["job"]
+    assert prom_conf.instance == config_values["instance"]
+    assert prom_conf.prometheus_env == config_values["prometheus_env"]
+    assert prom_conf.model == config_values["metrics_config_model"]
 
 def test_metrics_config_model_value():
     assert MetricsConfigModel.NO_INIT.value == 0
     assert MetricsConfigModel.PUSH.value == 1
     assert MetricsConfigModel.PULL.value == 2
-
 
 def test_env_config_from_lib_config(lmdb_version_store_v1):
     lib_cfg = lmdb_version_store_v1.lib_cfg()
