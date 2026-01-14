@@ -157,6 +157,7 @@ jobs:
           exit $any_worse
 
       - name: Add results to ArcticDB database
+        if: always()
         shell: bash -el {0}
         run: |
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
