@@ -364,11 +364,11 @@ def test_io_count_many_iterations(s3_library_factory):
     qs.reset_stats()
     # Iterations:
     # 0:    read 0 data keys, write 1 data key 0-4
-    # 1:    read 1 data keys, write 1 data key 0-8
-    # 2:    read 0 data keys, write 1 data key 0-8, 8-12
-    # 3:    read 2 data keys, write 1 data key 0-16
-    # 4-14: repeat this pattern, so total read 10 data keys, written 15 data keys 0-16, 16-32, 32-48, 48-56, 56-60
-    # 15:   read 5 data keys, write 1 data key 0-64
+    # 1:    read 0 data keys, write 1 data key 0-4, 4-8
+    # 2:    read 0 data keys, write 1 data key 0-4, 4-8, 8-12
+    # 3:    read 3 data keys, write 1 data key 0-16
+    # 4-14: repeat this pattern, so total read 9 data keys, written 15 data keys 0-16, 16-32, 32-48, 48-52, 52-56, 56-60
+    # 15:   read 6 data keys, write 1 data key 0-64
     # Cumulative total read 15 and written 16 data keys
     # 15-31: repeat this pattern for cumulative total read 30 and written 32 data keys
     assert_data_key_ios(stats, 30, 32)

@@ -110,21 +110,20 @@ def _append_and_defrag_idempotent(
         df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
         _append_and_defrag_idempotent(lib, [(sym, df)], factor)
     The row-slice structure after each iteration will be as follows:
-    0: 0-8 as we had 4 rows, and were appending 4 more. This triggers a defrag as 4 + 4 = 8 is >= the smallest defrag
-           threshold of 4
-    1:  0-8, 8-12 no compaction happens this iteration
+    0:  0-4, 4-8 no compaction happens this iteration
+    1:  0-4, 4-8, 8-12 no compaction happens this iteration
     2:  0-16 defrag triggered as we have hit the next defrag threshold of 16
     3:  0-16, 16-20 no compaction happens this iteration
-    4:  0-16, 16-24 same reasoning as iteration 0
-    5:  0-16, 16-24, 24-28 same reasoning as iteration 1
+    4:  0-16, 16-20, 20-24 no compaction happens this iteration
+    5:  0-16, 16-20, 20-24, 24-28 no compaction happens this iteration
     6:  0-16, 16-32 same reasoning as iteration 2
-    7:  0-16, 16-32, 32-36 same reasoning as iteration 3
-    8:  0-16, 16-32, 32-40 same reasoning as iteration 4
-    9:  0-16, 16-32, 32-40, 40-44 same reasoning as iteration 5
-    10: 0-16, 16-32, 32-48 same reasoning as iteration 6
-    11: 0-16, 16-32, 32-48, 48-52 same reasoning as iteration 3
-    12: 0-16, 16-32, 32-48, 48-56 same reasoning as iteration 4
-    13: 0-16, 16-32, 32-48, 48-56, 56-60 same reasoning as iteration 5
+    7:  0-16, 16-32, 32-36 no compaction happens this iteration
+    8:  0-16, 16-32, 32-36, 36-40 no compaction happens this iteration
+    9:  0-16, 16-32, 32-36, 36-40, 40-44 no compaction happens this iteration
+    10: 0-16, 16-32, 32-48 same reasoning as iteration 2
+    11: 0-16, 16-32, 32-48, 48-52 no compaction happens this iteration
+    12: 0-16, 16-32, 32-48, 48-52, 52-56 no compaction happens this iteration
+    13: 0-16, 16-32, 32-48, 48-52, 52-56, 56-60 no compaction happens this iteration
     14: 0-64 defrag triggered as we have hit the next defrag threshold of 64
     """
 
@@ -147,14 +146,10 @@ def _append_and_defrag_idempotent(
                     self.append_df = None
                 else:
                     # Drop columns we don't need as we're going to do a filter
-                    index.drop(
-                        columns=index.columns.difference(["start_row", "end_row", "start_col", "end_col"]), inplace=True
-                    )
+                    index = index[["start_row", "end_row", "start_col"]]
                     # Drop everything except the first column slice
                     first_start_col = index["start_col"][0]
                     index = index[index["start_col"] == first_start_col]
-                    # Lazy way to get unique values when there is column slicing (although main use case has dynamic schema enabled anyway)
-                    # Index keys will not be very long so not worried about efficiency here
                     self.start_indexes = index.index.to_list()
                     self.start_rows = index["start_row"].to_list()
                     self.end_rows = index["end_row"].to_list()
