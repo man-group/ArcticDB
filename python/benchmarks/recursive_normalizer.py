@@ -68,7 +68,7 @@ class LMDBRecursiveNormalizerRead:
 
 class LMDBRecursiveNormalizerWrite:
     param_names = ["num_dict_entries"]
-    params = [[1000]]
+    params = [[10]]
     ARCTIC_URI = "lmdb://recursive_normalizer_write"
 
     def __init__(self):

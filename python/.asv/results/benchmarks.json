@@ -4008,7 +4008,7 @@
         ],
         "params": [
             [
-                "1000"
+                "10"
             ]
         ],
         "setup_cache_key": "recursive_normalizer:80",
@@ -4026,7 +4026,7 @@
         ],
         "params": [
             [
-                "1000"
+                "10"
             ]
         ],
         "repeat": 0,

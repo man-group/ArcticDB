@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 import datetime
 import os
+import time
 
 import pytz
 from enum import Enum, auto
@@ -2075,6 +2076,7 @@ class Library:
         ----
         column: [[5,6,7]]
         """
+        time.sleep(1)
         if lazy:
             return LazyDataFrame(
                 self,
