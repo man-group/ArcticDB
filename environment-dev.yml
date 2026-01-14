@@ -36,7 +36,7 @@ dependencies:
   - libprotobuf <7
   - openssl
   # TODO: understand failures with libcurl>=8.17
-  - libcurl <8.17
+  - libcurl==8.17
   - bitmagic
   - sparrow-devel==1.4.0
   - spdlog
