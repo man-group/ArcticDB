@@ -71,6 +71,11 @@
       "platform": "windows"
     },
     {
+      "name": "curl",
+      "version>=": "8.18.0",
+      "$version reason": "Issues with libcurl==8.17.0 which need investigation"
+    },
+    {
       "name": "azure-core-cpp",
       "default-features": false,
       "features": [ "curl" ],
@@ -101,7 +106,6 @@
     { "name": "azure-identity-cpp", "version": "1.6.0" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
-    { "name": "curl", "version": "8.18.0" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "10.2.1" },
     { "name": "folly", "version-string": "2025.04.14.00" },
