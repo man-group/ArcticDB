@@ -612,9 +612,6 @@ jobs:
       - name: Set s3 sts AWS S3 variables for Windows
         if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
-        with:
-          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
-          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3

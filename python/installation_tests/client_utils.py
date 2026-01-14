@@ -120,14 +120,8 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
         raise ValueError(f"Invalid storage type: {storage_type}")
 
 
-def remove_http_prefix(endpoint: str) -> str:
-    if endpoint is not None and "://" in endpoint:
-        endpoint = endpoint.split("://")[1]
-    return endpoint
-
-
 def real_s3_credentials(shared_path: bool = True):
-    endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_S3_ENDPOINT"))
+    endpoint = os.getenv("ARCTICDB_REAL_S3_ENDPOINT")
     bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
     region = os.getenv("ARCTICDB_REAL_S3_REGION")
     access_key = os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY")
@@ -159,7 +153,7 @@ def get_real_s3_uri(shared_path: bool = True):
 
 
 def real_gcp_credentials(shared_path: bool = True):
-    endpoint = remove_http_prefix(os.getenv("ARCTICDB_REAL_GCP_ENDPOINT"))
+    endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
     bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
     region = os.getenv("ARCTICDB_REAL_GCP_REGION")
     access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
