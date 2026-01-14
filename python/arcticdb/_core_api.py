@@ -2,10 +2,10 @@
 Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 
-This module implements a backwards compatible version of msgpack functions.
 """
 
-# Treat everything here as public APIs!!!! Any change made here may break downstream repos!!!!
+# Treat everything here as public APIs!!!!
+# Any breaking change made here may break downstream repos and requires bumping major version!!!!
 
 from arcticdb_ext.storage import NativeVariantStorage
 from arcticdb_ext.metrics.prometheus import MetricsConfig
