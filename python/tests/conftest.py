@@ -389,6 +389,14 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 
 @pytest.fixture(scope="session")
+def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
+    return real_s3_from_environment_variables(
+        shared_path=False,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
+
+
+@pytest.fixture(scope="session")
 def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
         shared_path=False,
@@ -456,6 +464,12 @@ def real_gcp_storage_without_clean_up(real_gcp_shared_path_storage_factory) -> S
 @pytest.fixture(scope="session")
 def real_azure_storage_without_clean_up(real_azure_shared_path_storage_factory) -> S3Bucket:
     return real_azure_shared_path_storage_factory.create_fixture()
+
+
+@pytest.fixture(scope="session")
+def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
+    with real_s3_storage_factory.create_fixture() as f:
+        yield f
 
 
 @pytest.fixture(scope="session")
