@@ -31,6 +31,7 @@ pytestmark = pytest.mark.skipif(
     reason="Test setup segfaults",
 )
 
+
 @pytest.mark.parametrize("version_store", ["wrapped_s3_version_store", "mock_s3_store_with_error_simulation"])
 def test_s3_storage_failures(request, version_store):
     lib = request.getfixturevalue(version_store)
