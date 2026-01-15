@@ -722,7 +722,7 @@ set (arcticdb_core_libraries
         ${Zstd_LIBRARY}
         ${ARCTICDB_MONGO_LIBS}
         spdlog::spdlog
-        Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
+        Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty
         Azure::azure-identity
         Azure::azure-storage-blobs
         sparrow::sparrow
