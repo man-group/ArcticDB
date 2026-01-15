@@ -30,7 +30,7 @@ std::string MockS3Client::get_failure_trigger(
     );
 }
 
-std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
+std::optional<Aws::S3::S3Error> has_object_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = s3_object_name.rfind(failure_string_for_operation);
     if (position == std::string::npos)
@@ -65,12 +65,12 @@ Aws::S3::S3Error create_error(
     return error;
 }
 
-const auto not_found_error = create_error(Aws::S3::S3Errors::RESOURCE_NOT_FOUND);
-const auto precondition_failed_error = create_error(
+const Aws::S3::S3Error not_found_error = create_error(Aws::S3::S3Errors::RESOURCE_NOT_FOUND);
+const Aws::S3::S3Error precondition_failed_error = create_error(
         Aws::S3::S3Errors::UNKNOWN, "PreconditionFailed", "Precondition failed", false,
         Aws::Http::HttpResponseCode::PRECONDITION_FAILED
 );
-const auto not_implemented_error = create_error(
+const Aws::S3::S3Error not_implemented_error = create_error(
         Aws::S3::S3Errors::UNKNOWN, "NotImplemented",
         "A header you provided implies functionality that is not implemented", false
 );
@@ -78,7 +78,7 @@ const auto not_implemented_error = create_error(
 S3Result<std::monostate> MockS3Client::head_object(const std::string& s3_object_name, const std::string& bucket_name)
         const {
     std::scoped_lock<std::mutex> lock(mutex_);
-    auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::EXISTS);
+    auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::EXISTS);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -92,7 +92,7 @@ S3Result<std::monostate> MockS3Client::head_object(const std::string& s3_object_
 
 S3Result<Segment> MockS3Client::get_object(const std::string& s3_object_name, const std::string& bucket_name) const {
     std::scoped_lock<std::mutex> lock(mutex_);
-    auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::READ);
+    auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::READ);
     if (maybe_error.has_value()) {
         return {*maybe_error};
     }
@@ -114,7 +114,7 @@ S3Result<std::monostate> MockS3Client::put_object(
         const std::string& s3_object_name, Segment& segment, const std::string& bucket_name, PutHeader header
 ) {
     std::scoped_lock<std::mutex> lock(mutex_);
-    auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::WRITE);
+    auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::WRITE);
 
     if (maybe_error.has_value() && header == PutHeader::IF_NONE_MATCH) {
         return {not_implemented_error};
@@ -142,7 +142,7 @@ S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(
 ) {
     std::scoped_lock<std::mutex> lock(mutex_);
     for (auto& s3_object_name : s3_object_names) {
-        auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE);
+        auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE);
         if (maybe_error.has_value()) {
             return {*maybe_error};
         }
@@ -150,7 +150,7 @@ S3Result<DeleteObjectsOutput> MockS3Client::delete_objects(
 
     DeleteObjectsOutput output;
     for (auto& s3_object_name : s3_object_names) {
-        auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
+        auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
         if (maybe_error.has_value()) {
             output.failed_deletes.emplace_back(s3_object_name, "Sample error message");
         } else {
@@ -169,10 +169,10 @@ folly::Future<S3Result<std::monostate>> MockS3Client::delete_object(
         const std::string& s3_object_name, const std::string& bucket_name
 ) {
     std::scoped_lock<std::mutex> lock(mutex_);
-    if (auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE); maybe_error) {
+    if (auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE); maybe_error) {
         S3Result<std::monostate> res{*maybe_error};
         return folly::makeFuture(res);
-    } else if (auto maybe_local_error = has_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
+    } else if (auto maybe_local_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL);
                maybe_local_error) {
         S3Result<std::monostate> res{*maybe_local_error};
         return folly::makeFuture(res);
@@ -211,7 +211,7 @@ S3Result<ListObjectsOutput> MockS3Client::list_objects(
             it->second.has_value()) {
             auto s3_object_name = it->first.s3_object_name;
 
-            auto maybe_error = has_failure_trigger(s3_object_name, StorageOperation::LIST);
+            auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::LIST);
             if (maybe_error.has_value())
                 return {*maybe_error};
 
