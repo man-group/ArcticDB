@@ -303,6 +303,12 @@ def s3_and_nfs_storage_bucket(test_prefix, request):
 
 
 @pytest.fixture(scope="session")
+def wrapped_s3_storage(wrapped_s3_storage_factory):
+    with wrapped_s3_storage_factory.create_fixture() as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
 def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_storage_factory.create_fixture() as f:
         yield f
@@ -383,14 +389,6 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 
 
 @pytest.fixture(scope="session")
-def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
-    return real_s3_from_environment_variables(
-        shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
-    )
-
-
-@pytest.fixture(scope="session")
 def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
         shared_path=False,
@@ -458,12 +456,6 @@ def real_gcp_storage_without_clean_up(real_gcp_shared_path_storage_factory) -> S
 @pytest.fixture(scope="session")
 def real_azure_storage_without_clean_up(real_azure_shared_path_storage_factory) -> S3Bucket:
     return real_azure_shared_path_storage_factory.create_fixture()
-
-
-@pytest.fixture(scope="session")
-def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
-    with real_s3_storage_factory.create_fixture() as f:
-        yield f
 
 
 @pytest.fixture(scope="session")
@@ -781,6 +773,11 @@ def s3_store_factory(lib_name, s3_storage) -> Generator[Callable[..., NativeVers
 
 
 @pytest.fixture
+def wrapped_s3_store_factory(lib_name, wrapped_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
+    yield from _store_factory(lib_name, wrapped_s3_storage)
+
+
+@pytest.fixture
 def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, s3_no_ssl_storage)
 
@@ -835,6 +832,11 @@ def mongo_store_factory(mongo_storage, lib_name) -> Generator[Callable[..., Nati
 @pytest.fixture
 def in_memory_store_factory(mem_storage, lib_name) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, mem_storage)
+
+
+@pytest.fixture
+def wrapped_s3_version_store(wrapped_s3_store_factory):
+    return wrapped_s3_store_factory()
 
 
 # endregion
