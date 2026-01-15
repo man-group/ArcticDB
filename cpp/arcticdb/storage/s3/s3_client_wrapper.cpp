@@ -154,8 +154,8 @@ folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
 ) {
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::DELETE)) {
         return folly::makeFuture(S3Result<std::monostate>{*maybe_error});
-    } else if (auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {
-        return folly::makeFuture(S3Result<std::monostate>{*maybe_error});
+    } else if (auto maybe_object_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {
+        return folly::makeFuture(S3Result<std::monostate>{*maybe_object_error});
     }
     return actual_client_->delete_object(s3_object_name, bucket_name);
 }
