@@ -17,6 +17,7 @@ import pandas as pd
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.common import *
+from arcticdb.util.logger import get_logger
 
 from benchmarks.environment_setup import Storage, create_libraries_across_storages
 

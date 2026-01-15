@@ -11,6 +11,7 @@ from arcticdb.version_store.processing import QueryBuilder
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from .common import *
+from arcticdb.util.logger import get_logger
 from .environment_setup import create_libraries_across_storages, is_storage_enabled, Storage
 
 PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
