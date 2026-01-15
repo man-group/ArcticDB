@@ -531,7 +531,11 @@ def real_s3_sts_from_environment_variables(
         raise e
 
     out.native_config = NativeVariantStorage(
-        NativeS3Settings(aws_auth=AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER, aws_profile=profile_name, use_internal_client_wrapper_for_testing=False)
+        NativeS3Settings(
+            aws_auth=AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER,
+            aws_profile=profile_name,
+            use_internal_client_wrapper_for_testing=False,
+        )
     )
     out.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
     out.aws_profile = profile_name

@@ -17,7 +17,9 @@ extern const Aws::S3::S3Error not_found_error;
 extern const Aws::S3::S3Error precondition_failed_error;
 extern const Aws::S3::S3Error not_implemented_error;
 
-std::optional<Aws::S3::S3Error> has_object_failure_trigger(const std::string& s3_object_name, StorageOperation operation);
+std::optional<Aws::S3::S3Error> has_object_failure_trigger(
+        const std::string& s3_object_name, StorageOperation operation
+);
 
 struct S3Key {
     std::string bucket_name;

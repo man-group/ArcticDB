@@ -26,7 +26,9 @@ void register_metrics(py::module&& m, arcticdb::BindingScope scope) {
             .def_property_readonly("port", [](const arcticdb::MetricsConfig& config) { return config.port; })
             .def_property_readonly("job_name", [](const arcticdb::MetricsConfig& config) { return config.job_name; })
             .def_property_readonly("instance", [](const arcticdb::MetricsConfig& config) { return config.instance; })
-            .def_property_readonly("prometheus_env", [](const arcticdb::MetricsConfig& config) { return config.prometheus_env; })
+            .def_property_readonly(
+                    "prometheus_env", [](const arcticdb::MetricsConfig& config) { return config.prometheus_env; }
+            )
             .def_property_readonly("model", [](const arcticdb::MetricsConfig& config) { return config.model_; });
 
     py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel", py::module_local(local_bindings))

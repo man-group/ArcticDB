@@ -30,7 +30,9 @@ std::string MockS3Client::get_failure_trigger(
     );
 }
 
-std::optional<Aws::S3::S3Error> has_object_failure_trigger(const std::string& s3_object_name, StorageOperation operation) {
+std::optional<Aws::S3::S3Error> has_object_failure_trigger(
+        const std::string& s3_object_name, StorageOperation operation
+) {
     auto failure_string_for_operation = "#Failure_" + operation_to_string(operation) + "_";
     auto position = s3_object_name.rfind(failure_string_for_operation);
     if (position == std::string::npos)

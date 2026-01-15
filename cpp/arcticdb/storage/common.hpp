@@ -72,12 +72,7 @@ inline std::vector<char> stream_to_vector(std::iostream& src) {
     return v;
 }
 
-
-enum class NativeVariantStorageContentType : uint32_t {
-    EMPTY = 0,
-    S3 = 1,
-    GCPXML = 2
-};
+enum class NativeVariantStorageContentType : uint32_t { EMPTY = 0, S3 = 1, GCPXML = 2 };
 
 class NativeVariantStorage {
   public:

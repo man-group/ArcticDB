@@ -4,12 +4,12 @@
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/python/python_bindings_common.hpp>
 
-namespace arcticdb::storage{
+namespace arcticdb::storage {
 
-namespace s3{
-    class S3Settings;
-    class GCPXMLSettings;
-};
+namespace s3 {
+class S3Settings;
+class GCPXMLSettings;
+}; // namespace s3
 
 namespace apy {
 
@@ -39,5 +39,5 @@ s3::S3Settings s3_settings(const pybind11::tuple& t);
 pybind11::tuple to_tuple(const s3::GCPXMLSettings& settings);
 pybind11::tuple to_tuple(const s3::S3Settings& settings);
 void register_common_storage_bindings(pybind11::module& m, BindingScope scope);
-}
-} // namespace arcticdb::storage::apy
+} // namespace apy
+} // namespace arcticdb::storage

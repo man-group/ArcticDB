@@ -80,7 +80,9 @@ py::tuple to_tuple(const s3::S3Settings& settings) {
 
 void register_common_storage_bindings(py::module& storage, BindingScope scope) {
     bool local_bindings = (scope == BindingScope::LOCAL);
-    py::enum_<NativeVariantStorageContentType>(storage, "NativeVariantStorageContentType", py::module_local(local_bindings))
+    py::enum_<NativeVariantStorageContentType>(
+            storage, "NativeVariantStorageContentType", py::module_local(local_bindings)
+    )
             .value("EMPTY", NativeVariantStorageContentType::EMPTY)
             .value("S3", NativeVariantStorageContentType::S3)
             .value("GCPXML", NativeVariantStorageContentType::GCPXML);
@@ -140,12 +142,13 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
                     },
                     [](py::tuple t) {
                         util::check(t.size() >= 1, "Expected at least one attribute in Native Settings pickle");
-                        auto type = t[static_cast<uint32_t>(S3SettingsPickleOrder::TYPE)].cast<s3::NativeSettingsType>();
+                        auto type =
+                                t[static_cast<uint32_t>(S3SettingsPickleOrder::TYPE)].cast<s3::NativeSettingsType>();
                         switch (type) {
                         case s3::NativeSettingsType::S3:
-                                return NativeVariantStorage(s3_settings(t));
+                            return NativeVariantStorage(s3_settings(t));
                         case s3::NativeSettingsType::GCPXML:
-                                return NativeVariantStorage(gcp_settings(t));
+                            return NativeVariantStorage(gcp_settings(t));
                         }
                         util::raise_rte("Inaccessible");
                     }

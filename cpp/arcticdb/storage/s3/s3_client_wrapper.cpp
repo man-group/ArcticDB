@@ -34,7 +34,8 @@ std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_bucket_failure_trigger(
     }
 
     // Get target buckets (if not set or "all", affects all buckets)
-    if (auto failure_buckets_str = ConfigsMap::instance()->get_string("S3ClientTestWrapper.FailureBucket", "all"); failure_buckets_str != "all") {
+    if (auto failure_buckets_str = ConfigsMap::instance()->get_string("S3ClientTestWrapper.FailureBucket", "all");
+        failure_buckets_str != "all") {
         // Split the comma-separated bucket names and check if current bucket is in the list
         std::istringstream bucket_stream(failure_buckets_str);
         std::string target_bucket;
@@ -153,8 +154,7 @@ folly::Future<S3Result<std::monostate>> S3ClientTestWrapper::delete_object(
 ) {
     if (auto maybe_error = has_failure_trigger(s3_object_name, bucket_name, StorageOperation::DELETE)) {
         return folly::makeFuture(S3Result<std::monostate>{*maybe_error});
-    }
-    else if (auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {
+    } else if (auto maybe_error = has_object_failure_trigger(s3_object_name, StorageOperation::DELETE_LOCAL)) {
         return folly::makeFuture(S3Result<std::monostate>{*maybe_error});
     }
     return actual_client_->delete_object(s3_object_name, bucket_name);
