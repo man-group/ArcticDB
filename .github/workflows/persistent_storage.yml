@@ -7,7 +7,6 @@ on:
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       arcticdb_version:  {default: "", type: string, description: The version of ArcticDB that will be installed and used for seed/verify }
-      # TODO: Maybe we should add these as GitHub variables   
       persistent_storage: {required: true, default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
 
 jobs:
