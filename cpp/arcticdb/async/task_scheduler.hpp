@@ -15,6 +15,7 @@
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/IOThreadPoolExecutor.h>
+#include <pybind11/pybind11.h>
 #include <fmt/format.h>
 #include <thread>
 #include <algorithm>
@@ -215,9 +216,7 @@ class TaskScheduler {
     auto submit_cpu_task(Task&& t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
-        if (PyGILState_Check()) {
-            util::raise_rte("CPU Task submitted while GIL is held");
-        }
+        util::check(PyGILState_Check() == 0, "CPU Task submitted while GIL is held");
         ARCTICDB_DEBUG(
                 log::schedule(),
                 "{} Submitting CPU task {}: {} of {}",
@@ -234,9 +233,7 @@ class TaskScheduler {
     auto submit_io_task(Task&& t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
-        if (PyGILState_Check()) {
-            util::raise_rte("IO Task submitted while GIL is held");
-        }
+        util::check(PyGILState_Check() == 0, "IO Task submitted while GIL is held");
         ARCTICDB_DEBUG(
                 log::schedule(),
                 "{} Submitting IO task {}: {}",
