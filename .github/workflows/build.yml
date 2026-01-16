@@ -8,8 +8,7 @@ on:
     # On pull requests only local storage tests get executed
     branches: ["**"]
   schedule:
-    # IMPORTANT: For scheduled job we execute AWS_S3
-    - cron: '0 23 * * 0,1,2,3,4,5' # Start previous dat at 23:00 to finish next day
+    - cron: '0 23 * * 0,1,2,3,4,5' # Start from 23:00 on the previous day to finish on the next day
   workflow_dispatch:
     inputs:
       persistent_storage:
