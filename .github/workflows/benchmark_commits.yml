@@ -59,13 +59,14 @@ jobs:
         with:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
-      - name: Extra envs
+      - name: Environment setup
         shell: bash -l {0}
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          yum install -y awscli
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
