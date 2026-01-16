@@ -33,6 +33,10 @@ jobs:
       SCCACHE_S3_USE_SSL: false
       AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
       AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      ARCTICDB_REAL_S3_ACCESS_KEY: ${{secrets.AWS_S3_ACCESS_KEY}}
+      ARCTICDB_REAL_S3_SECRET_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      ARCTICDB_REAL_S3_REGION: eu-west-1
+      ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -65,14 +69,16 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
-      - name: Set persistent storage variables
-        uses: ./.github/actions/set_persistent_storage_env_vars
-        with:
-          bucket: "arcticdb-ci-benchmark-results"
-          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
-          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
-          strategy_branch: "${{ inputs.commit }}"
-          shared_storage_prefix: "_github_runner_"
+      - name: Create test bucket
+        shell: bash -el {0}
+        run: |
+          random_id=$(openssl rand -hex 4)
+          timestamp=$(date +%s)
+          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
+          echo "Bucket name: ${bucket_name}"
+          aws s3 mb "s3://${bucket_name}" --endpoint-url "${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}"
+          echo "Created bucket s3://${bucket_name}"
+          echo "ARCTICDB_REAL_S3_BUCKET=${bucket_name}" >> $GITHUB_ENV
 
       # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
       - name: Setup micromamba
@@ -100,22 +106,14 @@ jobs:
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
+            SUITE='^.*'
             if [ "${{ inputs.storage }}" == "REAL" ]; then
-              # ASV tests with real storage starts with 'real_' in the test name
-              # aseaton: We are currently refactoring away from this pattern to control the storages by environment variables
-              # instead. The names here are the modules that have been moved to the new approach so far.
-              SUITE='(^real_.*|^finalize_staged_data.*|^list_.*)'
               echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
               echo "ARCTICDB_STORAGE_LMDB=0" >> $GITHUB_ENV
             elif [ "${{ inputs.storage }}" == "ALL" ]; then
-              # Select all tests
-              SUITE='^.*'
               echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
-            else
-              # LMDB tests are other tests not starting with 'real_'
-              SUITE='^(?!real_).*'
             fi
-            echo "selection of suite SUITE=$SUITE"
+            
             SUITE_OVERWRITE=${{ github.event.inputs.suite_overwrite }}
             echo "selection of SUITE_OVERWRITE=$SUITE_OVERWRITE"
             # Remove leading and trailing whitespaces using parameter expansion
@@ -161,6 +159,20 @@ jobs:
           ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
           exit $any_worse
 
+      - name: Clean up the test bucket
+        if: always()
+        shell: bash -el {0}
+        run: |
+          if [[ $ARCTICDB_REAL_S3_BUCKET == arcticdb-asv-data* ]]; then
+            echo "Removing ${ARCTICDB_REAL_S3_BUCKET}"
+            # --force since there will be files in the bucket
+            aws s3 rb "s3://${ARCTICDB_REAL_S3_BUCKET}" --force --endpoint-url "${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}"
+          else
+            echo "Unexpected bucket to clean up! ${ARCTICDB_REAL_S3_BUCKET}"
+            echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
+            exit 1
+          fi
+
       - name: Add results to ArcticDB database
         if: always()
         shell: bash -el {0}
@@ -170,6 +182,8 @@ jobs:
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode analyze \
           ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}} \
           --hash $(git rev-parse --short=8 ${{inputs.commit}})
+        env:
+          ARCTICDB_REAL_S3_BUCKET: arcticdb-ci-benchmark-results
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_commit]
