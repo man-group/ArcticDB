@@ -5,8 +5,8 @@ on:
       job_type:           {required: true, type: string, description: Selects the steps to enable}
       label:              {type: string, description: the label of the machine that was create by the start-runner job needed by the stop-runner job}
       ec2-instance-id:    {type: string, description: the ec2-instance-id of the machine that was create by the start-runner job needed by the stop-runner job}
-      image-id:           {default: ami-0936679d3002e5be3, type: string, description: ID of the Amazon Image that should be used as a base for the runner}
-      instance-type:      {default: m6i.4xlarge, type: string, description: Instace type that will be used to create the runner VM}
+      image-id:           {default: ami-051ae9048637b0525, type: string, description: ID of the Amazon Image that should be used as a base for the runner}
+      instance-type:      {default: m6i.4xlarge, type: string, description: Instance type that will be used to create the runner VM}
       subnet-id:          {default: subnet-04ee7771eea5d61d9, type: string, description: VPC Subnet to be used when creating the runner}
       security-group-id:  {default: sg-08bd5ce9b15ba4f4b, type: string, description: Security Group to be used when creating the runner}
     outputs:
