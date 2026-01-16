@@ -127,12 +127,13 @@ jobs:
             echo "FINAL selection to execute SUITE=$SUITE"
             echo "SUITE=$SUITE" >> $GITHUB_ENV
             # Now lets reduce logging
-            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
+            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request' || inputs.benchmark_all_tags == true
         shell: bash -l {0}
         run: | 
+          echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           git config --global --add safe.directory .
           python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
           exit_code=$?
@@ -143,6 +144,7 @@ jobs:
         if: github.event_name == 'pull_request'
         shell: bash -l {0}
         run: |
+          echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           # Look up the most recent master commit stored in our ASV database and compare against it.
           # asv compare exits with code 0 even if there are regressions.
           ARCTICDB_REAL_S3_BUCKET=${ASV_RESULTS_BUCKET} ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
@@ -179,6 +181,7 @@ jobs:
         if: always()
         shell: bash -el {0}
         run: |
+          echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode analyze \
