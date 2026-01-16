@@ -35,6 +35,7 @@ dist/
 cmake-build-*/
 dist_release/
 CMakeUserPresets.json
+CLAUDE_USER_SETTINGS.md
 
 *_pb2.py
 *.mdb
