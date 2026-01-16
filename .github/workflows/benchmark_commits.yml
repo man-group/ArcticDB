@@ -77,7 +77,7 @@ jobs:
           timestamp=$(date +%s)
           bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
           echo "Bucket name: ${bucket_name}"
-          aws s3 mb "s3://${bucket_name}" --endpoint-url "${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}"
+          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
           echo "Created bucket s3://${bucket_name}"
           echo "ARCTICDB_REAL_S3_BUCKET=${bucket_name}" >> $GITHUB_ENV
 
@@ -167,7 +167,7 @@ jobs:
           if [[ $ARCTICDB_REAL_S3_BUCKET == arcticdb-asv-data* ]]; then
             echo "Removing ${ARCTICDB_REAL_S3_BUCKET}"
             # --force since there will be files in the bucket
-            aws s3 rb "s3://${ARCTICDB_REAL_S3_BUCKET}" --force --endpoint-url "${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}"
+            aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}" "s3://${ARCTICDB_REAL_S3_BUCKET}" 
           else
             echo "Unexpected bucket to clean up! ${ARCTICDB_REAL_S3_BUCKET}"
             echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
