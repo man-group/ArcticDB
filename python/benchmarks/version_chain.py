@@ -22,10 +22,9 @@ from .common import *
 
 class IterateVersionChain:
     timeout = 1000
-    rounds = 3
-    repeat = 1
-    number = 50
-    warmup_time = 0.2
+    rounds = 2
+    repeat = 5
+    sample_time = 1
 
     DIR_UNDELETED = "version_chain"
     DIR_TAIL_DELETED = "version_chain_tail_deleted"
