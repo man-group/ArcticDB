@@ -37,6 +37,7 @@ jobs:
       ARCTICDB_REAL_S3_SECRET_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
       ARCTICDB_REAL_S3_REGION: eu-west-1
       ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+      ASV_RESULTS_BUCKET: arcticdb-ci-benchmark-results
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -144,7 +145,7 @@ jobs:
         run: |
           # Look up the most recent master commit stored in our ASV database and compare against it.
           # asv compare exits with code 0 even if there are regressions.
-          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
+          ARCTICDB_REAL_S3_BUCKET=${ASV_RESULTS_BUCKET} ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
           python -m asv run --show-stderr --durations all --bench $SUITE HEAD^! || exit 1
           python -m asv compare -s -f 1.15 $(cat master_commit_hash.txt) HEAD > results.txt || exit 1
           
@@ -184,7 +185,7 @@ jobs:
           ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}} \
           --hash $(git rev-parse --short=8 ${{inputs.commit}})
         env:
-          ARCTICDB_REAL_S3_BUCKET: arcticdb-ci-benchmark-results
+          ARCTICDB_REAL_S3_BUCKET: ${{ env.ASV_RESULTS_BUCKET }}
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_commit]
