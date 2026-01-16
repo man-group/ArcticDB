@@ -540,6 +540,7 @@ def real_s3_sts_from_environment_variables(
     out.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
     out.aws_profile = profile_name
     real_s3_sts_write_local_credentials(out, config_file_path)
+    out.default_key = Key(id="", secret="", user_name="unknown user") # Reset to ensure client can't fallback to default key+secret auth
     return out
 
 

@@ -22,7 +22,7 @@ import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException, KeyType
+from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
@@ -43,10 +43,10 @@ from arcticdb.version_store.library import (
 )
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.version_store._store import NativeVersionStore
-
 from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from tests.conftest import Marks
 from tests.util.marking import marks
+from tests.util.storage_test import get_s3_storage_config
 from ...util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -237,6 +237,10 @@ def test_s3_sts_expiry_check(lib_name, real_s3_sts_storage):
 @pytest.mark.storage
 def test_s3_sts_auth_store(real_s3_sts_version_store):
     lib = real_s3_sts_version_store
+    assert lib.lib_native_cfg().as_s3_settings().aws_auth == AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
+    storage_cfg = get_s3_storage_config(lib.lib_cfg())
+    assert storage_cfg.credential_name == ""  # to ensure client can't fallback to default key+secret auth
+    assert storage_cfg.credential_key == ""
     df = pd.DataFrame({"a": [1, 2, 3]})
     lib.write("sym", df)
     assert_frame_equal(lib.read("sym").data, df)
