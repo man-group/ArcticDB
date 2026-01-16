@@ -215,6 +215,9 @@ class TaskScheduler {
     auto submit_cpu_task(Task&& t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
+        if (PyGILState_Check()) {
+            util::raise_rte("CPU Task submitted while GIL is held");
+        }
         ARCTICDB_DEBUG(
                 log::schedule(),
                 "{} Submitting CPU task {}: {} of {}",
@@ -231,6 +234,9 @@ class TaskScheduler {
     auto submit_io_task(Task&& t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
+        if (PyGILState_Check()) {
+            util::raise_rte("IO Task submitted while GIL is held");
+        }
         ARCTICDB_DEBUG(
                 log::schedule(),
                 "{} Submitting IO task {}: {}",
