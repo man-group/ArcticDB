@@ -35,6 +35,7 @@ dist/
 cmake-build-*/
 dist_release/
 CMakeUserPresets.json
+.claude/
 CLAUDE_USER_SETTINGS.md
 
 *_pb2.py
@@ -58,4 +59,3 @@ __azurite_*
 # Ignore sports db and sports exports
 docs/mkdocs/docs/notebooks/arcticdb_sports/
 docs/mkdocs/docs/notebooks/exports/
-.claude/
