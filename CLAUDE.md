@@ -90,12 +90,13 @@ ArcticDB stores data as **keys** in the underlying storage backend. Each key con
 ### Key Types (defined in `cpp/arcticdb/entity/key.hpp`)
 
 - **VERSION_REF**: Head of the version chain for a symbol, points to the latest VERSION key
-- **VERSION**: Contains metadata and links to previous versions (forming a linked list) plus a TABLE_INDEX key
-- **TABLE_INDEX**: Points to one or more TABLE_DATA keys containing the actual data segments
-- **TABLE_DATA**: Leaf nodes containing the actual compressed data
-- **TOMBSTONE**: Marks deleted versions (exists only inside VERSION key segments, not standalone)
+- **VERSION**: Contains a link to TABLE_INDEX for this version plus link to previous version (forming a linked list) 
+- **TABLE_INDEX**: Points to TABLE_DATA keys containing the actual data segments
+- **TABLE_DATA**: Leaf nodes containing compressed data for a row and columns slice from the original dataframe
+- **TOMBSTONE**: Marks a deleted version (exists only inside VERSION key segments, not standalone)
+- **TOMBSTONE_ALL**: Marks all versions before its version as deleted (exists only inside VERSION key segments, not standalone)
 - **SNAPSHOT_REF**: References multiple TABLE_INDEX keys for a snapshot
-- **SYMBOL_LIST**: Linked list of symbols for fast `list_symbols()` operations
+- **SYMBOL_LIST**: Contains symbol list modifications (adds and removes) to form a concurrent data structure for fast `list_symbols()` operations
 
 ### Version Chain Structure
 
