@@ -3,8 +3,7 @@ Copyright 2023 Man Group Operations Ltd.
 NO WARRANTY, EXPRESSED OR IMPLIED.
 
 Non-public APIs depended by downstream repos
-Treat everything here as public APIs!!!!
-Any breaking change made here may break downstream repos and requires bumping major version!!!!
+Treat everything here as a public API, governed by our semantic versioning
 """
 
 from arcticdb_ext.storage import NativeVariantStorage, NativeVariantStorageContentType, NoDataFoundException, KeyType
