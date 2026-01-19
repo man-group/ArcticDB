@@ -591,19 +591,21 @@ class VersionMapImpl {
                     if (prevent_non_increasing_version_id) {
                         storage::raise<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(
                                 "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last "
-                                "version: {} This is most likely due to parallel writes to the same symbol, which is "
-                                "not supported.",
+                                "version: {}, symbol: {}. This is most likely due to parallel writes to the same "
+                                "symbol, which is not supported.",
                                 key.version_id(),
-                                original_head ? original_head->version_id() : VariantId{""}
+                                original_head ? original_head->version_id() : VariantId{""},
+                                key.id()
                         );
                     } else {
                         // This should happen only in tests and background jobs
                         log::version().warn(
                                 "Force writing TABLE_INDEX key with a non-increasing version (Reading with as_of "
                                 "version numbers and timestamps may no longer work as expected). New version: {}, Last "
-                                "version: {}",
+                                "version: {}, symbol: {}",
                                 key.version_id(),
-                                original_head ? original_head->version_id() : VariantId{""}
+                                original_head ? original_head->version_id() : VariantId{""},
+                                key.id()
                         );
                     }
                 }
