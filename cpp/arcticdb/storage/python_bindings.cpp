@@ -374,6 +374,7 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             .def(
                     "remove_library_config",
                     [](const LibraryManager& library_manager, std::string_view library_path) {
+                        py::gil_scoped_release gil_release;
                         return library_manager.remove_library_config(LibraryPath{library_path, '.'});
                     },
                     py::call_guard<SingleThreadMutexHolder>()
