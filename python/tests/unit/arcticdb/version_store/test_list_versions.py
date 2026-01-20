@@ -360,7 +360,6 @@ def test_list_versions_specific_snapshot_reads_all_snapshots(s3_version_store_v1
     lib = s3_version_store_v1
     num_snapshots = 5
 
-    # Create multiple snapshots
     for i in range(num_snapshots):
         lib.write(f"sym{i}", i)
         lib.snapshot(f"snap{i}")
@@ -374,16 +373,8 @@ def test_list_versions_specific_snapshot_reads_all_snapshots(s3_version_store_v1
     stats = qs.get_query_stats()
     storage_ops = stats["storage_operations"]
 
-    # S3_ListObjectsV2["SNAPSHOT"] counts how many times snapshot iteration occurs
-    # When querying a specific snapshot, we expect this to be 1
-    # Due to the bug, it will be equal to num_snapshots (iterates all snapshots)
-    snapshot_list_count = storage_ops.get("S3_ListObjectsV2", {}).get("SNAPSHOT", {}).get("count", 0)
-
-    # This assertion documents the bug:
-    # Expected (after fix): snapshot_list_count == 1
-    # Actual (with bug): snapshot_list_count >= 1 (reads all snapshots)
-    assert snapshot_list_count == 1, (
-        f"Bug 18262322490: Expected to list only 1 snapshot when querying specific snapshot 'snap0', "
-        f"but listed snapshots {snapshot_list_count} times. "
-        f"This indicates all {num_snapshots} snapshots were iterated instead of just 'snap0'."
-    )
+    # Should not list snapshots when user specifies a particular snapshot
+    snapshot_list_count = storage_ops["S3_ListObjectsV2"]["SNAPSHOT"]["count"]
+    assert snapshot_list_count == 0
+    snapshot_read_count = storage_ops["S3_GetObject"]["SNAPSHOT"]["count"]
+    assert snapshot_read_count == 1
