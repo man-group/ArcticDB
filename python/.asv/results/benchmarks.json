@@ -1206,7 +1206,7 @@
         "warmup_time": 0
     },
     "list_symbols.ListSymbolsWithoutCache.time_list_symbols": {
-        "code": "class ListSymbolsWithoutCache:\n    def time_list_symbols(self, *args):\n        self._check_test_counter()\n        self.test_counter += 1\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
+        "code": "class ListSymbolsWithoutCache:\n    def time_list_symbols(self, *args):\n        self._check_test_counter()\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "list_symbols.ListSymbolsWithoutCache.time_list_symbols",
         "number": 1,
@@ -1231,7 +1231,7 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "5f53bb107ed7219767d5c5572ec197a0dc58b2c905ca657221799bf23f8027c9",
+        "version": "843dd34bf1cd6875d10798c9616b378671efa66c112b250876340d4ad6ba8ddc",
         "warmup_time": 0
     },
     "list_versions.ListVersions.peakmem_list_versions": {

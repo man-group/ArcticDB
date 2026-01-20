@@ -55,7 +55,6 @@ class ListSymbolsWithoutCache:
 
     def time_list_symbols(self, *args):
         self._check_test_counter()
-        self.test_counter += 1
         self.lib.list_symbols()
 
     def peakmem_list_symbols(self, *args):
