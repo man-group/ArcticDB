@@ -24,7 +24,7 @@ if MACOS_WHEEL_BUILD:
     pytest.skip("We don't have previous versions of arcticdb pypi released for MacOS", allow_module_level=True)
 
 
-@pytest.mark.parametrize("old_venv", ["4.5.1"], indirect=True)  # adb version doesn't matter here
+@pytest.mark.parametrize("old_venv", ["6.6.0"], indirect=True)  # adb version doesn't matter here
 def test_comp_venv_loading_path(old_venv, tmp_path_factory):
     dir = tmp_path_factory.mktemp("comp_venv_loading_path")
     python_path = os.path.join(dir, "run.py")
@@ -32,7 +32,7 @@ def test_comp_venv_loading_path(old_venv, tmp_path_factory):
         f"import arcticdb as adb",
         f"import sys",
         f"import os",
-        f"assert adb.__version__ == '4.5.1'",
+        f"assert adb.__version__ == '6.6.0'",
         f"assert os.getcwd() == '{old_venv.path}'",
         f"assert sys.path[1] == '{old_venv.path}'",
         f"assert sys.path[0] == '{dir}'",
