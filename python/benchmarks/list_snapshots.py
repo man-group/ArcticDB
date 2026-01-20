@@ -73,7 +73,7 @@ class Snapshots:
                 lib.write_batch(writes)
 
                 inputs = [(lib, i, md_size) for i in range(n_snaps)]
-                with multiprocessing.Pool(10) as p:
+                with multiprocessing.get_context('spawn').Pool(10) as p:
                     p.starmap(create_snapshot, inputs)
 
         return libs_for_storage
@@ -84,6 +84,12 @@ class Snapshots:
             raise SkipNotImplemented
 
     def time_list_snapshots(
+        self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata
+    ):
+        res = self.lib.list_snapshots(load_metadata=load_metadata)
+        assert len(res) == num_snapshots, f"Expected {num_snapshots} snapshots but were {len(res)}"
+
+    def peakmem_list_snapshots(
         self, libs_for_storage, storage, num_symbols, num_snapshots, metadata_entries, load_metadata
     ):
         res = self.lib.list_snapshots(load_metadata=load_metadata)

@@ -54,13 +54,18 @@ class ListSymbolsWithoutCache:
         self.lib.write_batch(write_payloads)
 
     def time_list_symbols(self, *args):
-        assert self.test_counter == 1
+        self._check_test_counter()
+        self.test_counter += 1
         self.lib.list_symbols()
 
     def peakmem_list_symbols(self, *args):
-        assert self.test_counter == 1
+        self._check_test_counter()
         self.lib.list_symbols()
 
     def time_has_symbol(self, *args):
-        assert self.test_counter == 1
+        self._check_test_counter()
         self.lib.has_symbol("250_sym")
+
+    def _check_test_counter(self):
+        assert self.test_counter == 1
+        self.test_counter += 1

@@ -140,11 +140,10 @@ def create_library(storage: Storage) -> Optional[Library]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.
 
+    Returns None if the storage is not enabled.
+
     See create_libraries docstring for notes on running locally.
     """
-    if not is_storage_enabled(storage):
-        return None
-
     lib_name = random_ascii_string(10)
     return create_libraries(storage, [lib_name])[0]
 
