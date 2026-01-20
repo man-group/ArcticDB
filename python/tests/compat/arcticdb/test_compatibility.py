@@ -24,6 +24,7 @@ if MACOS_WHEEL_BUILD:
     pytest.skip("We don't have previous versions of arcticdb pypi released for MacOS", allow_module_level=True)
 
 
+@pytest.mark.skipif(sys.version_info == (3, 14), reason="Pending public release of py3.14 wheels")
 @pytest.mark.parametrize("old_venv", ["latest"], indirect=True)  # adb version doesn't matter here
 def test_comp_venv_loading_path(old_venv, tmp_path_factory):
     dir = tmp_path_factory.mktemp("comp_venv_loading_path")
