@@ -12,7 +12,7 @@ from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 from arcticdb.version_store.processing import QueryBuilder
 
 
-def get_results_lib(use_aws_auth: bool = True):
+def get_results_lib(use_aws_auth: bool = False):
     if use_aws_auth:
         ac = Arctic("s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-pytest-results?path_prefix=pytest_results&aws_auth=true")
         lib = ac["pytest_results"]
