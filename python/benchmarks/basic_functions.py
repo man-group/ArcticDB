@@ -25,8 +25,10 @@ DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
-    sample_time = 0.1
-    rounds = 1
+    sample_time = 2
+    rounds = 2
+    repeat = (1, 10, 20.0)
+    warmup_time = 0.2
 
     params = PARAMS
     param_names = PARAM_NAMES

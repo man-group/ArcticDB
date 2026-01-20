@@ -267,7 +267,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "basic_functions:39",
+        "setup_cache_key": "basic_functions:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "4ed305e5b21d4c3df22cc239ad54e2ab9b8acf19c2a689e264e9145eca1a2094"
@@ -284,7 +284,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "basic_functions:39",
+        "setup_cache_key": "basic_functions:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "0655902640cee72832e909202e4187147f1378b546bd5b3518ab19f4004d5b32"
@@ -301,7 +301,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "basic_functions:39",
+        "setup_cache_key": "basic_functions:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "a12a8dd0cf3e4d5ab9c8535fcaec9647a533644933a4b5c643a7f99723015fa3"
@@ -318,7 +318,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "basic_functions:39",
+        "setup_cache_key": "basic_functions:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "a0dbc5843fc9f5b31ccf981b2a6b6569880b0841b684163e617368071e48e2c7"
@@ -335,7 +335,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "basic_functions:39",
+        "setup_cache_key": "basic_functions:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "530fec1ac85f134bab26649b2579b205a87c1b01dc5d972f324e452e6a4633cd"
@@ -352,7 +352,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "basic_functions:39",
+        "setup_cache_key": "basic_functions:41",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "a19002933078e96e583a65bb547e86712f87c841e877a54fba4fce777ac6ab05"
@@ -371,14 +371,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:39",
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "basic_functions:41",
         "type": "time",
         "unit": "seconds",
         "version": "0790a17ac39caedc1cea887331e48e2b607f4bbdbde59ebdf2a16e220e680c81",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "basic_functions.BasicFunctions.time_read_with_columns": {
         "code": "class BasicFunctions:\n    def time_read_with_columns(self, rows):\n        COLS = [\"value\"]\n        self.lib.read(f\"sym\", columns=COLS).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -394,14 +393,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:39",
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "basic_functions:41",
         "type": "time",
         "unit": "seconds",
         "version": "d66332f438d375470e7b471b2641664ce03a5043765b8aecb701ba028940504d",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "basic_functions.BasicFunctions.time_read_with_date_ranges": {
         "code": "class BasicFunctions:\n    def time_read_with_date_ranges(self, rows):\n        self.lib.read(f\"sym\", date_range=DATE_RANGE).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -417,14 +415,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:39",
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "basic_functions:41",
         "type": "time",
         "unit": "seconds",
         "version": "c1fdcddf679a65c0f96b011e2f091c21b3f6fa603b9dd9c3daf20698273e1245",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "basic_functions.BasicFunctions.time_read_with_date_ranges_query_builder": {
         "code": "class BasicFunctions:\n    def time_read_with_date_ranges_query_builder(self, rows):\n        q = QueryBuilder().date_range(DATE_RANGE)\n        self.lib.read(f\"sym\", query_builder=q).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -440,14 +437,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:39",
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "basic_functions:41",
         "type": "time",
         "unit": "seconds",
         "version": "e30effe8e084ada39a8d4f7e123d6253b483a434a3a59c65fcb1dc2a04377959",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "basic_functions.BasicFunctions.time_write": {
         "code": "class BasicFunctions:\n    def time_write(self, rows):\n        self.fresh_lib.write(f\"sym\", self.df)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -463,14 +459,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:39",
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "basic_functions:41",
         "type": "time",
         "unit": "seconds",
         "version": "eb258ad770b5f9d0220957f1fce0410b51de9964c6a1744919abda640feec054",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "basic_functions.BasicFunctions.time_write_staged": {
         "code": "class BasicFunctions:\n    def time_write_staged(self, rows):\n        self.fresh_lib.write(f\"sym\", self.df, staged=True)\n        self.fresh_lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -486,14 +481,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:39",
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "basic_functions:41",
         "type": "time",
         "unit": "seconds",
         "version": "bb986153ea43fb78204ded8a63c102b4718197158c8f81d6c28e17cfa39d3282",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "basic_functions.BatchBasicFunctions.peakmem_read_batch": {
         "code": "class BatchBasicFunctions:\n    def peakmem_read_batch(self, rows, num_symbols):\n        read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -512,7 +506,7 @@
                 "200"
             ]
         ],
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "1154d4d002a16465c10fd5e41721ed25ee8d4a5fa3790c7718d7f309f1b8b29c"
@@ -534,7 +528,7 @@
                 "200"
             ]
         ],
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "eb2f74f4dab10d4472f2349a2d539c9609baaaa6debf7206c064a2b93c495bfc"
@@ -556,7 +550,7 @@
                 "200"
             ]
         ],
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "114711c1c4ebf66c64ab33fb81f5f8cc73ce78984e2472f492d0c80f96f331d8"
@@ -578,7 +572,7 @@
                 "200"
             ]
         ],
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "e29d7bab3ecd450da657f11c448f62bbb39d5a2607fb6f4cc5b92db2dee50dc9"
@@ -605,7 +599,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "time",
         "unit": "seconds",
         "version": "95a87e9c330d6f1b83b13cdf87403e69a4c2d4a3992430942454acfd5021b73a",
@@ -633,7 +627,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "time",
         "unit": "seconds",
         "version": "2c798cded56db601f7a5e81cf0d0e77407d3717695a4c4863d4e68c96618393b",
@@ -661,7 +655,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "time",
         "unit": "seconds",
         "version": "04e761907c8cd5b7d21ef3beadec4150292a508c0de7c9fd36305f118c97ceb3",
@@ -689,7 +683,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "time",
         "unit": "seconds",
         "version": "ae298ed42a2bc58a2d14509b1578a2ecd7c11cab6f15200ef8ebfbc4f9924a27",
@@ -717,7 +711,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:185",
+        "setup_cache_key": "basic_functions:187",
         "type": "time",
         "unit": "seconds",
         "version": "49522447c3d9ac6f75f9df9a159dbbaeb95553440cf4bbb98303fce0c490bd66",
@@ -735,7 +729,7 @@
                 "5000"
             ]
         ],
-        "setup_cache_key": "basic_functions:155",
+        "setup_cache_key": "basic_functions:157",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "0c9e4ed77543c683169797f90579b45d91798edff513d7b6eeac570b958822eb"
@@ -757,7 +751,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:155",
+        "setup_cache_key": "basic_functions:157",
         "type": "time",
         "unit": "seconds",
         "version": "de731d8892af34ed745e455464ee25c7a3144744c6a19440e2b1f4726623ad2c",
@@ -1359,7 +1353,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "ea9562ac454e814117fbe50a9b5d235a37110c1745fa24bd71db420baaf072ef"
@@ -1376,7 +1370,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "69f411de823212396215fb4912da15f56a16ca931fd2cfcf9533204b56e696ba"
@@ -1393,7 +1387,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "ecadcf0caca3e2382953be630263bde2c01f7ac011ac2a140080e00f3a6ebdad"
@@ -1410,7 +1404,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "cd35c81c46cd4eb64ccab7a6099884a9f99832a5ece8bb0bc387c0ed402f1536"
@@ -1427,7 +1421,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "1806b540ceeb66fb0bc4476c5b07fca6d5d5edb13e441fb4a2471751a99ff7cb"
@@ -1444,7 +1438,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "923c4661c84571a4abb8cf5d774b2e0ec674bf671b3b11bc26ed561a0c417ef7"
@@ -1461,7 +1455,7 @@
                 "10000000"
             ]
         ],
-        "setup_cache_key": "local_query_builder:30",
+        "setup_cache_key": "local_query_builder:33",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "0af435e83cbba85506f4bbf0fe355dd839b3e55fd81aa7e3600fcb443dc682ee"
@@ -1480,14 +1474,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "2ac4df4d7d9b744d192742ba5b8c00c2f79a143cd72c4a7b7f63785dea19e219",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_isin": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_string_isin(self, num_rows):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1503,14 +1496,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "e16e60780a624d94310ad7e6059e97827feb6b4b6bc2d757a1e89f67c5e7ddd5",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_regex_match": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, num_rows):\n        pattern = f\"^id\\d\\d\\d$\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1526,14 +1518,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "104a945e32f971e4b887da7b6cc6e6e728fc78ef6a77c2f6aed0693c24113234",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_projection": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_projection(self, num_rows):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1549,14 +1540,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "f2bd34ad9342852559d34262fc059be4c6f3122909b31ee078847b1a1b93907f",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_query_1": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_query_1(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        self.lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1572,14 +1562,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "af4473b7d93a3c30d6cfc9d8bcde05e126a1df7948b5877c1604f2882a037768",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_query_3": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_query_3(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        self.lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1595,14 +1584,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "9d0961c0292eff90c651a1989e525c7ce5ab63baa888ac4e2ccdb88b89cc9f2e",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_query_4": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_query_4(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        self.lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1618,14 +1606,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "e32d4b66ff29029ccf51f51511afe9792412ba38d2422d44b03b7e7e8710e38b",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_query_adv_query_2": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_query_adv_query_2(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        self.lib.read(f\"{num_rows}_rows\", query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1641,14 +1628,13 @@
                 "10000000"
             ]
         ],
-        "repeat": 0,
         "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "local_query_builder:30",
+        "sample_time": 2,
+        "setup_cache_key": "local_query_builder:33",
         "type": "time",
         "unit": "seconds",
         "version": "2b556ee72fdb8b5b25072c8e0df67fb3264fc3f2fa724c453a6522ef98392f93",
-        "warmup_time": -1
+        "warmup_time": 0.2
     },
     "modification_functions.DeleteMultipleVersions.time_delete_multiple_versions": {
         "code": "class DeleteMultipleVersions:\n    def time_delete_multiple_versions(self):\n        self.lib.delete(self.sym, list(range(99)))\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n        self.sym = f\"sym_{random.randint(0, 1_000_000)}\"\n    \n        for i in range(100):\n            self.lib.write(self.sym, pd.DataFrame({\"a\": [0]}), prune_previous_versions=False)",
@@ -4107,10 +4093,10 @@
                 "False"
             ]
         ],
-        "repeat": 0,
+        "repeat": 5,
         "rounds": 2,
-        "sample_time": 2,
-        "setup_cache_key": "version_chain:48",
+        "sample_time": 1,
+        "setup_cache_key": "version_chain:49",
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
@@ -4141,10 +4127,10 @@
                 "False"
             ]
         ],
-        "repeat": 0,
+        "repeat": 5,
         "rounds": 2,
-        "sample_time": 2,
-        "setup_cache_key": "version_chain:48",
+        "sample_time": 1,
+        "setup_cache_key": "version_chain:49",
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
@@ -4175,10 +4161,10 @@
                 "False"
             ]
         ],
-        "repeat": 0,
+        "repeat": 5,
         "rounds": 2,
-        "sample_time": 2,
-        "setup_cache_key": "version_chain:48",
+        "sample_time": 1,
+        "setup_cache_key": "version_chain:49",
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
@@ -4209,10 +4195,10 @@
                 "False"
             ]
         ],
-        "repeat": 0,
+        "repeat": 5,
         "rounds": 2,
-        "sample_time": 2,
-        "setup_cache_key": "version_chain:48",
+        "sample_time": 1,
+        "setup_cache_key": "version_chain:49",
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
@@ -4243,10 +4229,10 @@
                 "False"
             ]
         ],
-        "repeat": 0,
+        "repeat": 5,
         "rounds": 2,
-        "sample_time": 2,
-        "setup_cache_key": "version_chain:48",
+        "sample_time": 1,
+        "setup_cache_key": "version_chain:49",
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",

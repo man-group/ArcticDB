@@ -16,10 +16,13 @@ PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
 
 
 class LocalQueryBuilderFunctions:
+    sample_time = 2
     rounds = 2
-    sample_time = 1
+    repeat = (1, 10, 20.0)
+    warmup_time = 0.2
+
     LIB_NAME = "query_builder"
-    CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
+    CONNECTION_STRING = "lmdb://query_builder"
 
     params = PARAMS_QUERY_BUILDER
     param_names = ["num_rows"]
