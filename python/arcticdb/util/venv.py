@@ -44,11 +44,11 @@ def run_shell_command(
         # But to correctly work with shell=True we need a single command string.
         result = subprocess.run(
             command_string,
-            cwd=cwd, # this only affects os.getcwd()
+            cwd=cwd,  # this only affects os.getcwd()
             capture_output=True,
             shell=True,
             stdin=subprocess.DEVNULL,
-            env=env # this put cwd at index 1 in os.path; index 0 is always the path of the script
+            env=env,  # this put cwd at index 1 in os.path; index 0 is always the path of the script
         )
     if result.returncode != 0:
         error_message = (
