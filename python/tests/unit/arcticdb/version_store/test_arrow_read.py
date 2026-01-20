@@ -918,42 +918,38 @@ def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, ro
     assert expected.equals(received)
 
 
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    df=data_frames(
-        columns(["col"], elements=st.floats(min_value=0, max_value=1000, allow_nan=False), fill=st.just(np.nan)),
-    ),
-    rows_per_slice=st.integers(2, 10),
-    use_row_range=st.booleans(),
-)
-def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, use_row_range):
-    row_count = len(df)
-    assume(row_count > 0)
-    # Cannot use version_store_factory as it will complain that the library name is the same
-    lib = lmdb_version_store_arrow
-    lib._cfg.write_options.segment_row_size = rows_per_slice
-    sym = "test_arrow_sparse_floats_hypothesis"
-    # Each row slice must have at least one non-NaN value for sparsify_floats to work, so add one if there aren't any
-    row_slices = []
-    num_row_slices = (row_count + (rows_per_slice - 1)) // rows_per_slice
-    for i in range(num_row_slices):
-        row_slice = df[i * rows_per_slice : (i + 1) * rows_per_slice]
-        if row_slice["col"].notna().sum() == 0:
-            row_slice["col"][i * rows_per_slice] = 100
-        row_slices.append(row_slice)
-    adjusted_df = pd.concat(row_slices)
-    lib.write(sym, adjusted_df, sparsify_floats=True)
-    if use_row_range:
-        row_range = (row_count // 3, (2 * row_count) // 3)
-        expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices]).slice(
-            offset=row_range[0], length=row_range[1] - row_range[0]
-        )
-        received = lib.read(sym, row_range=row_range).data
+@pytest.mark.parametrize("row_range_start", [0, 1, 3, 7])
+@pytest.mark.parametrize("row_range_width", [0, 1, 2])
+@pytest.mark.parametrize("use_query_builder", [True, False])
+def test_arrow_dynamic_schema_row_range(version_store_factory, row_range_start, row_range_width, use_query_builder):
+    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    sym = "test_arrow_dynamic_schema_row_range"
+
+    df1 = pd.DataFrame(
+        {
+            "a": [1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", periods=4),
+    )
+    lib.write(sym, df1)
+
+    df2 = pd.DataFrame(
+        {
+            "b": [1000, 2000, 3000, 4000],
+        },
+        index=pd.date_range("2025-01-05", periods=4),
+    )
+    lib.append(sym, df2)
+
+    row_range = (row_range_start, row_range_start + row_range_width)
+    expected = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder:
+        q = QueryBuilder().row_range(row_range)
+        result = lib.read(sym, query_builder=q).data
     else:
-        expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
-        received = lib.read(sym).data
-    assert expected.equals(received)
+        result = lib.read(sym, row_range=row_range).data
+    assert_frame_equal_with_arrow(expected, result)
 
 
 @pytest.mark.parametrize("type_to_drop", [pa.int64(), pa.float64(), pa.large_string()])
@@ -1221,3 +1217,15 @@ def test_polars_unsupported_small_string(lmdb_version_store_arrow):
 
     with pytest.raises(ValueError):
         lib.read(sym, arrow_string_format_per_column={"col": ArrowOutputStringFormat.SMALL_STRING}).data
+
+
+def test_arrow_read_all_empty_strings(lmdb_version_store_arrow, any_arrow_string_format):
+    lib = lmdb_version_store_arrow
+    sym = "test_arrow_read_all_empty_strings"
+
+    df = pd.DataFrame({"empty_string_col": [""] * 10})
+    lib.write(sym, df)
+
+    result = lib.read(sym, arrow_string_format_default=any_arrow_string_format).data
+    expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(result, expected)
