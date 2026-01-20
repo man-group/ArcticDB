@@ -1,6 +1,7 @@
 import sys
 import pytest
 import pytz
+import os
 
 if sys.version_info >= (3, 9):
     import zoneinfo
@@ -22,6 +23,24 @@ if ARCTICDB_USING_CONDA:
 if MACOS_WHEEL_BUILD:
     pytest.skip("We don't have previous versions of arcticdb pypi released for MacOS", allow_module_level=True)
 
+
+@pytest.mark.parametrize("old_venv", ["4.5.1"], indirect=True) # adb version doesn't matter here
+def test_comp_venv_loading_path(old_venv, tmp_path_factory):
+    dir = tmp_path_factory.mktemp("comp_venv_loading_path")
+    python_path = os.path.join(dir, "run.py")
+    python_commands = [
+        f"import arcticdb as adb",
+        f"import sys",
+        f"import os",
+        f"assert adb.__version__ == '4.5.1'",
+        f"assert os.getcwd() == '{old_venv.path}'",
+        f"assert sys.path[1] == '{old_venv.path}'",
+        f"assert sys.path[0] == '{dir}'"
+    ]
+    with open(python_path, "w") as python_file:
+        python_file.write("\n".join(python_commands))
+    old_venv.execute_python_file(python_path)
+    
 
 def test_compat_write_read(old_venv_and_arctic_uri, lib_name, any_output_format):
     old_venv, arctic_uri = old_venv_and_arctic_uri

@@ -34,6 +34,8 @@ def run_shell_command(
     logger.info(f"Executing command: {command}")
     result = None
     command_string = " ".join(command)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = cwd
     if is_running_on_windows():
         # shell=True is required for running the correct python executable on Windows
         result = subprocess.run(command, cwd=cwd, capture_output=True, shell=True)
@@ -42,10 +44,11 @@ def run_shell_command(
         # But to correctly work with shell=True we need a single command string.
         result = subprocess.run(
             command_string,
-            cwd=cwd,
+            cwd=cwd, # this only affects os.getcwd()
             capture_output=True,
             shell=True,
             stdin=subprocess.DEVNULL,
+            env=env # this put cwd at index 1 in os.path; index 0 is always the path of the script
         )
     if result.returncode != 0:
         error_message = (
