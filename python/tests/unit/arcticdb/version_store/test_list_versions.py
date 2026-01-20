@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pytest
 
+import arcticdb.toolbox.query_stats as qs
 from arcticdb_ext.exceptions import KeyNotFoundException
 from arcticdb_ext.storage import KeyType
 
@@ -340,3 +341,49 @@ def test_broken_version_chain(lmdb_version_store_v1, latest_only):
     with pytest.raises(KeyNotFoundException) as e:
         lib.list_versions(latest_only=latest_only)
     assert broken_sym in str(e.value)
+
+
+# Query stats test for bug demonstration
+
+
+def test_list_versions_specific_snapshot_reads_all_snapshots(s3_version_store_v1, clear_query_stats):
+    """
+    Bug 18262322490: Demonstrates that list_versions reads all snapshots even when a specific
+    snapshot name is provided.
+
+    The bug is in version_store_api.cpp:332:
+        const bool do_snapshots = !skip_snapshots || snap_name;
+
+    When snap_name is specified, do_snapshots is always true, causing get_snapshot_version_info()
+    to read all snapshots via get_versions_from_snapshots() which iterates over all snapshot keys.
+    """
+    lib = s3_version_store_v1
+    num_snapshots = 5
+
+    # Create multiple snapshots
+    for i in range(num_snapshots):
+        lib.write(f"sym{i}", i)
+        lib.snapshot(f"snap{i}")
+
+    qs.enable()
+    qs.reset_stats()
+
+    # Query versions for a specific snapshot - should only need to read that one snapshot
+    lib.list_versions(snapshot="snap0")
+
+    stats = qs.get_query_stats()
+    storage_ops = stats["storage_operations"]
+
+    # S3_ListObjectsV2["SNAPSHOT"] counts how many times snapshot iteration occurs
+    # When querying a specific snapshot, we expect this to be 1
+    # Due to the bug, it will be equal to num_snapshots (iterates all snapshots)
+    snapshot_list_count = storage_ops.get("S3_ListObjectsV2", {}).get("SNAPSHOT", {}).get("count", 0)
+
+    # This assertion documents the bug:
+    # Expected (after fix): snapshot_list_count == 1
+    # Actual (with bug): snapshot_list_count >= 1 (reads all snapshots)
+    assert snapshot_list_count == 1, (
+        f"Bug 18262322490: Expected to list only 1 snapshot when querying specific snapshot 'snap0', "
+        f"but listed snapshots {snapshot_list_count} times. "
+        f"This indicates all {num_snapshots} snapshots were iterated instead of just 'snap0'."
+    )
