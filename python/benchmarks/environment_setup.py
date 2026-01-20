@@ -17,12 +17,13 @@ import tempfile
 import time
 import pandas as pd
 import numpy as np
-from typing import List, Union, Tuple
+from typing import List, Union, Optional, Iterable, Dict
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
 from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
+from arcticdb.util.test import random_ascii_string
 from arcticdb.util.test_utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.util.utils import strtobool
 from arcticdb.util.logger import get_logger
@@ -80,7 +81,7 @@ def is_storage_enabled(storage: Storage) -> bool:
         raise RuntimeError(f"Only LMDB and AMAZON storages are supported, received {storage}")
 
 
-def create_library(storage: Storage) -> Library:
+def create_libraries(storage: Storage, library_names: List[str]) -> List[Optional[Library]]:
     """
     Create a library for a given storage test, for use in ASV benchmarking runs.
 
@@ -116,19 +117,41 @@ def create_library(storage: Storage) -> Library:
 
     `aws s3 rb s3://<bucket-name> --region eu-west-2`
     """
-    lib_name = "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(10))
+    if not is_storage_enabled(storage):
+        return [None] * len(library_names)
 
     if storage == Storage.LMDB:
-        ac = Arctic(f"lmdb://tmp/{lib_name}")
+        ac = Arctic(f"lmdb://tmp/{random.randint(0, 100_000)}")
     elif storage == Storage.AMAZON:
         factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)
         ac = factory.create_fixture().create_arctic()
     else:
         raise RuntimeError(f"storage {storage} not implemented for benchmark {__file__}")
 
-    ac.delete_library(lib_name)
+    res = []
+    for l in library_names:
+        ac.delete_library(l)
+        res.append(ac.create_library(l))
 
-    return ac.create_library(lib_name)
+    return res
+
+
+def create_library(storage: Storage) -> Optional[Library]:
+    """
+    Create a library for a given storage test, for use in ASV benchmarking runs.
+
+    Returns None if the storage is not enabled.
+
+    See create_libraries docstring for notes on running locally.
+    """
+    lib_name = random_ascii_string(10)
+    return create_libraries(storage, [lib_name])[0]
+
+
+def create_libraries_across_storages(storages: Iterable[Storage]) -> Dict[Storage, Optional[Library]]:
+    """Create libraries for benchmarking on each of storages. If the storage not is_storage_enabled, the value
+    for that storage will be None."""
+    return {s: create_library(s) for s in storages}
 
 
 class StorageSetup:

@@ -103,8 +103,8 @@ jobs:
             if [ "${{ inputs.storage }}" == "REAL" ]; then
               # ASV tests with real storage starts with 'real_' in the test name
               # aseaton: We are currently refactoring away from this pattern to control the storages by environment variables
-              # instead. finalize_staged_data is the first one in the new pattern.
-              SUITE='(^real_.*|^finalize_staged_data.*)'
+              # instead. The names here are the modules that have been moved to the new approach so far.
+              SUITE='(^real_.*|^finalize_staged_data.*|^list_.*)'
               echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
               echo "ARCTICDB_STORAGE_LMDB=0" >> $GITHUB_ENV
             elif [ "${{ inputs.storage }}" == "ALL" ]; then
