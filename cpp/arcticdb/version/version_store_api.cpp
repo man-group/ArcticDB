@@ -127,13 +127,40 @@ using SymbolVersionToSnapshotInfoMap = std::unordered_map<std::pair<StreamId, Ve
 
 using VersionResultVector = std::vector<VersionResult>;
 
-VersionResultVector list_versions_for_snapshot(
+VersionResultVector list_versions_for_snapshot_without_snapshot_list(
+        const std::shared_ptr<Store>& store, const std::optional<StreamId>& stream_id, const SnapshotId& snap_name
+) {
+    auto snap = get_snapshot(store, snap_name);
+    if (!snap) {
+        throw NoDataFoundException(fmt::format("Specified snapshot {} not found", snap_name));
+    }
+    auto& [_, seg] = *snap;
+    VersionResultVector res;
+    std::vector<SnapshotId> empty_snapshots;
+    for (size_t idx = 0; idx < seg.row_count(); idx++) {
+        auto stream_index = read_key_row(seg, static_cast<ssize_t>(idx));
+        if (stream_id && stream_index.id() != *stream_id) {
+            continue;
+        }
+        res.emplace_back(
+                stream_index.id(), stream_index.version_id(), stream_index.creation_ts(), empty_snapshots, false
+        );
+    }
+
+    std::sort(res.begin(), res.end(), VersionComp());
+    return res;
+}
+
+VersionResultVector list_versions_for_snapshot_with_snapshot_list(
         const std::set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name, SnapshotMap&& versions_for_snapshots,
         SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
 
     VersionResultVector res;
-    util::check(versions_for_snapshots.count(snap_name.value()) != 0, "Snapshot not found");
+    if (!versions_for_snapshots.contains(snap_name.value())) {
+        throw NoDataFoundException(fmt::format("Snapshot {} not found", *snap_name));
+    }
+
     std::unordered_map<StreamId, AtomKey> version_for_stream_in_snapshot;
     for (const auto& key_in_snap : versions_for_snapshots[snap_name.value()]) {
         util::check(
@@ -321,6 +348,13 @@ VersionResultVector PythonVersionStore::list_versions(
 ) {
     ARCTICDB_SAMPLE(ListVersions, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
+
+    // If the snapshot name is specified, and we are skipping snapshots (so the user does not want a list of every
+    // snapshot that each version is in), then just load that snapshot and transform its contents.
+    if (snap_name && skip_snapshots) {
+        return list_versions_for_snapshot_without_snapshot_list(store(), stream_id, *snap_name);
+    }
+
     auto stream_ids = std::set<StreamId>();
 
     if (stream_id) {
@@ -332,24 +366,25 @@ VersionResultVector PythonVersionStore::list_versions(
     const bool do_snapshots = !skip_snapshots || snap_name;
 
     SymbolVersionToSnapshotInfoMap snapshots_for_symbol;
-    std::optional<SnapshotMap> versions_for_snapshots;
     if (do_snapshots) {
+        std::optional<SnapshotMap> versions_for_snapshots;
         get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots, stream_id);
 
         if (snap_name)
-            return list_versions_for_snapshot(
+            return list_versions_for_snapshot_with_snapshot_list(
                     stream_ids, snap_name, std::move(*versions_for_snapshots), std::move(snapshots_for_symbol)
             );
     }
 
-    if (latest_only)
+    if (latest_only) {
         return get_latest_versions_for_symbols(
                 store(), version_map(), std::move(stream_ids), std::move(snapshots_for_symbol)
         );
-    else
+    } else {
         return get_all_versions_for_symbols(
                 store(), version_map(), std::move(stream_ids), std::move(snapshots_for_symbol)
         );
+    }
 }
 
 namespace {
