@@ -73,7 +73,7 @@ class Snapshots:
                 lib.write_batch(writes)
 
                 inputs = [(lib, i, md_size) for i in range(n_snaps)]
-                with multiprocessing.get_context('spawn').Pool(10) as p:
+                with multiprocessing.get_context("spawn").Pool(10) as p:
                     p.starmap(create_snapshot, inputs)
 
         return libs_for_storage
