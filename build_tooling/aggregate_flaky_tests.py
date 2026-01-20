@@ -129,7 +129,6 @@ def generate_summary(combined_data: pd.DataFrame, total_runs: int, since_date: d
     if combined_data.empty:
         return "# Flaky Tests Summary\n\nNo test data found for the specified date range."
 
-    total_unique_tests = combined_data["test_name"].nunique()
     failure_counts = aggregate_failure_counts(combined_data)
 
     date_range = f"since {since_date.date()}" if since_date else "All data (since 2025-08-20)"
@@ -137,7 +136,6 @@ def generate_summary(combined_data: pd.DataFrame, total_runs: int, since_date: d
     summary = f"""# Flaky Tests Summary ({date_range})
 
 **Total runs analyzed:** {total_runs}
-**Total unique tests:** {total_unique_tests}
 **Tests with failures:** {len(failure_counts)}
 
 ## Top Failing Tests
