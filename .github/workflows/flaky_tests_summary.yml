@@ -1,15 +1,8 @@
 name: Flaky Tests Summary
 on:
-  push:
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at 00:00 UTC
   workflow_dispatch:
-    inputs:
-      since_date:
-        description: 'Start date (inclusive) in YYYY-MM-DD format. Leave empty for all data.'
-        required: false
-        type: string
-        default: ''
-
-run-name: Flaky tests ${{ inputs.since_date && format('since {0}', inputs.since_date) || '(all data)' }}
 
 permissions:
   contents: read
@@ -19,6 +12,13 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04
+    strategy:
+      matrix:
+        period:
+          - name: "1 week"
+            days: 7
+          - name: "6 months"
+            days: 180
     steps:
       - name: Select Python
         uses: actions/setup-python@v4.7.1
@@ -32,7 +32,7 @@ jobs:
         run: |
           apt update
           apt install -y git
-          python3 -m pip install arcticdb[Testing] pandas 
+          python3 -m pip install arcticdb[Testing] pandas
 
       - name: Setup softlink for SSL
         shell: bash -el {0}
@@ -48,10 +48,12 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
-      - name: Aggregate flaky tests
+      - name: Calculate since date
+        id: date
         run: |
-          if [ -n "${{ inputs.since_date }}" ]; then
-            python3 build_tooling/aggregate_flaky_tests.py --since "${{ inputs.since_date }}" --output "$GITHUB_STEP_SUMMARY" --md
-          else
-            python3 build_tooling/aggregate_flaky_tests.py --output "$GITHUB_STEP_SUMMARY" --md
-          fi
+          echo "since_date=$(date -d '-${{ matrix.period.days }} days' '+%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Aggregate flaky tests (${{ matrix.period.name }})
+        run: |
+          echo "## Flaky Tests Summary (${{ matrix.period.name }})" >> "$GITHUB_STEP_SUMMARY"
+          python3 build_tooling/aggregate_flaky_tests.py --since "${{ steps.date.outputs.since_date }}" --output "$GITHUB_STEP_SUMMARY" --md
