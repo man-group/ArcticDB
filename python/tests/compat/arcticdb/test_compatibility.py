@@ -32,10 +32,9 @@ def test_comp_venv_loading_path(old_venv, tmp_path_factory):
     python_commands = [
         f"import sys",
         f"import os",
-        f"from pathlib import Path",
-        f"assert Path(os.getcwd()) == Path('{old_venv.path}')",
-        f"assert Path(sys.path[1]) == Path('{old_venv.path}')",
-        f"assert Path(sys.path[0]) == Path('{dir}')",
+        f"assert os.getcwd() == {repr(str(old_venv.path))}",
+        f"assert sys.path[1] == {repr(str(old_venv.path))}",
+        f"assert sys.path[0] == {repr(str(dir))}",
     ]
     with open(python_path, "w") as python_file:
         python_file.write("\n".join(python_commands))
