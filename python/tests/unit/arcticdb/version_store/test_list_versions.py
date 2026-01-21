@@ -125,11 +125,9 @@ def test_list_versions_snapshot(lmdb_version_store_v1, snapshot):
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot))
 
 
@@ -157,11 +155,9 @@ def test_list_versions_symbol_and_snapshot(lmdb_version_store_v1, symbol, snapsh
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_symbol(all_versions, symbol)
     expected_versions = filter_for_snapshot(expected_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot))
 
 
@@ -189,11 +185,9 @@ def test_list_versions_snapshot_and_latest_only(lmdb_version_store_v1, snapshot)
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot, latest_only=True))
 
 
@@ -202,11 +196,9 @@ def test_list_versions_snapshot_and_skip_snapshots(lmdb_version_store_v1, snapsh
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     expected_versions = filter_for_skip_snapshots(expected_versions)
     assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot, skip_snapshots=True))
 
@@ -230,11 +222,9 @@ def test_list_versions_symbol_and_snapshot_and_latest_only(lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_symbol(all_versions, symbol)
     expected_versions = filter_for_snapshot(expected_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=True))
 
 
@@ -245,11 +235,9 @@ def test_list_versions_symbol_and_snapshot_and_skip_snapshots(lmdb_version_store
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_symbol(all_versions, symbol)
     expected_versions = filter_for_snapshot(expected_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     expected_versions = filter_for_skip_snapshots(expected_versions)
     assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot, skip_snapshots=True))
 
@@ -271,11 +259,9 @@ def test_list_versions_snapshot_and_latest_only_and_skip_snapshots(lmdb_version_
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
     expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
-    # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
-    # lines once resolved
+    # Won't fix bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified.
     for version in expected_versions:
         version["deleted"] = False
-    # end remove
     expected_versions = filter_for_skip_snapshots(expected_versions)
     assert_versions_equal(
         expected_versions, lib.list_versions(snapshot=snapshot, latest_only=True, skip_snapshots=True)
@@ -423,3 +409,19 @@ def test_list_versions_snapshot_not_found(lmdb_version_store_v1):
 
     with pytest.raises(NoDataFoundException, match=expected_message):
         lib.list_versions(snapshot="non_existent_snap", skip_snapshots=True)
+
+
+@pytest.mark.parametrize("symbol", ["sym", None])
+@pytest.mark.parametrize("latest_only", [None, True, False])
+@pytest.mark.parametrize("skip_snapshots", [None, True, False])
+def test_list_versions_with_snapshot_deleted_always_false(lmdb_version_store_v1, symbol, latest_only, skip_snapshots):
+    """See 18286248854, which is marked won't fix due to the performance impact a fix would have. This limitation
+    is documented on our `list_versions` APIs. If you change this behaviour, be sure to update that documentation.
+    """
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.snapshot("snap")
+    lib.delete("sym")
+
+    res = lib.list_versions(snapshot="snap")
+    assert res[0]["deleted"] == False
