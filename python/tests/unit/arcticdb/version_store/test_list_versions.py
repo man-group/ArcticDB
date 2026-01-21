@@ -101,15 +101,77 @@ def assert_versions_equal(expected_versions, versions):
 def test_list_versions_default_args(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = all_versions
-    # Bug 18279584183: list_versions does not include versions of symbols that have been deleted, but have versions
-    # kept alive in snapshots. Remove following line once resolved
-    expected_versions = expected_versions[:-1]
-    # end remove
-    assert_versions_equal(expected_versions, lib.list_versions())
+    assert_versions_equal(all_versions, lib.list_versions())
+
+
+def test_list_versions_deleted_symbols_alive_in_snapshot(lmdb_version_store_v1):
+    """Repro for bug 18279584183: list_versions does not include versions of symbols that have been deleted,
+    but have versions kept alive in snapshots"""
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.write("sym", 1)
+    lib.write("sym2", 2)
+    lib.write("sym3", 3)
+
+    lib.snapshot("snap")
+
+    lib.delete("sym")
+    lib.delete("sym2")
+    lib.write("sym2", 4)
+    lib.snapshot("other_snap")
+    lib.write("sym4", 5)
+
+    res = lib.list_versions()
+
+    expected = [
+        {"symbol": "sym4", "version": 0, "deleted": False, "snapshots": []},
+        {"symbol": "sym3", "version": 0, "deleted": False, "snapshots": ["other_snap", "snap"]},
+        {"symbol": "sym2", "version": 1, "deleted": False, "snapshots": ["other_snap"]},
+        {"symbol": "sym2", "version": 0, "deleted": True, "snapshots": ["snap"]},
+        {"symbol": "sym", "version": 1, "deleted": True, "snapshots": ["snap"]},
+    ]
+
+    assert_versions_equal(expected, res)
 
 
 # 1 argument
+
+
+def test_list_versions_deleted_symbols_alive_in_snapshot_skip_snapshots(s3_version_store_v1, clear_query_stats):
+    """Should not look in snapshots at all, even if the symbol is deleted."""
+    lib = s3_version_store_v1
+    lib.write("sym", 1)
+    lib.snapshot("snap")
+    lib.delete("sym")
+
+    qs.enable()
+    qs.reset_stats()
+    res = lib.list_versions(skip_snapshots=True)
+
+    assert res == []
+
+    stats = qs.get_query_stats()
+    storage_ops = stats["storage_operations"]
+
+    assert "SNAPSHOT_REF" not in storage_ops["S3_ListObjectsV2"]
+    assert "SNAPSHOT_REF" not in storage_ops["S3_GetObject"]
+
+
+@pytest.mark.parametrize("symbol", [None, "sym"])
+def test_list_versions_deleted_symbol_alive_in_snapshot(lmdb_version_store_v1, symbol):
+    """Minimal repro for bug 18279584183: list_versions does not include versions of symbols that have been deleted,
+    but have versions kept alive in snapshots"""
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.snapshot("snap")
+    lib.delete("sym")
+    res = lib.list_versions(symbol=symbol)
+    assert len(res) == 1
+    res = res[0]
+    assert res["symbol"] == "sym"
+    assert res["version"] == 0
+    assert res["deleted"] == True
+    assert res["snapshots"] == ["snap"]
 
 
 @pytest.mark.parametrize("symbol", ["sym0", "sym1", "sym2"])
