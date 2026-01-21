@@ -53,7 +53,10 @@ class S3ClientTestWrapper : public S3ClientInterface {
 
   private:
     // Returns error if failures are enabled for the given bucket
-    std::optional<Aws::S3::S3Error> has_failure_trigger(const std::string& bucket_name) const;
+    std::optional<Aws::S3::S3Error> has_bucket_failure_trigger(const std::string& bucket_name) const;
+    std::optional<Aws::S3::S3Error> has_failure_trigger(
+            const std::string& s3_object_name, const std::string& bucket_name, StorageOperation operation
+    ) const;
 
     std::unique_ptr<S3ClientInterface> actual_client_;
 };

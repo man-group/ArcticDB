@@ -72,6 +72,8 @@ inline std::vector<char> stream_to_vector(std::iostream& src) {
     return v;
 }
 
+enum class NativeVariantStorageContentType : uint32_t { EMPTY = 0, S3 = 1, GCPXML = 2 };
+
 class NativeVariantStorage {
   public:
     using VariantStorageConfig = std::variant<std::monostate, s3::S3Settings, s3::GCPXMLSettings>;
@@ -99,6 +101,17 @@ class NativeVariantStorage {
                 std::holds_alternative<s3::GCPXMLSettings>(config_), "Expected gcpxml settings but was {}", to_string()
         );
         return std::get<s3::GCPXMLSettings>(config_);
+    }
+
+    NativeVariantStorageContentType setting_type() const {
+        if (std::holds_alternative<std::monostate>(config_)) {
+            return NativeVariantStorageContentType::EMPTY;
+        } else if (std::holds_alternative<s3::S3Settings>(config_)) {
+            return NativeVariantStorageContentType::S3;
+        } else if (std::holds_alternative<s3::GCPXMLSettings>(config_)) {
+            return NativeVariantStorageContentType::GCPXML;
+        }
+        util::raise_rte("Unknown variant storage type");
     }
 
   private:
