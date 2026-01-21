@@ -130,11 +130,11 @@ using VersionResultVector = std::vector<VersionResult>;
 VersionResultVector list_versions_for_snapshot_without_snapshot_list(
         const std::shared_ptr<Store>& store, const std::optional<StreamId>& stream_id, const SnapshotId& snap_name
 ) {
-    auto snap = get_snapshot(store, snap_name);
+    const auto snap = get_snapshot(store, snap_name);
     if (!snap) {
         throw NoDataFoundException(fmt::format("Specified snapshot {} not found", snap_name));
     }
-    auto& [_, seg] = *snap;
+    const auto& seg = snap->second;
     VersionResultVector res;
     std::vector<SnapshotId> empty_snapshots;
     for (size_t idx = 0; idx < seg.row_count(); idx++) {
