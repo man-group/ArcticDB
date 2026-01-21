@@ -109,6 +109,19 @@ sparrow::array minimal_strings_array() {
     return sparrow::array(sparrow::string_array_impl<OffsetType>(std::vector<std::string>()));
 }
 
+sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t offset) {
+    const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
+    if (!has_string_buffer) {
+        return minimal_string_buffer();
+    }
+    auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
+    if (strings.blocks().size() == 0) {
+        return minimal_string_buffer();
+    }
+    const auto strings_buffer_size = strings.block(0)->bytes();
+    return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
+}
+
 template<typename TagType>
 requires(is_sequence_type(TagType::DataTypeTag::data_type))
 sparrow::array string_array_from_block(
@@ -129,15 +142,7 @@ sparrow::array string_array_from_block(
             block.mem_block()->bytes()
     );
     sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1);
-    const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
-    auto strings_buffer = [&]() {
-        if (!has_string_buffer) {
-            return minimal_string_buffer();
-        }
-        auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-        const auto strings_buffer_size = strings.block(0)->bytes();
-        return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
-    }();
+    auto strings_buffer = strings_buffer_at_offset(column, offset);
     auto arr = [&]() {
         if (maybe_bitmap.has_value()) {
             return sparrow::array(sparrow::string_array_impl<SignedType>(
@@ -181,11 +186,7 @@ sparrow::array string_dict_from_block(
             sparrow::u8_buffer<int64_t> offsets_buffer(
                     reinterpret_cast<int64_t*>(string_offsets.block(0)->release()), offset_buffer_value_count
             );
-            auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-            const auto strings_buffer_size = strings.block(0)->bytes();
-            sparrow::u8_buffer<char> strings_buffer(
-                    reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size
-            );
+            sparrow::u8_buffer<char> strings_buffer = strings_buffer_at_offset(column, offset);
             return {std::move(strings_buffer), std::move(offsets_buffer)};
         } else if (!has_offset_buffer && !has_string_buffer) {
             return minimal_strings_for_dict();
