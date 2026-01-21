@@ -93,7 +93,7 @@ class QueryBuilderFunctions:
         self.lib.read(self.symbol, columns=["v3"], query_builder=q)
 
     def time_filtering_string_regex_match(self, *args):
-        pattern = f"^id\d\d\d$"
+        pattern = r"^id\d\d\d$"
         q = QueryBuilder()
         q = q[q["id1"].regex_match(pattern)]
         self.lib.read(self.symbol, columns=["v3"], query_builder=q)
