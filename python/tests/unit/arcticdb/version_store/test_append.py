@@ -146,7 +146,11 @@ def test_append_snapshot_delete(lmdb_version_store):
     assert_frame_equal(vit.data, expected)
 
     lmdb_version_store.delete(symbol)
-    assert lmdb_version_store.list_versions() == []
+    versions = lmdb_version_store.list_versions()
+    assert len(versions) == 1
+    version = versions[0]
+    version.pop("date")
+    assert version == {"deleted": True, "snapshots": ["my_snap"], "symbol": symbol, "version": 0}
 
     assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, df1)
 

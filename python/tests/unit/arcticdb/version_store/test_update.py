@@ -307,7 +307,11 @@ def test_update_with_snapshot(version_store_factory):
     assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
     lmdb_version_store.delete(symbol)
-    assert lmdb_version_store.list_versions() == []
+    versions = lmdb_version_store.list_versions()
+    assert len(versions) == 1
+    version = versions[0]
+    version.pop("date")
+    assert version == {"deleted": True, "snapshots": ["my_snap"], "symbol": "update_no_daterange", "version": 0}
 
     assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 

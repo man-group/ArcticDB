@@ -626,8 +626,17 @@ def test_snapshots_with_delete_batch(arctic_library):
     assert_frame_equal(lib.read("sym3", as_of="sym3_snap").data, original_data)
     assert_frame_equal(lib.read("sym1", as_of="sym3_snap").data, original_data)
     assert lib.list_symbols() == []
-    assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym1"]
-    assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym3"]
+    sym_one_versions = [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym1"]
+    assert len(sym_one_versions) == 1
+    sym_one_version = sym_one_versions[0]
+    sym_one_version.pop("date")
+    assert sym_one_version == {"symbol": "sym1", "version": 0, "deleted": True, "snapshots": ["sym3_snap"]}
+
+    sym_three_versions = [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym3"]
+    assert len(sym_three_versions) == 1
+    sym_three_version = sym_three_versions[0]
+    sym_three_version.pop("date")
+    assert sym_three_version == {"symbol": "sym3", "version": 0, "deleted": True, "snapshots": ["sym3_snap"]}
 
 
 @pytest.mark.storage

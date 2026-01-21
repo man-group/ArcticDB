@@ -370,10 +370,20 @@ VersionResultVector PythonVersionStore::list_versions(
         std::optional<SnapshotMap> versions_for_snapshots;
         get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots, stream_id);
 
-        if (snap_name)
+        if (snap_name) {
             return list_versions_for_snapshot_with_snapshot_list(
                     stream_ids, snap_name, std::move(*versions_for_snapshots), std::move(snapshots_for_symbol)
             );
+        }
+
+        // The step below needs to consider streams that have been deleted but are kept alive by a snapshot
+        if (!stream_id && versions_for_snapshots) {
+            for (const auto& keys : *versions_for_snapshots | ranges::views::values) {
+                for (const AtomKey& key : keys) {
+                    stream_ids.insert(key.id());
+                }
+            }
+        }
     }
 
     if (latest_only) {

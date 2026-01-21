@@ -164,13 +164,9 @@ class VersionStoreComparison(RuleBasedStateMachine):
         """lib.list_versions() with args"""
         expected_vers = {}
         for sym, versions in self._versions.items():
-            # AN implementation first calls list_streams() and then resolve the available versions on those, which is
-            # different from Python Arctic:
-            last = versions[-1]
-            if last and last.state == State.NORMAL:
-                for ver_num, ver in enumerate(versions):
-                    if not (ver.state == State.DELETED or ver.can_delete()):
-                        expected_vers[(sym, ver_num)] = ver
+            for ver_num, ver in enumerate(versions):
+                if ver.state != State.DELETED and not ver.can_delete():
+                    expected_vers[(sym, ver_num)] = ver
 
         actual_vers = self._lib.list_versions()
         for actual in actual_vers:
