@@ -2783,6 +2783,9 @@ class NativeVersionStore:
             Symbol to return versions for.  If None, returns versions for all of the symbols in the library.
         snapshot : `Optional[str]`, default=None,
             Return the versions contained in the named snapshot.
+
+            Limitation: If this is specified then every element in the returned list will have `'deleted'=False`. This may
+            change in future.
         latest_only : `bool`
             Only include the latest version for each returned symbol. Has no effect if `snapshot` argument is also
             specified.
