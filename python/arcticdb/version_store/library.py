@@ -2833,6 +2833,9 @@ class Library:
             Symbol to return versions for.  If None returns versions across all symbols in the library.
         snapshot
             Only return the versions contained in the named snapshot.
+
+            Limitation: If this is specified then every VersionInfo in the result will have `deleted=False`. This may
+            change in future.
         latest_only : bool, default=False
             Only include the latest version for each returned symbol.
         skip_snapshots : bool, default=False
