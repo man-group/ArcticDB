@@ -32,8 +32,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_s3_storage_failures(mock_s3_store_with_error_simulation):
-    lib = mock_s3_store_with_error_simulation
+@pytest.mark.parametrize("version_store", ["wrapped_s3_version_store", "mock_s3_store_with_error_simulation"])
+def test_s3_storage_failures(request, version_store):
+    lib = request.getfixturevalue(version_store)
     symbol_success = "symbol"
     symbol_fail_write = "symbol#Failure_Write_99_0"
     symbol_fail_read = "symbol#Failure_Read_17_0"

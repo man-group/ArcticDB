@@ -34,9 +34,13 @@ def run_shell_command(
     logger.info(f"Executing command: {command}")
     result = None
     command_string = " ".join(command)
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(cwd)  # Windows only allow str object here
+    # cwd parameter only affects result of os.getcwd()
+    # env parameter puts cwd at index 1 in os.path; index 0 is always the path of the script
     if is_running_on_windows():
         # shell=True is required for running the correct python executable on Windows
-        result = subprocess.run(command, cwd=cwd, capture_output=True, shell=True)
+        result = subprocess.run(command, cwd=cwd, capture_output=True, shell=True, env=env)
     else:
         # On linux we need shell=True for conda feedstock runners (because otherwise they fail to expand path variables)
         # But to correctly work with shell=True we need a single command string.
@@ -46,6 +50,7 @@ def run_shell_command(
             capture_output=True,
             shell=True,
             stdin=subprocess.DEVNULL,
+            env=env,
         )
     if result.returncode != 0:
         error_message = (
