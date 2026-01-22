@@ -956,6 +956,93 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
     assert expected.equals(received)
 
 
+@pytest.mark.parametrize("row_range_start", [0, 1, 3, 6, 12])
+@pytest.mark.parametrize("row_range_width", [0, 1, 2, 5])
+@pytest.mark.parametrize("use_query_builder", [True, False])
+def test_arrow_dynamic_schema_row_range(version_store_factory, row_range_start, row_range_width, use_query_builder, any_arrow_string_format):
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    lib.set_arrow_string_format_default(any_arrow_string_format)
+    sym = "test_arrow_dynamic_schema_row_range"
+
+    df1 = pd.DataFrame(
+        {
+            "a": [1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", periods=4),
+    )
+    lib.write(sym, df1)
+
+    df2 = pd.DataFrame(
+        {},
+        index=pd.date_range("2025-01-05", periods=4),
+    )
+    lib.append(sym, df2)
+
+    df3 = pd.DataFrame(
+        {
+            "b": ["a", "b", "c", "d"],
+            "c": [10.0, 20.0, 30.0, 40.0],
+        },
+        index=pd.date_range("2025-01-09", periods=4),
+    )
+    lib.append(sym, df3)
+
+    row_range = (row_range_start, row_range_start + row_range_width)
+    expected = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder:
+        q = QueryBuilder().row_range(row_range)
+        result = lib.read(sym, query_builder=q, ).data
+    else:
+        result = lib.read(sym, row_range=row_range).data
+    assert_frame_equal_with_arrow(expected, result)
+
+
+@pytest.mark.parametrize("date_range_start", [0, 1, 3, 6, 12])
+@pytest.mark.parametrize("date_range_width", [0, 1, 2, 5])
+@pytest.mark.parametrize("use_query_builder", [True, False])
+def test_arrow_dynamic_schema_date_range(version_store_factory, date_range_start, date_range_width, use_query_builder, any_arrow_string_format):
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    lib.set_arrow_string_format_default(any_arrow_string_format)
+    sym = "test_arrow_dynamic_schema_date_range"
+
+    df1 = pd.DataFrame(
+        {
+            "a": [1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", periods=4),
+    )
+    lib.write(sym, df1)
+
+    df2 = pd.DataFrame(
+        {},
+        index=pd.date_range("2025-01-05", periods=4),
+    )
+    lib.append(sym, df2)
+
+    df3 = pd.DataFrame(
+        {
+            "b": ["a", "b", "c", "d"],
+            "c": [10.0, 20.0, 30.0, 40.0],
+        },
+        index=pd.date_range("2025-01-09", periods=4),
+    )
+    lib.append(sym, df3)
+
+    date_range = (
+        pd.Timestamp("2025-01-01") + pd.Timedelta(days=date_range_start),
+        pd.Timestamp("2025-01-01") + pd.Timedelta(days=date_range_start + date_range_width - 1),
+    )
+    expected = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder:
+        q = QueryBuilder().date_range(date_range)
+        result = lib.read(sym, query_builder=q).data
+    else:
+        result = lib.read(sym, date_range=date_range).data
+    assert_frame_equal_with_arrow(expected, result)
+
+
 @pytest.mark.parametrize("type_to_drop", [pa.int64(), pa.float64(), pa.large_string()])
 def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_arrow, type_to_drop):
     lib = lmdb_version_store_dynamic_schema_arrow
