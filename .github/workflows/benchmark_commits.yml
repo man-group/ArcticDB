@@ -51,7 +51,7 @@ jobs:
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
-        
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
@@ -94,6 +94,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+          
+          # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
+          python -m venv ./tooling_venv
+          ./tooling_venv/bin/pip install "ArcticDB[Testing]"
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
