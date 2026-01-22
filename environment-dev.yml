@@ -66,6 +66,7 @@ dependencies:
   - packaging
   - numpy
   - pandas <3
+  - pytz
   - attrs
   - boto3
   - werkzeug
