@@ -51,7 +51,7 @@ jobs:
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
-        
+
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
