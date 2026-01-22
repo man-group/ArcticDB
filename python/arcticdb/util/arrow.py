@@ -30,6 +30,7 @@ def convert_arrow_to_pandas_for_tests(table):
     - Replaces dictionary encoded string columns with regular string columns.
     - Fills null values in int columns with zeros.
     - Fills null values in bool columns with False.
+    - Fills null values in string columns with empty strings.
     """
     new_table = cast_string_columns(table)
     for i, name in enumerate(new_table.column_names):
@@ -38,5 +39,8 @@ def convert_arrow_to_pandas_for_tests(table):
             new_table = new_table.set_column(i, name, new_col)
         if pa.types.is_boolean(new_table.column(i).type):
             new_col = new_table.column(i).fill_null(False)
+            new_table = new_table.set_column(i, name, new_col)
+        if pa.types.is_string(new_table.column(i).type) or pa.types.is_large_string(new_table.column(i).type) or pa.types.is_dictionary(new_table.column(i).type):
+            new_col = new_table.column(i).fill_null("")
             new_table = new_table.set_column(i, name, new_col)
     return new_table.to_pandas()
