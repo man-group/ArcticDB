@@ -19,6 +19,7 @@
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
+#include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
 
@@ -56,6 +57,49 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
         const PreDeleteChecks& check = default_pre_delete_checks, const bool dry_run = false
 );
+
+namespace details {
+
+struct ListStreamsVersionStoreObjects {
+    std::shared_ptr<Store>& store_;
+    SymbolList& symbol_list_;
+    const arcticc::pb2::storage_pb2::VersionStoreConfig& cfg_;
+    std::shared_ptr<VersionMap>& version_map_;
+};
+
+template<StreamIdSet R>
+R list_streams_internal_implementation(
+        std::optional<SnapshotId> snap_name, const std::optional<std::string>& regex,
+        const std::optional<std::string>& prefix, const std::optional<bool>& use_symbol_list,
+        const std::optional<bool>& all_symbols, ListStreamsVersionStoreObjects& version_store_objects
+) {
+    ARCTICDB_SAMPLE(ListStreamsInternal, 0)
+    R res{};
+
+    if (snap_name) {
+        res = list_streams_in_snapshot<R>(version_store_objects.store_, *snap_name);
+    } else {
+        if (use_symbol_list.value_or(version_store_objects.cfg_.symbol_list()))
+            res = version_store_objects.symbol_list_.get_symbol_set<R>(version_store_objects.store_);
+        else
+            res = list_streams<R>(
+                    version_store_objects.store_,
+                    version_store_objects.version_map_,
+                    prefix,
+                    all_symbols.value_or(false)
+            );
+    }
+
+    if (regex) {
+        return filter_by_regex(res, regex);
+    } else if (prefix) {
+        return filter_by_regex(res, std::optional("^" + *prefix));
+    } else {
+        return res;
+    }
+}
+
+} // namespace details
 
 class LocalVersionedEngine : public VersionedEngine {
 
@@ -138,6 +182,12 @@ class LocalVersionedEngine : public VersionedEngine {
     };
 
     std::set<StreamId> list_streams_internal(
+            std::optional<SnapshotId> snap_name, const std::optional<std::string>& regex,
+            const std::optional<std::string>& prefix, const std::optional<bool>& opt_use_symbol_list,
+            const std::optional<bool>& opt_all_symbols
+    ) override;
+
+    std::unordered_set<StreamId> list_streams_unordered_internal(
             std::optional<SnapshotId> snap_name, const std::optional<std::string>& regex,
             const std::optional<std::string>& prefix, const std::optional<bool>& opt_use_symbol_list,
             const std::optional<bool>& opt_all_symbols

@@ -356,23 +356,6 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
     return store->read_sync(*opt_snap_key);
 }
 
-std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store, const SnapshotId& snap_name) {
-    ARCTICDB_SAMPLE(ListStreamsInSnapshot, 0)
-    std::set<StreamId> res;
-    auto opt_snap_key = get_snapshot(store, snap_name);
-
-    if (!opt_snap_key)
-        throw storage::NoDataFoundException(fmt::format("Snapshot {} not found", snap_name));
-
-    const auto& snapshot_segment = opt_snap_key->second;
-
-    for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
-        auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-        res.insert(stream_index.id());
-    }
-    return res;
-}
-
 std::vector<AtomKey> get_versions_from_segment(
         const SegmentInMemory& snapshot_segment, const std::optional<StreamId>& stream_id
 ) {

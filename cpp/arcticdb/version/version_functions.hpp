@@ -85,7 +85,7 @@ inline std::optional<AtomKey> get_specific_version(
 }
 
 template<typename MatchingAcceptor, typename PrevAcceptor, typename NextAcceptor, typename KeyFilter>
-inline bool get_matching_prev_and_next_versions(
+bool get_matching_prev_and_next_versions(
         const std::shared_ptr<VersionMapEntry>& entry, VersionId version_id, MatchingAcceptor matching_acceptor,
         PrevAcceptor prev_acceptor, NextAcceptor next_acceptor, KeyFilter key_filter
 ) {
@@ -126,9 +126,10 @@ inline bool has_undeleted_version(
     return static_cast<bool>(maybe_undeleted);
 }
 
-inline void insert_if_undeleted(
+template<stream::StreamIdSet R>
+void insert_if_undeleted(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const VariantKey& key,
-        std::set<StreamId>& res
+        R& res
 ) {
     auto id = variant_key_id(key);
     if (has_undeleted_version(store, version_map, id))
@@ -339,12 +340,13 @@ inline std::vector<AtomKey> get_index_and_tombstone_keys(
     return res;
 }
 
-inline std::set<StreamId> list_streams(
+template<typename R = std::set<StreamId>>
+R list_streams(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
         const std::optional<std::string>& prefix, bool all_symbols
 ) {
     ARCTICDB_SAMPLE(ListStreams, 0)
-    std::set<StreamId> res;
+    R res;
     if (prefix && store->supports_prefix_matching()) {
         ARCTICDB_DEBUG(log::version(), "Storage backend supports prefix matching");
         store->iterate_type(
