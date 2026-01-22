@@ -8,8 +8,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pytest
 
+import arcticdb.toolbox.query_stats as qs
 from arcticdb_ext.exceptions import KeyNotFoundException
-from arcticdb_ext.storage import KeyType
+from arcticdb_ext.storage import KeyType, NoDataFoundException
 
 
 def populate_library(lib):
@@ -206,10 +207,7 @@ def test_list_versions_snapshot_and_skip_snapshots(lmdb_version_store_v1, snapsh
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    # Bug 18262322490: list_versions does not respect skip_snapshots argument when snapshot is specified. Add in
-    # following line once resolved
-    # expected_versions = filter_for_skip_snapshots(expected_versions)
-    # end add
+    expected_versions = filter_for_skip_snapshots(expected_versions)
     assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot, skip_snapshots=True))
 
 
@@ -252,10 +250,7 @@ def test_list_versions_symbol_and_snapshot_and_skip_snapshots(lmdb_version_store
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    # Bug 18262322490: list_versions does not respect skip_snapshots argument when snapshot is specified. Add in
-    # following line once resolved
-    # expected_versions = filter_for_skip_snapshots(expected_versions)
-    # end add
+    expected_versions = filter_for_skip_snapshots(expected_versions)
     assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot, skip_snapshots=True))
 
 
@@ -281,10 +276,7 @@ def test_list_versions_snapshot_and_latest_only_and_skip_snapshots(lmdb_version_
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    # Bug 18262322490: list_versions does not respect skip_snapshots argument when snapshot is specified. Add in
-    # following line once resolved
-    # expected_versions = filter_for_skip_snapshots(expected_versions)
-    # end add
+    expected_versions = filter_for_skip_snapshots(expected_versions)
     assert_versions_equal(
         expected_versions, lib.list_versions(snapshot=snapshot, latest_only=True, skip_snapshots=True)
     )
@@ -340,3 +332,94 @@ def test_broken_version_chain(lmdb_version_store_v1, latest_only):
     with pytest.raises(KeyNotFoundException) as e:
         lib.list_versions(latest_only=latest_only)
     assert broken_sym in str(e.value)
+
+
+def test_list_versions_specific_snapshot_should_not_list_snapshots(s3_version_store_v1, clear_query_stats):
+    lib = s3_version_store_v1
+    num_snapshots = 5
+
+    for i in range(num_snapshots):
+        lib.write(f"sym{i}", i)
+        lib.snapshot(f"snap{i}")
+
+    qs.enable()
+    qs.reset_stats()
+
+    # Query versions for a specific snapshot - should only need to read that one snapshot
+    lib.list_versions(snapshot="snap0", skip_snapshots=True)
+
+    stats = qs.get_query_stats()
+    storage_ops = stats["storage_operations"]
+
+    # Should not list snapshots when user specifies a particular snapshot
+    assert "S3_ListObjectsV2" not in storage_ops
+    snapshot_read_count = storage_ops["S3_GetObject"]["SNAPSHOT_REF"]["count"]
+    assert snapshot_read_count == 1
+
+    # Reasonableness check that "S3_ListObjectsV2" can be in the output
+    lib.list_snapshots()
+    stats = qs.get_query_stats()
+    storage_ops = stats["storage_operations"]
+    assert "S3_ListObjectsV2" in storage_ops
+
+
+def test_list_versions_specific_snapshot_all_symbols(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    num_snapshots = 5
+
+    for i in range(num_snapshots):
+        lib.write(f"sym{i}", i)
+        lib.snapshot(f"snap{i}")
+
+    res = lib.list_versions(snapshot="snap0", skip_snapshots=True)
+    assert len(res) == 1
+    assert res[0]["symbol"] == "sym0"
+    assert res[0]["snapshots"] == []
+
+    res = lib.list_versions(snapshot="snap4", skip_snapshots=True)
+    assert len(res) == 5
+
+    for v in res:
+        assert v["snapshots"] == []
+
+    symbols = {r["symbol"] for r in res}
+    for i in range(num_snapshots):
+        assert f"sym{i}" in symbols
+
+
+def test_list_versions_specific_snapshot_specific_symbols(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    num_snapshots = 5
+
+    for i in range(num_snapshots):
+        lib.write(f"sym{i}", i)
+        lib.snapshot(f"snap{i}")
+
+    res = lib.list_versions(snapshot="snap0", skip_snapshots=True, symbol="sym0")
+    assert len(res) == 1
+    assert res[0]["symbol"] == "sym0"
+    assert res[0]["snapshots"] == []
+
+    res = lib.list_versions(snapshot="snap4", skip_snapshots=True, symbol="sym0")
+    assert len(res) == 1
+    assert res[0]["symbol"] == "sym0"
+    assert res[0]["snapshots"] == []
+
+
+def test_list_versions_snapshot_not_found(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.snapshot("snap")
+
+    expected_message = r".*non_existent_snap not found"
+    with pytest.raises(NoDataFoundException, match=expected_message):
+        lib.list_versions("sym", snapshot="non_existent_snap")
+
+    with pytest.raises(NoDataFoundException, match=expected_message):
+        lib.list_versions("sym", snapshot="non_existent_snap", skip_snapshots=True)
+
+    with pytest.raises(NoDataFoundException, match=expected_message):
+        lib.list_versions(snapshot="non_existent_snap")
+
+    with pytest.raises(NoDataFoundException, match=expected_message):
+        lib.list_versions(snapshot="non_existent_snap", skip_snapshots=True)
