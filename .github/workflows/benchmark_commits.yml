@@ -95,7 +95,8 @@ jobs:
           
           # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
           python -m venv ./tooling_venv
-          ./tooling_venv/bin/pip install "ArcticDB[Testing]"
+          # pytz and pandas<3 can go once latest ArcticDB release has these dependencies
+          ./tooling_venv/bin/pip install "ArcticDB[Testing]" "pytz" "pandas<3"
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
