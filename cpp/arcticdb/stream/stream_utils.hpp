@@ -362,13 +362,14 @@ class KeysFromSegIterator : public IndexRangeFilter {
     std::size_t row_id = 0;
 };
 
-inline std::set<StreamId> filter_by_regex(
-        const std::set<StreamId>& results, const std::optional<std::string>& opt_regex
+template<typename R = std::set<StreamId>>
+R filter_by_regex(
+        const R& results, const std::optional<std::string>& opt_regex
 ) {
     if (!opt_regex) {
         return results;
     }
-    std::set<StreamId> filtered_results;
+    R filtered_results;
     util::RegexPatternUTF8 pattern(*opt_regex);
     util::RegexUTF8 regex{pattern};
 

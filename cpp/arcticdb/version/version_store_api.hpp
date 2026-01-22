@@ -170,17 +170,17 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     timestamp get_update_time(const StreamId& stream_id, const VersionQuery& version_query);
 
-    inline void fix_ref_key(StreamId stream_id) { version_map()->fix_ref_key(store(), std::move(stream_id)); }
+    void fix_ref_key(StreamId stream_id) { version_map()->fix_ref_key(store(), std::move(stream_id)); }
 
-    inline void remove_and_rewrite_version_keys(StreamId stream_id) {
+    void remove_and_rewrite_version_keys(StreamId stream_id) {
         version_map()->remove_and_rewrite_version_keys(store(), std::move(stream_id));
     }
 
-    inline bool check_ref_key(StreamId stream_id) {
+    bool check_ref_key(StreamId stream_id) {
         return version_map()->check_ref_key(store(), std::move(stream_id));
     }
 
-    inline bool indexes_sorted(const StreamId& stream_id) { return version_map()->indexes_sorted(store(), stream_id); }
+    bool indexes_sorted(const StreamId& stream_id) { return version_map()->indexes_sorted(store(), stream_id); }
 
     void verify_snapshot(const SnapshotId& snap_name);
 
@@ -253,6 +253,14 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     std::set<StreamId> list_streams(
+            const std::optional<SnapshotId>& snap_name = std::nullopt,
+            const std::optional<std::string>& regex = std::nullopt,
+            const std::optional<std::string>& prefix = std::nullopt,
+            const std::optional<bool>& use_symbol_list = std::nullopt,
+            const std::optional<bool>& all_symbols = std::nullopt
+    );
+
+    std::unordered_set<StreamId> list_streams_unordered(
             const std::optional<SnapshotId>& snap_name = std::nullopt,
             const std::optional<std::string>& regex = std::nullopt,
             const std::optional<std::string>& prefix = std::nullopt,

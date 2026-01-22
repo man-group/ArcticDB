@@ -25,11 +25,6 @@ using namespace arcticdb::stream;
 
 static const StreamId compaction_id{StringId{CompactionId}};
 
-using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
-using Compaction = std::vector<AtomKey>::const_iterator;
-using MaybeCompaction = std::optional<Compaction>;
-using CollectionType = std::vector<SymbolListEntry>;
-
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
@@ -38,14 +33,6 @@ SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId
     seed_(seed),
     version_map_(std::move(version_map)) {}
 
-struct LoadResult {
-    std::vector<AtomKey> symbol_list_keys_;
-    MaybeCompaction maybe_previous_compaction;
-    CollectionType symbols_;
-    timestamp timestamp_ = 0L;
-
-    std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
-};
 
 auto warning_threshold() {
     return 2 * static_cast<size_t>(
@@ -509,7 +496,7 @@ CollectionType load_from_version_keys(
     return merge_existing_with_journal_keys(version_map, store, keys, std::move(previous_entries));
 }
 
-LoadResult attempt_load(
+LoadResult SymbolList::attempt_load(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Symbol list load attempt");
@@ -810,43 +797,6 @@ bool has_recent_compaction(
     }
 
     return (maybe_previous_compaction && !found_last) || has_newer;
-}
-
-std::set<StreamId> SymbolList::load(
-        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction
-) {
-    LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
-        return attempt_load(version_map, store, data_);
-    });
-
-    if (!no_compaction && needs_compaction(load_result)) {
-        ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
-        try {
-            if (StorageLock lock{StringId{CompactionLockName}}; lock.try_lock(store)) {
-                OnExit x([&lock, &store] { lock.unlock(store); });
-
-                ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Checking whether we still need to compact under lock");
-                compact_internal(store, load_result);
-            } else {
-                ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Not compacting the symbol list due to lock contention");
-            }
-        } catch (const storage::LibraryPermissionException& ex) {
-            // Note: this only reflects AN's permission check and is not thrown by the Storage
-            ARCTICDB_RUNTIME_DEBUG(
-                    log::symbol(), "Not compacting the symbol list due to lack of permission", ex.what()
-            );
-        } catch (const std::exception& ex) {
-            log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
-        }
-    }
-
-    std::set<StreamId> output;
-    for (const auto& entry : load_result.symbols_) {
-        if (entry.action_ == ActionType::ADD)
-            output.insert(entry.stream_id_);
-    }
-
-    return output;
 }
 
 size_t SymbolList::compact(const std::shared_ptr<Store>& store) {

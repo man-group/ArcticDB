@@ -236,23 +236,22 @@ std::set<StreamId> LocalVersionedEngine::list_streams_internal(
         const std::optional<bool>& all_symbols
 ) {
     ARCTICDB_SAMPLE(ListStreamsInternal, 0)
-    auto res = std::set<StreamId>();
+    details::ListStreamsVersionStoreObjects version_store_objects{.store_=store(), .symbol_list_ = symbol_list(),
+        .cfg_ = cfg(), .version_map_ = version_map()};
+    return details::list_streams_internal_implementation<>(
+        snap_name, regex, prefix, use_symbol_list, all_symbols, version_store_objects);
+}
 
-    if (snap_name) {
-        res = list_streams_in_snapshot(store(), *snap_name);
-    } else {
-        if (use_symbol_list.value_or(cfg().symbol_list()))
-            res = symbol_list().get_symbol_set(store());
-        else
-            res = list_streams(store(), version_map(), prefix, all_symbols.value_or(false));
-    }
-
-    if (regex) {
-        return filter_by_regex(res, regex);
-    } else if (prefix) {
-        return filter_by_regex(res, std::optional("^" + *prefix));
-    }
-    return res;
+std::unordered_set<StreamId> LocalVersionedEngine::list_streams_unordered_internal(
+        std::optional<SnapshotId> snap_name, const std::optional<std::string>& regex,
+        const std::optional<std::string>& prefix, const std::optional<bool>& use_symbol_list,
+        const std::optional<bool>& all_symbols
+) {
+    ARCTICDB_SAMPLE(ListStreamsInternal, 0)
+    details::ListStreamsVersionStoreObjects version_store_objects{.store_=store(), .symbol_list_ = symbol_list(),
+        .cfg_ = cfg(), .version_map_ = version_map()};
+    return details::list_streams_internal_implementation<std::unordered_set<StreamId>>(
+        snap_name, regex, prefix, use_symbol_list, all_symbols, version_store_objects);
 }
 
 size_t LocalVersionedEngine::compact_symbol_list_internal() {
