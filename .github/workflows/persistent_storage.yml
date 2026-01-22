@@ -92,7 +92,7 @@ jobs:
       - name: Seed the storage
         if: inputs.job_type == 'seed'
         run: |
-          echo "Running seed for ${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }} on ${{matrix.os}}_${{env.python_impl_name}}"
+          echo "Running seed on ${{matrix.os}}_${{env.python_impl_name}}"
           python python/tests/util/storage_test.py --type seed --version ${{inputs.arcticdb_version}}
 
       - name: Verify the storage

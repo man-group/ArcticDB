@@ -72,7 +72,7 @@ jobs:
       commit: ${{ matrix.commits }}
       benchmark_all_tags: ${{ inputs.benchmark_all_tags || false }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
-      storage: ${{  github.event_name == 'schedule' && 'ALL' || inputs.storage || 'LMDB'}}
+      storage: ${{  github.ref_name == 'master' && 'ALL' || inputs.storage || 'LMDB'}}
       suite_overwrite: ${{ inputs.suite_overwrite || ''}}
 
   publish_benchmark_results_to_gh_pages:  

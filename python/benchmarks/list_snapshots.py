@@ -15,6 +15,7 @@ from arcticdb import WritePayload
 from arcticdb.util.test_utils import CachedDFGenerator
 from asv_runner.benchmarks.mark import SkipNotImplemented
 from benchmarks.common import *
+from arcticdb.util.logger import get_logger
 
 from benchmarks.environment_setup import Storage, create_libraries, is_storage_enabled
 
