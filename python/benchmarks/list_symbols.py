@@ -10,6 +10,7 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from .environment_setup import Storage, create_libraries_across_storages
 from benchmarks.common import *
+from arcticdb.util.logger import get_logger
 
 from arcticdb.version_store.library import WritePayload
 

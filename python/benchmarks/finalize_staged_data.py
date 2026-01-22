@@ -9,7 +9,7 @@ from arcticdb.version_store.library import StagedDataFinalizeMethod
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from .environment_setup import Storage, create_libraries_across_storages
-from .common import get_logger
+from arcticdb.util.logger import get_logger
 
 
 def _symbol_name(num_chunks):

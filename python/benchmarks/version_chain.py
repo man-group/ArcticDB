@@ -18,6 +18,7 @@ import sys
 import time
 
 from .common import *
+from arcticdb.util.logger import get_logger
 
 
 class IterateVersionChain:
