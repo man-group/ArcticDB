@@ -40,7 +40,11 @@ def convert_arrow_to_pandas_for_tests(table):
         if pa.types.is_boolean(new_table.column(i).type):
             new_col = new_table.column(i).fill_null(False)
             new_table = new_table.set_column(i, name, new_col)
-        if pa.types.is_string(new_table.column(i).type) or pa.types.is_large_string(new_table.column(i).type) or pa.types.is_dictionary(new_table.column(i).type):
+        if (
+            pa.types.is_string(new_table.column(i).type)
+            or pa.types.is_large_string(new_table.column(i).type)
+            or pa.types.is_dictionary(new_table.column(i).type)
+        ):
             new_col = new_table.column(i).fill_null("")
             new_table = new_table.set_column(i, name, new_col)
     return new_table.to_pandas()

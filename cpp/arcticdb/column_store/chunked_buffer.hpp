@@ -284,10 +284,6 @@ class ChunkedBufferImpl {
     };
 
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
-        if (blocks_.size() == 1u) {
-            return BlockAndOffset(blocks_[0], pos_bytes, 0);
-        }
-
         if (is_regular_sized() || pos_bytes < regular_sized_until_) {
             size_t block_offset = pos_bytes / DefaultBlockSize;
             util::check(
@@ -308,9 +304,18 @@ class ChunkedBufferImpl {
         }
 
         util::check(!block_offsets_.empty(), "Expected an irregular block-sized buffer to have offsets");
-        auto block_offset = std::lower_bound(std::begin(block_offsets_), std::end(block_offsets_), pos_bytes);
-        if (block_offset == block_offsets_.end() || *block_offset != pos_bytes)
-            --block_offset;
+        util::check(pos_bytes >= block_offsets_.front(), "Requested position {} before first block offset {}", pos_bytes, block_offsets_.front());
+
+        if (blocks_.size() == 1u) {
+            // Some constructions of a PRESIZED ChunkedBuffer can produce a single block with only a beginning offset, so we can't unify with below upper_bound logic.
+            // TODO: Make sure all constructions of ChunkedBuffer have valid block offsets.
+            return BlockAndOffset(blocks_[0], pos_bytes - block_offsets_.front(), 0);
+        }
+
+        // We want to get the block where block_offsets_[i] <= pos_bytes < block_offsets_[i+1]
+        auto block_offset = std::upper_bound(std::begin(block_offsets_), std::end(block_offsets_), pos_bytes);
+        util::check(block_offset != block_offsets_.end(), "Requested position {} after last block offset {}", pos_bytes, block_offsets_.back());
+        --block_offset;
 
         auto irregular_block_num = std::distance(block_offsets_.begin(), block_offset);
         auto first_irregular_block = regular_sized_until_ / DefaultBlockSize;
@@ -500,8 +505,10 @@ class ChunkedBufferImpl {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
     }
 
-    // Note that with all the truncate_*_block methods, the bytes_ and offsets are no longer accurate after the methods
-    // are called, but downstream logic uses these values to match up blocks with record batches, so this is deliberate
+    // Note that with all truncate_*_block methods update the block_offsets in a way which allows the first offset to be > 0.
+    // E.g. if we have two blocks of size 10 and we truncate the first 5 bytes, the block_offsets_ will be {5, 10, 20}.
+    // This allows modifying only the first and last blocks without needing to update all offsets.
+    // Also the `bytes_` must not be changed. It is used to verify `pos + required <= bytes()` in several places.
     void truncate_single_block(size_t start_offset, size_t end_offset) {
         // Inclusive of start_offset, exclusive of end_offset
         util::check(
@@ -523,9 +530,11 @@ class ChunkedBufferImpl {
         auto remaining_bytes_without_extra = block_bytes_without_extra - removed_bytes;
         auto remaining_bytes = remaining_bytes_without_extra + extra_bytes_per_block_;
         if (remaining_bytes_without_extra > 0) {
-            auto new_block = create_block(remaining_bytes_without_extra, 0);
+            auto new_block = create_block(remaining_bytes_without_extra, block->offset_ + start_offset);
             new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
             blocks_[0] = new_block;
+            block_offsets_[0] = start_offset;
+            block_offsets_[1] = end_offset;
         } else {
             blocks_.clear();
             block_offsets_.clear();
@@ -552,9 +561,10 @@ class ChunkedBufferImpl {
         );
         auto remaining_bytes_without_extra = block_bytes_without_extra - bytes;
         auto remaining_bytes = remaining_bytes_without_extra + extra_bytes_per_block_;
-        auto new_block = create_block(remaining_bytes_without_extra, block->offset_);
+        auto new_block = create_block(remaining_bytes_without_extra, block->offset_ + bytes);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
+        block_offsets_[0] = bytes;
         block->abandon();
         free_block(block);
     }
@@ -575,6 +585,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(remaining_bytes_without_extra, block->offset_);
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
+        block_offsets_.back() -= bytes;
         block->abandon();
         free_block(block);
     }
