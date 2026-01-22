@@ -107,7 +107,7 @@ void PythonVersionStore::_clear_symbol_list_keys() { symbol_list().clear(store()
 
 void PythonVersionStore::reload_symbol_list() {
     symbol_list().clear(store());
-    symbol_list().load(version_map(), store(), false);
+    symbol_list().load<std::set<StreamId>>(version_map(), store(), false);
 }
 
 // To be sorted on timestamp
@@ -152,8 +152,8 @@ VersionResultVector list_versions_for_snapshot_without_snapshot_list(
 }
 
 VersionResultVector list_versions_for_snapshot_with_snapshot_list(
-        const std::set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name, SnapshotMap&& versions_for_snapshots,
-        SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
+        const std::unordered_set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name,
+        SnapshotMap&& versions_for_snapshots, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
 
     VersionResultVector res;
@@ -210,12 +210,8 @@ void get_snapshot_version_info(
 
 VersionResultVector get_latest_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
+        std::vector<StreamId>&& symbols, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
-    // folly::window requires subscript operator
-    std::vector<StreamId> symbols(
-            std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
-    );
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
     // We are going to use folly::collect to short-circuit on any network errors, which means we need to keep everything
     // alive even after this function exits to avoid segfaults in workers that are still going after one worker raises
@@ -266,12 +262,8 @@ VersionResultVector get_latest_versions_for_symbols(
 
 VersionResultVector get_all_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
+        std::vector<StreamId>&& symbols, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
-    // folly::window requires subscript operator
-    std::vector<StreamId> symbols(
-            std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
-    );
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
     // We are going to use folly::collect to short-circuit on any network errors, which means we need to keep everything
     // alive even after this function exits to avoid segfaults in workers that are still going after one worker raises
@@ -355,12 +347,12 @@ VersionResultVector PythonVersionStore::list_versions(
         return list_versions_for_snapshot_without_snapshot_list(store(), stream_id, *snap_name);
     }
 
-    auto stream_ids = std::set<StreamId>();
+    auto stream_ids = std::unordered_set<StreamId>{};
 
     if (stream_id) {
         stream_ids.insert(*stream_id);
     } else {
-        stream_ids = list_streams(snap_name);
+        stream_ids = list_streams_unordered(snap_name);
     }
 
     const bool do_snapshots = !skip_snapshots || snap_name;
@@ -386,13 +378,18 @@ VersionResultVector PythonVersionStore::list_versions(
         }
     }
 
+    std::vector<StreamId> ordered_stream_ids(
+            std::make_move_iterator(stream_ids.begin()), std::make_move_iterator(stream_ids.end())
+    );
+    ranges::sort(ordered_stream_ids, std::greater<StreamId>());
+
     if (latest_only) {
         return get_latest_versions_for_symbols(
-                store(), version_map(), std::move(stream_ids), std::move(snapshots_for_symbol)
+                store(), version_map(), std::move(ordered_stream_ids), std::move(snapshots_for_symbol)
         );
     } else {
         return get_all_versions_for_symbols(
-                store(), version_map(), std::move(stream_ids), std::move(snapshots_for_symbol)
+                store(), version_map(), std::move(ordered_stream_ids), std::move(snapshots_for_symbol)
         );
     }
 }
@@ -639,7 +636,17 @@ std::set<StreamId> PythonVersionStore::list_streams(
         const std::optional<bool>& opt_all_symbols
 
 ) {
-    return list_streams_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
+    auto res = list_streams_unordered_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
+    return {std::make_move_iterator(res.begin()), std::make_move_iterator(res.end())};
+}
+
+std::unordered_set<StreamId> PythonVersionStore::list_streams_unordered(
+        const std::optional<SnapshotId>& snap_name, const std::optional<std::string>& regex,
+        const std::optional<std::string>& prefix, const std::optional<bool>& opt_use_symbol_list,
+        const std::optional<bool>& opt_all_symbols
+
+) {
+    return list_streams_unordered_internal(snap_name, regex, prefix, opt_use_symbol_list, opt_all_symbols);
 }
 
 size_t PythonVersionStore::compact_symbol_list() { return compact_symbol_list_internal(); }

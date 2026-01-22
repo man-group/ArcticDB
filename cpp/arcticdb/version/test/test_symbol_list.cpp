@@ -83,7 +83,7 @@ struct SymbolListSuite : Test {
     // Need at least one compaction key to avoid using the version keys as source
     void write_initial_compaction_key() const {
         log::version().set_level(spdlog::level::warn);
-        symbol_list_->load(version_map_, store_, false);
+        symbol_list_->load<std::set<StreamId>>(version_map_, store_, false);
         log::version().set_level(spdlog::level::debug);
     }
 

@@ -13,10 +13,25 @@
 #include <arcticdb/version/version_map.hpp>
 #include <folly/futures/Future.h>
 #include <set>
+#include <util/storage_lock.hpp>
 
 namespace arcticdb {
+struct SymbolListEntry;
+struct SymbolEntryData;
 
-struct LoadResult;
+using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
+using Compaction = std::vector<AtomKey>::const_iterator;
+using MaybeCompaction = std::optional<Compaction>;
+using CollectionType = std::vector<SymbolListEntry>;
+
+struct LoadResult {
+    std::vector<AtomKey> symbol_list_keys_;
+    MaybeCompaction maybe_previous_compaction;
+    CollectionType symbols_;
+    timestamp timestamp_ = 0L;
+
+    std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
+};
 
 struct SymbolListData {
     StreamId type_holder_;
@@ -109,6 +124,10 @@ ProblematicResult is_problematic(
 
 ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
 
+LoadResult attempt_load(
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data
+);
+
 class SymbolList {
     SymbolListData data_;
 
@@ -118,17 +137,50 @@ class SymbolList {
     ) :
         data_(std::move(version_map), std::move(type_indicator), seed) {}
 
-    std::set<StreamId> load(
-            const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction
-    );
+    template<StreamIdSet R>
+    R load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction) {
+        LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
+            return attempt_load(version_map, store, data_);
+        });
+
+        if (!no_compaction && needs_compaction(load_result)) {
+            ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
+            try {
+                if (StorageLock lock{StringId{CompactionLockName}}; lock.try_lock(store)) {
+                    OnExit x([&lock, &store] { lock.unlock(store); });
+
+                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Checking whether we still need to compact under lock");
+                    compact_internal(store, load_result);
+                } else {
+                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Not compacting the symbol list due to lock contention");
+                }
+            } catch (const storage::LibraryPermissionException& ex) {
+                // Note: this only reflects AN's permission check and is not thrown by the Storage
+                ARCTICDB_RUNTIME_DEBUG(
+                        log::symbol(), "Not compacting the symbol list due to lack of permission", ex.what()
+                );
+            } catch (const std::exception& ex) {
+                log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
+            }
+        }
+
+        R output;
+        for (const auto& entry : load_result.symbols_) {
+            if (entry.action_ == ActionType::ADD)
+                output.insert(entry.stream_id_);
+        }
+
+        return output;
+    }
 
     std::vector<StreamId> get_symbols(const std::shared_ptr<Store>& store, bool no_compaction = false) {
-        auto symbols = load(data_.version_map_, store, no_compaction);
+        auto symbols = load<std::set<StreamId>>(data_.version_map_, store, no_compaction);
         return {std::make_move_iterator(symbols.begin()), std::make_move_iterator(symbols.end())};
     }
 
-    std::set<StreamId> get_symbol_set(const std::shared_ptr<Store>& store) {
-        return load(data_.version_map_, store, false);
+    template<typename R = std::set<StreamId>>
+    R get_symbol_set(const std::shared_ptr<Store>& store) {
+        return load<R>(data_.version_map_, store, false);
     }
 
     size_t compact(const std::shared_ptr<Store>& store);

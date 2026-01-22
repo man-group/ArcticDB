@@ -113,6 +113,12 @@ class VersionedEngine {
             const std::optional<bool>& opt_all_symbols
     ) = 0;
 
+    virtual std::unordered_set<StreamId> list_streams_unordered_internal(
+            std::optional<SnapshotId> snap_name, const std::optional<std::string>& regex,
+            const std::optional<std::string>& prefix, const std::optional<bool>& opt_use_symbol_list,
+            const std::optional<bool>& opt_all_symbols
+    ) = 0;
+
     virtual size_t compact_symbol_list_internal() = 0;
 
     virtual std::variant<VersionedItem, CompactionError> compact_incomplete_dynamic(
