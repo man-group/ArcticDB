@@ -326,7 +326,11 @@ void decode_or_expand(
             if (read_options.output_format() == OutputFormat::ARROW) {
                 bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
                 handle_truncation(*bv, mapping.truncate_);
-                create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
+                if (bv->count() != bv->size()) {
+                    auto first_offset_after_truncation = mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0
+                                                                                 ) * dest_type_desc.get_type_bytes();
+                    create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE);
+                }
             }
         } else {
             SliceDataSink sink(dest, dest_bytes);
@@ -340,12 +344,8 @@ void decode_or_expand(
             }
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
         }
+        handle_truncation(dest_column, mapping.truncate_);
     }
-    // TODO: This can be inefficient for Arrow string columns if most of the strings are truncated.
-    // Current logic will allocate all required offsets and string buffers and truncate only the `keys` for categorical
-    // and the `offsets` for variable length encoding. This leaves the string buffer potentially larger than it needs
-    // to be.
-    handle_truncation(dest_column, mapping);
 }
 
 ColumnTruncation get_truncate_range_from_rows(
@@ -750,6 +750,8 @@ void decode_into_frame_dynamic(
         if (get_index_field_count(frame)) {
             handle_truncation(frame.column(0), truncate_range);
         }
+        auto requires_truncation = truncate_range.start_.has_value() || truncate_range.end_.has_value();
+        auto truncated_column_indices = std::unordered_set<size_t>{};
 
         auto field_count = context.slice_and_key().slice_.col_range.diff() + index_fieldcount;
         for (auto field_col = index_fieldcount; field_col < field_count; ++field_col) {
@@ -766,6 +768,9 @@ void decode_into_frame_dynamic(
             ColumnMapping mapping{frame, dst_col, field_col, context};
             check_mapping_type_compatibility(mapping);
             mapping.set_truncate(truncate_range);
+            if (requires_truncation) {
+                truncated_column_indices.insert(dst_col);
+            }
             util::check(
                     data != end || source_is_empty(mapping),
                     "Reached end of input block with {} fields to decode",
@@ -792,6 +797,17 @@ void decode_into_frame_dynamic(
                     data - begin
             );
         }
+
+        if (requires_truncation) {
+            // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the
+            // remaining columns in `frame` that were not present in `seg`.
+            for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
+                if (truncated_column_indices.find(frame_col) == truncated_column_indices.end()) {
+                    auto& column = frame.column(static_cast<position_t>(frame_col));
+                    handle_truncation(column, truncate_range);
+                }
+            }
+        }
     } else {
         ARCTICDB_DEBUG(log::version(), "Empty segment");
     }
@@ -806,7 +822,10 @@ class NullValueReducer {
     Column& column_;
     const int type_bytes_;
     std::shared_ptr<PipelineContext> context_;
-    SegmentInMemory frame_;
+    // All positions are with respect to the global frame
+    size_t frame_offset_;
+    size_t first_pos_;
+    size_t last_pos_;
     size_t pos_;
     size_t column_block_idx_;
     DecodePathData shared_data_;
@@ -823,13 +842,30 @@ class NullValueReducer {
         column_(column),
         type_bytes_(column_.type().get_type_bytes()),
         context_(context),
-        frame_(std::move(frame)),
-        pos_(frame_.offset()),
+        frame_offset_(frame.offset()),
         column_block_idx_(0),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
         output_format_(output_format),
-        default_value_(default_value) {}
+        default_value_(default_value) {
+        if (column_.data().buffer().allocation_type() != AllocationType::DETACHABLE) {
+            // Non-detachable buffers are never truncated, so we can just set the first and last positions to the frame
+            // bounds. We can't rely on block_offsets in this case.
+            first_pos_ = frame_offset_;
+            last_pos_ = frame_offset_ + frame.row_count();
+        } else if (column_.block_offsets().empty()) {
+            // It is possible after truncation to have a column with no blocks. In this case we want applying the
+            // NullValueReducer to be a no-op
+            first_pos_ = frame_offset_;
+            last_pos_ = frame_offset_;
+        } else {
+            // When the frame is truncated, we need to look at the block offsets to determine the actual first and last
+            // positions
+            first_pos_ = frame_offset_ + column_.block_offsets().front() / type_bytes_;
+            last_pos_ = frame_offset_ + column_.block_offsets().back() / type_bytes_;
+        }
+        pos_ = first_pos_;
+    }
 
     [[nodiscard]] static size_t cursor(const PipelineContextRow& context_row) {
         return context_row.slice_and_key().slice_.row_range.first;
@@ -844,7 +880,7 @@ class NullValueReducer {
                 up_to_block_offset,
                 block_offsets.back()
         );
-        for (; column_block_idx_ < block_offsets.size() - 1 && block_offsets.at(column_block_idx_) < up_to_block_offset;
+        for (; column_block_idx_ + 1 < block_offsets.size() && block_offsets.at(column_block_idx_) < up_to_block_offset;
              ++column_block_idx_) {
             auto rows = (block_offsets.at(column_block_idx_ + 1) - block_offsets.at(column_block_idx_)) / type_bytes_;
             create_dense_bitmap_all_zeros(
@@ -856,8 +892,8 @@ class NullValueReducer {
     void backfill_up_to_frame_offset(size_t up_to) {
         if (pos_ != up_to) {
             const auto num_rows = up_to - pos_;
-            const auto start_row = pos_ - frame_.offset();
-            const auto end_row = up_to - frame_.offset();
+            const auto start_row = pos_ - frame_offset_;
+            const auto end_row = up_to - frame_offset_;
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type());
                 handler) {
                 auto type_size = data_type_size(column_.type());
@@ -876,20 +912,19 @@ class NullValueReducer {
 
     void reduce(PipelineContextRow& context_row) {
         auto& slice_and_key = context_row.slice_and_key();
-        auto sz_to_advance = slice_and_key.slice_.row_range.diff();
-        auto current_pos = context_row.slice_and_key().slice_.row_range.first;
-        backfill_up_to_frame_offset(current_pos);
-        pos_ = current_pos + sz_to_advance;
+        // It is possible for the slice to start before `pos_` if the first slice was truncated.
+        auto up_to = std::max(first_pos_, context_row.slice_and_key().slice_.row_range.first);
+        backfill_up_to_frame_offset(up_to);
+        // It is possible for the slice to end after the frame end if the last slice was truncated.
+        pos_ = std::min(last_pos_, slice_and_key.slice_.row_range.second);
         if (output_format_ == OutputFormat::ARROW) {
             ++column_block_idx_;
         }
     }
 
     void finalize() {
-        const auto total_rows = frame_.row_count();
-        const auto end = frame_.offset() + total_rows;
-        util::check(pos_ <= end, "Overflow in finalize {} > {}", pos_, end);
-        backfill_up_to_frame_offset(end);
+        util::check(pos_ <= last_pos_, "Overflow in finalize {} > {}", pos_, last_pos_);
+        backfill_up_to_frame_offset(last_pos_);
     }
 };
 

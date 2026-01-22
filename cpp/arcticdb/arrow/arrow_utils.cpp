@@ -271,6 +271,12 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
             vec.emplace_back(empty_arrow_array_for_column(column, name));
         }
         while (auto block = column_data.next<TagType>()) {
+            if (block->row_count() == 0) {
+                // Empty blocks should produce empty arrays, without reading extra buffers, because they share the same
+                // offset as the next block.
+                vec.emplace_back(empty_arrow_array_for_column(column, name));
+                continue;
+            }
             auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
                 if (column_data.buffer().has_extra_bytes_per_block()) {
