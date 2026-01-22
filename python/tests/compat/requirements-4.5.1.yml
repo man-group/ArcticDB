@@ -7,3 +7,5 @@ dependencies:
   - pyarrow
   - protobuf<=5.27.5
   - pytest
+  - pandas<3
+  - pytz
