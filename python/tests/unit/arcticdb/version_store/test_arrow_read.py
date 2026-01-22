@@ -679,6 +679,46 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
 
 
 @pytest.mark.parametrize(
+    "row_range_and_expected_segment_sizes",
+    [
+        ((3, 8), [5]),  # Within a segment
+        ((7, 15), [3, 5]),  # Truncating first and last
+        ((10, 20), [10]),  # Aligned to segment boundaries
+    ],
+)
+def test_arrow_string_layout_after_truncation(version_store_factory, row_range_and_expected_segment_sizes):
+    row_range, expected_segment_sizes = row_range_and_expected_segment_sizes
+    lib = version_store_factory(segment_row_size=10, dynamic_strings=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    sym = "test_arrow_string_layout_after_truncation"
+    df = pd.DataFrame(
+        {"str_col": [f"string_{i:02d}" for i in range(25)], "cat_col": [f"string_{i:02d}" for i in range(25)]}
+    )
+    lib.write(sym, df)
+    table = lib.read(
+        sym,
+        row_range=row_range,
+        arrow_string_format_per_column={
+            "str_col": ArrowOutputStringFormat.LARGE_STRING,
+            "cat_col": ArrowOutputStringFormat.CATEGORICAL,
+        },
+    ).data
+    expected_df = df.iloc[row_range[0] : row_range[1]].reset_index(drop=True)
+    assert_frame_equal_with_arrow(table, expected_df)
+    batches = table.to_batches()
+    assert len(batches) == len(expected_segment_sizes)
+    for record_batch, expected_size in zip(batches, expected_segment_sizes):
+        str_arr, cat_arr = record_batch.columns
+        assert str_arr.type == pa.large_string()
+        assert str_arr.buffers()[1].size == (expected_size + 1) * 8  # Offsets buffer size
+        assert str_arr.buffers()[2].size == expected_size * len("string_00")  # Strings buffer size
+        assert cat_arr.type == pa.dictionary(pa.int32(), pa.large_string())
+        assert cat_arr.buffers()[1].size == expected_size * 4  # Keys buffer size
+        assert cat_arr.dictionary.buffers()[1].size == (expected_size + 1) * 8  # Offsets buffer size
+        assert cat_arr.dictionary.buffers()[2].size == expected_size * len("string_00")  # Strings buffer size
+
+
+@pytest.mark.parametrize(
     "first_type",
     [
         pa.uint8(),
@@ -959,7 +999,9 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
 @pytest.mark.parametrize("row_range_start", [0, 1, 3, 6, 12])
 @pytest.mark.parametrize("row_range_width", [0, 1, 2, 5])
 @pytest.mark.parametrize("use_query_builder", [True, False])
-def test_arrow_dynamic_schema_row_range(version_store_factory, row_range_start, row_range_width, use_query_builder, any_arrow_string_format):
+def test_arrow_dynamic_schema_row_range(
+    version_store_factory, row_range_start, row_range_width, use_query_builder, any_arrow_string_format
+):
     lib = version_store_factory(segment_row_size=3, dynamic_schema=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
@@ -990,9 +1032,14 @@ def test_arrow_dynamic_schema_row_range(version_store_factory, row_range_start, 
 
     row_range = (row_range_start, row_range_start + row_range_width)
     expected = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
+    # With pandas output format, missing string columns are filled with empty strings
+    expected["b"] = expected["b"].replace("", None)
     if use_query_builder:
         q = QueryBuilder().row_range(row_range)
-        result = lib.read(sym, query_builder=q, ).data
+        result = lib.read(
+            sym,
+            query_builder=q,
+        ).data
     else:
         result = lib.read(sym, row_range=row_range).data
     assert_frame_equal_with_arrow(expected, result)
@@ -1001,7 +1048,9 @@ def test_arrow_dynamic_schema_row_range(version_store_factory, row_range_start, 
 @pytest.mark.parametrize("date_range_start", [0, 1, 3, 6, 12])
 @pytest.mark.parametrize("date_range_width", [0, 1, 2, 5])
 @pytest.mark.parametrize("use_query_builder", [True, False])
-def test_arrow_dynamic_schema_date_range(version_store_factory, date_range_start, date_range_width, use_query_builder, any_arrow_string_format):
+def test_arrow_dynamic_schema_date_range(
+    version_store_factory, date_range_start, date_range_width, use_query_builder, any_arrow_string_format
+):
     lib = version_store_factory(segment_row_size=3, dynamic_schema=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
@@ -1035,6 +1084,8 @@ def test_arrow_dynamic_schema_date_range(version_store_factory, date_range_start
         pd.Timestamp("2025-01-01") + pd.Timedelta(days=date_range_start + date_range_width - 1),
     )
     expected = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
+    # With pandas output format, missing string columns are filled with empty strings
+    expected["b"] = expected["b"].replace("", None)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
         result = lib.read(sym, query_builder=q).data
