@@ -45,7 +45,7 @@ jobs:
         run: |
           apt update
           apt install -y git
-          python3 -m pip install arcticdb[Testing] click
+          python3 -m pip install arcticdb[Testing] click "pandas<3" pytz
 
       - name: Setup softlink for SSL
         shell: bash -el {0}
