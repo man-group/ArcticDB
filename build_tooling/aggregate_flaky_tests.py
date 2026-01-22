@@ -24,6 +24,12 @@ def get_results_lib(use_aws_auth: bool = False):
     return lib
 
 
+VERSION_TAG_PATTERN = re.compile(r"^v\d+\.\d+\.\d+(\+man\d+)?\|")
+def is_master_or_release(symbol: str) -> bool:
+    """Check if symbol is from master branch or a release version tag (vX.Y.Z or vX.Y.Z+manN)."""
+    return symbol.startswith("master|") or VERSION_TAG_PATTERN.match(symbol) is not None
+
+
 def parse_date_from_symbol(symbol: str) -> datetime | None:
     """
     Parse date from symbol format.
@@ -61,7 +67,7 @@ def aggregate_failures(
     for result in read_results:
         result.data["symbol"] = result.symbol
         result.data["failure_date"] = parse_date_from_symbol(result.symbol)
-        result.data["is_master"] = result.symbol.startswith("master|")
+        result.data["is_master"] = is_master_or_release(result.symbol)
     combined = pd.concat([result.data for result in read_results], ignore_index=True)
 
     # Apply message regex filters
@@ -110,6 +116,7 @@ def aggregate_failure_counts(combined_data: pd.DataFrame, truncate: bool = True)
         })
     ).reset_index()
 
+    failure_counts = failure_counts[failure_counts["master_failure_count"] > 0]
     failure_counts = failure_counts.sort_values(
         ["master_failure_count", "failure_count"], ascending=[False, False]
     )
@@ -136,15 +143,14 @@ def generate_summary(combined_data: pd.DataFrame, total_runs: int, since_date: d
     summary = f"""# Flaky Tests Summary ({date_range})
 
 **Total runs analyzed:** {total_runs}
-**Tests with failures:** {len(failure_counts)}
-
+*\nShowing {len(failure_counts)} tests with failures on master or release builds.*
 ## Top Failing Tests
 
-| Test Name | Master Failures | Last Master Failure | All Failures | Last Failure | Python Versions | Test Type | Error Messages |
-|-----------|-----------------|---------------------|--------------|--------------|-----------------|-----------|----------------|
+| Test Name | Master/Release Failures | Last Master/Release Failure | All Failures | Last Failure | Python Versions | Test Type | Error Messages |
+|-----------|-------------------------|-----------------------------|--------------|--------------|-----------------|-----------|----------------|
 """
 
-    for _, row in failure_counts.head(500).iterrows():
+    for _, row in failure_counts.head(1000).iterrows():
         test_name = row["test_name"].replace("\n", " ").replace("|", "\\|")
         error_messages = row["error_messages"].replace("\n", " ").replace("|", "\\|")
         python_versions = row["python_versions"].replace("\n", " ").replace("|", "\\|")
@@ -155,8 +161,8 @@ def generate_summary(combined_data: pd.DataFrame, total_runs: int, since_date: d
 
         summary += f"| `{test_name}` | {master_failures} | {last_master_failure} | {int(row['failure_count'])} | {last_failure} | {python_versions} | {test_type} | {error_messages} |\n"
 
-    if len(failure_counts) > 500:
-        summary += f"\n*Showing top 500 of {len(failure_counts)} failing tests*\n"
+    if len(failure_counts) > 1000:
+        summary += f"\n*Showing top 1000 of {len(failure_counts)} failing tests*\n"
 
     return summary
 
