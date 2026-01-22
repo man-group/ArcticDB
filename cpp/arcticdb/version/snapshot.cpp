@@ -362,7 +362,7 @@ std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store,
     auto opt_snap_key = get_snapshot(store, snap_name);
 
     if (!opt_snap_key)
-        throw storage::NoDataFoundException(snap_name);
+        throw storage::NoDataFoundException(fmt::format("Snapshot {} not found", snap_name));
 
     const auto& snapshot_segment = opt_snap_key->second;
 

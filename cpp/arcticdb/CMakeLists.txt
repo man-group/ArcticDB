@@ -787,6 +787,11 @@ else ()
         list (APPEND arcticdb_core_libraries stdc++fs)
     endif()
 
+    if(${ARCTICDB_BUILD_LINK_STDLIB})
+        # Can be useful for local development. Should never be necessary when building for a release.
+        message("Linking against std lib")
+        list (APPEND arcticdb_core_libraries stdc++)
+    endif()
 
     list (APPEND arcticdb_core_libraries
             dl
