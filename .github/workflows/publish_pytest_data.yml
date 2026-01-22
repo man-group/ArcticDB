@@ -31,7 +31,7 @@ jobs:
 
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
             pattern: "pytest-*"
             run-id: ${{ github.run_id }}
@@ -45,7 +45,7 @@ jobs:
         run: |
           apt update
           apt install -y git
-          python3 -m pip install arcticdb[Testing] click
+          python3 -m pip install arcticdb[Testing] click "pandas<3"
 
       - name: Setup softlink for SSL
         shell: bash -el {0}

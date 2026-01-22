@@ -143,7 +143,7 @@ def generate_summary(combined_data: pd.DataFrame, total_runs: int, since_date: d
     summary = f"""# Flaky Tests Summary ({date_range})
 
 **Total runs analyzed:** {total_runs}
-*\nShowing {len(failure_counts)} tests with failures on master or release builds.*
+\n*Showing {len(failure_counts)} tests with failures on master or release builds.*
 ## Top Failing Tests
 
 | Test Name | Master/Release Failures | Last Master/Release Failure | All Failures | Last Failure | Python Versions | Test Type | Error Messages |
