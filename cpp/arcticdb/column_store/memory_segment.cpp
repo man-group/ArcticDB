@@ -144,6 +144,8 @@ void SegmentInMemory::calculate_statistics() { impl_->calculate_statistics(); }
 
 size_t SegmentInMemory::num_columns() const { return impl_->num_columns(); }
 
+void SegmentInMemory::set_row_count(size_t row_count) { set_row_id(static_cast<ssize_t>(row_count)-1); }
+
 size_t SegmentInMemory::row_count() const { return impl_->row_count(); }
 
 void SegmentInMemory::unsparsify() { impl_->unsparsify(); }

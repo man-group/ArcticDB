@@ -574,6 +574,18 @@ void check_data_left_for_subsequent_fields(
     );
 }
 
+void update_frame_for_truncation(SegmentInMemory& frame, const ColumnTruncation& truncate_range) {
+    if (truncate_range.end_.has_value()){
+        // If we truncate the end, we remain with the same offset `truncate_range.end_` rows, because the end range is exclusive. 
+        frame.set_row_count(*truncate_range.end_);
+    }
+    if (truncate_range.start_.has_value()){
+        // If we truncate the start we need to move the offset forward by `truncate_range.start_` rows and reduce the row count accordingly.
+        frame.set_offset(frame.offset() + *truncate_range.start_);
+        frame.set_row_count(frame.row_count() - *truncate_range.start_);
+    }
+}
+
 void decode_into_frame_static(
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
@@ -597,6 +609,7 @@ void decode_into_frame_static(
 
     // data == end in case we have empty data types (e.g. {EMPTYVAL, Dim0}, {EMPTYVAL, Dim1}) for which we store nothing
     // in storage as they can be reconstructed in the type handler on the read path.
+    // TODO: What if truncation is required for the data==end case?
     if (data != end || !fields.empty()) {
         auto string_pool_data = skip_to_string_pool(hdr, data);
         decode_string_pool(hdr, string_pool_data, begin, end, context);
@@ -609,6 +622,10 @@ void decode_into_frame_static(
         );
         if (context.fetch_index() && get_index_field_count(frame)) {
             handle_truncation(frame.column(0), truncate_range);
+        }
+        if (context.fetch_index()) {
+            // Update frame offset and row count based on truncation only when this is the first column slice.
+            update_frame_for_truncation(frame, truncate_range);
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -736,21 +753,24 @@ void decode_into_frame_dynamic(
     const auto encoding_version = hdr.encoding_version();
     const bool has_magic_numbers = encoding_version == EncodingVersion::V2;
 
+    auto string_pool_data = skip_to_string_pool(hdr, data);
+    decode_string_pool(hdr, string_pool_data, begin, end, context);
+
+    const auto& fields = hdr.body_fields();
+    auto& index_field = fields.at(0u);
+    auto index_field_offset = data;
+    decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
+    auto truncate_range = get_truncate_range(
+            frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
+    );
+    if (get_index_field_count(frame)) {
+        handle_truncation(frame.column(0), truncate_range);
+    }
+    auto requires_truncation =
+            truncate_range.start_.has_value() || truncate_range.end_.has_value();
+    auto truncated_column_indices = std::unordered_set<size_t>{};
+
     if (!hdr.body_fields().empty()) {
-        auto string_pool_data = skip_to_string_pool(hdr, data);
-        decode_string_pool(hdr, string_pool_data, begin, end, context);
-
-        const auto& fields = hdr.body_fields();
-        auto& index_field = fields.at(0u);
-        auto index_field_offset = data;
-        decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
-        auto truncate_range = get_truncate_range(
-                frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
-        );
-        if (get_index_field_count(frame)) {
-            handle_truncation(frame.column(0), truncate_range);
-        }
-
         auto field_count = context.slice_and_key().slice_.col_range.diff() + index_fieldcount;
         for (auto field_col = index_fieldcount; field_col < field_count; ++field_col) {
             auto field_name = context.descriptor().fields(field_col).name();
@@ -766,6 +786,9 @@ void decode_into_frame_dynamic(
             ColumnMapping mapping{frame, dst_col, field_col, context};
             check_mapping_type_compatibility(mapping);
             mapping.set_truncate(truncate_range);
+            if (requires_truncation){
+                truncated_column_indices.insert(dst_col);
+            }
             util::check(
                     data != end || source_is_empty(mapping),
                     "Reached end of input block with {} fields to decode",
@@ -794,6 +817,18 @@ void decode_into_frame_dynamic(
         }
     } else {
         ARCTICDB_DEBUG(log::version(), "Empty segment");
+    }
+
+    if (requires_truncation) {
+        // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the remaining
+        // columns in `frame` that were not present in `seg`.
+        update_frame_for_truncation(frame, truncate_range);
+        for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
+            if (truncated_column_indices.find(frame_col) == truncated_column_indices.end()) {
+                auto& column = frame.column(static_cast<position_t>(frame_col));
+                handle_truncation(column, truncate_range);
+            }
+        }
     }
 }
 
@@ -876,10 +911,11 @@ class NullValueReducer {
 
     void reduce(PipelineContextRow& context_row) {
         auto& slice_and_key = context_row.slice_and_key();
-        auto sz_to_advance = slice_and_key.slice_.row_range.diff();
-        auto current_pos = context_row.slice_and_key().slice_.row_range.first;
+        // It is possible for the slice to start before `pos_` if the first slice was truncated.
+        auto current_pos = std::max(context_row.slice_and_key().slice_.row_range.first, pos_);
         backfill_up_to_frame_offset(current_pos);
-        pos_ = current_pos + sz_to_advance;
+        // It is possible for the slice to end after the frame end if the last slice was truncated.
+        pos_ = std::min(frame_.offset() + frame_.row_count(), slice_and_key.slice_.row_range.second);
         if (output_format_ == OutputFormat::ARROW) {
             ++column_block_idx_;
         }

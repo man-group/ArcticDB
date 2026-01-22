@@ -500,6 +500,7 @@ class ChunkedBufferImpl {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
     }
 
+    // TODO: We will need to make truncation methods update the bytes_ and offsets correctly.
     // Note that with all the truncate_*_block methods, the bytes_ and offsets are no longer accurate after the methods
     // are called, but downstream logic uses these values to match up blocks with record batches, so this is deliberate
     void truncate_single_block(size_t start_offset, size_t end_offset) {

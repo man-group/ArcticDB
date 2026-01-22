@@ -162,6 +162,8 @@ class SegmentInMemory {
 
     [[nodiscard]] size_t num_columns() const;
 
+    void set_row_count(size_t row_count);
+
     [[nodiscard]] size_t row_count() const;
 
     void unsparsify();
