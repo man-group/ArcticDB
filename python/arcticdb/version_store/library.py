@@ -3238,16 +3238,65 @@ class Library:
     def merge(
         self,
         symbol: str,
-        data: NormalizableType,
+        source: NormalizableType,
         strategy: MergeStrategy = MergeStrategy(),
         on: Optional[List[str]] = None,
         metadata: Any = None,
         prune_previous_versions: bool = False,
         upsert: bool = False,
     ):
+        """
+        Merge new data into an existing symbol's DataFrame according to a specified strategy.
+
+        See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
+
+        !!! warning
+            This API is under development and is subject to change.
+
+            Only date time indexed symbols and sources are supported at the moment.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to merge data into.
+        source : pandas.DataFrame or pandas.Series
+            The new data to merge. In the case of timeseries, the index must be sorted.
+        strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
+            !!! warning
+                Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
+
+            Determines how to handle matched and unmatched rows. Accepted strategies include:
+                - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
+                - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
+                - MergeStrategy(matched="update", not_matched_by_target="insert"): Update matched rows and insert unmatched rows.
+            Note: If the strategy includes "update" on match, a row in the target cannot be matched by multiple rows in the source.
+        on : Optional[List[str]]
+            !!! warning
+                Not yet implemented
+
+            Columns which are used to determine row equality between source and target. A row is considered matched when
+            all specified columns have equal values in both source and target.
+
+            IMPORTANT: For date-time index data, the index is always included in matching and cannot be excluded.
+        metadata : Any, optional
+            Metadata to save alongside the new version.
+        prune_previous_versions : bool, default False
+            If True, removes previous versions from the version list.
+        upsert : bool, default False
+            !!! warning
+                Not yet implemented
+
+            If True and the strategy allows insert, creates the symbol if it does not exist.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store. The data attribute will
+            not be populated.
+        """
         return self._nvs.merge(
             symbol=symbol,
-            data=data,
+            source=source,
             strategy=strategy,
             on=on,
             metadata=metadata,
