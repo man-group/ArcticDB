@@ -12,6 +12,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/store.hpp>
 
@@ -62,7 +63,23 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
         const std::shared_ptr<Store>& store, const SnapshotId& snap_name
 );
 
-std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store, const SnapshotId& snap_name);
+template<stream::StreamIdSet R>
+R list_streams_in_snapshot(const std::shared_ptr<Store>& store, const SnapshotId& snap_name) {
+    ARCTICDB_SAMPLE(ListStreamsInSnapshot, 0)
+    R res;
+    auto opt_snap_key = get_snapshot(store, snap_name);
+
+    if (!opt_snap_key)
+        throw storage::NoDataFoundException(fmt::format("Snapshot {} not found", snap_name));
+
+    const auto& snapshot_segment = opt_snap_key->second;
+
+    for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
+        auto stream_index = stream::read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
+        res.insert(stream_index.id());
+    }
+    return res;
+}
 
 using SnapshotMap = std::unordered_map<SnapshotId, std::vector<AtomKey>>;
 
