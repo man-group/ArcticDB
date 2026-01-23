@@ -87,9 +87,9 @@ class ModificationFunctions:
             1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)
         )
         self.df_update_half = generate_random_floats_dataframe_with_index(
-            rows, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)
+            rows // 2, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)
         )
-        self.df_update_upsert = generate_random_floats_dataframe_with_index(
+        self.df_update_outside_date_range = generate_random_floats_dataframe_with_index(
             rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)
         )
         self.df_append_single = generate_random_floats_dataframe_with_index(
@@ -105,8 +105,8 @@ class ModificationFunctions:
     def time_update_half(self, *args):
         self.lib.update(self.sym, self.df_update_half)
 
-    def time_update_upsert(self, *args):
-        self.lib.update(self.sym, self.df_update_upsert, upsert=True)
+    def time_update_outside_date_range(self, *args):
+        self.lib.update(self.sym, self.df_update_outside_date_range, upsert=True)
 
     def time_append_single(self, *args):
         self.lib.append(self.sym, self.df_append_single)
