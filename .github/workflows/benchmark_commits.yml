@@ -109,7 +109,6 @@ jobs:
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
-            SUITE='^.*'
             if [ "${{ inputs.storage }}" == "REAL" ]; then
               echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
               echo "ARCTICDB_STORAGE_LMDB=0" >> $GITHUB_ENV
@@ -122,6 +121,7 @@ jobs:
             # Remove leading and trailing whitespaces using parameter expansion
             SUITE_OVERWRITE="${SUITE_OVERWRITE#"${SUITE_OVERWRITE%%[![:space:]]*}"}"
             SUITE_OVERWRITE="${SUITE_OVERWRITE%"${SUITE_OVERWRITE##*[![:space:]]}"}"
+            SUITE='^.*'
             if [[ -n "${SUITE_OVERWRITE// /}" ]]; then
               SUITE=$SUITE_OVERWRITE
             fi
