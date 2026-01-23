@@ -38,7 +38,7 @@ inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data, Out
             handler->convert_type(column, dest_column, mapping, shared_data, handler_data, seg.string_pool_ptr(), {});
             std::swap(column, dest_column);
             // dest_column now holds the original column. This was allocated with detachable blocks, which should be
-            // manually freed before the column goes out of scope to avoid triggering debug logs in ~MemBlock
+            // manually freed before the column goes out of scope to avoid triggering debug logs in ~DynamicMemBlock
             // complaining about freeing external data
             util::check(dest_column.blocks().size() == 1, "Unexpected multi-block column when reading single frame");
             dest_column.blocks().at(0)->abandon();
