@@ -147,15 +147,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
-    py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
-            .def(py::init())
-            .def(py::init<StreamId, KeyType>())
-            .def_property_readonly("id", &RefKey::id)
-            .def_property_readonly("type", [](const RefKey& self) { return self.type(); })
-            .def(pybind11::self == pybind11::self)
-            .def(pybind11::self != pybind11::self)
-            .def("__repr__", &RefKey::view);
-
     py::class_<Value, std::shared_ptr<Value>>(version, "ValueType").def(py::init());
 
     version.def("ValueBool", &construct_value<bool>);

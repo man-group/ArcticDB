@@ -37,33 +37,6 @@ std::shared_ptr<LibraryIndex> create_library_index(const std::string& environmen
 void register_bindings(py::module& storage, py::exception<arcticdb::ArcticException>& base_exception) {
     storage.attr("CONFIG_LIBRARY_NAME") = py::str(arcticdb::storage::CONFIG_LIBRARY_NAME);
 
-    py::enum_<KeyType>(storage, "KeyType")
-            .value("VERSION", KeyType::VERSION)
-            .value("VERSION_JOURNAL", KeyType::VERSION_JOURNAL)
-            .value("GENERATION", KeyType::GENERATION)
-            .value("TABLE_DATA", KeyType::TABLE_DATA)
-            .value("TABLE_INDEX", KeyType::TABLE_INDEX)
-            .value("METRICS", KeyType::METRICS)
-            .value("SNAPSHOT", KeyType::SNAPSHOT)
-            .value("SYMBOL_LIST", KeyType::SYMBOL_LIST)
-            .value("VERSION_REF", KeyType::VERSION_REF)
-            .value("STORAGE_INFO", KeyType::STORAGE_INFO)
-            .value("APPEND_REF", KeyType::APPEND_REF)
-            .value("LOCK", KeyType::LOCK)
-            .value("SLOW_LOCK", KeyType::ATOMIC_LOCK)
-            .value("SNAPSHOT_REF", KeyType::SNAPSHOT_REF)
-            .value("TOMBSTONE", KeyType::TOMBSTONE)
-            .value("APPEND_DATA", KeyType::APPEND_DATA)
-            .value("MULTI_KEY", KeyType::MULTI_KEY)
-            .value("LOG", KeyType::LOG)
-            .value("PARTITION", KeyType::PARTITION)
-            .value("OFFSET", KeyType::OFFSET)
-            .value("BACKUP_SNAPSHOT_REF", KeyType::BACKUP_SNAPSHOT_REF)
-            .value("TOMBSTONE_ALL", KeyType::TOMBSTONE_ALL)
-            .value("SNAPSHOT_TOMBSTONE", KeyType::SNAPSHOT_TOMBSTONE)
-            .value("LOG_COMPACTED", KeyType::LOG_COMPACTED)
-            .value("COLUMN_STATS", KeyType::COLUMN_STATS);
-
     py::enum_<ModifiableLibraryOption>(storage, "ModifiableLibraryOption", R"pbdoc(
          Library options that can be modified after library creation.
  
