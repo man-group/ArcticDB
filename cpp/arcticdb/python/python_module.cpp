@@ -28,7 +28,6 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/python/python_bindings_common.hpp>
-#include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
 #include <pybind11/pybind11.h>
@@ -290,26 +289,6 @@ void register_instrumentation(py::module&& m) {
     });
     remotery.def("log", [](std::string s ARCTICDB_UNUSED) { ARCTICDB_SAMPLE_LOG(s.c_str()) });
 #endif
-}
-
-/// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
-/// @see arcticdb::ITypeHandler
-void register_type_handlers() {
-    using namespace arcticdb;
-    TypeHandlerRegistry::instance()->register_handler(
-            OutputFormat::PANDAS, make_scalar_type(DataType::EMPTYVAL), arcticdb::PythonEmptyHandler()
-    );
-    TypeHandlerRegistry::instance()->register_handler(
-            OutputFormat::PANDAS, make_scalar_type(DataType::BOOL_OBJECT8), arcticdb::PythonBoolHandler()
-    );
-
-    register_python_array_types();
-    register_python_string_types();
-
-    register_arrow_string_types();
-
-    register_python_handler_data_factory();
-    register_arrow_handler_data_factory();
 }
 
 PYBIND11_MODULE(arcticdb_ext, m) {

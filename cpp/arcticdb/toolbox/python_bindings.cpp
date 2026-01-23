@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
 #include <arcticdb/version/symbol_list.hpp>
@@ -61,13 +60,7 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
             .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>())
             .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg)
-            .def("segment_in_memory_to_read_result", [&](LibraryTool& lt, arcticdb::SegmentInMemory& segment) {
-                constexpr OutputFormat output_format = OutputFormat::PANDAS;
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
-                return adapt_read_df(
-                        lt.segment_in_memory_to_read_result(segment, handler_data, output_format), &handler_data
-                );
-            });
+            .def("segment_in_memory_to_read_result", &LibraryTool::segment_in_memory_to_read_result);
 
     // Reliable storage lock exposed for integration testing. It is intended for use in C++
     using namespace arcticdb::lock;

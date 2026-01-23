@@ -236,5 +236,34 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
             .value("READ", OpenMode::READ)
             .value("WRITE", OpenMode::WRITE)
             .value("DELETE", OpenMode::DELETE);
+
+    
+
+    py::enum_<KeyType>(storage, "KeyType", py::module_local(local_bindings))
+            .value("VERSION", KeyType::VERSION)
+            .value("VERSION_JOURNAL", KeyType::VERSION_JOURNAL)
+            .value("GENERATION", KeyType::GENERATION)
+            .value("TABLE_DATA", KeyType::TABLE_DATA)
+            .value("TABLE_INDEX", KeyType::TABLE_INDEX)
+            .value("METRICS", KeyType::METRICS)
+            .value("SNAPSHOT", KeyType::SNAPSHOT)
+            .value("SYMBOL_LIST", KeyType::SYMBOL_LIST)
+            .value("VERSION_REF", KeyType::VERSION_REF)
+            .value("STORAGE_INFO", KeyType::STORAGE_INFO)
+            .value("APPEND_REF", KeyType::APPEND_REF)
+            .value("LOCK", KeyType::LOCK)
+            .value("SLOW_LOCK", KeyType::ATOMIC_LOCK)
+            .value("SNAPSHOT_REF", KeyType::SNAPSHOT_REF)
+            .value("TOMBSTONE", KeyType::TOMBSTONE)
+            .value("APPEND_DATA", KeyType::APPEND_DATA)
+            .value("MULTI_KEY", KeyType::MULTI_KEY)
+            .value("LOG", KeyType::LOG)
+            .value("PARTITION", KeyType::PARTITION)
+            .value("OFFSET", KeyType::OFFSET)
+            .value("BACKUP_SNAPSHOT_REF", KeyType::BACKUP_SNAPSHOT_REF)
+            .value("TOMBSTONE_ALL", KeyType::TOMBSTONE_ALL)
+            .value("SNAPSHOT_TOMBSTONE", KeyType::SNAPSHOT_TOMBSTONE)
+            .value("LOG_COMPACTED", KeyType::LOG_COMPACTED)
+            .value("COLUMN_STATS", KeyType::COLUMN_STATS);
 }
 } // namespace arcticdb::storage::apy

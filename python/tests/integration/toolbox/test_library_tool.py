@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
+from arcticdb.version_store._normalization import denormalize_dataframe
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
 from arcticdb_ext.exceptions import SchemaException, InternalException, StorageException
@@ -430,3 +431,21 @@ def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     expected_df = lib_tool.read_to_dataframe(tdata_key)
 
     assert_frame_equal(expected_df, dataframe)
+
+
+def test_segment_in_memory_to_read_result(lmdb_version_store_v1, sym):
+    df = sample_dataframe()
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    lib.write(sym, df)
+
+    tdata_key = lib_tool.find_keys(KeyType.TABLE_DATA)[0]
+    segment_in_memory = lib_tool.read_to_segment_in_memory(tdata_key)
+
+    read_result = lib_tool.segment_in_memory_to_read_result(segment_in_memory)
+
+    assert isinstance(read_result, tuple)
+    assert len(read_result) == 6
+
+    expected_df = lib_tool.read_to_dataframe(tdata_key)
+    assert_frame_equal(expected_df, denormalize_dataframe(read_result))

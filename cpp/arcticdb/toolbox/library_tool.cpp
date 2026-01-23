@@ -19,6 +19,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <cstdlib>
 
 namespace arcticdb::toolbox::apy {
@@ -31,16 +32,16 @@ std::shared_ptr<Store> LibraryTool::store() { return engine_._test_get_store(); 
 
 async::AsyncStore<>& LibraryTool::async_store() { return dynamic_cast<async::AsyncStore<>&>(*store()); }
 
-ReadResult LibraryTool::segment_in_memory_to_read_result(
-        arcticdb::SegmentInMemory& segment, std::any& handler_data, OutputFormat output_format
-) {
+py::tuple LibraryTool::segment_in_memory_to_read_result(SegmentInMemory& segment) {
+    constexpr OutputFormat output_format = OutputFormat::PANDAS;
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
     std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
 
     // This is a dummy atom key needed to construct the read result, otherwise not important
     const auto& atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
 
-    return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format);
+    return adapt_read_df(pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format), &handler_data);
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
