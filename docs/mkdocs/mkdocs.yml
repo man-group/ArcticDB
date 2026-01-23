@@ -131,7 +131,8 @@ nav:
   - 1 Billion Row Challenge Notebook: 'notebooks/ArcticDB_billion_row_challenge.ipynb'
   - Pythagorean Won Loss Formula Notebook: 'notebooks/ArcticDB_pythagorean_won_loss_formula_notebook.ipynb'
   - Staged Data Notebook: 'notebooks/ArcticDB_staged_data_with_tokens.ipynb'
-  - Recursive normalizer Notebook: 'notebooks/ArcticDB_demo_recursive_normalizers.ipynb
+  - Recursive normalizer Notebook: 'notebooks/ArcticDB_demo_recursive_normalizers.ipynb'
+  - Merge Notebook: 'notebooks/ArcticDB_merge.ipynb'
 - Python API Reference: 
   - Introduction: 'api/index.md'
   - Arctic: 'api/arctic.md'
