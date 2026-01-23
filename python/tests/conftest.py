@@ -144,7 +144,8 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"[:200]
+    hashed = hash(f"{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
+    return f"{name}.{hashed}"
 
 
 @pytest.fixture
@@ -308,6 +309,12 @@ def s3_and_nfs_storage_bucket(test_prefix, request):
     ) as factory:
         with factory.create_fixture() as bucket:
             yield bucket
+
+
+@pytest.fixture(scope="session")
+def wrapped_s3_storage(wrapped_s3_storage_factory):
+    with wrapped_s3_storage_factory.create_fixture() as f:
+        yield f
 
 
 @pytest.fixture(scope="session")
@@ -789,6 +796,11 @@ def s3_store_factory(lib_name, s3_storage) -> Generator[Callable[..., NativeVers
 
 
 @pytest.fixture
+def wrapped_s3_store_factory(lib_name, wrapped_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
+    yield from _store_factory(lib_name, wrapped_s3_storage)
+
+
+@pytest.fixture
 def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, s3_no_ssl_storage)
 
@@ -843,6 +855,11 @@ def mongo_store_factory(mongo_storage, lib_name) -> Generator[Callable[..., Nati
 @pytest.fixture
 def in_memory_store_factory(mem_storage, lib_name) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, mem_storage)
+
+
+@pytest.fixture
+def wrapped_s3_version_store(wrapped_s3_store_factory):
+    return wrapped_s3_store_factory()
 
 
 # endregion

@@ -33,6 +33,11 @@ jobs:
       SCCACHE_S3_USE_SSL: false
       AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
       AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      ARCTICDB_REAL_S3_ACCESS_KEY: ${{secrets.AWS_S3_ACCESS_KEY}}
+      ARCTICDB_REAL_S3_SECRET_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      ARCTICDB_REAL_S3_REGION: eu-west-1
+      ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+      ASV_RESULTS_BUCKET: arcticdb-ci-benchmark-results
       VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
       VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
       VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}} # For forks to download pre-compiled dependencies from the Man repo
@@ -55,24 +60,27 @@ jobs:
         with:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
-      - name: Extra envs
+      - name: Environment setup
         shell: bash -l {0}
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          yum install -y awscli
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
-      - name: Set persistent storage variables
-        uses: ./.github/actions/set_persistent_storage_env_vars
-        with:
-          bucket: "arcticdb-ci-benchmark-results"
-          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
-          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
-          strategy_branch: "${{ inputs.commit }}"
-          shared_storage_prefix: "_github_runner_"
+      - name: Create test bucket
+        shell: bash -el {0}
+        run: |
+          random_id=$(openssl rand -hex 4)
+          timestamp=$(date +%s)
+          bucket_name="arcticdb-asv-data-${timestamp}-${random_id}"
+          echo "Bucket name: ${bucket_name}"
+          aws s3 mb --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}" "s3://${bucket_name}"
+          echo "Created bucket s3://${bucket_name}"
+          echo "ARCTICDB_REAL_S3_BUCKET=${bucket_name}" >> $GITHUB_ENV
 
       # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
       - name: Setup micromamba
@@ -95,27 +103,20 @@ jobs:
           
           # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
           python -m venv ./tooling_venv
-          ./tooling_venv/bin/pip install "ArcticDB[Testing]"
+          # pytz and pandas<3 can go once latest ArcticDB release has these dependencies
+          ./tooling_venv/bin/pip install "ArcticDB[Testing]" "pytz" "pandas<3"
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
         run: | 
+            SUITE='^.*'
             if [ "${{ inputs.storage }}" == "REAL" ]; then
-              # ASV tests with real storage starts with 'real_' in the test name
-              # aseaton: We are currently refactoring away from this pattern to control the storages by environment variables
-              # instead. finalize_staged_data is the first one in the new pattern.
-              SUITE='(^real_.*|^finalize_staged_data.*)'
               echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
               echo "ARCTICDB_STORAGE_LMDB=0" >> $GITHUB_ENV
             elif [ "${{ inputs.storage }}" == "ALL" ]; then
-              # Select all tests
-              SUITE='^.*'
               echo "ARCTICDB_STORAGE_AWS_S3=1" >> $GITHUB_ENV
-            else
-              # LMDB tests are other tests not starting with 'real_'
-              SUITE='^(?!real_).*'
             fi
-            echo "selection of suite SUITE=$SUITE"
+            
             SUITE_OVERWRITE=${{ github.event.inputs.suite_overwrite }}
             echo "selection of SUITE_OVERWRITE=$SUITE_OVERWRITE"
             # Remove leading and trailing whitespaces using parameter expansion
@@ -127,12 +128,13 @@ jobs:
             echo "FINAL selection to execute SUITE=$SUITE"
             echo "SUITE=$SUITE" >> $GITHUB_ENV
             # Now lets reduce logging
-            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
+            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request' || inputs.benchmark_all_tags == true
         shell: bash -l {0}
         run: | 
+          echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           git config --global --add safe.directory .
           python -m asv run --show-stderr --durations all --bench $SUITE ${{ inputs.commit }}^!
           exit_code=$?
@@ -143,9 +145,10 @@ jobs:
         if: github.event_name == 'pull_request'
         shell: bash -l {0}
         run: |
+          echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           # Look up the most recent master commit stored in our ASV database and compare against it.
           # asv compare exits with code 0 even if there are regressions.
-          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
+          ARCTICDB_REAL_S3_BUCKET=${ASV_RESULTS_BUCKET} ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent || exit 1
           python -m asv run --show-stderr --durations all --bench $SUITE HEAD^! || exit 1
           python -m asv compare -s -f 1.15 $(cat master_commit_hash.txt) HEAD > results.txt || exit 1
           
@@ -161,15 +164,32 @@ jobs:
           ./tooling_venv/bin/python build_tooling/summarize_asv_run.py --commit-hash $(git rev-parse HEAD)
           exit $any_worse
 
+      - name: Clean up the test bucket
+        if: always()
+        shell: bash -el {0}
+        run: |
+          if [[ $ARCTICDB_REAL_S3_BUCKET == arcticdb-asv-data* ]]; then
+            echo "Removing ${ARCTICDB_REAL_S3_BUCKET}"
+            # --force since there will be files in the bucket
+            aws s3 rb --force --endpoint-url "http://${ARCTICDB_REAL_S3_ENDPOINT}" --region "${ARCTICDB_REAL_S3_REGION}" "s3://${ARCTICDB_REAL_S3_BUCKET}" 
+          else
+            echo "Unexpected bucket to clean up! ${ARCTICDB_REAL_S3_BUCKET}"
+            echo "This indicates a bug in the workflow. Not deleting anything and exiting..."
+            exit 1
+          fi
+
       - name: Add results to ArcticDB database
         if: always()
         shell: bash -el {0}
         run: |
+          echo "Using S3 bucket: ${ARCTICDB_REAL_S3_BUCKET}"
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode analyze \
           ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}} \
           --hash $(git rev-parse --short=8 ${{inputs.commit}})
+        env:
+          ARCTICDB_REAL_S3_BUCKET: ${{ env.ASV_RESULTS_BUCKET }}
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_commit]

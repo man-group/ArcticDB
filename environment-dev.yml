@@ -65,7 +65,8 @@ dependencies:
   - python >=3.12,<3.14
   - packaging
   - numpy
-  - pandas
+  - pandas <3
+  - pytz
   - attrs
   - boto3
   - werkzeug

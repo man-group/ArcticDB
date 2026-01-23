@@ -8,15 +8,18 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import random
 import time
-from typing import List
 from shutil import copytree, rmtree
 
 from arcticdb import Arctic
 from arcticdb.util.test import config_context
 
 import pandas as pd
+from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.common import *
+from arcticdb.util.logger import get_logger
+
+from benchmarks.environment_setup import Storage, create_libraries_across_storages
 
 
 def get_time_at_fraction_of_df(fraction, rows):
@@ -25,174 +28,121 @@ def get_time_at_fraction_of_df(fraction, rows):
     return end_time + time_delta
 
 
+def _sym_name(rows, cols):
+    return f"sym_{rows}_{cols}"
+
+
 class ModificationFunctions:
-    rounds = 1
-    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
-    repeat = 3
+    number = 1  # We do a single run between setup and teardown so we always start in the same state
     warmup_time = 0
+    timeout = 600
 
-    ARCTIC_DIR = "modification_functions"
-    ARCTIC_DIR_ORIGINAL = "modification_functions_original"
-    CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}"
+    rows_and_cols = [(1_000_000, 2), (10_000_000, 2), (5_000, 30_000)]
+    storages = [Storage.LMDB, Storage.AMAZON]
+    param_names = ["rows_and_cols", "storage"]
 
-    params = [1_000_000, 10_000_000]
-    param_names = ["rows"]
-
-    class LargeAppendDataModify:
-        """
-        This class will hold a cache of append large dataframes.
-
-        This cache is to create dataframes with timestamps sequenced over time so that overlap does not occur.
-        """
-
-        def __init__(self, num_rows_list: List[int], number_elements: int):
-            self.df_append_large = {}
-            for rows in num_rows_list:
-                lst = list()
-                for n in range(number_elements + 1):
-                    df = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(2 * (n + 1), rows))
-
-                    lst.append(df)
-                self.df_append_large[rows] = lst
+    params = [rows_and_cols, storages]
 
     def __init__(self):
         self.logger = get_logger()
+        self.lib = None
+        self.sym = None
 
     def setup_cache(self):
         start = time.time()
-        lad = self._setup_cache()
+        libs_for_storage = self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
-        return lad
+        return libs_for_storage
 
     def _setup_cache(self):
-        self.ac = Arctic(self.CONNECTION_STRING)
-        rows_values = self.params
+        lib_for_storage = create_libraries_across_storages(ModificationFunctions.storages)
 
-        self.init_dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}
-        for rows in rows_values:
-            lib_name = get_prewritten_lib_name(rows)
-            self.ac.delete_library(lib_name)
-            lib = self.ac.create_library(lib_name)
-            df = self.init_dfs[rows]
-            lib.write("sym", df)
-            print(f"INITIAL DATAFRAME {rows} rows has Index {df.iloc[0].name} - {df.iloc[df.shape[0] - 1].name}")
+        dfs = {
+            (r, c): generate_random_floats_dataframe_with_index(num_rows=r, num_cols=c, end_timestamp="1/1/2023")
+            for r, c in ModificationFunctions.rows_and_cols
+        }
+        for storage in ModificationFunctions.storages:
+            lib = lib_for_storage[storage]
+            if lib is None:
+                continue
+            for rows, cols in ModificationFunctions.rows_and_cols:
+                df = dfs[(rows, cols)]
+                lib.write(_sym_name(rows, cols), df)
 
-        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.
-        # Then on each teardown we restore the initial state by overwriting the modified with the original.
-        copytree(self.ARCTIC_DIR, self.ARCTIC_DIR_ORIGINAL)
+        return lib_for_storage
 
-        number_iteration = self.repeat * self.number * self.rounds
+    def setup(self, libs_for_storage, rows_and_cols, storage):
+        self.lib = libs_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
 
-        lad = self.LargeAppendDataModify(self.params, number_iteration)
+        rows, cols = rows_and_cols
 
-        return lad
+        self.sym = _sym_name(rows, cols)
+        assert self.lib.has_symbol(self.sym)
+        self.lib._nvs.restore_version(self.sym, 0)
+        assert self.lib.get_description(self.sym).row_count == rows
 
-    def setup(self, lad: LargeAppendDataModify, rows):
-        self.df_update_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(0.5, rows))
-        self.df_update_half = generate_pseudo_random_dataframe(rows // 2, "s", get_time_at_fraction_of_df(0.75, rows))
-        self.df_update_upsert = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(1.5, rows))
-        self.df_append_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(1.1, rows))
+        self.df_update_single = generate_random_floats_dataframe_with_index(
+            1, cols, end_timestamp=get_time_at_fraction_of_df(0.5, rows)
+        )
+        self.df_update_half = generate_random_floats_dataframe_with_index(
+            rows, cols, end_timestamp=get_time_at_fraction_of_df(0.75, rows)
+        )
+        self.df_update_upsert = generate_random_floats_dataframe_with_index(
+            rows, cols, end_timestamp=get_time_at_fraction_of_df(1.5, rows)
+        )
+        self.df_append_single = generate_random_floats_dataframe_with_index(
+            1, cols, end_timestamp=get_time_at_fraction_of_df(1.1, rows)
+        )
+        self.df_append_large = generate_random_floats_dataframe_with_index(rows, cols)
+        append_index = pd.date_range(start="1/2/2023", periods=rows, freq="ms")
+        self.df_append_large.index = append_index
 
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac[get_prewritten_lib_name(rows)]
+    def time_update_single(self, *args):
+        self.lib.update(self.sym, self.df_update_single)
 
-    def teardown(self, lad: LargeAppendDataModify, rows):
-        rmtree(self.ARCTIC_DIR)
-        copytree(self.ARCTIC_DIR_ORIGINAL, self.ARCTIC_DIR, dirs_exist_ok=True)
+    def time_update_half(self, *args):
+        self.lib.update(self.sym, self.df_update_half)
 
-        del self.ac
+    def time_update_upsert(self, *args):
+        self.lib.update(self.sym, self.df_update_upsert, upsert=True)
 
-    def time_update_single(self, lad: LargeAppendDataModify, rows):
-        self.lib.update("sym", self.df_update_single)
+    def time_append_single(self, *args):
+        self.lib.append(self.sym, self.df_append_single)
 
-    def time_update_half(self, lad: LargeAppendDataModify, rows):
-        self.lib.update("sym", self.df_update_half)
-
-    def time_update_upsert(self, lad: LargeAppendDataModify, rows):
-        self.lib.update("sym", self.df_update_upsert, upsert=True)
-
-    def time_append_single(self, lad: LargeAppendDataModify, rows):
-        self.lib.append("sym", self.df_append_single)
-
-    def time_append_large(self, lad: LargeAppendDataModify, rows):
-        large: pd.DataFrame = lad.df_append_large[rows].pop(0)
-        self.lib.append("sym", large)
-
-    def time_delete(self, lad: LargeAppendDataModify, rows):
-        self.lib.delete("sym")
+    def time_append_large(self, *args):
+        self.lib.append(self.sym, self.df_append_large)
 
 
-class ShortWideModificationFunctions:
-    rounds = 1
-    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
-    repeat = 2
+class Deletion:
+    number = 1  # We do a single run between setup and teardown because we can't delete a symbol twice
     warmup_time = 0
+    timeout = 600
 
-    ARCTIC_DIR = "modification_functions_short_wide"
-    ARCTIC_DIR_ORIGINAL = "modification_functions_short_wide_original"
-    CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}"
-    WIDE_DF_ROWS = 5_000
-    WIDE_DF_COLS = 30_000
-
-    class ShortWideAppendData:
-        def __init__(self, number_elements: int):
-            append_dfs = list()
-            for n in range(number_elements + 1):
-                df = generate_random_floats_dataframe_with_index(
-                    ShortWideModificationFunctions.WIDE_DF_ROWS,
-                    ShortWideModificationFunctions.WIDE_DF_COLS,
-                    "s",
-                    get_time_at_fraction_of_df(2 * (n + 1), rows=ShortWideModificationFunctions.WIDE_DF_ROWS),
-                )
-
-                append_dfs.append(df)
-            self.append_dfs = append_dfs
-
-    def __init__(self):
-        self.logger = get_logger()
+    rows_and_cols = [(1_000_000, 2), (10_000_000, 2), (5_000, 30_000)]
+    storages = [Storage.AMAZON, Storage.LMDB]
+    params = [rows_and_cols, storages]
+    param_names = ["rows_and_cols", "storage"]
 
     def setup_cache(self):
-        wide_append_data = self._setup_cache()
-        return wide_append_data
+        lib_for_storage = create_libraries_across_storages(Deletion.storages)
+        return lib_for_storage
 
-    def _setup_cache(self):
-        self.ac = Arctic(self.CONNECTION_STRING)
+    def setup(self, lib_for_storage, rows_and_cols, storage):
+        lib = lib_for_storage[storage]
+        if lib is None:
+            raise SkipNotImplemented
+        self.lib = lib
+        self.lib._nvs.version_store.clear()
 
-        lib_name = get_prewritten_lib_name(self.WIDE_DF_ROWS)
-        self.ac.delete_library(lib_name)
-        lib = self.ac.create_library(lib_name)
-        lib.write(
-            "short_wide_sym",
-            generate_random_floats_dataframe_with_index(self.WIDE_DF_ROWS, self.WIDE_DF_COLS),
-        )
+        rows, cols = rows_and_cols
+        df = generate_random_floats_dataframe_with_index(num_rows=rows, num_cols=cols)
+        self.lib.write("sym", df)
 
-        copytree(self.ARCTIC_DIR, self.ARCTIC_DIR_ORIGINAL)
-
-        number_iteration = self.repeat * self.number * self.rounds
-
-        return self.ShortWideAppendData(number_iteration)
-
-    def setup(self, wide_append_data: ShortWideAppendData):
-        self.df_update_short_wide = generate_random_floats_dataframe_with_index(self.WIDE_DF_ROWS, self.WIDE_DF_COLS)
-
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib_short_wide = self.ac[get_prewritten_lib_name(self.WIDE_DF_ROWS)]
-
-    def teardown(self, wide_append_data: ShortWideAppendData):
-        rmtree(self.ARCTIC_DIR)
-        copytree(self.ARCTIC_DIR_ORIGINAL, self.ARCTIC_DIR, dirs_exist_ok=True)
-
-        del self.ac
-
-    def time_update_short_wide(self, wide_append_data: ShortWideAppendData):
-        self.lib_short_wide.update("short_wide_sym", self.df_update_short_wide)
-
-    def time_append_short_wide(self, wide_append_data: ShortWideAppendData):
-        large: pd.DataFrame = wide_append_data.append_dfs.pop(0)
-        self.lib_short_wide.append("short_wide_sym", large)
-
-    def time_delete_short_wide(self, wide_append_data: ShortWideAppendData):
-        self.lib_short_wide.delete("short_wide_sym")
+    def time_delete(self, *args):
+        assert self.lib.has_symbol("sym")
+        self.lib.delete("sym")
 
 
 class DeleteOverTimeModificationFunctions:

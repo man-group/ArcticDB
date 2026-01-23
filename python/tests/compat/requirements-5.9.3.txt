@@ -3,3 +3,5 @@ numpy
 pyarrow
 protobuf<6
 pytest
+pandas<3
+pytz
