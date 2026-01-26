@@ -191,7 +191,7 @@ sparrow::array string_dict_from_block(
             sparrow::u8_buffer<int64_t> offsets_buffer(
                     reinterpret_cast<int64_t*>(string_offsets.block(0)->release()), offset_buffer_value_count
             );
-            sparrow::u8_buffer<char> strings_buffer = strings_buffer_at_offset(column, offset);
+            auto strings_buffer = strings_buffer_at_offset(column, offset);
             return {std::move(strings_buffer), std::move(offsets_buffer)};
         } else if (!has_offset_buffer && !has_string_buffer) {
             return minimal_strings_for_dict();
