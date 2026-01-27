@@ -199,8 +199,8 @@ bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.s
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
 
-IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl& desc) {
-    if (std::holds_alternative<stream::TimeseriesIndex>(index))
+void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
+    if (std::holds_alternative<TimeseriesIndex>(index))
         util::check(
                 desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
                 "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
@@ -210,8 +210,6 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
                 desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
                 "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
         );
-
-    return desc;
 }
 
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
@@ -285,12 +283,21 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
 /// When segments are produced by the processing pipeline, some rows might be missing. Imagine a filter with the middle
 /// rows filtered out. These slices cannot be put in an index key as the row slices in the index key must be contiguous.
 /// This function adjusts the row slices so that there are no gaps.
-/// @note This expects the slices to be sorted by colum slice i.e., first are all row in the first column slice, then
-///     are the row slices in the second column slice, etc... It also expects that there are no missing columns. The
-///     difference between this and adjust_slice_ranges is that this will not change the column slices. While
+/// @note The difference between this and adjust_slice_ranges is that this will not change the column slices. While
 ///     adjust_slice_ranges will change the column slices, making the first slice start from 0 even for timestamp-index
 ///     dataframes (which should have column range starting from 1 when being written to disk).
 void compact_row_slices(std::span<SliceAndKey> slices) {
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            ranges::adjacent_find(
+                    slices,
+                    [](const SliceAndKey& a, const SliceAndKey& b) {
+                        return a > b || (a.slice().col_range != b.slice().col_range &&
+                                         a.slice().col_range.start() != b.slice().col_range.end());
+                    }
+            ) == slices.end(),
+            "SlicesAndKeys must be sorted by column slice and all column slices must be present"
+    );
+
     size_t current_compacted_row = 0;
     size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
     size_t previous_col_slice_end = slices.empty() ? 0 : slices.front().slice().col_range.end();
@@ -454,7 +461,8 @@ static void check_can_update(
             "Cannot update as there is no previous index key to update into"
     );
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    const auto index_desc = check_index_match(frame.index, index_segment_reader.tsd().index());
+    check_index_match(frame.index, index_segment_reader.tsd().index());
+    const auto index_desc = index_segment_reader.tsd().index();
     util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
     check_update_data_is_sorted(frame, index_segment_reader);
     (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
@@ -2776,7 +2784,12 @@ folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
                                 processed_entity_ids
                         )),
                         std::back_inserter(write_segments_futures),
-                        [](const std::shared_ptr<folly::Future<SliceAndKey>>& fut) { return std::move(*fut); }
+                        [](const std::shared_ptr<folly::Future<SliceAndKey>>& fut) {
+                            return std::move(*fut).thenValueInline([](SliceAndKey&& slice_and_key) {
+                                slice_and_key.unset_segment();
+                                return slice_and_key;
+                            });
+                        }
                 );
                 return folly::collect(std::move(write_segments_futures));
             });
@@ -2792,12 +2805,19 @@ folly::Future<VersionedItem> read_modify_write_impl(
                    store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
     )
             .thenValue([&](std::vector<SliceAndKey>&& data_keys_and_slices) {
+                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        std::ranges::all_of(
+                                data_keys_and_slices,
+                                [](const SliceAndKey& slice_and_key) { return slice_and_key.segment().empty(); }
+                        ),
+                        "All segments should be empty after read_modify_write"
+                );
                 ranges::sort(data_keys_and_slices);
                 compact_row_slices(data_keys_and_slices);
                 const size_t row_count = data_keys_and_slices.empty()
                                                  ? 0
                                                  : data_keys_and_slices.back().slice().row_range.second -
-                                                           data_keys_and_slices[0].slice().row_range.first;
+                                                           data_keys_and_slices.front().slice().row_range.first;
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
@@ -2836,6 +2856,9 @@ folly::Future<VersionedItem> merge_update_impl(
             source_descriptor,
             pipeline_context->descriptor()
     );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !write_options.dynamic_schema, "Cannot merge update with dynamic schema"
+    );
     return read_modify_write_data_keys(
                    store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
     )
@@ -2861,7 +2884,7 @@ folly::Future<VersionedItem> merge_update_impl(
                 const size_t row_count = merged_ranges_and_keys.empty()
                                                  ? 0
                                                  : merged_ranges_and_keys.back().slice().row_range.second -
-                                                           merged_ranges_and_keys[0].slice().row_range.first;
+                                                           merged_ranges_and_keys.front().slice().row_range.first;
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),

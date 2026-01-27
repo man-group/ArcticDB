@@ -452,16 +452,11 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
 }
 
 VersionedItem LocalVersionedEngine::read_modify_write_internal(
-        const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
-        const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, bool prune_previous_versions
+        const StreamId& source_stream, const StreamId& target_stream, const VersionQuery& version_query,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, bool prune_previous_versions,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 ) {
     py::gil_scoped_release release_gil;
-
-    std::optional<proto::descriptors::UserDefinedMetadata> user_meta_proto;
-    if (!user_meta.is_none()) {
-        python_util::pb_from_python<proto::descriptors::UserDefinedMetadata>(user_meta);
-    }
 
     std::optional<VersionedItem> source_version = get_version_to_read(source_stream, version_query);
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(

@@ -446,12 +446,8 @@ class TestMergeTimeseriesUpdate:
             pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
         ),
     )
-    @pytest.mark.parametrize("upsert", (True, False))
-    def test_target_symbol_does_not_exist(self, lmdb_library, monkeypatch, source, upsert):
-        # Model non-existing target after Library.update
-        # There is an upsert parameter to control whether to create the index. If upsert=False exception is thrown.
-        # Since we're doing a merge on non-existing data, I think it's logical to assume that nothing matches. If
-        # upsert=True, we will create an empty dataframe with the same schema of the source.
+    @pytest.mark.parametrize("upsert", (pytest.param(True, marks=pytest.mark.xfail), False))
+    def test_target_symbol_does_not_exist(self, lmdb_library, source, upsert):
         lib = lmdb_library
 
         if not upsert:
@@ -460,40 +456,10 @@ class TestMergeTimeseriesUpdate:
                     "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert
                 )
         else:
-            import datetime
-
-            monkeypatch.setattr(
-                lib.__class__,
-                "merge",
-                lambda *args, **kwargs: VersionedItem(
-                    symbol="sym",
-                    library=lmdb_library.name,
-                    data=None,
-                    version=0,
-                    metadata=None,
-                    host=lmdb_library._nvs.env,
-                    timestamp=pd.Timestamp(datetime.datetime.now()),
-                ),
-                raising=False,
-            )
             merge_vit = lib.merge(
                 "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert
             )
             expected = pd.DataFrame({"a": []}, index=pd.DatetimeIndex([]))
-
-            monkeypatch.setattr(
-                lib,
-                "read",
-                lambda *args, **kwargs: VersionedItem(
-                    symbol=merge_vit.symbol,
-                    library=merge_vit.library,
-                    data=expected,
-                    version=merge_vit.version,
-                    metadata=merge_vit.metadata,
-                    host=merge_vit.host,
-                    timestamp=merge_vit.timestamp,
-                ),
-            )
             read_vit = lib.read("sym")
             assert_vit_equals_except_data(merge_vit, read_vit)
             assert_frame_equal(read_vit.data, expected)
@@ -561,11 +527,11 @@ class TestMergeTimeseriesUpdate:
     def test_two_segments_with_same_index_value(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = [
-            pd.DataFrame({"a": [36189]}, index=[pd.Timestamp(0)]),
-            pd.DataFrame({"a": [257]}, index=[pd.Timestamp(0)]),
+            pd.DataFrame({"a": [1]}, index=[pd.Timestamp(0)]),
+            pd.DataFrame({"a": [2]}, index=[pd.Timestamp(0)]),
         ]
 
-        source = pd.DataFrame({"a": [66313]}, index=[pd.Timestamp(0)])
+        source = pd.DataFrame({"a": [3]}, index=[pd.Timestamp(0)])
         for df in target:
             lib.append("sym", df)
         strategy = MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)

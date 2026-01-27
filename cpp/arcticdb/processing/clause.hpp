@@ -889,9 +889,6 @@ struct MergeUpdateClause {
             const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
     ) const;
 
-    /// Filter segments which will be affected by the merge. The complexity is O(n) where n is the number of rows in
-    /// the source data.
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing_linear(std::vector<RangesAndKey>&);
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
@@ -899,35 +896,14 @@ struct MergeUpdateClause {
     /// @return Vector of size equal to the number of source data rows that are within the row slice being
     /// processed. Each element is a vector of the rows from the target data that has the same index as the
     /// corresponding source row
-    std::vector<std::vector<size_t>> filter_index_match(const ProcessingUnit& proc) const;
-
-    /// During filtering of rowslices in structure for processing, there might be multiple row slices that contain
-    /// the same index value. All of them must have the same  value in  source_start_end_for_row_range_. Add the
-    /// values and skip the rows containing a single  repeated index value
-    /// @return pair of the number of consecutive row slices whose time range is the same as range and an iterator
-    /// to the first column slice that has a different start and end range
-    std::pair<size_t, std::vector<RangesAndKey>::iterator> mark_duplicate_time_ranges_for_processing(
-            const size_t row_slice_idx, const std::span<std::vector<size_t>> offsets, const TimestampRange& range,
-            const std::pair<size_t, size_t>& source_row_range,
-            std::vector<RangesAndKey>::iterator first_col_slice_in_row, std::vector<size_t>& row_slices_to_keep
-    );
-    /// The last value of the current row range can be the same as the first value of the next segment. Start
-    /// iterating the source from the first occurrence of that index value so that we don't miss potential matches.
-    /// @example
-    ///          0  1  2  3  4  5  6
-    /// Source: [1, 4, 5, 7, 7, 7, 8]
-    /// Target: [1, 4), [5, 8), [7, 9)
-    /// The rows of source that fall into the second row slice are [2;6] (corresponding to 5, 7, 7, 7). The rows of
-    /// source that fall into the third row slice are [3;7] (corresponding to 7, 7, 7, 8).
-    size_t count_repetitions_of_overlapping_segment_values_in_source(
-            std::ranges::subrange<const ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>::DataTypeTag::raw_type*>
-                    source_range_for_slice,
-            const size_t next_row_slice_with_different_time_range, const size_t row_slice_count,
-            const std::vector<RangesAndKey>::iterator col_slice, const TimestampRange& time_range,
-            const size_t* first_occurrence_of_last_value
+    std::vector<std::vector<size_t>> filter_index_match(
+            const Column& target_index, const std::span<const timestamp> source_index,
+            const TimestampRange& target_atom_key_range
     ) const;
-    /// For each row range stores the first and last row in the source that overlaps with the row range. The
+
+    /// For each timestamp range stores the first and last row in the source that overlaps with the row range. The
     /// interval is closed in the start and open in the end: [start, end)
-    ankerl::unordered_dense::map<RowRange, std::pair<size_t, size_t>, RowRange::Hasher> source_start_end_for_row_range_;
+    ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
+            source_start_end_for_row_range_;
 };
 } // namespace arcticdb

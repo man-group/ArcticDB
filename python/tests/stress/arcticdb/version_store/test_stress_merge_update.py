@@ -19,7 +19,7 @@ def make_matching_source(target_df: pd.DataFrame, segments: List[int], rows_per_
         start = seg * rows_per_segment
         end = start + rows_per_segment
         segment_indices = target_df.index[start:end]
-        n = np.random.randint(1, high=100_000)
+        n = np.random.randint(1, high=rows_per_segment)
         chosen = np.random.choice(segment_indices, size=n, replace=False)
         indices.extend(chosen)
 

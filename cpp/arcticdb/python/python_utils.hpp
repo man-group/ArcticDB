@@ -124,10 +124,15 @@ void pb_from_python(const py::object& py_msg, Msg& out) {
 }
 
 template<typename Msg>
-Msg pb_from_python(const py::object& py_msg) {
+std::optional<Msg> maybe_pb_from_python(const py::object& py_msg) {
+    std::optional<Msg> res;
+    if (py_msg.is_none()) {
+        return res;
+    }
     Msg out;
     out.ParseFromString(py_msg.attr("SerializeToString")().cast<std::string>());
-    return out;
+    res = std::move(out);
+    return res;
 }
 
 /**

@@ -108,6 +108,7 @@ std::vector<EntityId> push_selected_entities(
     std::vector<std::shared_ptr<SegmentInMemory>> segments;
     std::vector<std::shared_ptr<ColRange>> col_ranges;
     std::vector<std::shared_ptr<RowRange>> row_ranges;
+    std::vector<std::shared_ptr<AtomKey>> atom_keys;
     for (const RangesAndKey& range : ranges_and_keys) {
         while ((idx < segments_in.size()) &&
                (range.row_range() != row_ranges_in[idx] || range.col_range() != col_ranges_in[idx])) {
@@ -116,11 +117,13 @@ std::vector<EntityId> push_selected_entities(
         segments.emplace_back(std::make_shared<SegmentInMemory>(std::move(segments_in[idx])));
         col_ranges.emplace_back(std::make_shared<ColRange>(std::move(col_ranges_in[idx])));
         row_ranges.emplace_back(std::make_shared<RowRange>(std::move(row_ranges_in[idx])));
+        atom_keys.emplace_back(std::make_shared<AtomKey>(range.key_));
     }
     return component_manager.add_entities(
             std::move(segments),
             std::move(col_ranges),
             std::move(row_ranges),
+            std::move(atom_keys),
             std::vector<EntityFetchCount>(ranges_and_keys.size(), 0)
     );
 }

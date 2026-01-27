@@ -90,11 +90,10 @@ class VersionedEngine {
             const ReadOptions& read_options, std::any& handler_data
     ) = 0;
 
-    // New API mirroring read path: read-modify-write operation
     virtual VersionedItem read_modify_write_internal(
-            const StreamId& stream_id, const StreamId& target_id, const py::object& user_meta,
-            const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-            const ReadOptions& read_options, bool prune_previous_versions
+            const StreamId& stream_id, const StreamId& target_stream, const VersionQuery& version_query,
+            const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, bool prune_previous_versions,
+            std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
     ) = 0;
 
     virtual VersionedItem write_versioned_dataframe_internal(

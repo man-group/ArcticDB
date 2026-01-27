@@ -34,13 +34,16 @@
 namespace {
 using namespace arcticdb;
 /// Remove all row slice entities and ranges and keys whose indexes do not appear in row_slices_to_keep
-/// @param row_slices_to_keep Must be sorted and unique
 /// @param offsets Must be structured by row slice with ranges and keys
 /// @param ranges_and_keys Must be structured by row slice with offsets
 void filter_selected_ranges_and_keys_and_reindex_entities(
         const std::span<const size_t> row_slices_to_keep, std::vector<std::vector<size_t>>& offsets,
-        std::vector<arcticdb::RangesAndKey>& ranges_and_keys
+        std::vector<RangesAndKey>& ranges_and_keys
 ) {
+    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            std::ranges::adjacent_find(row_slices_to_keep, std::ranges::greater_equal{}) == row_slices_to_keep.end(),
+            "Elements of rows slices to keep must be sorted and unique"
+    );
     std::vector<std::vector<size_t>> new_offsets;
     new_offsets.reserve(row_slices_to_keep.size());
     for (const size_t row_slice_to_keep : row_slices_to_keep) {
@@ -48,16 +51,15 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
     }
     offsets = std::move(new_offsets);
     size_t new_entity_id = 0;
+    std::vector<RangesAndKey> new_ranges_and_keys;
+    new_ranges_and_keys.reserve(ranges_and_keys.size());
     for (std::span<size_t> row_slice : offsets) {
         for (size_t& entity_id : row_slice) {
-            if (entity_id != new_entity_id) {
-                ranges_and_keys[new_entity_id] = std::move(ranges_and_keys[entity_id]);
-                entity_id = new_entity_id;
-            }
-            new_entity_id++;
+            new_ranges_and_keys.emplace_back(std::move(ranges_and_keys[entity_id]));
+            entity_id = new_entity_id++;
         }
     }
-    ranges_and_keys.erase(ranges_and_keys.begin() + new_entity_id, ranges_and_keys.end());
+    ranges_and_keys = std::move(new_ranges_and_keys);
 }
 
 template<typename TDT>
@@ -83,12 +85,6 @@ Column merge_update_string_column(
         const Field& target_field, const RowRange& row_range, const StringPool& target_string_pool,
         const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
 ) {
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            rows_to_update.size() == source_column_view.size(), "Mismatched source row sizes"
-    );
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
-    );
     if constexpr (is_fixed_string_type(TDT::data_type())) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "Fixed string sequences are not supported for merge update"
@@ -1859,44 +1855,6 @@ MergeUpdateClause::MergeUpdateClause(
     );
 }
 
-std::pair<size_t, std::vector<RangesAndKey>::iterator> MergeUpdateClause::mark_duplicate_time_ranges_for_processing(
-        const size_t row_slice_idx, const std::span<std::vector<size_t>> offsets, const TimestampRange& time_range,
-        const std::pair<size_t, size_t>& source_row_range, std::vector<RangesAndKey>::iterator first_col_slice_in_row,
-        std::vector<size_t>& row_slices_to_keep
-) {
-    const size_t row_slice_count = offsets.size();
-    auto col_slice = first_col_slice_in_row + offsets[row_slice_idx].size();
-    for (size_t i = row_slice_idx + 1; i < row_slice_count && col_slice->key_.time_range() == time_range; ++i) {
-        row_slices_to_keep.push_back(i);
-        source_start_end_for_row_range_.emplace(col_slice->row_range(), source_row_range);
-        col_slice += offsets[i].size();
-    }
-    return {row_slices_to_keep.back() - row_slice_idx, col_slice};
-}
-
-size_t MergeUpdateClause::count_repetitions_of_overlapping_segment_values_in_source(
-        std::ranges::subrange<const ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>::DataTypeTag::raw_type*>
-                source_range_for_slice,
-        const size_t next_row_slice_with_different_time_range, const size_t row_slice_count,
-        const std::vector<RangesAndKey>::iterator col_slice, const TimestampRange& time_range,
-        const size_t* first_occurrence_of_last_value
-) const {
-    if (next_row_slice_with_different_time_range < row_slice_count) {
-        const auto [next_start, _] = col_slice->key_.time_range();
-        const bool index_value_spans_two_segments = next_start + 1 == time_range.second;
-        if (index_value_spans_two_segments) {
-            if (first_occurrence_of_last_value != nullptr) {
-                return source_range_for_slice.size() - *first_occurrence_of_last_value;
-            } else {
-                auto reversed = std::views::reverse(source_range_for_slice);
-                return ranges::find_if(reversed, [&](const timestamp val) { return val != reversed.front(); }) -
-                       reversed.begin();
-            }
-        }
-    }
-    return 0;
-}
-
 std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
     if (ranges_and_keys.empty()) {
@@ -1911,11 +1869,20 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
 std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log(
         std::vector<RangesAndKey>& ranges_and_keys
 ) {
+
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     std::vector<std::vector<size_t>> offsets = structure_by_row_slice(ranges_and_keys);
     std::vector<size_t> row_slices_to_keep;
     // TODO: Arrow is not supported yet.
     const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            util::is_cstyle_array<IndexType::DataTypeTag::raw_type>(index_tensor),
+            "Fortran-style arrays are not supported by merge update yet. The index column has data type {} of "
+            "size {} bytes but the stride is {} bytes",
+            IndexType::data_type(),
+            sizeof(IndexType::DataTypeTag::raw_type),
+            index_tensor.strides()[0]
+    );
     const bool source_ends_before_first_row_slice =
             index_tensor.at(source_->num_rows - 1) < ranges_and_keys.begin()->key_.time_range().first;
     const bool source_starts_after_the_last_row_slice =
@@ -1925,145 +1892,25 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
         ranges_and_keys.clear();
         return {};
     }
-    const auto index_begin = static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data());
-    const auto source_end =
-            static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data()) + source_->num_rows;
-    const auto* current_index_it = static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data());
-    auto first_col_in_row_slice = ranges_and_keys.begin();
-    for (size_t row_slice_idx = 0; row_slice_idx < offsets.size() && current_index_it < source_end; ++row_slice_idx) {
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(current_index_it >= index_begin, "Invalid index iterator");
-        // TODO: Add logic for insertion. If we're skipping source rows and strategy.not_matched_by_target is INSERT
-        //  all the skipped
-        const TimestampRange& time_range = first_col_in_row_slice->key_.time_range();
-        const auto source_range_start = std::lower_bound(current_index_it, source_end, time_range.first);
-        // All subsequent source index values are less than the first index value of this row slice. Since all
-        // row slices are ordered, there is no way that the index will match any of the upcoming row slices.
-        if (source_range_start == source_end) {
+    std::span index(static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data()), source_->num_rows);
+    for (size_t row_slice_idx = 0; row_slice_idx < offsets.size(); ++row_slice_idx) {
+        // TODO: Add logic for insertion.
+        const TimestampRange& time_range = ranges_and_keys[offsets[row_slice_idx].front()].key_.time_range();
+        if (source_start_end_for_row_range_.contains(time_range)) {
+            row_slices_to_keep.push_back(row_slice_idx);
+            continue;
+        }
+        const auto source_range_start = std::ranges::lower_bound(index, time_range.first);
+        if (source_range_start == index.end()) {
             break;
         }
-        // The first value that's >= row slice start is also < row slice end. Which means the source overlaps with the
-        // current slice.
         if (*source_range_start < time_range.second) {
-            const auto source_range_end = std::upper_bound(source_range_start, source_end, time_range.second - 1);
+            auto source_range_end = std::upper_bound(source_range_start, index.end(), time_range.second - 1);
             const std::pair<size_t, size_t> source_row_range = {
-                    source_range_start - index_begin, source_range_end - index_begin
+                    source_range_start - index.begin(), source_range_end - index.begin()
             };
+            source_start_end_for_row_range_.insert({time_range, source_row_range});
             row_slices_to_keep.push_back(row_slice_idx);
-            source_start_end_for_row_range_.emplace(first_col_in_row_slice->row_range(), source_row_range);
-            size_t next_row_slice_with_different_time_range = row_slice_idx;
-            if (row_slice_idx + 1 < offsets.size()) {
-                const auto [duplicates, col_slice_after_index_duplicates] = mark_duplicate_time_ranges_for_processing(
-                        row_slice_idx, offsets, time_range, source_row_range, first_col_in_row_slice, row_slices_to_keep
-                );
-                row_slice_idx += duplicates;
-                first_col_in_row_slice = col_slice_after_index_duplicates;
-                next_row_slice_with_different_time_range += duplicates + 1;
-            }
-            // The time range for a segment is [index start value in ns, index end value + 1 in ns).
-            // Thus, the sequence of end[i], start[i+1] is not always increasing when a segment starts with the same
-            // value as the previous ends. E.g.
-            // Segment[0] index = [0, 1, 5] -> TimeRange = [0, 6)
-            // Segment[1] index = [5, 5] -> TimeRange = [5, 6)
-            // In this case we need to start matching the next segment from the first occurrence of the last value
-            const size_t last_source_index_value_repetitions =
-                    count_repetitions_of_overlapping_segment_values_in_source(
-                            ranges::subrange{source_range_start, source_range_end},
-                            next_row_slice_with_different_time_range,
-                            offsets.size(),
-                            first_col_in_row_slice,
-                            time_range,
-                            nullptr
-                    );
-            current_index_it = source_range_end - last_source_index_value_repetitions;
-        } else {
-            first_col_in_row_slice += offsets[row_slice_idx].size();
-            current_index_it = source_range_start;
-        }
-    }
-    filter_selected_ranges_and_keys_and_reindex_entities(row_slices_to_keep, offsets, ranges_and_keys);
-    return offsets;
-}
-
-std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_linear(
-        std::vector<RangesAndKey>& ranges_and_keys
-) {
-    using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    // TODO: Arrow is not supported yet.
-    const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
-    const bool is_update_only = strategy_ == MergeStrategy{MergeAction::UPDATE, MergeAction::DO_NOTHING};
-    std::vector<std::vector<size_t>> offsets = structure_by_row_slice(ranges_and_keys);
-    auto first_col_slice_in_row = ranges_and_keys.begin();
-    const bool source_is_before_first_row_slice =
-            index_tensor.at(source_->num_rows - 1) < first_col_slice_in_row->key_.time_range().first;
-    const bool source_starts_after_the_last_row_slice =
-            index_tensor.at(0) >= ranges_and_keys.back().key_.time_range().second;
-    if (is_update_only && (source_is_before_first_row_slice || source_starts_after_the_last_row_slice)) {
-        ranges_and_keys.clear();
-        return {};
-    }
-    std::vector<size_t> row_slices_to_keep;
-    const size_t row_slice_count = offsets.size();
-    const auto source_begin = static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data());
-    const auto source_end =
-            static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data()) + source_->num_rows;
-    const auto* current_index_it = static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data());
-    for (size_t row_slice_idx = 0; row_slice_idx < row_slice_count && current_index_it < source_end; ++row_slice_idx) {
-        // TODO: Add logic for insertion. If we're skipping source rows and strategy.not_matched_by_target is INSERT
-        //  all the skipped rows must be inserted
-        const TimestampRange time_range = first_col_slice_in_row->key_.time_range();
-        const auto first_source_row_in_slice = std::find_if(current_index_it, source_end, [&](const timestamp src) {
-            return src >= time_range.first;
-        });
-        if (first_source_row_in_slice == source_end) {
-            break;
-        }
-        if (*first_source_row_in_slice < time_range.second) {
-            size_t first_occurrence_of_last_value = 0;
-            const auto first_source_row_past_slice = std::find_if(
-                    first_source_row_in_slice,
-                    source_end,
-                    [&, last_value = *first_source_row_in_slice, i = 0](const timestamp src) mutable {
-                        if (src != last_value && src < time_range.second) {
-                            last_value = src;
-                            first_occurrence_of_last_value = i;
-                        }
-                        ++i;
-                        return src >= time_range.second;
-                    }
-            );
-            row_slices_to_keep.push_back(row_slice_idx);
-            const std::pair source_row_range{
-                    first_source_row_in_slice - source_begin, first_source_row_past_slice - source_begin
-            };
-            source_start_end_for_row_range_.emplace(first_col_slice_in_row->row_range(), source_row_range);
-            size_t next_row_slice_with_different_time_range = row_slice_idx;
-            if (row_slice_idx + 1 < row_slice_count) {
-                const auto [duplicates, col_slice_after_index_duplicates] = mark_duplicate_time_ranges_for_processing(
-                        row_slice_idx, offsets, time_range, source_row_range, first_col_slice_in_row, row_slices_to_keep
-                );
-                row_slice_idx += duplicates;
-                first_col_slice_in_row = col_slice_after_index_duplicates;
-                next_row_slice_with_different_time_range += duplicates + 1;
-            }
-            // The time range for a segment is [index start value in ns, index end value + 1 in ns).
-            // Thus, the sequence of end[i], start[i+1] is not always increasing when a segment starts with the same
-            // value as the previous ends. E.g.
-            // Segment[0] index = [0, 1, 5] -> TimeRange = [0, 6)
-            // Segment[1] index = [5, 5] -> TimeRange = [5, 6)
-            // In this case we need to start matching the next segment from the first occurrence of the last value
-            const size_t last_source_index_value_repetitions =
-                    count_repetitions_of_overlapping_segment_values_in_source(
-                            ranges::subrange{current_index_it, first_source_row_past_slice},
-                            next_row_slice_with_different_time_range,
-                            offsets.size(),
-                            first_col_slice_in_row,
-                            time_range,
-                            &first_occurrence_of_last_value
-                    );
-            current_index_it = first_source_row_past_slice - last_source_index_value_repetitions;
-        } else {
-            const size_t col_slice_count = offsets[row_slice_idx].size();
-            first_col_slice_in_row += col_slice_count;
         }
     }
     filter_selected_ranges_and_keys_and_reindex_entities(row_slices_to_keep, offsets, ranges_and_keys);
@@ -2087,12 +1934,20 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     if (entity_ids.empty()) {
         return {};
     }
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-            *component_manager_, std::move(entity_ids)
-    );
+    auto proc = gather_entities<
+            std::shared_ptr<SegmentInMemory>,
+            std::shared_ptr<RowRange>,
+            std::shared_ptr<ColRange>,
+            std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
     // TODO: Add exception handling two source rows matching the same target row. This should be done in the function
     //  handling the "on" parameter matching multiple columns. Monday 10655943156
-    std::vector<std::vector<size_t>> matched = filter_index_match(proc);
+    using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
+    std::vector<std::vector<size_t>> matched = filter_index_match(
+            proc.segments_->front()->column(0),
+            std::span(index_tensor.data(), source_->num_rows),
+            proc.atom_keys_->front()->time_range()
+    );
     if (source_->has_segment()) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "Arrow format is not supported yes as input for merge update"
@@ -2112,7 +1967,15 @@ void MergeUpdateClause::update_and_insert(
     const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
     const std::span<const std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
     const std::span<const std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
-    const auto [source_row_start, source_row_end] = source_start_end_for_row_range_.at(*row_ranges[0]);
+    const std::span<const std::shared_ptr<AtomKey>> atom_keys = *proc.atom_keys_;
+    const auto source_row_range_it = source_start_end_for_row_range_.find(atom_keys.front()->time_range());
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            source_row_range_it != source_start_end_for_row_range_.end(),
+            "Missing mapping between AtomKey timerange {} {} and source row start/end",
+            atom_keys.front()->time_range().first,
+            atom_keys.front()->time_range().second
+    );
+    const auto [source_row_start, source_row_end] = source_row_range_it->second;
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
     // updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
@@ -2144,11 +2007,18 @@ void MergeUpdateClause::update_and_insert(
                 );
                 Column& target_column = target_segment.column(column_index_in_slice);
                 const NativeTensor& source_tensor = source_tensors[column_position_in_source];
+                using SourceType = std::conditional_t<is_sequence_type(tdt.data_type()), PyObject* const, RawType>;
+                const std::span source_data(
+                        static_cast<const SourceType*>(source_tensor.data()) + source_row_start,
+                        source_row_end - source_row_start
+                );
+                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        rows_to_update.size() == source_data.size(), "Mismatched source row sizes"
+                );
+                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
+                );
                 if constexpr (is_sequence_type(tdt.data_type())) {
-                    const std::span source_data(
-                            static_cast<PyObject* const*>(source_tensor.data()) + source_row_start,
-                            source_row_end - source_row_start
-                    );
                     // String columns are always recreated from scratch regardless if an update or insert is happening.
                     // This is done because the string pool must be updated. With data read from disk, the map_ member
                     // of the pool is not populated. Which means that the mapping between a string and offset in the
@@ -2165,10 +2035,6 @@ void MergeUpdateClause::update_and_insert(
                     );
                     target_segment.column(column_index_in_slice) = std::move(new_string_column);
                 } else {
-                    std::span source_data(
-                            static_cast<const RawType*>(source_tensor.data()) + source_row_start,
-                            source_row_end - source_row_start
-                    );
                     ColumnData target_column_data = target_column.data();
                     auto target_row_to_update_it = target_column_data.begin<TDT>();
                     size_t target_row_to_update_idx = 0;
@@ -2198,29 +2064,29 @@ void MergeUpdateClause::update_and_insert(
 /// target to be matched by multiple rows in source only if MergeUpdateClause::on_ is not empty. If
 /// MergeUpdateClause::on_ is not empty there will be further filtering which might remove some matches. Otherwise,
 /// one row will be updated multiple times which is not allowed.
-std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const ProcessingUnit& proc) const {
+std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
+        const Column& target_index, const std::span<const timestamp> source_index,
+        const TimestampRange& target_atom_key_range
+) const {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    const std::span<const std::shared_ptr<SegmentInMemory>> target_segments{*proc.segments_};
-    const std::span<const std::shared_ptr<RowRange>> row_ranges{*proc.row_ranges_};
-    ColumnData target_index = target_segments[0]->column(0).data();
-    const auto target_index_accessor = random_accessor<IndexType>(&target_index);
-    const auto [source_row_start, source_row_end] = source_start_end_for_row_range_.at(*row_ranges[0]);
-    const timestamp last_source_value_in_range = source_->index_value_at(source_row_end - 1);
-    const size_t last_target_row_to_consider = [&]() {
-        auto row_indexes = ranges::iota_view{position_t{0}, target_segments[0]->column(0).row_count()};
+    ColumnData target_index_column_data = target_index.data();
+    const auto target_index_accessor = random_accessor<IndexType>(&target_index_column_data);
+    const auto [source_row_start, source_row_end] = source_start_end_for_row_range_.at(target_atom_key_range);
+    const size_t last_target_row_to_consider = [&] {
+        auto row_indexes = ranges::iota_view{position_t{0}, target_index.row_count()};
         const auto upper_bound = ranges::upper_bound(
                 row_indexes,
-                last_source_value_in_range,
+                source_index.back(),
                 [&](const timestamp value, const int64_t row_idx) { return value < target_index_accessor.at(row_idx); }
         );
-        return upper_bound == row_indexes.end() ? target_segments[0]->column(0).row_count() : *upper_bound;
+        return upper_bound == row_indexes.end() ? target_index.row_count() : *upper_bound;
     }();
     size_t source_row = source_row_start;
     const size_t source_rows_in_row_slice = source_row_end - source_row;
     std::vector<std::vector<size_t>> matched_rows(source_rows_in_row_slice);
     size_t target_row = 0;
     while (target_row < last_target_row_to_consider && source_row < source_row_end) {
-        const timestamp source_ts = source_->index_value_at(source_row);
+        const timestamp source_ts = source_index[source_row];
         // TODO: Profile performance and try different optimizations. See Monday 10655963947
         auto row_index_view = std::ranges::iota_view{target_row, last_target_row_to_consider};
         auto target_match_it =

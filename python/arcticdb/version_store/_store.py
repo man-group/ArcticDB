@@ -112,10 +112,9 @@ class MergeStrategy(NamedTuple):
 def normalize_merge_action(action: Union[MergeAction, str]) -> MergeAction:
     if isinstance(action, MergeAction):
         return action
+    assert isinstance(action, str)
 
-    if isinstance(action, str):
-        action = action.lower()
-
+    action = action.lower()
     if action == "update":
         return MergeAction.UPDATE
     elif action == "insert":
@@ -3889,11 +3888,7 @@ class NativeVersionStore:
         prune_previous_versions: bool = False,
         upsert: bool = False,
     ):
-        strategy = MergeStrategy(
-            matched=normalize_merge_action(strategy.matched),
-            not_matched_by_target=normalize_merge_action(strategy.not_matched_by_target),
-        )
-
+        strategy = normalize_merge_strategy(strategy)
         udm, item, norm_meta = self._try_normalize(
             symbol,
             data,

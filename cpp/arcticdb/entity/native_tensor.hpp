@@ -244,6 +244,8 @@ struct TypedTensor : public NativeTensor {
         check_ptr_within_bounds(tensor, slice_num, stride_offset);
     }
 
+    const T* data() const { return static_cast<const T*>(NativeTensor::data()); }
+
   private:
     void check_ptr_within_bounds(const NativeTensor& tensor, ssize_t slice_num, ssize_t stride_offset) {
         if (tensor.extent(0) == 0) {

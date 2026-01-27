@@ -1264,23 +1264,11 @@ def assert_vit_equals_except_data(left, right):
     assert left.timestamp == right.timestamp
 
 
-def schema_match(left: pd.DataFrame, right: pd.DataFrame) -> bool:
-    index_name_match = (left.index.name is None and right.index.name) or left.index.name == right.index.name
-    index_type_match = left.index.dtype == right.index.dtype
-    index_match = index_name_match and index_type_match
-
-    column_names_match = left.columns.equals(right.columns)
-    column_type_match = left.dtypes.equals(right.dtypes)
-    columns_match = column_names_match and column_type_match
-
-    if not index_match:
-        print(f"Index mismatch: {left.index.dtype} != {right.index.dtype}")
-        print(f"Index name mismatch: {left.index.name} != {right.index.name}")
-    if not columns_match:
-        print(f"Columns mismatch: {left.columns} != {right.columns}")
-        print(f"Column types mismatch: {left.dtypes} != {right.dtypes}")
-
-    return index_match and columns_match
+def assert_schema_match(left: pd.DataFrame, right: pd.DataFrame):
+    assert (left.index.name is None and right.index.name) or left.index.name == right.index.name
+    assert left.index.dtype == right.index.dtype
+    assert left.columns.equals(right.columns)
+    assert left.dtypes.equals(right.dtypes)
 
 
 def merge_update(
@@ -1355,7 +1343,7 @@ def merge(
     on: Optional[List[str]] = None,
     inplace: bool = False,
 ) -> pd.DataFrame:
-    assert schema_match(target, source), "Dynamic schema merge is not implemented yet"
+    assert_schema_match(target, source)
     assert isinstance(target.index, pd.DatetimeIndex), "Only DateTime index implemented"
     assert normalize_merge_strategy(strategy) == normalize_merge_strategy(
         MergeStrategy(matched="update", not_matched_by_target="do_nothing")
