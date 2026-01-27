@@ -56,7 +56,7 @@ jobs:
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
         run: |
-          pip install pytest arcticdb "protobuf<5"
+          pip install pytest arcticdb "protobuf<5" "pytz" "pandas<3"
       
       # Currently, the oldest "supported" release is 3.0.0 for windows and linux, 6.5.0 for mac
       # For gcpxml, the release needs to be >= v5.3.0
@@ -66,16 +66,17 @@ jobs:
       - name: Install oldest supported release (Windows and Linux)
         if: matrix.os == 'windows' || matrix.os == 'linux'
         run: |
+          pip install "protobuf<5" "numpy<2" "pandas<3" "pytz" "pytest"
           if [ "${{ inputs.persistent_storage }}" == "GCPXML" ]; then
-            pip install pytest arcticdb=="5.3.0" "protobuf<5" "numpy<2"
+            pip install arcticdb=="5.3.0"
           else
-            pip install pytest arcticdb=="3.0.0" "protobuf<5" "numpy<2"
+            pip install arcticdb=="3.0.0"
           fi
 
       - name: Install oldest supported release (macOS)
         if: matrix.os == 'macos'
         run: |
-          pip install pytest arcticdb=="6.5.0" "protobuf<5" "numpy<2"
+          pip install pytest arcticdb=="6.5.0" "protobuf<5" "numpy<2" "pandas<3" "pytz"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -115,7 +116,7 @@ jobs:
 
       - name: Install latest release
         run: |
-          pip install pytest arcticdb "protobuf<5"
+          pip install pytest arcticdb "protobuf<5" "pandas<3" "pytz"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -127,7 +128,7 @@ jobs:
           azure_container: "githubblob"
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           persistent_storage: ${{ inputs.persistent_storage }}
-      
+
       - name: Clean the storage
         run: |
           echo "Running cleanup for ${{ github.ref_name }}"
