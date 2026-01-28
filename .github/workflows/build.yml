@@ -497,11 +497,7 @@ jobs:
 
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, persistent_storage_verify_macos, storage_type]
-    if: |
-      always() &&
-      !failure() &&
-      !cancelled() &&
-      ${{ needs.storage_type.outputs.storage != 'no' }}
+    if: ${{ always() && !failure() && !cancelled() && needs.storage_type.outputs.storage != 'no' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
