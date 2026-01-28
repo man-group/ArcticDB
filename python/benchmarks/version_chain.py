@@ -22,10 +22,12 @@ from arcticdb.util.logger import get_logger
 
 
 class IterateVersionChain:
-    timeout = 1000
-    rounds = 2
-    repeat = 5
-    sample_time = 1
+    timeout = 1200
+    rounds = 3
+    repeat = (1, 10, 20.0)
+    sample_time = 0.5
+    warmup_time = 0.5
+    min_run_count = 5
 
     DIR_UNDELETED = "version_chain"
     DIR_TAIL_DELETED = "version_chain_tail_deleted"
