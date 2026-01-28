@@ -46,8 +46,10 @@ sparrow::array create_array(const std::vector<T>& data) {
                 strings_buffer[str_idx++] = c;
             }
         }
-        sparrow::u8_buffer<int32_t> sparrow_offsets_buffer(offsets_buffer, data.size() + 1);
-        sparrow::u8_buffer<char> sparrow_strings_buffer(strings_buffer, strings_buffer_size);
+        sparrow::u8_buffer<int32_t> sparrow_offsets_buffer(offsets_buffer, data.size() + 1, get_detachable_allocator());
+        sparrow::u8_buffer<char> sparrow_strings_buffer(
+                strings_buffer, strings_buffer_size, get_detachable_allocator()
+        );
         return sparrow::array{
                 sparrow::string_array{std::move(sparrow_strings_buffer), std::move(sparrow_offsets_buffer)}
         };

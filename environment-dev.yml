@@ -38,7 +38,7 @@ dependencies:
   # TODO: Understand failures with 8.17
   - libcurl >=8.18
   - bitmagic
-  - sparrow-devel==1.4.0
+  - sparrow-devel==2.2.0
   - spdlog
   - azure-core-cpp
   - azure-identity-cpp
