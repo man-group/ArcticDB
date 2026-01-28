@@ -1386,7 +1386,7 @@
         "version": "a14720848297f912d486f8af9f7e910ffce6362511a459d4a7115f6090ec3a88"
     },
     "list_symbols.ListSymbolsWithoutCache.time_has_symbol": {
-        "code": "class ListSymbolsWithoutCache:\n    def time_has_symbol(self, *args):\n        self._check_test_counter()\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
+        "code": "class ListSymbolsWithoutCache:\n    def time_has_symbol(self, *args):\n        self._check_test_counter()\n        for i in range(50, 150):\n            self.lib.has_symbol(f\"{i}\")\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "list_symbols.ListSymbolsWithoutCache.time_has_symbol",
         "number": 1,
@@ -1411,7 +1411,7 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "461e8b2adf939873268e712542116ec4e1f4935443dd70b0d66e951212a44656",
+        "version": "eb6f2f7d851aa1291ea7212dd0ab46e0f861324a868f66ea7f88c5b1228091af",
         "warmup_time": 0
     },
     "list_symbols.ListSymbolsWithoutCache.time_list_symbols": {
