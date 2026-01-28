@@ -276,6 +276,7 @@ set(arcticdb_srcs
         python/python_handler_data.hpp
         python/python_bindings_common.hpp
         python/python_utils.hpp
+        python/python_handlers.hpp
         pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
@@ -426,6 +427,7 @@ set(arcticdb_srcs
         version/version_store_api.hpp
         version/version_store_objects.hpp
         version/version_utils.hpp
+        version/python_bindings_common.hpp
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_output_frame.cpp
@@ -511,6 +513,7 @@ set(arcticdb_srcs
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
+        python/python_handlers.cpp
         storage/config_resolvers.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
@@ -573,6 +576,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         version/version_tasks.cpp
+        version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
 
@@ -876,9 +880,7 @@ set(arcticdb_python_srcs
         version/python_bindings.cpp
         util/python_bindings.cpp
         python/reader.hpp
-        python/adapt_read_dataframe.hpp
-        python/python_handlers.hpp
-        python/python_handlers.cpp)
+        python/adapt_read_dataframe.hpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 

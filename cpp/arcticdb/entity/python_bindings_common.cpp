@@ -10,6 +10,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/ref_key.hpp>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/operators.h>
@@ -21,6 +22,16 @@ namespace arcticdb::entity::apy {
 
 void register_common_entity_bindings(py::module& m, BindingScope scope) {
     bool local_bindings = (scope == BindingScope::LOCAL);
+
+    py::class_<RefKey, std::shared_ptr<RefKey>>(m, "RefKey", py::module_local(local_bindings))
+            .def(py::init())
+            .def(py::init<StreamId, KeyType>())
+            .def_property_readonly("id", &RefKey::id)
+            .def_property_readonly("type", [](const RefKey& self) { return self.type(); })
+            .def(pybind11::self == pybind11::self)
+            .def(pybind11::self != pybind11::self)
+            .def("__repr__", &RefKey::view);
+
     py::class_<AtomKey, std::shared_ptr<AtomKey>>(m, "AtomKey", py::module_local(local_bindings))
             .def(py::init())
             .def(py::init<StreamId, VersionId, timestamp, ContentHash, IndexValue, IndexValue, KeyType>())
