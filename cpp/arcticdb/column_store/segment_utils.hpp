@@ -8,32 +8,13 @@
 
 #pragma once
 
-#include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/column_algorithms.hpp>
 #include <ankerl/unordered_dense.h>
-#include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
-inline ankerl::unordered_dense::set<entity::position_t> unique_values_for_string_column(const Column& column) {
-    ankerl::unordered_dense::set<entity::position_t> output_set;
-    // Guessing that unique values is a third of the column length
-    // TODO would be useful to have actual unique count here from stats
-    static auto map_reserve_ratio = ConfigsMap::instance()->get_int("UniqueColumns.AllocationRatio", 3);
-    output_set.reserve(column.row_count() / map_reserve_ratio);
+class Column;
 
-    details::visit_type(column.type().data_type(), [&](auto col_desc_tag) {
-        using type_info = ScalarTypeInfo<decltype(col_desc_tag)>;
-        if constexpr (is_sequence_type(type_info::data_type)) {
-            arcticdb::for_each<typename type_info::TDT>(column, [&output_set](auto value) {
-                output_set.emplace(value);
-            });
-        } else {
-            util::raise_rte("Column {} is not a string type column");
-        }
-    });
-    return output_set;
-}
+ankerl::unordered_dense::set<entity::position_t> unique_values_for_string_column(const Column& column);
 
 } // namespace arcticdb

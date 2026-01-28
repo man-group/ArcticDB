@@ -29,12 +29,34 @@ concept ValidIndex = util::any_of<
 struct InputFrame {
   public:
     InputFrame();
-    void set_segment(SegmentInMemory&& seg);
-    void set_from_tensors(
-            StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
-            std::optional<entity::NativeTensor>&& index_tensor
-    );
+    InputFrame(SegmentInMemory&& seg);
 
+    template<ValidIndex Index, typename DescriptorT>
+    requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
+    InputFrame(
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, Index&& index,
+            std::optional<NativeTensor>&& index_tensor
+    ) :
+        index(std::forward<Index>(index)) {
+        if constexpr (std::same_as<Index, stream::TimeseriesIndex>) {
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    index_tensor.has_value(), "Timeseries index tensor required"
+            );
+        }
+        set_from_tensors(std::forward<DescriptorT>(desc), std::move(field_tensors), std::move(index_tensor));
+    }
+
+    template<typename DescriptorT>
+    requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
+    void set_from_tensors(
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
+    ) {
+        input_data.emplace<InputTensors>(
+                std::move(index_tensor), std::move(field_tensors), std::forward<DescriptorT>(desc)
+        );
+    }
+
+    void set_segment(SegmentInMemory&& seg);
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow

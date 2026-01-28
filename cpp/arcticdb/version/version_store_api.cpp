@@ -1009,10 +1009,16 @@ ReadResult PythonVersionStore::read_dataframe_version(
 VersionedItem PythonVersionStore::read_modify_write(
         const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
         const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, bool prune_previous_versions
+        const ReadOptions& read_options, const bool prune_previous_versions
 ) {
     return read_modify_write_internal(
-            source_stream, target_stream, user_meta, version_query, read_query, read_options, prune_previous_versions
+            source_stream,
+            target_stream,
+            version_query,
+            read_query,
+            read_options,
+            prune_previous_versions,
+            python_util::maybe_pb_from_python<proto::descriptors::UserDefinedMetadata>(user_meta)
     );
 }
 
@@ -1420,4 +1426,22 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
     delete_all_for_stream(store(), stream_id, true);
     version_map()->flush();
 }
+
+VersionedItem PythonVersionStore::merge(
+        const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
+        const bool prune_previous_versions, const bool upsert, const py::tuple& py_strategy, std::vector<std::string> on
+) {
+    const MergeStrategy strategy{
+            .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()
+    };
+    return merge_internal(
+            stream_id,
+            convert::py_ndf_to_frame(stream_id, source, norm, user_meta, cfg().write_options().empty_types()),
+            prune_previous_versions,
+            upsert,
+            strategy,
+            std::move(on)
+    );
+}
+
 } // namespace arcticdb::version_store
