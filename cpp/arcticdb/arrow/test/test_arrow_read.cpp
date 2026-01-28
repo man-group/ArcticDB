@@ -15,6 +15,7 @@
 #include <arcticdb/arrow/test/arrow_test_utils.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
+#include <arcticdb/util/allocator.hpp>
 
 using namespace arcticdb;
 
@@ -107,7 +108,7 @@ TEST(ArrowRead, ZeroCopy) {
     for (size_t idx = 0; idx < num_rows; ++idx) {
         typed_ptr[idx] = idx;
     }
-    sparrow::u8_buffer<uint64_t> u8_buffer(typed_ptr, num_rows);
+    sparrow::u8_buffer<uint64_t> u8_buffer(typed_ptr, num_rows, get_detachable_allocator());
     sparrow::primitive_array<uint64_t> primitive_array(std::move(u8_buffer), num_rows);
     sparrow::array array{std::move(primitive_array)};
     auto arrow_structures = sparrow::get_arrow_structures(array);
