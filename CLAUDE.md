@@ -31,6 +31,46 @@ Key presets in `cpp/CMakePresets.json`:
 
 User-specific presets can be defined in `cpp/CMakeUserPresets.json` (git-ignored).
 
+## Git Submodules
+
+The project uses several git submodules. **Do not directly edit files inside submodule directories** - instead update the submodule reference.
+
+### Submodule Locations
+
+| Submodule | Path | Purpose |
+|-----------|------|---------|
+| vcpkg | `cpp/vcpkg` | Package manager with custom ports (e.g., `arcticdb-sparrow`) |
+| pybind11 | `cpp/third_party/pybind11` | Python bindings |
+| lmdb | `cpp/third_party/lmdb` | LMDB storage backend |
+| lmdbxx | `cpp/third_party/lmdbxx` | C++ wrapper for LMDB |
+| recycle | `cpp/third_party/recycle` | Memory recycling |
+| rapidcheck | `cpp/third_party/rapidcheck` | Property-based testing |
+| entt | `cpp/third_party/entt` | Entity component system |
+
+### Upgrading a Dependency via vcpkg Submodule
+
+When upgrading a dependency like `sparrow` that has a custom port in vcpkg:
+
+1. **Fetch and checkout the vcpkg commit** containing the new version:
+   ```bash
+   cd cpp/vcpkg
+   git fetch origin
+   git log --oneline origin/master | grep -i <package-name>  # Find the commit
+   git checkout <commit-hash>
+   cd ../..
+   ```
+
+2. **Update the version override** in `cpp/vcpkg.json`:
+   ```json
+   "overrides": [
+     { "name": "arcticdb-sparrow", "version": "X.Y.Z" }
+   ]
+   ```
+
+3. **Update conda environment** in `environment-dev.yml` if applicable
+
+4. **Rebuild** - vcpkg will fetch the new version on next build
+
 ### Building C++ Tests
 
 Use the preset from `CLAUDE_USER_SETTINGS.md` (or `linux-debug` as default):
@@ -146,4 +186,9 @@ VERSION_REF (symbol)
 
 ### Code Style
 
-- Code style enforced by `./build_tooling/format.py`
+Code style is enforced by `./build_tooling/format.py`. **Always run the formatter after making code changes:**
+
+```bash
+# Format all code
+python ./build_tooling/format.py --in-place --type all
+```
