@@ -3895,7 +3895,8 @@ class NativeVersionStore:
         See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
 
         !!! warning
-            This API is under development and is subject to change.
+            This API is under development and is subject to change. The API is not subject to semver and can change in
+            minor or patch releases.
 
             Only date time indexed symbols and sources are supported at the moment.
 
@@ -3909,11 +3910,14 @@ class NativeVersionStore:
             !!! warning
                 Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
 
-            Determines how to handle matched and unmatched rows. Accepted strategies include:
+            Determines how to handle matched and unmatched rows. Accepted strategies are:
                 - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
                 - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
                 - MergeStrategy(matched="update", not_matched_by_target="insert"): Update matched rows and insert unmatched rows.
-            Note: If the strategy includes "update" on match, a row in the target cannot be matched by multiple rows in the source.
+            Note: If the strategy includes "update" on matched, a row in the target cannot be matched by multiple rows in the source.
+
+            The elements of `MergeStrategy` can be either values of the `MergeAction` enum or case-insensitive strings
+            representing the enum values.
         on : Optional[List[str]]
             !!! warning
                 Not yet implemented
@@ -3921,7 +3925,7 @@ class NativeVersionStore:
             Columns which are used to determine row equality between source and target. A row is considered matched when
             all specified columns have equal values in both source and target.
 
-            IMPORTANT: For date-time index data, the index is always included in matching and cannot be excluded.
+            IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
@@ -3930,14 +3934,37 @@ class NativeVersionStore:
             !!! warning
                 Not yet implemented
 
-            If True and the strategy allows insert, creates the symbol if it does not exist.
+            If True and `not_matched_by_target="insert"`, creates the symbol if it does not exist.
 
         Returns
         -------
         VersionedItem
             Structure containing metadata and version number of the written symbol in the store. The data attribute will
             not be populated.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist and `upsert=False`
+        UserInputException
+            If strategy is not one of the supported strategies listed above
+        SortingException
+            If date-time index is used and source or target are not sorted
+        SchemaException
+            If dynamic schema is used or if source's schema is incompatible with target's schema
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
+        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])))
+        >>> lib.read("symbol").data
+                                       a
+        1970-01-01 00:00:00.000000001  1
+        1970-01-01 00:00:00.000000002  100
+        1970-01-01 00:00:00.000000003  3
         """
+
         strategy = MergeStrategy(
             matched=normalize_merge_action(strategy.matched),
             not_matched_by_target=normalize_merge_action(strategy.not_matched_by_target),
