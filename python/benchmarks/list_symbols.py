@@ -64,7 +64,8 @@ class ListSymbolsWithoutCache:
 
     def time_has_symbol(self, *args):
         self._check_test_counter()
-        self.lib.has_symbol("250_sym")
+        for i in range(50, 150):
+            self.lib.has_symbol(f"{i}")
 
     def _check_test_counter(self):
         assert self.test_counter == 1

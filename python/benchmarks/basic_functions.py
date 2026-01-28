@@ -36,7 +36,7 @@ class BasicFunctions:
     warmup_time = 0.2
     timeout = 600
 
-    num_rows = [1_000_000, 10_000_000]
+    num_rows = [5_000_000, 10_000_000]
     use_query_stats = [True, False]
 
     params = [num_rows, use_query_stats, STORAGES]
