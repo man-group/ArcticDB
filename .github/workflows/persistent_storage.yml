@@ -68,9 +68,9 @@ jobs:
         run: |
           pip install "protobuf<5" "numpy<2" "pandas<3" "pytz" "pytest"
           if [ "${{ inputs.persistent_storage }}" == "GCPXML" ]; then
-            pip install arcticdb=="5.3.0"
+            pip install arcticdb=="5.3.0" "protobuf<5"
           else
-            pip install arcticdb=="3.0.0"
+            pip install arcticdb=="3.0.0" "protobuf<5"
           fi
 
       - name: Install oldest supported release (macOS)
