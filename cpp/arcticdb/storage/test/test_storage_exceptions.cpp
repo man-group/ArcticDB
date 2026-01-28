@@ -14,7 +14,7 @@
 #include <arcticdb/storage/mock/lmdb_mock_client.hpp>
 #include <arcticdb/storage/memory/memory_storage.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/mock/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/azure/azure_storage.hpp>
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
@@ -302,17 +302,19 @@ TEST(S3MockStorageTest, TestPermissionErrorException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol =
-            s3::MockS3Client::get_failure_trigger("sym1", StorageOperation::READ, Aws::S3::S3Errors::ACCESS_DENIED);
+    std::string failureSymbol = s3::S3ClientTestWrapper::get_failure_trigger(
+            "sym1", StorageOperation::READ, Aws::S3::S3Errors::ACCESS_DENIED
+    );
 
     ASSERT_THROW({ read_in_store(*storage, failureSymbol); }, PermissionException);
 
-    failureSymbol =
-            s3::MockS3Client::get_failure_trigger("sym2", StorageOperation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED);
+    failureSymbol = s3::S3ClientTestWrapper::get_failure_trigger(
+            "sym2", StorageOperation::DELETE, Aws::S3::S3Errors::ACCESS_DENIED
+    );
 
     ASSERT_THROW({ remove_in_store(*storage, {failureSymbol}); }, PermissionException);
 
-    failureSymbol = s3::MockS3Client::get_failure_trigger(
+    failureSymbol = s3::S3ClientTestWrapper::get_failure_trigger(
             "sym3", StorageOperation::WRITE, Aws::S3::S3Errors::INVALID_ACCESS_KEY_ID
     );
 
@@ -323,7 +325,7 @@ TEST(S3MockStorageTest, TestS3RetryableException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger(
+    std::string failureSymbol = s3::S3ClientTestWrapper::get_failure_trigger(
             "sym1", StorageOperation::READ, Aws::S3::S3Errors::NETWORK_CONNECTION
     );
 
@@ -334,7 +336,7 @@ TEST(S3MockStorageTest, TestUnexpectedS3ErrorException) {
     S3MockStorageFactory factory;
     auto storage = factory.create();
 
-    std::string failureSymbol = s3::MockS3Client::get_failure_trigger(
+    std::string failureSymbol = s3::S3ClientTestWrapper::get_failure_trigger(
             "sym{1}", StorageOperation::READ, Aws::S3::S3Errors::NETWORK_CONNECTION, false
     );
 
