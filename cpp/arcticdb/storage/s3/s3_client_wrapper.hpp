@@ -22,7 +22,7 @@ class S3ClientTestWrapper : public S3ClientInterface {
 
     ~S3ClientTestWrapper() override = default;
 
-    // Can be used to trigger a simulated failure inside MockS3Client. For example:
+    // Can be used to trigger a simulated failure inside S3ClientTestWrapper. For example:
     // auto object_to_trigger_put_failure = get_failure_trigger("test", StorageOperation::WRITE,
     // Aws::S3::S3Errors::NETWORK_FAILURE, false); mock_s3_client.put_object(object_to_trigger_put_failure, segment,
     // bucket_name); // This will return a network failure.
