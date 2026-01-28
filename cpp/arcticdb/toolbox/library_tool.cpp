@@ -35,13 +35,15 @@ async::AsyncStore<>& LibraryTool::async_store() { return dynamic_cast<async::Asy
 py::tuple LibraryTool::segment_in_memory_to_read_result(SegmentInMemory& segment) {
     constexpr OutputFormat output_format = OutputFormat::PANDAS;
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
-    std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
 
     // This is a dummy atom key needed to construct the read result, otherwise not important
     const auto& atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
 
-    return adapt_read_df(pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format), &handler_data);
+    return adapt_read_df(
+            pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format),
+            &handler_data
+    );
 }
 
 Segment LibraryTool::read_to_segment(const VariantKey& key) {

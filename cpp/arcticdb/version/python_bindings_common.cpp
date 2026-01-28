@@ -18,7 +18,9 @@ namespace arcticdb::version_store {
 
 void register_version_store_common_bindings(py::module& version, BindingScope scope) {
     bool local_bindings = (scope == BindingScope::LOCAL);
-    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(version, "NumpyBufferHolder", py::module_local(local_bindings));
+    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(
+            version, "NumpyBufferHolder", py::module_local(local_bindings)
+    );
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame", py::module_local(local_bindings))

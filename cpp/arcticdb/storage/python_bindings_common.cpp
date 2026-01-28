@@ -237,8 +237,6 @@ void register_common_storage_bindings(py::module& storage, BindingScope scope) {
             .value("WRITE", OpenMode::WRITE)
             .value("DELETE", OpenMode::DELETE);
 
-    
-
     py::enum_<KeyType>(storage, "KeyType", py::module_local(local_bindings))
             .value("VERSION", KeyType::VERSION)
             .value("VERSION_JOURNAL", KeyType::VERSION_JOURNAL)
