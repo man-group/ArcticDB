@@ -412,6 +412,7 @@ TEST_F(SparseTestStore, Segment) {
 }
 
 TEST_F(SparseTestStore, SegmentWithExistingIndex) {
+    SKIP_WIN("Flaky in Windows CI Monday: 8416830355");
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =
@@ -479,6 +480,7 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
 }
 
 TEST_F(SparseTestStore, SegmentAndFilterColumn) {
+    SKIP_WIN("Flaky in Windows CI Monday: 8416830355");
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =
@@ -544,6 +546,7 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
 }
 
 TEST_F(SparseTestStore, SegmentWithRangeFilter) {
+    SKIP_WIN("Flaky in Windows CI Monday: 8416830355");
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =
