@@ -6,8 +6,9 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/nfs_backed_storage.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
@@ -130,7 +131,7 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath& library_path, OpenMode mod
 
     if (conf.use_mock_storage_for_testing()) {
         log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
-        s3_client_ = std::make_unique<s3::MockS3Client>();
+        s3_client_ = std::make_unique<s3::S3ClientTestWrapper>(std::make_unique<s3::MockS3Client>());
     } else {
         s3_client_ = std::make_unique<s3::S3ClientImpl>(
                 s3::get_aws_credentials(conf),
