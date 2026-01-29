@@ -25,7 +25,7 @@ import difflib
 from datetime import datetime
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
-from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
+from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
 from contextlib import contextmanager
 import time
 
@@ -61,7 +61,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
+from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction
 from arcticdb.options import (
     RuntimeOptions,
     OutputFormat,
@@ -102,6 +102,33 @@ from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
 IS_WINDOWS = sys.platform == "win32"
 
 FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred", "metastruct", "to_write"])
+
+
+class MergeStrategy(NamedTuple):
+    matched: Union[MergeAction, str] = MergeAction.UPDATE
+    not_matched_by_target: Union[MergeAction, str] = MergeAction.INSERT
+
+
+def normalize_merge_action(action: Union[MergeAction, str]) -> MergeAction:
+    if isinstance(action, MergeAction):
+        return action
+    check(isinstance(action, str), "Merge action must be either a string or a member of the MergeAction enum")
+
+    action = action.lower()
+    if action == "update":
+        return MergeAction.UPDATE
+    elif action == "insert":
+        return MergeAction.INSERT
+    elif action == "do_nothing":
+        return MergeAction.DO_NOTHING
+    else:
+        raise ArcticNativeException(f"Invalid MergeAction: {action}. Must be one of: update, insert, do_nothing.")
+
+
+def normalize_merge_strategy(strategy: MergeStrategy) -> MergeStrategy:
+    return MergeStrategy(
+        normalize_merge_action(strategy.matched), normalize_merge_action(strategy.not_matched_by_target)
+    )
 
 
 def resolve_defaults(
@@ -3850,6 +3877,30 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self._library, self)
+
+    def merge(
+        self,
+        symbol: str,
+        data,
+        strategy: MergeStrategy = MergeStrategy(),
+        on: Optional[List[str]] = None,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        upsert: bool = False,
+    ):
+        strategy = normalize_merge_strategy(strategy)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            data,
+            metadata,
+            pickle_on_failure=False,
+            dynamic_strings=True,
+            coerce_columns=None,
+            norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
+        )
+        on = [] if on is None else on
+        vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
+        return self._convert_thin_cxx_item_to_python(vit, metadata)
 
 
 def resolve_dynamic_strings(kwargs):

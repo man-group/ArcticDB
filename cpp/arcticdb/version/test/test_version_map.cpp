@@ -15,7 +15,6 @@
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/version/version_log.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
-#include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 namespace arcticdb {

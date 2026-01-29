@@ -50,6 +50,7 @@ from arcticdb_ext import (
     unset_config_string,
 )
 from packaging.version import Version
+from arcticdb.version_store._store import MergeStrategy, normalize_merge_strategy
 
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
@@ -1261,3 +1262,96 @@ def assert_vit_equals_except_data(left, right):
     assert left.metadata == right.metadata
     assert left.host == right.host
     assert left.timestamp == right.timestamp
+
+
+def assert_schema_match(left: pd.DataFrame, right: pd.DataFrame):
+    assert left.index.name == right.index.name
+    assert left.index.dtype == right.index.dtype
+    assert left.columns.equals(right.columns)
+    assert left.dtypes.equals(right.dtypes)
+
+
+def merge_update(
+    target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[str]] = None, inplace: bool = False
+) -> pd.DataFrame:
+    """
+    Special case of merge when the strategy is MergeStrategy(matched=update, not_matched_by_target=do_nothing)
+
+    Parameters
+    ----------
+    target : pd.DataFrame
+        The target DataFrame to merge into.
+    source : pd.DataFrame
+        The source DataFrame containing the new values.
+    on : `Optional[List[str]]`, default=None
+        A list of columns to match on, the index is always implicitly included no regardless if the parameter is None or
+        contains values. When a row in source matches a row in target on all these columns, the row in target is updated with
+        the values from source. If None, only the index is used for matching.
+    inplace : `bool`, default=False
+        If True, modifies the target DataFrame in place. Otherwise, returns a new DataFrame with the updates applied.
+
+    Returns
+    -------
+    Pandas DataFrame representing the target updated with the values from source.
+    """
+
+    assert isinstance(target.index, pd.DatetimeIndex), "Only datetime index is implemented"
+
+    deep = not inplace
+    original_column_order = list(target.columns)
+
+    # If "on" is an empty match on the index. Otherwise, create a multiindex which includes the DatetimeIndex (if any)
+    # and the columns listed in "on". Using the a multiindex makes it easier to find which rows match using
+    # DataFrame.loc
+    if on is None:
+        result = target.copy(deep=deep)
+    else:
+        if isinstance(target.index, pd.DatetimeIndex):
+            index_name = target.index.name or "index"
+            while index_name in target.columns:
+                index_name = f"_{index_name}_"
+        else:
+            raise Exception("Only datetime index is implemented")
+
+        if inplace:
+            target.reset_index(names=index_name, inplace=True)
+            result = target
+        else:
+            result = target.reset_index(names=index_name, inplace=False)
+
+        source_reset = source.reset_index(names=index_name)
+        new_index_columns = [index_name] + on
+        result.set_index(new_index_columns, inplace=True)
+        source_reset.set_index(new_index_columns, inplace=True)
+
+        source = source_reset
+
+    common_idx = result.index.intersection(source.index)
+    result.loc[common_idx] = source.loc[common_idx]
+    if on is not None:
+        # Result is multiindex. Reset it so that it's indexed as target
+        result.reset_index(level=on, inplace=True)
+        result.index.name = target.index.name
+    result = result[original_column_order]
+    return result
+
+
+def merge(
+    target: pd.DataFrame,
+    source: pd.DataFrame,
+    strategy: MergeStrategy,
+    on: Optional[List[str]] = None,
+    inplace: bool = False,
+) -> pd.DataFrame:
+    assert_schema_match(target, source)
+    assert isinstance(target.index, pd.DatetimeIndex), "Only DateTime index implemented"
+    assert normalize_merge_strategy(strategy) == normalize_merge_strategy(
+        MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+    ), f"Only update on matched is implemented but {strategy} was given"
+
+    if normalize_merge_strategy(strategy) == normalize_merge_strategy(
+        MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+    ):
+        return merge_update(target, source, on, inplace=inplace)
+    # TODO: Implement other merge strategies
+    raise Exception(f"Merge strategy {strategy} not implemented")

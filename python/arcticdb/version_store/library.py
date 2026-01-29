@@ -24,7 +24,14 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
+from arcticdb.version_store._store import (
+    NativeVersionStore,
+    VersionedItem,
+    VersionedItemWithJoin,
+    VersionQueryInput,
+    MergeStrategy,
+    MergeAction,
+)
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
 
@@ -1995,7 +2002,7 @@ class Library:
             DateRange to restrict read data to.
 
             Applicable only for time-indexed Pandas dataframes or series. Returns only the
-            part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
+            part of the data that falls within the given range (inclusive). None on either end leaves that part of the
             range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
             to and including 20250101.
             The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
@@ -3227,6 +3234,26 @@ class Library:
         in the future. This API will allow overriding the setting as well.
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
+
+    def merge(
+        self,
+        symbol: str,
+        data: NormalizableType,
+        strategy: MergeStrategy = MergeStrategy(),
+        on: Optional[List[str]] = None,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        upsert: bool = False,
+    ):
+        return self._nvs.merge(
+            symbol=symbol,
+            data=data,
+            strategy=strategy,
+            on=on,
+            metadata=metadata,
+            prune_previous_versions=prune_previous_versions,
+            upsert=upsert,
+        )
 
     @property
     def name(self) -> str:

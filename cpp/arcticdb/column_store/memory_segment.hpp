@@ -11,7 +11,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
-#include <arcticdb/entity/output_format.hpp>
 
 namespace arcticdb {
 
@@ -291,6 +290,8 @@ class SegmentInMemory {
     [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows, bool filter_down_stringpool = false) const;
 
     void drop_empty_columns();
+
+    std::string_view string_at_offset(position_t offset_in_string_pool) const;
 
   private:
     explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl) : impl_(std::move(impl)) {}
