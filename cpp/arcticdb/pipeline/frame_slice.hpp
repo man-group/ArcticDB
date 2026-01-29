@@ -277,6 +277,8 @@ struct SliceAndKey {
 
     void set_segment(SegmentInMemory&& seg) { segment_ = std::move(seg); }
 
+    bool has_segment() const { return segment_.has_value(); }
+
     mutable std::optional<SegmentInMemory> segment_;
     FrameSlice slice_;
     std::optional<entity::AtomKey> key_;

@@ -2808,7 +2808,9 @@ folly::Future<VersionedItem> read_modify_write_impl(
                 debug::check<ErrorCode::E_ASSERTION_FAILURE>(
                         std::ranges::all_of(
                                 data_keys_and_slices,
-                                [](const SliceAndKey& slice_and_key) { return slice_and_key.segment().empty(); }
+                                [](const SliceAndKey& slice_and_key) {
+                                    return !slice_and_key.has_segment() || slice_and_key.segment().empty();
+                                }
                         ),
                         "All segments should be empty after read_modify_write"
                 );
@@ -2858,6 +2860,11 @@ folly::Future<VersionedItem> merge_update_impl(
     );
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !write_options.dynamic_schema, "Cannot merge update with dynamic schema"
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP &&
+                    pipeline_context->descriptor().sorted() == SortedValue::ASCENDING,
+            "Only timeseries ascending indexed target data is supported for merge update"
     );
     return read_modify_write_data_keys(
                    store, read_query, read_options, write_options, target_partial_index_key, pipeline_context

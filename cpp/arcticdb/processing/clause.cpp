@@ -2012,10 +2012,10 @@ void MergeUpdateClause::update_and_insert(
                         static_cast<const SourceType*>(source_tensor.data()) + source_row_start,
                         source_row_end - source_row_start
                 );
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         rows_to_update.size() == source_data.size(), "Mismatched source row sizes"
                 );
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
                 );
                 if constexpr (is_sequence_type(tdt.data_type())) {

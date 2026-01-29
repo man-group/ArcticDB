@@ -1265,7 +1265,7 @@ def assert_vit_equals_except_data(left, right):
 
 
 def assert_schema_match(left: pd.DataFrame, right: pd.DataFrame):
-    assert (left.index.name is None and right.index.name) or left.index.name == right.index.name
+    assert left.index.name == right.index.name
     assert left.index.dtype == right.index.dtype
     assert left.columns.equals(right.columns)
     assert left.dtypes.equals(right.dtypes)

@@ -112,7 +112,7 @@ class MergeStrategy(NamedTuple):
 def normalize_merge_action(action: Union[MergeAction, str]) -> MergeAction:
     if isinstance(action, MergeAction):
         return action
-    assert isinstance(action, str)
+    check(isinstance(action, str), "Merge action must be either a string or a member of the MergeAction enum")
 
     action = action.lower()
     if action == "update":
