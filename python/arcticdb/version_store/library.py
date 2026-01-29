@@ -3235,7 +3235,7 @@ class Library:
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
-    def merge(
+    def merge_experimental(
         self,
         symbol: str,
         source: NormalizableType,
@@ -3315,14 +3315,14 @@ class Library:
         --------
 
         >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
-        >>> lib.merge("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
         >>> lib.read("symbol").data
                                        a
         1970-01-01 00:00:00.000000001  1
         1970-01-01 00:00:00.000000002  100
         1970-01-01 00:00:00.000000003  3
         """
-        return self._nvs.merge(
+        return self._nvs.merge_experimental(
             symbol=symbol,
             source=source,
             strategy=strategy,

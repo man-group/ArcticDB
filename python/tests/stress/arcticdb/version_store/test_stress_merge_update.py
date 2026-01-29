@@ -65,7 +65,7 @@ class TestStressTimeseriesMergeUpdate:
         source = make_matching_source(self.__class__.data, segments_to_update, self.__class__.rows_per_segment)
         strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
         with qs.query_stats():
-            lib.merge("sym", source, strategy=strategy)
+            lib.merge_experimental("sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         expected_table_data_read_count = len(segments_to_update) * self.__class__.col_slices
         assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == expected_table_data_read_count
