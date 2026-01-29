@@ -122,11 +122,11 @@ sparrow::array string_array_from_block(
     auto offset = block.offset();
     auto block_size = block.row_count();
     util::check(
-            block.mem_block()->bytes() == (block_size + 1) * sizeof(SignedType),
+            block.mem_block()->physical_bytes() == (block_size + 1) * sizeof(SignedType),
             "Expected memory block for variable length strings to have size {} due to extra bytes but got a memory "
             "block with size {}",
             (block_size + 1) * sizeof(SignedType),
-            block.mem_block()->bytes()
+            block.mem_block()->physical_bytes()
     );
     sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1);
     const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
@@ -135,7 +135,7 @@ sparrow::array string_array_from_block(
             return minimal_string_buffer();
         }
         auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-        const auto strings_buffer_size = strings.block(0)->bytes();
+        const auto strings_buffer_size = strings.block(0)->physical_bytes();
         return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
     }();
     auto arr = [&]() {
@@ -177,12 +177,12 @@ sparrow::array string_dict_from_block(
     auto dict_values_array = [&]() -> sparrow::big_string_array {
         if (has_offset_buffer && has_string_buffer) {
             auto& string_offsets = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
-            const auto offset_buffer_value_count = string_offsets.block(0)->bytes() / sizeof(int64_t);
+            const auto offset_buffer_value_count = string_offsets.block(0)->physical_bytes() / sizeof(int64_t);
             sparrow::u8_buffer<int64_t> offsets_buffer(
                     reinterpret_cast<int64_t*>(string_offsets.block(0)->release()), offset_buffer_value_count
             );
             auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-            const auto strings_buffer_size = strings.block(0)->bytes();
+            const auto strings_buffer_size = strings.block(0)->physical_bytes();
             sparrow::u8_buffer<char> strings_buffer(
                     reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size
             );
