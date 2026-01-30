@@ -26,7 +26,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <arcticdb/util/type_handler.hpp>
-#include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/python/python_handlers_common.hpp>
 #include <arcticdb/python/python_bindings_common.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 

@@ -277,6 +277,7 @@ set(arcticdb_srcs
         python/python_bindings_common.hpp
         python/python_utils.hpp
         python/python_handlers.hpp
+        python/python_handlers_common.hpp
         pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
