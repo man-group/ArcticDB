@@ -103,7 +103,7 @@ void fill_chunked_string_column(
 
 TEST(ArrowRead, ZeroCopy) {
     size_t num_rows{10};
-    uint8_t* data_ptr = std::allocator<uint8_t>().allocate(sizeof(uint64_t) * num_rows);
+    uint8_t* data_ptr = allocate_detachable_memory(sizeof(uint64_t) * num_rows);
     auto typed_ptr = reinterpret_cast<uint64_t*>(data_ptr);
     for (size_t idx = 0; idx < num_rows; ++idx) {
         typed_ptr[idx] = idx;
@@ -114,11 +114,12 @@ TEST(ArrowRead, ZeroCopy) {
     auto arrow_structures = sparrow::get_arrow_structures(array);
     auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
     const auto* roundtripped_ptr = reinterpret_cast<uint64_t*>(arrow_array_buffers.at(1).data<uint8_t>());
+    // Verify zero-copy: the roundtripped pointer should be the same as the original
+    ASSERT_EQ(roundtripped_ptr, typed_ptr);
+    // Verify data integrity through the roundtripped pointer
     for (size_t idx = 0; idx < num_rows; ++idx) {
-        ASSERT_EQ(typed_ptr[idx], idx);
         ASSERT_EQ(roundtripped_ptr[idx], idx);
     }
-    ASSERT_EQ(roundtripped_ptr, typed_ptr);
 }
 
 TEST(ArrowRead, ColumnBasic) {
