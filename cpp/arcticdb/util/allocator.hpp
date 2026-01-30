@@ -10,6 +10,7 @@
 
 #include <arcticdb/util/clock.hpp>
 #include <memory>
+#include <sparrow/buffer/buffer.hpp>
 
 #if USE_SLAB_ALLOCATOR
 #include <arcticdb/util/slab_allocator.hpp>
@@ -20,19 +21,21 @@
 
 namespace arcticdb {
 
-// Must be used whenever deallocation COULD be the responsibility of sparrow
-// Explanation: Windows new[]/delete[] do not exactly map onto std::allocator allocate/deallocate
-// In particular, std::allocate has alignment optimisations when allocating larger blocks that
-// are not applied by new[]. sparrow uses the standard allocator to free memory we pass of to it,
-// and this can crash if the memory was allocated with new[] due to a mismatch in alignment expectations
+// The allocator type used for memory that will be passed to sparrow.
+// We use sparrow's default allocator to ensure zero-copy behavior when buffers are moved
+// internally within sparrow (sparrow compares allocators and copies data if they differ).
+using DetachableAllocator = sparrow::buffer<uint8_t>::default_allocator;
+
+// Must be used whenever deallocation COULD be the responsibility of sparrow.
+// Uses sparrow's default allocator to ensure zero-copy when passing buffers to sparrow.
 uint8_t* allocate_detachable_memory(size_t size);
 
 // Must be used whenever memory was allocated with allocate_detachable_memory
 void free_detachable_memory(uint8_t* ptr, size_t size);
 
 // Returns the allocator used by allocate_detachable_memory(). Must be passed to sparrow when
-// creating buffers from raw pointers to ensure memory can be properly freed.
-std::allocator<uint8_t> get_detachable_allocator();
+// creating buffers from raw pointers to ensure zero-copy behavior.
+DetachableAllocator get_detachable_allocator();
 
 static constexpr uint64_t BYTES = 1;
 static constexpr uint64_t KILOBYTES = 1024 * BYTES;

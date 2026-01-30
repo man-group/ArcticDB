@@ -22,7 +22,7 @@ uint8_t* allocate_detachable_memory(size_t size) { return get_detachable_allocat
 
 void free_detachable_memory(uint8_t* ptr, size_t size) { get_detachable_allocator().deallocate(ptr, size); }
 
-std::allocator<uint8_t> get_detachable_allocator() { return std::allocator<uint8_t>(); }
+DetachableAllocator get_detachable_allocator() { return DetachableAllocator{}; }
 
 bool use_slab_allocator() {
     static const bool use_it = ConfigsMap::instance()->get_int("Allocator.UseSlabAllocator", 1);
