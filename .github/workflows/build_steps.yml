@@ -198,9 +198,7 @@ jobs:
             ${{
               format('[{0}{1}''-DVCPKG_INSTALL_OPTIONS=--clean-after-build''{2}]',
                 matrix.cmake_extra_args,
-                # Add a comma if there are extra args
                 matrix.cmake_extra_args != '' && ', ' || '',
-                # Add test-specific args
                 inputs.job_type == 'cpp-tests' && ', ''-DTEST=ON'', ''ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=1''' || ''
               )
             }}
