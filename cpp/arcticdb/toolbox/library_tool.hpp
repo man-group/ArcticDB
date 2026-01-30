@@ -28,9 +28,7 @@ class LibraryTool {
 
     ReadResult read(const VariantKey& key, std::any& handler_data, OutputFormat output_format);
 
-    ReadResult segment_in_memory_to_read_result(
-            arcticdb::SegmentInMemory& segment, std::any& handler_data, OutputFormat output_format
-    );
+    py::tuple segment_in_memory_to_read_result(SegmentInMemory& segment);
 
     Segment read_to_segment(const VariantKey& key);
 
