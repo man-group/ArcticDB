@@ -199,7 +199,7 @@ jobs:
               format('[{0}{1}''-DVCPKG_INSTALL_OPTIONS=--clean-after-build''{2}]',
                 matrix.cmake_extra_args,
                 matrix.cmake_extra_args != '' && ', ' || '',
-                inputs.job_type == 'cpp-tests' && ', ''-DTEST=ON'', ''ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=1''' || ''
+                inputs.job_type == 'cpp-tests' && ', ''-DTEST=ON'', ''-DARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=ON''' || ''
               )
             }}
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
