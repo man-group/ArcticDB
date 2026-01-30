@@ -25,7 +25,7 @@ from arcticdb.util.test import (
     equals,
     CustomArray,
     CustomArrayNormalizer,
-    CustomClassSeparatorInStr
+    CustomClassSeparatorInStr,
 )
 from arcticdb.exceptions import (
     DataTooNestedException,

@@ -229,7 +229,9 @@ class TestMergeTimeseriesUpdate:
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame({"a": [4, 5], "b": [4.0, 5.0]}, index=pd.date_range("2023-01-01", periods=2))
-        merge_vit = lib.merge_experimental("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
+        merge_vit = lib.merge_experimental(
+            "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
+        )
         assert merge_vit.version == 1
 
         read_vit = lib.read("sym")
@@ -306,7 +308,9 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
-        lib.merge_experimental("sym", source, on=["a"], strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
+        lib.merge_experimental(
+            "sym", source, on=["a"], strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
+        )
 
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
@@ -685,7 +689,9 @@ class TestMergeTimeseriesInsert:
         source = pd.DataFrame(
             {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3)
         )
-        merge_vit = lib.merge_experimental("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        merge_vit = lib.merge_experimental(
+            "sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        )
         assert merge_vit.version == 1
 
         monkeypatch.setattr(
@@ -732,7 +738,9 @@ class TestMergeTimeseriesInsert:
             ),
         )
         monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
-        lib.merge_experimental("sym", source, on=["a"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        lib.merge_experimental(
+            "sym", source, on=["a"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        )
 
         # The first row is matched, but the strategy for matched rows is DO_NOTHING, so no update
         # the rest rows are inserted
@@ -775,7 +783,9 @@ class TestMergeTimeseriesInsert:
         )
 
         monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
-        lib.merge_experimental("sym", source, on=["b", "d", "e"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        lib.merge_experimental(
+            "sym", source, on=["b", "d", "e"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
+        )
         expected = pd.concat([target, source.tail(len(source) - 1)]).sort_index()
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
@@ -883,7 +893,11 @@ class TestMergeTimeseriesUpdateAndInsert:
             raising=False,
         )
 
-        merge_vit = lib.merge_experimental("sym", source, strategy=strategy) if strategy else lib.merge_experimental("sym", source)
+        merge_vit = (
+            lib.merge_experimental("sym", source, strategy=strategy)
+            if strategy
+            else lib.merge_experimental("sym", source)
+        )
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.metadata == write_vit.metadata
