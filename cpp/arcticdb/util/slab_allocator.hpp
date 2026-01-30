@@ -59,8 +59,11 @@ class SlabAllocator {
     };
     ~SlabAllocator() { delete[] main_memory_; };
 
-    pointer allocate() noexcept {
-        manage_slab_capacity();
+    pointer allocate(
+            std::shared_ptr<std::latch> decrease_available_blocks_done = nullptr,
+            std::shared_ptr<std::latch> start_callbacks = nullptr
+    ) noexcept {
+        manage_slab_capacity(decrease_available_blocks_done, start_callbacks);
         pointer p_block = nullptr;
         tagged_value_t curr_next_free_offset = next_free_offset_.load();
         tagged_value_t new_next_free_offset;
@@ -144,12 +147,20 @@ class SlabAllocator {
         return n;
     }
 
-    void manage_slab_capacity() {
+    void manage_slab_capacity(
+            std::shared_ptr<std::latch> decrease_available_blocks_done, std::shared_ptr<std::latch> start_callbacks
+    ) {
         size_type n = try_decrease_available_blocks();
         if (!n) {
             util::raise_rte("Out of memory in slab allocator, callbacks not freeing memory?");
         }
-        if (n / (float)capacity_ <= slab_activate_cb_cutoff) {
+        if (decrease_available_blocks_done) {
+            decrease_available_blocks_done->count_down();
+        }
+        if (start_callbacks) {
+            start_callbacks->wait();
+        }
+        if (n <= slab_activate_cb_cutoff * static_cast<float>(capacity_)) {
             // trigger callbacks to free space
             if (try_changing_cb(true)) {
                 ARCTICDB_TRACE(
@@ -162,7 +173,7 @@ class SlabAllocator {
                 }
             }
         }
-        if (n / (float)capacity_ >= slab_deactivate_cb_cutoff)
+        if (n >= slab_deactivate_cb_cutoff * static_cast<float>(capacity_))
             try_changing_cb(false);
     }
 
