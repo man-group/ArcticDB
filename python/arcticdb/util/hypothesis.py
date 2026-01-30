@@ -220,7 +220,7 @@ def dataframe(draw, column_names, column_dtypes, min_date, max_date, index_name=
                     dtype=dtype,
                     elements=st.one_of(
                         st.text(min_size=1, max_size=20, alphabet=string.ascii_letters + string.digits),  # ASCII
-                        st.text(min_size=1, max_size=20, alphabet=unicode_symbols),  # Unicode
+                        st.text(min_size=1, max_size=20, alphabet=unicode_symbols()),  # Unicode
                         st.just(np.nan),  # Missing value
                         st.just(None),  # Missing value
                     ),
