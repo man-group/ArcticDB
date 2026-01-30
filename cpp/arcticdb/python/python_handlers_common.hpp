@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/arrow/arrow_handlers.hpp>
 
 namespace arcticdb {
 /// Register handling of non-trivial types. For more information @see arcticdb::TypeHandlerRegistry and
