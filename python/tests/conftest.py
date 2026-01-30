@@ -515,6 +515,13 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
         f = real_s3_from_environment_variables(False, NativeVariantStorage(), "")
         f.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
         f.aws_profile = profile_name
+        f.native_config = NativeVariantStorage(
+            NativeS3Settings(
+                aws_auth=f.aws_auth,
+                aws_profile=f.aws_profile,
+                use_internal_client_wrapper_for_testing=False,
+            )
+        )
         yield f
     else:
         working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
