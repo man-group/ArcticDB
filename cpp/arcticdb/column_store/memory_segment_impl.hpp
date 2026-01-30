@@ -560,6 +560,7 @@ class SegmentInMemoryImpl {
 
     std::vector<std::shared_ptr<SegmentInMemoryImpl>> split(size_t rows, bool filter_down_stringpool = false) const;
     void drop_empty_columns();
+    std::string_view string_at_offset(const position_t offset_in_string_pool) const;
 
   private:
     ssize_t row_id_ = -1;

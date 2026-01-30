@@ -25,7 +25,7 @@ import difflib
 from datetime import datetime
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
-from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
+from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
 from contextlib import contextmanager
 import time
 
@@ -61,7 +61,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
+from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction
 from arcticdb.options import (
     RuntimeOptions,
     OutputFormat,
@@ -102,6 +102,33 @@ from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
 IS_WINDOWS = sys.platform == "win32"
 
 FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred", "metastruct", "to_write"])
+
+
+class MergeStrategy(NamedTuple):
+    matched: Union[MergeAction, str] = MergeAction.UPDATE
+    not_matched_by_target: Union[MergeAction, str] = MergeAction.INSERT
+
+
+def normalize_merge_action(action: Union[MergeAction, str]) -> MergeAction:
+    if isinstance(action, MergeAction):
+        return action
+    check(isinstance(action, str), "Merge action must be either a string or a member of the MergeAction enum")
+
+    action = action.lower()
+    if action == "update":
+        return MergeAction.UPDATE
+    elif action == "insert":
+        return MergeAction.INSERT
+    elif action == "do_nothing":
+        return MergeAction.DO_NOTHING
+    else:
+        raise ArcticNativeException(f"Invalid MergeAction: {action}. Must be one of: update, insert, do_nothing.")
+
+
+def normalize_merge_strategy(strategy: MergeStrategy) -> MergeStrategy:
+    return MergeStrategy(
+        normalize_merge_action(strategy.matched), normalize_merge_action(strategy.not_matched_by_target)
+    )
 
 
 def resolve_defaults(
@@ -3850,6 +3877,106 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self._library, self)
+
+    def merge_experimental(
+        self,
+        symbol: str,
+        source: Any,
+        strategy: MergeStrategy = MergeStrategy(),
+        on: Optional[List[str]] = None,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        upsert: bool = False,
+    ):
+        """
+        Merge new data into an existing symbol's DataFrame according to a specified strategy.
+
+        See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
+
+        !!! warning
+            This API is under development and is subject to change. The API is not subject to semver and can change in
+            minor or patch releases.
+
+            Only date time indexed symbols and sources are supported at the moment.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to merge data into.
+        source : pandas.DataFrame or pandas.Series
+            The new data to merge. In the case of timeseries, the index must be sorted.
+        strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
+            !!! warning
+                Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
+
+            Determines how to handle matched and unmatched rows. Accepted strategies are:
+                - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
+                - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
+                - MergeStrategy(matched="update", not_matched_by_target="insert"): Update matched rows and insert unmatched rows.
+            Note: If the strategy includes "update" on matched, a row in the target cannot be matched by multiple rows in the source.
+
+            The elements of `MergeStrategy` can be either values of the `MergeAction` enum or case-insensitive strings
+            representing the enum values.
+        on : Optional[List[str]]
+            !!! warning
+                Not yet implemented
+
+            Columns which are used to determine row equality between source and target. A row is considered matched when
+            all specified columns have equal values in both source and target.
+
+            IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
+        metadata : Any, optional
+            Metadata to save alongside the new version.
+        prune_previous_versions : bool, default False
+            If True, removes previous versions from the version list.
+        upsert : bool, default False
+            !!! warning
+                Not yet implemented
+
+            If True and `not_matched_by_target="insert"`, creates the symbol if it does not exist.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store. The data attribute will
+            not be populated.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist and `upsert=False`
+        UserInputException
+            If strategy is not one of the supported strategies listed above
+        SortingException
+            If date-time index is used and source or target are not sorted
+        SchemaException
+            If dynamic schema is used or if source's schema is incompatible with target's schema
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
+        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.read("symbol").data
+                                       a
+        1970-01-01 00:00:00.000000001  1
+        1970-01-01 00:00:00.000000002  100
+        1970-01-01 00:00:00.000000003  3
+        """
+
+        strategy = normalize_merge_strategy(strategy)
+        udm, item, norm_meta = self._try_normalize(
+            symbol,
+            source,
+            metadata,
+            pickle_on_failure=False,
+            dynamic_strings=True,
+            coerce_columns=None,
+            norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
+        )
+        on = [] if on is None else on
+        vit = self.version_store.merge(symbol, item, norm_meta, udm, prune_previous_versions, upsert, strategy, on)
+        return self._convert_thin_cxx_item_to_python(vit, metadata)
 
 
 def resolve_dynamic_strings(kwargs):

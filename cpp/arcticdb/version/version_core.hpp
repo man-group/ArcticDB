@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <string>
 
@@ -182,18 +183,24 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
 );
 
-VersionedItem read_modify_write_impl(
+folly::Future<VersionedItem> read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
+);
+
+folly::Future<VersionedItem> merge_update_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+        const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, std::vector<std::string>&& on, const MergeStrategy& strategy,
+        std::shared_ptr<InputFrame> source
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         ReadQuery& read_query, const ReadOptions& read_options
 );
-
 } // namespace arcticdb::version_store
 
 namespace arcticdb {

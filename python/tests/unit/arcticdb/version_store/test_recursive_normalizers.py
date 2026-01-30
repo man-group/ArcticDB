@@ -18,7 +18,15 @@ from arcticdb.version_store._custom_normalizers import (
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
-from arcticdb.util.test import equals, assert_frame_equal, CustomArray, CustomArrayNormalizer, CustomClassSeparatorInStr
+
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_vit_equals_except_data,
+    equals,
+    CustomArray,
+    CustomArrayNormalizer,
+    CustomClassSeparatorInStr,
+)
 from arcticdb.exceptions import (
     DataTooNestedException,
     UnsupportedKeyInDictionary,
@@ -27,7 +35,6 @@ from arcticdb.exceptions import (
 from arcticdb.version_store.library import ArcticUnsupportedDataTypeException
 from arcticdb_ext.storage import KeyType, ModifiableLibraryOption
 from arcticdb_ext.version_store import NoSuchVersionException
-import arcticdb_ext.stream as adb_stream
 import arcticdb_ext
 
 from tests.util.mark import MACOS_WHEEL_BUILD
@@ -47,19 +54,6 @@ class AlmostAListNormalizer(CustomNormalizer):
 
     def denormalize(self, item, norm_meta):
         return AlmostAList(item)
-
-
-def assert_vit_equals_except_data(left, right):
-    """
-    Checks if two VersionedItem objects are equal disregarding differences in the data field. This is because when a
-    write is performed the returned VersionedItem does not contain a data field.
-    """
-    assert left.symbol == right.symbol
-    assert left.library == right.library
-    assert left.version == right.version
-    assert left.metadata == right.metadata
-    assert left.host == right.host
-    assert left.timestamp == right.timestamp
 
 
 @pytest.mark.parametrize("staged", (True, False, None))

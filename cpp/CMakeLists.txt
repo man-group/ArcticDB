@@ -28,6 +28,7 @@ option(ARCTICDB_USING_UB_SANITIZER "Enable undefined behavior sanitizer." OFF)
 option(ARCTICDB_LOG_PERFORMANCE "Whether to log performance timings." OFF)
 option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations." OFF)
 option(ARCTICDB_KEEP_DEBUG_SYMBOLS "Whether to keep debug symbols in RelWithDebInfo builds." OFF)
+option(ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT "Enables pretty printing of segments. The printing can affect runtime" OFF)
 
 set(ARCTICDB_SANITIZER_FLAGS)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})

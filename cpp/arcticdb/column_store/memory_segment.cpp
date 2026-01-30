@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/column_store/memory_segment.hpp>
+
 #include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
@@ -283,5 +284,9 @@ std::vector<SegmentInMemory> SegmentInMemory::split(size_t rows, bool filter_dow
 }
 
 void SegmentInMemory::drop_empty_columns() { impl_->drop_empty_columns(); }
+
+std::string_view SegmentInMemory::string_at_offset(const position_t offset_in_string_pool) const {
+    return impl_->string_at_offset(offset_in_string_pool);
+}
 
 } // namespace arcticdb

@@ -13,7 +13,6 @@
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/util/test/generators.hpp>
-#include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/version/test/symbol_list_backwards_compat.hpp>
 
 #include <shared_mutex>

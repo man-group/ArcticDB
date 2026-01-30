@@ -24,7 +24,14 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
+from arcticdb.version_store._store import (
+    NativeVersionStore,
+    VersionedItem,
+    VersionedItemWithJoin,
+    VersionQueryInput,
+    MergeStrategy,
+    MergeAction,
+)
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
 
@@ -1999,7 +2006,7 @@ class Library:
             DateRange to restrict read data to.
 
             Applicable only for time-indexed Pandas dataframes or series. Returns only the
-            part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
+            part of the data that falls within the given range (inclusive). None on either end leaves that part of the
             range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
             to and including 20250101.
             The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
@@ -3234,6 +3241,103 @@ class Library:
         in the future. This API will allow overriding the setting as well.
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
+
+    def merge_experimental(
+        self,
+        symbol: str,
+        source: NormalizableType,
+        strategy: MergeStrategy = MergeStrategy(),
+        on: Optional[List[str]] = None,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        upsert: bool = False,
+    ):
+        """
+        Merge new data into an existing symbol's DataFrame according to a specified strategy.
+
+        See [Merge Notebook](../notebooks/ArcticDB_merge.ipynb) for usage examples.
+
+        !!! warning
+            This API is under development and is subject to change. The API is not subject to semver and can change in
+            minor or patch releases.
+
+            Only date time indexed symbols and sources are supported at the moment.
+
+            Dynamic schema is not supported.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to merge data into.
+        source : pandas.DataFrame or pandas.Series
+            The new data to merge. In the case of timeseries, the index must be sorted.
+        strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
+            !!! warning
+                Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
+
+            Determines how to handle matched and unmatched rows. Accepted strategies are:
+                - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
+                - MergeStrategy(matched="do_nothing", not_matched_by_target="insert"): Insert unmatched rows from source.
+                - MergeStrategy(matched="update", not_matched_by_target="insert"): Update matched rows and insert unmatched rows.
+            Note: If the strategy includes "update" on matched, a row in the target cannot be matched by multiple rows in the source.
+
+            The elements of `MergeStrategy` can be either values of the `MergeAction` enum or case-insensitive strings
+            representing the enum values.
+        on : Optional[List[str]]
+            !!! warning
+                Not yet implemented
+
+            Columns which are used to determine row equality between source and target. A row is considered matched when
+            all specified columns have equal values in both source and target.
+
+            IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
+        metadata : Any, optional
+            Metadata to save alongside the new version.
+        prune_previous_versions : bool, default False
+            If True, removes previous versions from the version list.
+        upsert : bool, default False
+            !!! warning
+                Not yet implemented
+
+            If True and `not_matched_by_target="insert"`, creates the symbol if it does not exist.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing metadata and version number of the written symbol in the store. The data attribute will
+            not be populated.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist and `upsert=False`
+        UserInputException
+            If strategy is not one of the supported strategies listed above
+        SortingException
+            If date-time index is used and source or target are not sorted
+        SchemaException
+            If dynamic schema is used or if source's schema is incompatible with target's schema
+
+        Examples
+        --------
+
+        >>> lib.write("symbol", pd.DataFrame({'a': [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)])))
+        >>> lib.merge_experimental("symbol", pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4)])), strategy=MergeStrategy(matched="update", not_matched_by_target="do_nothing"))))
+        >>> lib.read("symbol").data
+                                       a
+        1970-01-01 00:00:00.000000001  1
+        1970-01-01 00:00:00.000000002  100
+        1970-01-01 00:00:00.000000003  3
+        """
+        return self._nvs.merge_experimental(
+            symbol=symbol,
+            source=source,
+            strategy=strategy,
+            on=on,
+            metadata=metadata,
+            prune_previous_versions=prune_previous_versions,
+            upsert=upsert,
+        )
 
     @property
     def name(self) -> str:

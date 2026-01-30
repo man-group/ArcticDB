@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/version/merge_options.hpp>
 
 namespace arcticdb::version_store {
 
@@ -91,11 +92,10 @@ class VersionedEngine {
             const ReadOptions& read_options, std::any& handler_data
     ) = 0;
 
-    // New API mirroring read path: read-modify-write operation
     virtual VersionedItem read_modify_write_internal(
-            const StreamId& stream_id, const StreamId& target_id, const py::object& user_meta,
-            const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-            const ReadOptions& read_options, bool prune_previous_versions
+            const StreamId& stream_id, const StreamId& target_stream, const VersionQuery& version_query,
+            const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, bool prune_previous_versions,
+            std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
     ) = 0;
 
     virtual VersionedItem write_versioned_dataframe_internal(
@@ -158,6 +158,11 @@ class VersionedEngine {
     virtual void set_store(std::shared_ptr<Store> store) = 0;
     virtual timestamp latest_timestamp(const std::string& symbol) = 0;
     virtual void flush_version_map() = 0;
+
+    virtual VersionedItem merge_internal(
+            const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions, bool upsert,
+            const MergeStrategy& strategy, std::vector<std::string>&& on
+    ) = 0;
 };
 
 } // namespace arcticdb::version_store
