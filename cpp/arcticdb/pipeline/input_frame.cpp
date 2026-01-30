@@ -16,6 +16,8 @@ namespace arcticdb::pipelines {
 
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
+InputFrame::InputFrame(SegmentInMemory&& seg) : index(stream::empty_index()) { set_segment(std::move(seg)); }
+
 void InputFrame::set_segment(SegmentInMemory&& seg) {
     num_rows = seg.row_count();
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
@@ -37,13 +39,6 @@ void InputFrame::set_segment(SegmentInMemory&& seg) {
         seg.descriptor().set_sorted(SortedValue::UNKNOWN);
     }
     input_data.emplace<InputSegment>(std::move(seg));
-}
-
-void InputFrame::set_from_tensors(
-        StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
-        std::optional<entity::NativeTensor>&& index_tensor
-) {
-    input_data.emplace<InputTensors>(std::move(index_tensor), std::move(field_tensors), std::move(desc));
 }
 
 StreamDescriptor& InputFrame::desc() {
@@ -74,7 +69,7 @@ timestamp InputFrame::index_value_at(size_t row) {
     util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
     return util::variant_match(
             input_data,
-            [row](InputSegment& input_segment) {
+            [row](const InputSegment& input_segment) {
                 const auto& seg = input_segment.seg;
                 util::check(
                         row < seg.row_count(),
@@ -87,7 +82,7 @@ timestamp InputFrame::index_value_at(size_t row) {
                 // equal to the number of input record batches for Arrow
                 return *index_column.scalar_at<timestamp>(row);
             },
-            [row](InputTensors& input_tensors) {
+            [row](const InputTensors& input_tensors) {
                 util::check(
                         input_tensors.index_tensor.has_value(), "InputFrame::index_value_at call with null index tensor"
                 );

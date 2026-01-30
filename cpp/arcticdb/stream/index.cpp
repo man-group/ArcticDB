@@ -42,7 +42,7 @@ FieldRef BaseIndex<Derived>::field(size_t) const {
     return {static_cast<TypeDescriptor>(typename Derived::TypeDescTag{}), std::string_view(derived()->name())};
 }
 
-TimeseriesIndex::TimeseriesIndex(const std::string& name) : name_(name) {}
+TimeseriesIndex::TimeseriesIndex(const std::string_view name) : name_(name) {}
 
 TimeseriesIndex TimeseriesIndex::default_index() { return TimeseriesIndex(DefaultName); }
 

@@ -133,11 +133,11 @@ class StringPool {
     ~StringPool() = default;
     StringPool& operator=(const StringPool&) = delete;
     StringPool(const StringPool&) = delete;
-    StringPool(StringPool&& that) = delete;
+    StringPool(StringPool&& that) noexcept = default;
 
     std::shared_ptr<StringPool> clone() const;
 
-    StringPool& operator=(StringPool&& that) noexcept;
+    StringPool& operator=(StringPool&& that) noexcept = default;
 
     ColumnData column_data() const;
 

@@ -34,7 +34,8 @@ struct AxisRange : std::pair<size_t, size_t> {
 
     struct Hasher {
         template<class T>
-        std::enable_if_t<std::is_base_of_v<AxisRange, std::decay_t<T>>, std::size_t> operator()(const T& r) const {
+        requires std::is_base_of_v<AxisRange, T>
+        std::size_t operator()(const T& r) const {
             // try to make better use of msb lsb given how F14 is implemented
 #ifdef _WIN32
             return r.first ^ _byteswap_uint64(r.second);
@@ -275,6 +276,8 @@ struct SliceAndKey {
     void unset_segment() { segment_ = std::nullopt; }
 
     void set_segment(SegmentInMemory&& seg) { segment_ = std::move(seg); }
+
+    bool has_segment() const { return segment_.has_value(); }
 
     mutable std::optional<SegmentInMemory> segment_;
     FrameSlice slice_;

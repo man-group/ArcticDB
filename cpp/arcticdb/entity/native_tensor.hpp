@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 // for std::accumulate
 #include <numeric>
@@ -116,7 +117,7 @@ struct NativeTensor {
     [[nodiscard]] auto extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
     [[nodiscard]] auto expanded_dim() const { return expanded_dim_; }
     template<typename T>
-    const T* ptr_cast(size_t pos) const {
+    const T* ptr_cast(const size_t pos) const {
         util::check(ptr != nullptr, "Unexpected null ptr in NativeTensor");
         const bool dimension_condition = ndim() == 1;
         const bool elsize_condition = elsize_ != 0;
@@ -171,7 +172,8 @@ ssize_t byte_offset_impl(const stride_t* strides, ssize_t i, Ix... index) {
 // TODO is the conversion to a typed tensor really necessary for the codec part?
 template<typename T>
 struct TypedTensor : public NativeTensor {
-    static size_t itemsize() { return sizeof(T); }
+
+    constexpr static size_t itemsize() { return sizeof(T); }
 
     std::array<stride_t, 2> f_style_strides() {
         std::array<stride_t, 2> strides = {};
@@ -241,6 +243,8 @@ struct TypedTensor : public NativeTensor {
         ptr = reinterpret_cast<const uint8_t*>(tensor.data()) + (slice_num * stride_offset);
         check_ptr_within_bounds(tensor, slice_num, stride_offset);
     }
+
+    const T* data() const { return static_cast<const T*>(NativeTensor::data()); }
 
   private:
     void check_ptr_within_bounds(const NativeTensor& tensor, ssize_t slice_num, ssize_t stride_offset) {

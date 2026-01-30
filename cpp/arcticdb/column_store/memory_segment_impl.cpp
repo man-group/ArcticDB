@@ -1129,4 +1129,8 @@ void SegmentInMemoryImpl::drop_empty_columns() {
     change_schema(std::move(only_non_empty_cols));
 }
 
+std::string_view SegmentInMemoryImpl::string_at_offset(const position_t offset_in_string_pool) const {
+    return string_pool_->get_view(offset_in_string_pool);
+}
+
 } // namespace arcticdb

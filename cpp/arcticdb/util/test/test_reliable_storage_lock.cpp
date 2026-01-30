@@ -11,13 +11,11 @@
 #include <gtest/gtest.h>
 #include <folly/executors/FutureExecutor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
-#include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/util/clock.hpp>
 
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/library_index.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/util/test/config_common.hpp>
 
 #include <arcticdb/storage/s3/s3_api.hpp>
