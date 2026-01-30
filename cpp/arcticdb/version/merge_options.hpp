@@ -7,6 +7,7 @@
  */
 #pragma once
 #include <cstdint>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
 enum class MergeAction : uint8_t { DO_NOTHING, UPDATE, INSERT };
@@ -35,6 +36,10 @@ struct formatter<arcticdb::MergeAction> {
             return fmt::format_to(ctx.out(), "update");
         case arcticdb::MergeAction::INSERT:
             return fmt::format_to(ctx.out(), "insert");
+        default:
+            arcticdb::internal::raise<arcticdb::ErrorCode::E_ASSERTION_FAILURE>(
+                    "Unknown merge action: {}", static_cast<std::underlying_type_t<decltype(action)>>(action)
+            );
         }
     }
 };
