@@ -18,6 +18,23 @@ using namespace object_store_utils;
 
 namespace s3 {
 
+std::string S3ClientTestWrapper::get_failure_trigger(
+        const std::string& s3_object_name, StorageOperation operation_to_fail, Aws::S3::S3Errors error_to_fail_with,
+        bool retryable
+) {
+    return fmt::format(
+            "{}#Failure_{}_{}_{}",
+            s3_object_name,
+            operation_to_string(operation_to_fail),
+            static_cast<int>(error_to_fail_with),
+            static_cast<int>(retryable)
+    );
+}
+
+void S3ClientTestWrapper::add_list_objects_failure_unretryable(Aws::S3::S3Errors error) {
+    list_objects_failures_.emplace_back(error, false);
+}
+
 std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_failure_trigger(
         const std::string& s3_object_name, const std::string& bucket_name, StorageOperation operation
 ) const {
@@ -164,6 +181,14 @@ S3Result<ListObjectsOutput> S3ClientTestWrapper::list_objects(
         const std::string& name_prefix, const std::string& bucket_name,
         const std::optional<std::string>& continuation_token
 ) const {
+    if (!list_objects_failures_.empty()) {
+        auto failure = list_objects_failures_.front();
+        list_objects_failures_.pop_front();
+        return {Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
+                failure.first, "Simulated error", "Simulated error message for list_objects", failure.second
+        ))};
+    }
+
     if (auto maybe_bucket_error = has_bucket_failure_trigger(bucket_name); maybe_bucket_error.has_value()) {
         return {*maybe_bucket_error};
     }

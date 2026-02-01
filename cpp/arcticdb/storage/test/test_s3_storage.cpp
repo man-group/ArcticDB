@@ -10,7 +10,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/storage/mock/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -280,7 +280,7 @@ TEST_F(S3StorageFixture, test_key_exists) {
     ASSERT_THROW(
             exists_in_store(
                     store,
-                    MockS3Client::get_failure_trigger(
+                    S3ClientTestWrapper::get_failure_trigger(
                             "symbol", StorageOperation::EXISTS, Aws::S3::S3Errors::NETWORK_CONNECTION, false
                     )
             ),
@@ -309,7 +309,7 @@ TEST_F(S3StorageFixture, test_read) {
     ASSERT_THROW(
             read_in_store(
                     store,
-                    MockS3Client::get_failure_trigger(
+                    S3ClientTestWrapper::get_failure_trigger(
                             "symbol", StorageOperation::READ, Aws::S3::S3Errors::THROTTLING, false
                     )
             ),
@@ -339,7 +339,7 @@ TEST_F(S3StorageFixture, test_write) {
     ASSERT_THROW(
             write_in_store(
                     store,
-                    MockS3Client::get_failure_trigger(
+                    S3ClientTestWrapper::get_failure_trigger(
                             "symbol", StorageOperation::WRITE, Aws::S3::S3Errors::NETWORK_CONNECTION, false
                     )
             ),
@@ -362,7 +362,7 @@ TEST_F(S3StorageFixture, test_remove) {
             remove_in_store(
                     store,
                     {"symbol_2",
-                     MockS3Client::get_failure_trigger(
+                     S3ClientTestWrapper::get_failure_trigger(
                              "symbol_3", StorageOperation::DELETE_LOCAL, Aws::S3::S3Errors::NETWORK_CONNECTION
                      )}
             ),
@@ -376,7 +376,7 @@ TEST_F(S3StorageFixture, test_remove) {
             remove_in_store(
                     store,
                     {"symbol_3",
-                     MockS3Client::get_failure_trigger(
+                     S3ClientTestWrapper::get_failure_trigger(
                              "symbol_4", StorageOperation::DELETE, Aws::S3::S3Errors::NETWORK_CONNECTION, false
                      )}
             ),
@@ -396,7 +396,7 @@ TEST_F(S3StorageFixture, test_list) {
 
     write_in_store(
             store,
-            MockS3Client::get_failure_trigger(
+            S3ClientTestWrapper::get_failure_trigger(
                     "symbol_99", StorageOperation::LIST, Aws::S3::S3Errors::NETWORK_CONNECTION, false
             )
     );
@@ -417,7 +417,7 @@ TEST_F(S3StorageFixture, test_matching_key_type_prefix_list) {
 // The first call to ListObjectsV2 with a directory bucket and a prefix not ending in the '/' delimiter returns this
 // error. We then retry effectively without the prefix, which should succeed
 TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
-    auto* mock_s3_client = dynamic_cast<MockS3Client*>(&store.client());
+    auto* mock_s3_client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
     mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
     std::string prefix("symbol_");
     auto symbols = std::set<std::string>();
@@ -433,7 +433,7 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
 }
 
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
-    auto* mock_s3_client = dynamic_cast<MockS3Client*>(&store.client());
+    auto* mock_s3_client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
     mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
     // This simulates the case where the invalid request response was not due to a directory bucket, but because of
     // something else. In this case we should raise

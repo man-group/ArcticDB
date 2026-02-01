@@ -21,7 +21,7 @@
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
-#include <arcticdb/storage/mock/s3_mock_client.hpp>
+#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <aws/core/Aws.h>
 
@@ -156,7 +156,7 @@ TEST(ReliableStorageLock, NotImplementedException) {
     namespace ap = arcticdb::pipelines;
 
     // We set the suffix for the storage test to fail.
-    std::string failure_suffix = storage::s3::MockS3Client::get_failure_trigger(
+    std::string failure_suffix = storage::s3::S3ClientTestWrapper::get_failure_trigger(
             "suffix", storage::StorageOperation::WRITE, Aws::S3::S3Errors::UNKNOWN
     );
     ConfigsMap::instance()->set_string("Storage.AtomicSupportTestSuffix", failure_suffix);
