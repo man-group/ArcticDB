@@ -15,11 +15,11 @@ Or just run them on everything:
 python build_tooling/format.py --in-place --type all
 
 """
+
 import argparse
 import pathlib
 import sys
 import subprocess
-
 
 black_version = "25.11.0"
 clang_format_version = "19.1.2"
@@ -37,21 +37,17 @@ def lint_python(in_place: bool, specific_file: str = None):
     except ImportError:
         raise RuntimeError("black not installed. Run this script with --install-tools then try again")
 
-    assert black.__version__ == black_version, (f"Black version should be {black.__version__} but was {black_version}. "
-                                                f"Run this script with --install-tools then try again")
+    assert black.__version__ == black_version, (
+        f"Black version should be {black_version} but was {black.__version__}. "
+        f"Run this script with --install-tools then try again"
+    )
 
     if specific_file:
         path = specific_file
     else:
         path = "python/"
 
-    command = [
-        "black",
-        "-l",
-        "120",
-        "--extend-exclude",
-        "/(.asv)/"
-    ]
+    command = ["black", "-l", "120", "--extend-exclude", "/(.asv)/"]
 
     if not in_place:
         command.append("--check")
@@ -100,37 +96,16 @@ def main(type: str, in_place: bool, specific_file: str):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        prog="ArcticDBLint",
-        description="Linter for ArcticDB"
+    parser = argparse.ArgumentParser(prog="ArcticDBLint", description="Linter for ArcticDB")
+    parser.add_argument("--install-tools", action="store_true", help="Install the linters we need")
+    parser.add_argument("-t", "--type", help="Type of files to format. {python,cpp,all}")
+    parser.add_argument(
+        "-c", "--check", action="store_true", help="Just check that your code is compliant. Do not change files."
     )
     parser.add_argument(
-        '--install-tools',
-        action='store_true',
-        help="Install the linters we need"
+        "-i", "--in-place", action="store_true", help="Apply linting rules to your working copy. Changes files."
     )
-    parser.add_argument(
-        '-t',
-        '--type',
-        help="Type of files to format. {python,cpp,all}"
-    )
-    parser.add_argument(
-        '-c',
-        '--check',
-        action='store_true',
-        help="Just check that your code is compliant. Do not change files."
-    )
-    parser.add_argument(
-        '-i',
-        '--in-place',
-        action='store_true',
-        help="Apply linting rules to your working copy. Changes files."
-    )
-    parser.add_argument(
-        "-f", 
-        "--file", 
-        help="Apply linting rules to a specific file."
-    )
+    parser.add_argument("-f", "--file", help="Apply linting rules to a specific file.")
     args = parser.parse_args()
 
     if args.install_tools:
