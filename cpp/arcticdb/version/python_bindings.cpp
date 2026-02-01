@@ -12,6 +12,7 @@
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/version/python_bindings_common.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -147,15 +148,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
-    py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
-            .def(py::init())
-            .def(py::init<StreamId, KeyType>())
-            .def_property_readonly("id", &RefKey::id)
-            .def_property_readonly("type", [](const RefKey& self) { return self.type(); })
-            .def(pybind11::self == pybind11::self)
-            .def(pybind11::self != pybind11::self)
-            .def("__repr__", &RefKey::view);
-
     py::class_<Value, std::shared_ptr<Value>>(version, "ValueType").def(py::init());
 
     version.def("ValueBool", &construct_value<bool>);
@@ -243,15 +235,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }
     );
 
-    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(version, "NumpyBufferHolder");
-
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
-    py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
-            .def("extract_numpy_arrays",
-                 [](PandasOutputFrame& self) { return python_util::extract_numpy_arrays(self); });
-
-    py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
-            .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches);
+    register_version_store_common_bindings(version, BindingScope::GLOBAL);
 
     py::class_<RecordBatchData>(version, "RecordBatchData")
             .def(py::init<>())
