@@ -37,4 +37,8 @@ For more information on running the persistent storage tests locally, please ref
 ## Analyzing pytest results
 All pytest runs on the CI are recorded into an arcticdb library on AWS S3.
 
-(Local only) Run `aggregate_flaky_tests.py` script to visuallize most failing tests. `aggregate_flaky_tests.py -h` for more info and options
+### On the CI
+A cron workflow is running weekly that shows both a week and a 6-month table with failing tests.
+
+### Locally
+Run `aggregate_flaky_tests.py` script to visuallize most failing tests. `aggregate_flaky_tests.py -h` for more info and options
