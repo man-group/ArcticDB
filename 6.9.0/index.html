@@ -1,0 +1,2739 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://docs.arcticdb.io/6.9.0/">
+      
+      
+      
+        <link rel="next" href="history/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="images/ArcticDB Logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.1">
+    
+    
+      
+        <title>Introduction - ArcticDB</title>
+      
+    
+    
+      <link rel="stylesheet" href="assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Aspekta:300,300i,400,400i,700,700i%7CGeist+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Aspekta";--md-code-font:"Geist Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="stylesheets/extra.css">
+    
+      <link rel="stylesheet" href="stylesheets/material.css">
+    
+      <link rel="stylesheet" href="stylesheets/mkdocstrings-python.css">
+    
+    <script>__md_scope=new URL(".",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="arcticdb" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#what-is-arcticdb" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're not viewing the latest version.
+  <a href="../.">
+    <strong>Click here to go to latest.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="images/ArcticDB Logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ArcticDB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Introduction
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="." class="md-tabs__link">
+          
+  
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="tutorials/fundamentals/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="notebooks/ArcticDB_demo_lmdb/" class="md-tabs__link">
+          
+  
+  
+  Notebooks
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="api/" class="md-tabs__link">
+          
+  
+  
+  Python API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="images/ArcticDB Logo.svg" alt="logo">
+
+    </a>
+    ArcticDB
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Home
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="." class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-is-arcticdb" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is ArcticDB?
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#getting-started" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Getting Started
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Getting Started">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#installation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Installation
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#library-setup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Library Setup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#reading-and-writing-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reading And Writing Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#slicing-and-filtering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Slicing and Filtering
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#modifications-versioning-aka-time-travel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Modifications, Versioning (aka Time Travel)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-access" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Storage Access
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#transactions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transactions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    History of ArcticDB
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Frequently Asked Questions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="licensing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Licensing FAQs
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tutorials
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Tutorials
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/fundamentals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Fundamentals
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/parallel_writes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parallel Writes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/snapshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Metadata
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/lmdb_and_in_memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    In-memory Backends
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/data_organisation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Organisation Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/library_sizes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Sizes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="tutorials/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Statistics
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Storage Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Storage Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="aws/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started with AWS S3
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="aws_permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Permissions with AWS S3
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="azure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started with Azure Blob Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Technical Information
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Technical Information
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="technical/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="technical/on_disk_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    On-Disk Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="technical/migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arctic Migration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="technical/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="technical/upgrade_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrade Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_4" id="__nav_2_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="lib_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="runtime_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Runtime Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="error_messages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Error Messages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Notebooks
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Notebooks
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Intro Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    LazyDataFrame Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Querybuilder Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Resample Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_concat/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Symbol Concat Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AWS Blockchain Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_snapshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Snapshots Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_equity_analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Equity Analytics Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_equity_options/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Equity Options Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_billion_row_challenge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1 Billion Row Challenge Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pythagorean Won Loss Formula Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_staged_data_with_tokens/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Staged Data Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_recursive_normalizers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recursive normalizer Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="notebooks/ArcticDB_demo_read_as_arrow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arrow Notebook
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Python API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Introduction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/arctic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arctic
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/arctic_uri/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Arctic URI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/library_types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Library Related Objects
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    DataFrame Processing Operations API
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Exceptions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/admin_tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Admin Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Query Stats
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+
+
+
+                  
+
+
+  
+  
+
+
+  <h1>Introduction</h1>
+
+<p><img src="images/ArcticDB Logo Purple Stacked.png" alt="logo" width="400"/></p>
+<h2 id="what-is-arcticdb">What is ArcticDB?<a class="headerlink" href="#what-is-arcticdb" title="Permanent link">&para;</a></h2>
+<p>ArcticDB is a serverless DataFrame database engine designed for the Python Data Science ecosystem. </p>
+<p>ArcticDB enables you to store, retrieve and process DataFrames at scale, backed by commodity object storage (S3-compatible storages and Azure Blob Storage).</p>
+<p>ArcticDB requires <em>zero additional infrastructure</em> beyond a running Python environment and access to object storage and can be <strong>installed in seconds.</strong></p>
+<p>ArcticDB is:</p>
+<ul>
+<li><strong>Fast</strong><ul>
+<li>Process up to 100 million rows per second for a single consumer</li>
+<li>Process a billion rows per second across all consumers</li>
+<li>Quick and easy to install: <code>pip install arcticdb</code></li>
+</ul>
+</li>
+<li><strong>Flexible</strong><ul>
+<li>Data schemas are not required</li>
+<li>Supports streaming data ingestion</li>
+<li>Bitemporal - stores all previous versions of stored data</li>
+<li>Easy to setup both locally and on cloud</li>
+<li>Scales from dev/research to production environments</li>
+</ul>
+</li>
+<li><strong>Familiar</strong><ul>
+<li>ArcticDB is the world's simplest shareable database</li>
+<li>Easy to learn for anyone with Python and Pandas experience</li>
+<li>Just you and your data - the cognitive overhead is very low.</li>
+</ul>
+</li>
+</ul>
+<h2 id="getting-started">Getting Started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h2>
+<p>This section will cover installation, setup and basic usage. More details on basics and advanced features can be found in the <a href="tutorials/fundamentals/">tutorials</a> section.</p>
+<h3 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h3>
+<p>ArcticDB supports Python 3.8 - 3.13.</p>
+<p>To install, simply run:</p>
+<div class="highlight"><pre><span></span><code><span class="n">pip</span> <span class="n">install</span> <span class="n">arcticdb</span>
+</code></pre></div>
+<h3 id="setup">Setup<a class="headerlink" href="#setup" title="Permanent link">&para;</a></h3>
+<p>ArcticDB is a storage engine designed for object storage and also supports local-disk storage using LMDB.</p>
+<div class="admonition storage compatibility">
+<p class="admonition-title">Storage</p>
+<p>ArcticDB supports any S3 API compatible storage, including AWS and Azure, and storage appliances like <a href="https://vastdata.com/">VAST Universal Storage</a> and <a href="https://purestorage.com/">Pure Storage</a>.</p>
+<p>ArcticDB also supports LMDB for local/file based storage - to use LMDB, pass an LMDB path as the URI: <code>adb.Arctic('lmdb://path/to/desired/database')</code>.</p>
+</div>
+<p>To get started, we can import ArcticDB and instantiate it:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="c1"># this will set up the storage using the local file system</span>
+<span class="n">uri</span> <span class="o">=</span> <span class="s2">&quot;lmdb://tmp/arcticdb_intro&quot;</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="n">uri</span><span class="p">)</span>
+</code></pre></div>
+<p>For more information on how to correctly format the <code>uri</code> string for other storages, please view the docstring (<a href="api/arctic/#arcticdb.Arctic"><code>help(Arctic)</code></a>) or read the <a href="#storage-access">storage access</a> section (click the link or keep reading below this section).</p>
+<h3 id="library-setup">Library Setup<a class="headerlink" href="#library-setup" title="Permanent link">&para;</a></h3>
+<p>ArcticDB is geared towards storing many (potentially millions) of tables. Individual tables (DataFrames) are called <em>symbols</em> and 
+are stored in collections called <em>libraries</em>. A single <em>library</em> can store many symbols.</p>
+<p><em>Libraries</em> must first be initialized prior to use:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">ac</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;intro&#39;</span><span class="p">)</span>  <span class="c1"># static schema - see note below</span>
+<span class="n">ac</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span>
+</code></pre></div>
+output
+<div class="highlight"><pre><span></span><code><span class="p">[</span><span class="s1">&#39;intro&#39;</span><span class="p">]</span>
+</code></pre></div></p>
+<p>The library must then be instantiated in the code ready to read/write data:</p>
+<div class="highlight"><pre><span></span><code><span class="n">library</span> <span class="o">=</span> <span class="n">ac</span><span class="p">[</span><span class="s1">&#39;intro&#39;</span><span class="p">]</span>
+</code></pre></div>
+<p>Sometimes it is more convenient to combine library creation and instantiation using this form, which will automatically create the library if needed, to save you checking if it exists already:</p>
+<div class="highlight"><pre><span></span><code><span class="n">library</span> <span class="o">=</span> <span class="n">ac</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;intro&#39;</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</code></pre></div>
+<div class="admonition info">
+<p class="admonition-title">ArcticDB Static &amp; Dynamic Schemas</p>
+<p>ArcticDB does not need data schemas, unlike many other databases. You can write any DataFrame and read it back later. If the shape of the data is changed and then written again, it will all just work. Nice and simple.</p>
+<p>The one exception where schemas are needed is in the case of functions that modify existing symbols: <code>update</code> and <code>append</code>. When modifying a symbol, the new data must have the same schema as the existing data. The schema here means the index type and the name, order, and type of each column in the DataFrame. In other words when you are appending new rows they must look like the existing rows. This is the default option and is called <code>static schema</code>.</p>
+<p>However, if you need to add, remove or change the type of columns via <code>update</code> or <code>append</code>, then you can do that. You simply need to create the library with the <code>dynamic_schema</code> option set. See the <code>library_options</code> parameter of the (<a href="api/arctic/#arcticdb.Arctic.create_library"><code>create_library</code></a>) method.</p>
+<p>So you have the best of both worlds - you can choose to either enforce a static schema on your data so it cannot be changed by modifying operations, or allow it to be flexible.</p>
+<p>The choice to use static or dynamic schemas must be set at library creation time.</p>
+<p>In this section we are using <code>static schema</code>, just to be clear.</p>
+</div>
+<h3 id="reading-and-writing-data">Reading And Writing Data<a class="headerlink" href="#reading-and-writing-data" title="Permanent link">&para;</a></h3>
+<p>Now we have a library set up, we can get to reading and writing data. ArcticDB has a set of simple functions for DataFrame storage.</p>
+<p>Let's write a DataFrame to storage.</p>
+<p>First create the data:</p>
+<p><div class="highlight"><pre><span></span><code><span class="c1"># 50 columns, 25 rows, random data, datetime indexed.</span>
+<span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">datetime</span> <span class="kn">import</span> <span class="n">datetime</span>
+<span class="n">cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;COL_</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">)]</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">25</span><span class="p">,</span> <span class="mi">50</span><span class="p">)),</span> <span class="n">columns</span><span class="o">=</span><span class="n">cols</span><span class="p">)</span>
+<span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">periods</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;h&quot;</span><span class="p">)</span>
+<span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+</code></pre></div>
+<em>output (the first 5 rows of the data)</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-01 05:00:00     18     48     10     16     38     34     25     44  ...
+2000-01-01 06:00:00     48     10     24     45     22     36     30     19  ...
+2000-01-01 07:00:00     25     16     36     29     25      9     48      2  ...
+2000-01-01 08:00:00     38     21      2      1     37      6     31     31  ...
+2000-01-01 09:00:00     45     17     39     47     47     11     33     31  ...
+</code></pre></div></p>
+<p>Then write to the library:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+</code></pre></div>
+<em>output (information about what was written)</em>
+<div class="highlight"><pre><span></span><code>VersionedItem(symbol=test_frame,library=intro,data=n/a,version=0,metadata=None,host=&lt;host&gt;)
+</code></pre></div></p>
+<p>The <code>'test_frame'</code> DataFrame will be used for the remainder of this guide.</p>
+<div class="admonition info">
+<p class="admonition-title">ArcticDB index</p>
+<p>When writing Pandas DataFrames, ArcticDB supports the following index types:</p>
+<ul>
+<li><code>pandas.Index</code> containing <code>int64</code> (or the corresponding dedicated types <code>Int64Index</code>, <code>UInt64Index</code>)</li>
+<li><code>RangeIndex</code></li>
+<li><code>DatetimeIndex</code></li>
+<li><code>MultiIndex</code> composed of above supported types</li>
+</ul>
+<p>The "row" concept in <code>head()/tail()</code> refers to the row number ('iloc'), not the value in the <code>pandas.Index</code> ('loc').</p>
+</div>
+<p>Read the data back from storage:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">from_storage_df</span> <span class="o">=</span> <span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+<span class="n">from_storage_df</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
+</code></pre></div>
+<em>output (the first 5 rows but read from the database)</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-01 05:00:00     18     48     10     16     38     34     25     44  ...
+2000-01-01 06:00:00     48     10     24     45     22     36     30     19  ...
+2000-01-01 07:00:00     25     16     36     29     25      9     48      2  ...
+2000-01-01 08:00:00     38     21      2      1     37      6     31     31  ...
+2000-01-01 09:00:00     45     17     39     47     47     11     33     31  ...
+</code></pre></div></p>
+<p>The data read matches the original data, of course.</p>
+<h3 id="slicing-and-filtering">Slicing and Filtering<a class="headerlink" href="#slicing-and-filtering" title="Permanent link">&para;</a></h3>
+<p>ArcticDB enables you to slice by row and by column. </p>
+<div class="admonition info">
+<p class="admonition-title">ArcticDB indexing</p>
+<p>ArcticDB will construct a full index for <em>ordered numerical and timeseries (e.g. DatetimeIndex) Pandas indexes</em>. This will enable
+optimised slicing across index entries. If the index is unsorted or not numeric your data can still be stored but row-slicing will
+be slower.</p>
+</div>
+<h4 id="row-slicing">Row-slicing<a class="headerlink" href="#row-slicing" title="Permanent link">&para;</a></h4>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">8</span><span class="p">]))</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<em>output (the rows in the data range requested)</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-01 10:00:00     23     39      0     45     15     28     10     17  ...
+2000-01-01 11:00:00     36     28     22     43     23      6     10      1  ...
+2000-01-01 12:00:00     18     42      1     15     19     36     41     36  ...
+2000-01-01 13:00:00     28     32     47     37     17     44     29     24  ...
+</code></pre></div></p>
+<h4 id="column-slicing">Column slicing<a class="headerlink" href="#column-slicing" title="Permanent link">&para;</a></h4>
+<p><div class="highlight"><pre><span></span><code><span class="n">_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span>
+<span class="n">_columns</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;COL_30&#39;</span><span class="p">,</span> <span class="s1">&#39;COL_31&#39;</span><span class="p">]</span>
+<span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="n">_range</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">_columns</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<em>output (the rows in the date range and columns requested)</em>
+<div class="highlight"><pre><span></span><code>                     COL_30  COL_31
+2000-01-01 10:00:00      31       2
+2000-01-01 11:00:00       3      34
+2000-01-01 12:00:00      24      43
+2000-01-01 13:00:00      18       8
+</code></pre></div></p>
+<h4 id="filtering-and-analytics">Filtering and Analytics<a class="headerlink" href="#filtering-and-analytics" title="Permanent link">&para;</a></h4>
+<p>ArcticDB supports many common DataFrame analytics operations, including filtering, projections, group-bys, aggregations, and resampling. The most intuitive way to access these operations is via the <a href="api/processing/#arcticdb.LazyDataFrame"><code>LazyDataFrame</code></a> API, which should feel familiar to experienced users of Pandas or Polars.</p>
+<p>The legacy <a href="api/processing/#arcticdb.QueryBuilder"><code>QueryBuilder</code></a> class can also be created directly and passed into <code>read</code> calls with the same effect.</p>
+<div class="admonition info">
+<p class="admonition-title">ArcticDB Analytics Philosphy</p>
+<p>In most cases this is more memory efficient and performant than the equivalent Pandas operation as the processing is within the C++ storage engine and parallelized over multiple threads of execution. </p>
+</div>
+<p><div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="n">_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span><span class="p">[</span><span class="mi">8</span><span class="p">])</span>
+<span class="n">_cols</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;COL_30&#39;</span><span class="p">,</span> <span class="s1">&#39;COL_31&#39;</span><span class="p">]</span>
+<span class="c1"># Using lazy evaluation</span>
+<span class="n">lazy_df</span> <span class="o">=</span> <span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="n">_range</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">_cols</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">lazy_df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[(</span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;COL_30&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">lazy_df</span><span class="p">[</span><span class="s2">&quot;COL_31&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">40</span><span class="p">)]</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+<span class="c1"># Using the legacy QueryBuilder class gives the same result</span>
+<span class="n">q</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">QueryBuilder</span><span class="p">()</span>
+<span class="n">q</span> <span class="o">=</span> <span class="n">q</span><span class="p">[(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;COL_30&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">q</span><span class="p">[</span><span class="s2">&quot;COL_31&quot;</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">40</span><span class="p">)]</span>
+<span class="n">library</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">date_range</span><span class="o">=</span><span class="n">_range</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="n">_cols</span><span class="p">,</span> <span class="n">query_builder</span><span class="o">=</span><span class="n">q</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<em>output (the data filtered by date range, columns and the query which filters based on the data values)</em>
+<div class="highlight"><pre><span></span><code>                     COL_30  COL_31
+2000-01-01 10:00:00      31       2
+2000-01-01 13:00:00      18       8
+</code></pre></div></p>
+<h3 id="modifications-versioning-aka-time-travel">Modifications, Versioning (aka Time Travel)<a class="headerlink" href="#modifications-versioning-aka-time-travel" title="Permanent link">&para;</a></h3>
+<p>ArcticDB fully supports modifying stored data via two primitives: <em>update</em> and <em>append</em>.</p>
+<p>These operations are atomic but do not lock the symbol. Please see the section on <a href="#transactions">transactions</a> for more on this.</p>
+<h4 id="append">Append<a class="headerlink" href="#append" title="Permanent link">&para;</a></h4>
+<p>Let's append data to the end of the timeseries.</p>
+<p>To start, we will take a look at the last few records of the data (before it gets modified)</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<em>output</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-02 02:00:00     46     12     38     47      4     31      1     42  ...
+2000-01-02 03:00:00     46     20      5     42      8     35     12      2  ...
+2000-01-02 04:00:00     17     48     36     43      6     46      5      8  ...
+2000-01-02 05:00:00     20     19     24     44     29     32      2     19  ...
+</code></pre></div>
+Then create 3 new rows to append. For append to work the new data must have its first <code>datetime</code> starting after the existing data.</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">random_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">50</span><span class="p">))</span>
+<span class="n">df_append</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">random_data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;COL_</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">)])</span>
+<span class="n">df_append</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="n">periods</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;h&quot;</span><span class="p">)</span>
+<span class="n">df_append</span>
+</code></pre></div>
+<em>output</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-02 07:00:00      9     15      4     48     48     35     34     49  ...
+2000-01-02 08:00:00     35      4     12     30     30     12     38     25  ...
+2000-01-02 09:00:00     25     17      3      1      1     15     33     49  ...
+</code></pre></div></p>
+<p>Now <em>append</em> that DataFrame to what was written previously</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">df_append</span><span class="p">)</span>
+</code></pre></div>
+<em>output</em>
+<div class="highlight"><pre><span></span><code>VersionedItem(symbol=test_frame,library=intro,data=n/a,version=1,metadata=None,host=&lt;host&gt;)
+</code></pre></div>
+Then look at the final 5 rows to see what happened</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<em>output</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-02 04:00:00     17     48     36     43      6     46      5      8  ...
+2000-01-02 05:00:00     20     19     24     44     29     32      2     19  ...
+2000-01-02 07:00:00      9     15      4     48     48     35     34     49  ...
+2000-01-02 08:00:00     35      4     12     30     30     12     38     25  ...
+2000-01-02 09:00:00     25     17      3      1      1     15     33     49  ...
+</code></pre></div></p>
+<p>The final 5 rows consist of the last two rows written previously followed by the 3 new rows that we have just appended.</p>
+<p>Append is very useful for adding new data to the end of a large timeseries.</p>
+<h4 id="update">Update<a class="headerlink" href="#update" title="Permanent link">&para;</a></h4>
+<p>The update primitive enables you to overwrite a contiguous chunk of data. This results in modifying some rows and deleting others as we will see in the example below.</p>
+<p>Here we create a new DataFrame for the update, with only 2 rows that are 2 hours apart</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">random_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">50</span><span class="p">))</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">random_data</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;COL_</span><span class="si">%d</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">)])</span>
+<span class="n">df</span><span class="o">.</span><span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="n">datetime</span><span class="p">(</span><span class="mi">2000</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="n">periods</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">&quot;2h&quot;</span><span class="p">)</span>
+<span class="n">df</span>
+</code></pre></div>
+<em>output (rows 0 and 2 only as selected by the <code>iloc[]</code>)</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...
+2000-01-01 07:00:00     46     10      2     49     24     49      8      0  ...
+</code></pre></div>
+now update the symbol
+<div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="n">df</span><span class="p">)</span>
+</code></pre></div>
+<em>output (information about the update)</em>
+<div class="highlight"><pre><span></span><code>VersionedItem(symbol=test_frame,library=intro,data=n/a,version=2,metadata=None,host=&lt;host&gt;)
+</code></pre></div></p>
+<p>Now let's look at the first 4 rows in the symbol:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>  <span class="c1"># head/tail are similar to the equivalent Pandas operations</span>
+</code></pre></div>
+<em>output</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-01 05:00:00     47     49     15      6     22     48     45     22  ...
+2000-01-01 07:00:00     46     10      2     49     24     49      8      0  ... 
+2000-01-01 08:00:00     38     21      2      1     37      6     31     31  ... 
+2000-01-01 09:00:00     45     17     39     47     47     11     33     31  ...
+</code></pre></div></p>
+<p>Let's unpack how we end up with that result. The update has</p>
+<ul>
+<li>replaced the data in the symbol with the new data where the index matched (in this case the 05:00 and 07:00 rows)</li>
+<li>removed any rows within the date range of the new data that are not in the index of the new data (in this case the 06:00 row)</li>
+<li>kept the rest of the data the same (in this case 09:00 onwards)</li>
+</ul>
+<p>Logically, this corresponds to replacing the complete date range of the old data with the new data, which is what you would expect from an update.</p>
+<h4 id="versioning">Versioning<a class="headerlink" href="#versioning" title="Permanent link">&para;</a></h4>
+<p>You might have noticed that <code>read</code> calls do not return the data directly - but instead returns a <code>VersionedItem</code> structure. You may also have noticed that modification operations (<code>write</code>, <code>append</code> and <code>update</code>) increment the version number. ArcticDB versions all modifications, which means you can retrieve earlier versions of data - it is a bitemporal database:</p>
+<p><div class="highlight"><pre><span></span><code><span class="n">library</span><span class="o">.</span><span class="n">tail</span><span class="p">(</span><span class="s1">&#39;test_frame&#39;</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="n">as_of</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
+</code></pre></div>
+<em>output</em>
+<div class="highlight"><pre><span></span><code>                     COL_0  COL_1  COL_2  COL_3  COL_4  COL_5  COL_6  COL_7  ...
+2000-01-01 23:00:00     16     46      3     45     43     14     10     27  ...
+2000-01-02 00:00:00     37     37     20      3     49     38     23     46  ...
+2000-01-02 01:00:00     42     47     40     27     49     41     11     26  ...
+2000-01-02 02:00:00     46     12     38     47      4     31      1     42  ...
+2000-01-02 03:00:00     46     20      5     42      8     35     12      2  ...
+2000-01-02 04:00:00     17     48     36     43      6     46      5      8  ...
+2000-01-02 05:00:00     20     19     24     44     29     32      2     19  ...
+</code></pre></div></p>
+<p>Note the timestamps - we've read the data prior to the <code>append</code> operation. Please note that you can also pass a <code>datetime</code> into any <code>as_of</code> argument, which will result in reading the last version earlier than the <code>datetime</code> passed.</p>
+<div class="admonition note">
+<p class="admonition-title">Versioning, Prune Previous &amp; Snapshots</p>
+<p>By default, <code>write</code>, <code>append</code>, and <code>update</code> operations will <strong>not</strong> remove the previous versions. Please be aware that this will consume more space.</p>
+<p>This behaviour can be can be controlled via the <code>prune_previous_versions</code> keyword argument. Space will be saved but the previous versions will then not be available.</p>
+<p>A compromise can be achieved by using snapshots, which allow states of the library to be saved and read back later. This allows certain versions to be protected from deletion, they will be deleted when the snapshot is deleted. See <a href="api/library/#arcticdb.version_store.library.Library.snapshot">snapshot documentation</a> for details.</p>
+</div>
+<h3 id="storage-access">Storage Access<a class="headerlink" href="#storage-access" title="Permanent link">&para;</a></h3>
+<h4 id="s3-configuration">S3 configuration<a class="headerlink" href="#s3-configuration" title="Permanent link">&para;</a></h4>
+<p>There are two methods to configure S3 access. If you happen to know the access and secret key, simply connect as follows:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://ENDPOINT:BUCKET?region=blah&amp;access=ABCD&amp;secret=DCBA&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>Otherwise, you can delegate authentication to the AWS SDK (obeys standard <a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS configuration options</a>):</p>
+<div class="highlight"><pre><span></span><code><span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://ENDPOINT:BUCKET?aws_auth=true&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>Same as above, but using HTTPS:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://ENDPOINT:BUCKET?aws_auth=true&#39;</span><span class="p">)</span>
+</code></pre></div>
+<div class="admonition s3 vs s3s">
+<p class="admonition-title">S3</p>
+<p>Use <code>s3s</code> if your S3 endpoint used HTTPS</p>
+</div>
+<h5 id="connecting-to-a-defined-storage-endpoint">Connecting to a defined storage endpoint<a class="headerlink" href="#connecting-to-a-defined-storage-endpoint" title="Permanent link">&para;</a></h5>
+<p>Connect to local storage (not AWS - HTTP endpoint of s3.local) with a pre-defined access and storage key:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3://s3.local:arcticdb-test-bucket?access=EFGH&amp;secret=HGFE&#39;</span><span class="p">)</span>
+</code></pre></div>
+<h5 id="connecting-to-aws">Connecting to AWS<a class="headerlink" href="#connecting-to-aws" title="Permanent link">&para;</a></h5>
+<p>Connecting to AWS with a pre-defined region:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?aws_auth=true&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>Note that no explicit credential parameters are given. When <code>aws_auth</code> is passed, authentication is delegated to the AWS SDK which is responsible for locating the appropriate credentials in the <code>.config</code> file or
+in environment variables. You can manually configure which profile is being used by setting the <code>AWS_PROFILE</code> environment variable as described in the
+<a href="https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html">AWS Documentation</a>.</p>
+<h4 id="using-a-specific-path-within-a-bucket">Using a specific path within a bucket<a class="headerlink" href="#using-a-specific-path-within-a-bucket" title="Permanent link">&para;</a></h4>
+<p>You may want to restrict access for the ArcticDB library to a specific path within the bucket. To do this, you can use the <code>path_prefix</code> parameter:</p>
+<div class="highlight"><pre><span></span><code><span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;s3s://s3.eu-west-2.amazonaws.com:arcticdb-test-bucket?path_prefix=test&amp;aws_auth=true&#39;</span><span class="p">)</span>
+</code></pre></div>
+<h4 id="azure">Azure<a class="headerlink" href="#azure" title="Permanent link">&para;</a></h4>
+<p>ArcticDB uses the <a href="https://learn.microsoft.com/en-us/azure/storage/common/storage-configure-connection-string">Azure connection string</a> to define the connection: </p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;azure://AccountName=ABCD;AccountKey=EFGH;BlobEndpoint=ENDPOINT;Container=CONTAINER&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>For example: </p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">&quot;azure://CA_cert_path=/etc/ssl/certs/ca-certificates.crt;BlobEndpoint=https://arctic.blob.core.windows.net;Container=acblob;SharedAccessSignature=sp=awd&amp;st=2001-01-01T00:00:00Z&amp;se=2002-01-01T00:00:00Z&amp;spr=https&amp;rf=g&amp;sig=awd%3D&quot;</span><span class="p">)</span>
+</code></pre></div>
+<p>For more information, <a href="api/arctic/#arcticdb.Arctic">see the Arctic class reference</a>.</p>
+<h4 id="lmdb">LMDB<a class="headerlink" href="#lmdb" title="Permanent link">&para;</a></h4>
+<p>LMDB supports configuring its map size. See its <a href="http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5">documentation</a>.</p>
+<p>You may need to tweak it on Windows, whereas on Linux the default is much larger and should suffice. This is because Windows allocates physical
+space for the map file eagerly, whereas on Linux the map size is an upper bound to the physical space that will be used.</p>
+<p>You can set a map size in the connection string:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;lmdb://path/to/desired/database?map_size=2GB&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>The default on Windows is 2GiB. Errors with <code>lmdb errror code -30792</code> indicate that the map is getting full and that you should
+increase its size. This will happen if you are doing large writes.</p>
+<p>In each Python process, you should ensure that you only have one Arctic instance open over a given LMDB database.</p>
+<p>LMDB does not work with remote filesystems.</p>
+<h4 id="in-memory-configuration">In-memory configuration<a class="headerlink" href="#in-memory-configuration" title="Permanent link">&para;</a></h4>
+<p>An in-memory backend is provided mainly for testing and experimentation. It could be useful when creating files with LMDB is not desired.</p>
+<p>There are no configuration parameters, and the memory is owned solely by the Arctic instance.</p>
+<p>For example:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span> <span class="nn">arcticdb</span> <span class="k">as</span> <span class="nn">adb</span>
+<span class="n">ac</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s1">&#39;mem://&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>For concurrent access to a local backend, we recommend LMDB connected to tmpfs, see <a href="tutorials/lmdb_and_in_memory/">LMDB and In-Memory Tutorial</a>.</p>
+<h3 id="transactions">Transactions<a class="headerlink" href="#transactions" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Transactions can be be very useful but are often expensive and slow</li>
+<li>If we unpack ACID: Atomicity, Consistency and Durability are useful, Isolation less so</li>
+<li>Most analytical workflows can be constructed to run without needing transactions at all</li>
+<li>So why pay the cost of transactions when they are often not needed?</li>
+<li>ArcticDB doesn't have transactions because it is designed for high throughput analytical workloads</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
