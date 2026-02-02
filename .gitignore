@@ -9,6 +9,8 @@ python/venvs/
 .vscode/
 .vs/
 .project
+.cproject
+.pydevproject
 .idea
 
 *.so
@@ -30,6 +32,7 @@ nogit/
 test_nogit.py
 
 /cpp/out/
+/cpp/vcpkg_installed/
 build/
 dist/
 cmake-build-*/
