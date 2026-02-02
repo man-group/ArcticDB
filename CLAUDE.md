@@ -17,9 +17,45 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 ### Building the Python Wheel
 
 ```bash
-# Build with a specific CMake preset
-ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+# Build with a specific CMake preset (limit parallelism to avoid overloading the system)
+CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 ```
+
+Note: Limit `CMAKE_BUILD_PARALLEL_LEVEL` to min(16, nproc) to avoid memory pressure during compilation.
+
+### Building on Man Linux VMs
+
+The vcpkg-based build requires certain system packages that may not be installed by default:
+
+```bash
+# Required system packages for vcpkg build
+sudo apt install pkg-config flex bison libsasl2-dev -y
+```
+
+Use Pegasus for Python environment management:
+
+```bash
+# Create a Python 3.11 environment
+pegasus create -d 311-1 /turbo/<username>/pyenvs/arcticdb-dev
+source /turbo/<username>/pyenvs/arcticdb-dev/bin/activate
+
+# Initialize git submodules (required for vcpkg)
+git submodule update --init --recursive
+
+# Build with linux-debug preset (limit parallelism)
+CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+```
+
+**Note**: The protobuf 5 compilation step may fail due to `grpcio-tools>=1.68.1` not being available in the internal Pegasus registry (only 1.56.2). This is non-fatal - protobuf 4 is compiled successfully and the package works correctly.
+
+### Building a Wheel
+
+```bash
+# Build wheel (use ARCTICDB_PROTOC_VERS=4 to skip protobuf 5 on Man VMs)
+ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip wheel . --no-deps -w dist/
+```
+
+The wheel will be created in `dist/arcticdb-<version>-cp311-cp311-linux_x86_64.whl`.
 
 ### CMake Presets
 
