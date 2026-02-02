@@ -1,5 +1,9 @@
 """
-Aggregate flaky test data from ArcticDB pytest results.
+Copyright 2026 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
 import re
@@ -11,18 +15,7 @@ from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 
 from arcticdb.version_store.processing import QueryBuilder
 
-
-def get_results_lib(use_aws_auth: bool = False):
-    if use_aws_auth:
-        ac = Arctic("s3://s3.eu-west-1.amazonaws.com:arcticdb-ci-pytest-results?path_prefix=pytest_results&aws_auth=true")
-        lib = ac["pytest_results"]
-    else:
-        factory = real_s3_from_environment_variables(shared_path=True)
-        factory.default_prefix = "pytest_results"
-        ac = factory.create_fixture().create_arctic()
-        lib = ac.get_library("pytest_results", create_if_missing=False)
-    return lib
-
+from process_pytest_artifacts import get_results_lib
 
 VERSION_TAG_PATTERN = re.compile(r"^v\d+\.\d+\.\d+(\+man\d+)?\|")
 def is_master_or_release(symbol: str) -> bool:
@@ -221,7 +214,7 @@ def main():
     else:
         print("Fetching all test data...", file=sys.stderr)
 
-    lib = get_results_lib()
+    lib = get_results_lib("pytest_results")
 
     all_symbols = lib.list_symbols()
     print(f"Total symbols in library: {len(all_symbols)}", file=sys.stderr)

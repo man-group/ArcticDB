@@ -10,7 +10,7 @@ permissions:
 jobs:
   aggregate_flaky_tests:
     runs-on: ubuntu-22.04
-    container:
+    container: # Native runner doesn't allow setting up the ca softlinks required below
       image: ubuntu:22.04
     strategy:
       matrix:
