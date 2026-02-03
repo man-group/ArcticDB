@@ -258,7 +258,7 @@ TEST(SlabAlloc, CallbacksRace) {
     size_t cap = 20;
     size_t num_thds = 3;
     SlabAllocType mc(cap);
-    std::atomic cb_called = 0;
+    std::atomic<int> cb_called = 0;
     mc.add_cb_when_full([&cb_called]() { cb_called.fetch_add(1); });
     perform_allocations(mc, 16);
 

@@ -60,10 +60,10 @@ class SlabAllocator {
     ~SlabAllocator() { delete[] main_memory_; };
 
     pointer allocate(
-            std::shared_ptr<std::latch> decrease_available_blocks_done = nullptr,
-            std::shared_ptr<std::latch> start_callbacks = nullptr
+            std::shared_ptr<std::latch> test_decrease_available_blocks_done = nullptr,
+            std::shared_ptr<std::latch> test_start_callbacks = nullptr
     ) noexcept {
-        manage_slab_capacity(decrease_available_blocks_done, start_callbacks);
+        manage_slab_capacity(test_decrease_available_blocks_done, test_start_callbacks);
         pointer p_block = nullptr;
         tagged_value_t curr_next_free_offset = next_free_offset_.load();
         tagged_value_t new_next_free_offset;
@@ -148,17 +148,18 @@ class SlabAllocator {
     }
 
     void manage_slab_capacity(
-            std::shared_ptr<std::latch> decrease_available_blocks_done, std::shared_ptr<std::latch> start_callbacks
+            const std::shared_ptr<std::latch>& test_decrease_available_blocks_done,
+            const std::shared_ptr<std::latch>& test_start_callbacks
     ) {
         size_type n = try_decrease_available_blocks();
         if (!n) {
             util::raise_rte("Out of memory in slab allocator, callbacks not freeing memory?");
         }
-        if (decrease_available_blocks_done) {
-            decrease_available_blocks_done->count_down();
+        if (test_decrease_available_blocks_done) {
+            test_decrease_available_blocks_done->count_down();
         }
-        if (start_callbacks) {
-            start_callbacks->wait();
+        if (test_start_callbacks) {
+            test_start_callbacks->wait();
         }
         if (n <= slab_activate_cb_cutoff * static_cast<float>(capacity_)) {
             // trigger callbacks to free space
