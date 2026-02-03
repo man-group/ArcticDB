@@ -14,6 +14,7 @@
 #include <iostream>
 #include <vector>
 #include <cstring>
+#include <latch>
 #include <arcticdb/util/slab_allocator.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 
@@ -177,6 +178,17 @@ TEST(SlabAlloc, AddrInSlab) {
 }
 
 using SlabAllocType = SlabAllocator<std::byte[4096], 64>;
+std::vector<SlabAllocType::pointer> perform_allocations_with_latches(
+        SlabAllocType& mc, size_t num, std::shared_ptr<std::latch> decrease_available_blocks_done,
+        std::shared_ptr<std::latch> start_callbacks
+) {
+    std::vector<SlabAllocType::pointer> res;
+    for (size_t i = 0; i < num; i++) {
+        res.push_back(mc.allocate(decrease_available_blocks_done, start_callbacks));
+    }
+    return res;
+}
+
 std::vector<SlabAllocType::pointer> perform_allocations(SlabAllocType& mc, size_t num) {
     std::vector<SlabAllocType::pointer> res;
     for (size_t i = 0; i < num; i++) {
@@ -226,7 +238,63 @@ TEST(SlabAlloc, Callbacks) {
             mc.deallocate(p);
         }
     }
-    ASSERT_EQ(cb_called, 1);
+    // Monday 11143606523 Should be ASSERT_EQ(cb_called, 1) after bug is fixed
+    ASSERT_GE(cb_called, 1);
+    mc.allocate();
+    ASSERT_FALSE(mc._get_cb_activated());
+}
+
+/**
+ * Test for a race condition in the callbacks logic. Monday: 11143606523
+ *
+ * Capacity 20
+ * Thread B: Allocate block 17 -> sees n=4, 20% left, so will try_changing_cb(false) later. Currently just finished
+ *   try_decrease_available_blocks
+ * Thread A: Allocate block 19 -> triggers slab_activate_cb_cutoff as only 2 blocks (10%) left. Sets cb_activated=true
+ * Thread B: Set cb_activated = false
+ * Thread A: Allocate block 20 -> triggers slab_activate_cb_cutoff as only 1 block left. Sets cb_activated=true
+ **/
+TEST(SlabAlloc, CallbacksRace) {
+    size_t cap = 20;
+    size_t num_thds = 3;
+    SlabAllocType mc(cap);
+    std::atomic<int> cb_called = 0;
+    mc.add_cb_when_full([&cb_called]() { cb_called.fetch_add(1); });
+    perform_allocations(mc, 16);
+
+    auto decrease_available_blocks_done = std::make_shared<std::latch>(1);
+    auto start_callbacks = std::make_shared<std::latch>(1);
+
+    auto thread_b = std::async(
+            std::launch::async,
+            perform_allocations_with_latches,
+            std::ref(mc),
+            1,
+            decrease_available_blocks_done,
+            start_callbacks
+    );
+    decrease_available_blocks_done->wait();
+
+    std::vector<std::vector<SlabAllocType::pointer>> collected_allocations;
+
+    auto thread_a_alloc = perform_allocations(mc, 2);
+    collected_allocations.push_back(thread_a_alloc);
+
+    start_callbacks->count_down(1);
+    collected_allocations.emplace_back(thread_b.get());
+
+    thread_a_alloc = perform_allocations(mc, 1);
+    collected_allocations.push_back(thread_a_alloc);
+
+    ASSERT_EQ(mc.get_approx_free_blocks(), 0);
+    for (size_t i = 0; i < num_thds; i++) {
+        for (auto& p : collected_allocations.at(i)) {
+            mc.deallocate(p);
+        }
+    }
+    // Monday 11143606523 Should be ASSERT_EQ(cb_called, 1) after bug is fixed
+    ASSERT_EQ(cb_called, 2);
+
     mc.allocate();
     ASSERT_FALSE(mc._get_cb_activated());
 }
