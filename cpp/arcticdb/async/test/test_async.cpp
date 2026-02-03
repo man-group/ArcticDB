@@ -21,6 +21,7 @@
 
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <aws/core/Aws.h>
@@ -554,7 +555,7 @@ TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailure) {
 
     auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
 
-    std::string failureSymbol = storage::s3::MockS3Client::get_failure_trigger(
+    std::string failureSymbol = as::s3::S3ClientTestWrapper::get_failure_trigger(
             "sym", storage::StorageOperation::EXISTS, Aws::S3::S3Errors::INTERNAL_FAILURE
     );
 
