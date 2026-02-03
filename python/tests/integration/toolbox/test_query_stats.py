@@ -706,3 +706,57 @@ def test_query_stats_get_library_create_if_missing(s3_storage, clear_query_stats
     assert stats["storage_operations"]["S3_HeadObject"]["LIBRARY_CONFIG"]["count"] == 1
     assert stats["storage_operations"]["S3_PutObject"].keys() == {"LIBRARY_CONFIG"}
     assert stats["storage_operations"]["S3_PutObject"]["LIBRARY_CONFIG"]["count"] == 1
+
+
+def test_query_stats_in_mem_read_write(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    qs.enable()
+    lib.write("a", 1)
+    lib.write("b", 2)
+    lib.read("a")
+    lib.read("b")
+    stats = qs.get_query_stats()
+    assert stats
+
+    storage_ops = stats["storage_operations"]
+    assert len(storage_ops) == 2
+    reads = storage_ops["Memory_GetObject"]
+
+    for key_type in ("TABLE_DATA", "TABLE_INDEX"):
+        assert reads[key_type]["count"] == 2
+        assert reads[key_type]["size_bytes"] > 0
+
+    for key_type in ("VERSION", "VERSION_REF"):
+        assert reads[key_type]["count"] == 4
+
+    writes = storage_ops["Memory_PutObject"]
+    for key_type in ("TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF", "SYMBOL_LIST"):
+        assert writes[key_type]["count"] == 2
+        assert writes[key_type]["size_bytes"] > 0
+
+
+def test_query_stats_in_mem_delete(in_memory_version_store, clear_query_stats):
+    lib = in_memory_version_store
+    lib.write("a", 1)
+    lib.write("b", 2)
+    qs.enable()
+    lib.delete("a")
+    lib.delete("b")
+    stats = qs.get_query_stats()
+    assert stats
+
+    storage_ops = stats["storage_operations"]
+    assert len(storage_ops) == 4
+
+    deletes = storage_ops["Memory_DeleteObject"]
+    assert len(deletes) == 3
+
+    assert deletes["COLUMN_STATS"]["count"] == 2
+    for key_type in ("TABLE_DATA", "TABLE_INDEX"):
+        assert deletes[key_type]["count"] == 2
+        assert deletes[key_type]["size_bytes"] > 0
+
+    lists = storage_ops["Memory_ListObjects"]
+    for key_type in ("SNAPSHOT", "SNAPSHOT_REF"):
+        assert lists[key_type]["count"] == 2
+        assert lists[key_type]["size_bytes"] == 0

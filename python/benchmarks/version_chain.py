@@ -6,8 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import shutil
-
 from arcticdb import Arctic
 from arcticdb.exceptions import NoSuchVersionException
 from arcticdb.config import set_log_level
@@ -15,10 +13,14 @@ import arcticdb as adb
 import datetime
 import math
 import sys
-import time
+import arcticdb.toolbox.query_stats as query_stats
 
 from .common import *
 from arcticdb.util.logger import get_logger
+
+
+def count_version_reads(qs):
+    return qs.get("storage_operations", {}).get("Memory_GetObject", {}).get("VERSION", {}).get("count", 0)
 
 
 class IterateVersionChain:
@@ -27,13 +29,15 @@ class IterateVersionChain:
     # rounds = repeat = 1 so that we do not run the slow setup more than we need to
     rounds = 1
     repeat = 1
+    # We are taking counts, which should be more stable than timings. No need to run repeatedly.
+    number = 1
 
     CONNECTION_STRING = f"mem://"
     DELETION_POINT = 0.99  # delete the symbol after writing this proportion of the versions
     LIB_NAME_UNDELETED = "lib_undeleted"
     LIB_NAME_DELETED = "lib_deleted"
 
-    params = ([5000], ["forever", "default", "never"], [True, False], [1, 2])
+    params = ([100], ["forever", "default", "never"], [True, False], [1, 10])
 
     # In the tail_deleted case we delete the symbol after writing the DELETION_POINT fraction of the versions,
     # so the tail of the version chain is deleted.
@@ -125,6 +129,7 @@ class IterateVersionChain:
             # Pre-load the cache
             self.load_all(self.symbol(num_versions))
         adb._ext.set_config_int("Testing.MemoryStorage.ReadDelayMs", read_delay_ms)
+        query_stats.enable()
 
     def teardown(self, num_versions, caching, deleted, read_delay_ms):
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
@@ -132,18 +137,33 @@ class IterateVersionChain:
         adb._ext.unset_config_int("Testing.MemoryStorage.ReadDelayMs")
         del self.lib
 
-    def time_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):
+        query_stats.reset_stats()
         self.load_all(self.symbol(num_versions))
+        stats = query_stats.get_query_stats()
+        return count_version_reads(stats)
 
-    def time_list_undeleted_versions(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_list_undeleted_versions(self, num_versions, caching, deleted, read_delay_ms):
+        query_stats.reset_stats()
         self.lib.list_versions(symbol=self.symbol(num_versions))
+        stats = query_stats.get_query_stats()
+        return count_version_reads(stats)
 
-    def time_read_v0(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_read_v0(self, num_versions, caching, deleted, read_delay_ms):
+        query_stats.reset_stats()
         self.read_v0(self.symbol(num_versions))
+        stats = query_stats.get_query_stats()
+        return count_version_reads(stats)
 
-    def time_read_from_epoch(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_read_from_epoch(self, num_versions, caching, deleted, read_delay_ms):
+        query_stats.reset_stats()
         self.read_from_epoch(self.symbol(num_versions))
+        stats = query_stats.get_query_stats()
+        return count_version_reads(stats)
 
-    def time_read_alternating(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_time_read_alternating(self, num_versions, caching, deleted, read_delay_ms):
+        query_stats.reset_stats()
         self.read_from_epoch(self.symbol(num_versions))
         self.read_v0(self.symbol(num_versions))
+        stats = query_stats.get_query_stats()
+        return count_version_reads(stats)
