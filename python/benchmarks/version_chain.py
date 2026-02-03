@@ -22,25 +22,22 @@ from arcticdb.util.logger import get_logger
 
 
 class IterateVersionChain:
-    timeout = 1200
-    rounds = 3
-    repeat = (1, 10, 20.0)
-    sample_time = 0.5
-    warmup_time = 0.5
-    min_run_count = 5
+    timeout = 1000
 
-    DIR_UNDELETED = "version_chain"
-    DIR_TAIL_DELETED = "version_chain_tail_deleted"
-    CONNECTION_STRING_UNDELETED = f"lmdb://{DIR_UNDELETED}"
-    CONNECTION_STRING_TAIL_DELETED = f"lmdb://{DIR_TAIL_DELETED}"
+    # rounds = repeat = 1 so that we do not run the slow setup more than we need to
+    rounds = 1
+    repeat = 1
+
+    CONNECTION_STRING = f"mem://"
     DELETION_POINT = 0.99  # delete the symbol after writing this proportion of the versions
-    LIB_NAME = "lib"
+    LIB_NAME_UNDELETED = "lib_undeleted"
+    LIB_NAME_DELETED = "lib_deleted"
 
-    params = ([25_000], ["forever", "default", "never"], [True, False])
+    params = ([5000], ["forever", "default", "never"], [True, False], [1, 2])
 
     # In the tail_deleted case we delete the symbol after writing the DELETION_POINT fraction of the versions,
     # so the tail of the version chain is deleted.
-    param_names = ["num_versions", "caching", "tail_deleted"]
+    param_names = ["num_versions", "caching", "tail_deleted", "read_delay_ms"]
 
     def symbol(self, num_versions):
         return f"symbol_{num_versions}"
@@ -49,71 +46,43 @@ class IterateVersionChain:
         self.logger = get_logger()
         self.lib = None
 
-    def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+    def _setup(self) -> Arctic:
+        ac = Arctic(IterateVersionChain.CONNECTION_STRING)
 
-    def _setup_cache(self):
-        ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)
+        num_versions_list, caching_list, deleted_list, read_delay_ms = IterateVersionChain.params
 
-        num_versions_list, caching_list, deleted_list = IterateVersionChain.params
-
-        ac.delete_library(IterateVersionChain.LIB_NAME)
-        lib = ac.create_library(IterateVersionChain.LIB_NAME)
+        lib_undeleted = ac.create_library(IterateVersionChain.LIB_NAME_UNDELETED)
+        lib_deleted = ac.create_library(IterateVersionChain.LIB_NAME_DELETED)
 
         small_df = generate_random_floats_dataframe(2, 2)
         delete_points = {}
         for num_versions in num_versions_list:
             delete_points[num_versions] = math.floor(IterateVersionChain.DELETION_POINT * num_versions)
 
-        # To save setup time we populate the two libraries by:
-        #
-        # Step 1 - write 99% of the versions to one library
-        # Step 2 - copy the library directory
-        # Step 3 - delete the symbol on the copy. Write the remaining versions to both source and copy.
         adb._ext.set_config_int("VersionMap.ReloadInterval", sys.maxsize)
 
         for num_versions in num_versions_list:
             symbol = self.symbol(num_versions)
             deletion_point = delete_points[num_versions]
             for i in range(deletion_point):
-                lib.write(symbol, small_df)
-
-        del lib
-        del ac
-
-        shutil.rmtree(IterateVersionChain.DIR_TAIL_DELETED, ignore_errors=True)
-        shutil.copytree(IterateVersionChain.DIR_UNDELETED, IterateVersionChain.DIR_TAIL_DELETED)
-
-        ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)
-        lib = ac[IterateVersionChain.LIB_NAME]
+                lib_deleted.write(symbol, small_df)
+                lib_undeleted.write(symbol, small_df)
+            lib_deleted.delete(symbol)
 
         for num_versions in num_versions_list:
             symbol = self.symbol(num_versions)
             deletion_point = delete_points[num_versions]
             for i in range(deletion_point, num_versions):
-                lib.write(symbol, small_df)
-            # reasonableness check
-            assert lib.read(symbol).version == num_versions - 1
-
-        del lib
-        del ac
-
-        ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)
-        lib = ac[IterateVersionChain.LIB_NAME]
-        for num_versions in num_versions_list:
-            symbol = self.symbol(num_versions)
-            lib.delete(symbol)
-            deletion_point = delete_points[num_versions]
-            for i in range(deletion_point, num_versions):
-                lib.write(symbol, small_df)
+                lib_deleted.write(symbol, small_df)
+                lib_undeleted.write(symbol, small_df)
             # reasonableness checks
-            assert lib.read(symbol).version == num_versions - 1
+            assert lib_deleted.read(symbol).version == num_versions - 1
+            assert lib_undeleted.read(symbol).version == num_versions - 1
             # Only versions that have not been deleted are returned by list_versions
-            assert len(lib.list_versions(symbol)) == num_versions - deletion_point
+            assert len(lib_deleted.list_versions(symbol)) == num_versions - deletion_point
 
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
+        return ac
 
     def load_all(self, symbol):
         # Getting tombstoned versions requires a LOAD_ALL
@@ -133,7 +102,7 @@ class IterateVersionChain:
         except NoSuchVersionException:
             pass
 
-    def setup(self, num_versions, caching, deleted):
+    def setup(self, num_versions, caching, deleted, read_delay_ms):
         # Disable warnings for version not found
         set_log_level("ERROR")
 
@@ -145,32 +114,36 @@ class IterateVersionChain:
             # Leave the default reload interval
             pass
 
+        adb._ext.set_config_int("Testing.MemoryStorage.AddDelays", 1)
+        ac = self._setup()
         if deleted:
-            ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)
+            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]
         else:
-            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)
-        self.lib = ac[IterateVersionChain.LIB_NAME]
+            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]
 
         if caching != "never":
             # Pre-load the cache
             self.load_all(self.symbol(num_versions))
+        adb._ext.set_config_int("Testing.MemoryStorage.ReadDelayMs", read_delay_ms)
 
-    def teardown(self, num_versions, caching, deleted):
+    def teardown(self, num_versions, caching, deleted, read_delay_ms):
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
+        adb._ext.unset_config_int("Testing.MemoryStorage.AddDelays")
+        adb._ext.unset_config_int("Testing.MemoryStorage.ReadDelayMs")
         del self.lib
 
-    def time_load_all_versions(self, num_versions, caching, deleted):
+    def time_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):
         self.load_all(self.symbol(num_versions))
 
-    def time_list_undeleted_versions(self, num_versions, caching, deleted):
+    def time_list_undeleted_versions(self, num_versions, caching, deleted, read_delay_ms):
         self.lib.list_versions(symbol=self.symbol(num_versions))
 
-    def time_read_v0(self, num_versions, caching, deleted):
+    def time_read_v0(self, num_versions, caching, deleted, read_delay_ms):
         self.read_v0(self.symbol(num_versions))
 
-    def time_read_from_epoch(self, num_versions, caching, deleted):
+    def time_read_from_epoch(self, num_versions, caching, deleted, read_delay_ms):
         self.read_from_epoch(self.symbol(num_versions))
 
-    def time_read_alternating(self, num_versions, caching, deleted):
+    def time_read_alternating(self, num_versions, caching, deleted, read_delay_ms):
         self.read_from_epoch(self.symbol(num_versions))
         self.read_v0(self.symbol(num_versions))
