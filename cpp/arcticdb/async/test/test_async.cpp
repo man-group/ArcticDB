@@ -21,6 +21,7 @@
 
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
+#include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <aws/core/Aws.h>
@@ -513,6 +514,81 @@ TEST(Async, CopyCompressedInterStoreNoSuchKeyOnWrite) {
     ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::FailedTargets>(res));
 
     // But it should still write the key to the non-failing target
+    auto read_result_0 = targets[0]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_0.first), key);
+    ASSERT_EQ(read_result_0.second.row_count(), row_count);
+
+    auto read_result_2 = targets[2]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_2.first), key);
+    ASSERT_EQ(read_result_2.second.row_count(), row_count);
+}
+
+TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailure) {
+    using namespace arcticdb::async;
+
+    // Given
+    as::EnvironmentName environment_name{"research"};
+    as::StorageName storage_name("storage_name");
+    as::LibraryPath library_path{"a", "b"};
+    namespace ap = arcticdb::pipelines;
+
+    auto config = proto::nfs_backed_storage::Config();
+    config.set_use_mock_storage_for_testing(true);
+
+    auto env_config = arcticdb::get_test_environment_config(
+            library_path, storage_name, environment_name, std::make_optional(config)
+    );
+    auto config_resolver = as::create_in_memory_resolver(env_config);
+    as::LibraryIndex library_index{environment_name, config_resolver};
+
+    auto failed_config = proto::s3_storage::Config();
+    failed_config.set_use_mock_storage_for_testing(true);
+
+    auto failed_env_config = arcticdb::get_test_environment_config(
+            library_path, storage_name, environment_name, std::make_optional(failed_config)
+    );
+    auto failed_config_resolver = as::create_in_memory_resolver(failed_env_config);
+    as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
+
+    as::UserAuth user_auth{"abc"};
+    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+
+    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+
+    std::string failureSymbol = as::s3::S3ClientTestWrapper::get_failure_trigger(
+            "sym", storage::StorageOperation::EXISTS, Aws::S3::S3Errors::INTERNAL_FAILURE
+    );
+
+    // Prepare 1 target to fail on key_exists and 2 targets to succeed
+    auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
+            create_store(library_path, library_index, user_auth, codec_opt),
+            create_store(library_path, failed_library_index, user_auth, codec_opt),
+            create_store(library_path, library_index, user_auth, codec_opt)
+    };
+
+    // When - we write a key to the source
+    const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{failureSymbol, KeyType::VERSION_REF};
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto row_count = segment_in_memory.row_count();
+    ASSERT_GT(row_count, 0);
+    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
+    (void)segment.calculate_size();
+    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+
+    // Copy the key with check_key_exists_on_targets=true
+    CopyCompressedInterStoreTask task{
+            key, std::nullopt, true, false, source_store, targets, std::shared_ptr<BitRateStats>()
+    };
+
+    arcticdb::async::TaskScheduler sched{1};
+    auto res = sched.submit_io_task(std::move(task)).get();
+
+    // It should report that it failed to copy to the failing target
+    ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::FailedTargets>(res));
+    auto failed_targets = std::get<CopyCompressedInterStoreTask::FailedTargets>(res);
+    ASSERT_EQ(failed_targets.size(), 1);
+
+    // But it should still write the key to the non-failing targets
     auto read_result_0 = targets[0]->read_sync(key);
     ASSERT_EQ(std::get<RefKey>(read_result_0.first), key);
     ASSERT_EQ(read_result_0.second.row_count(), row_count);

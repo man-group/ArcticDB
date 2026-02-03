@@ -335,6 +335,7 @@ set(arcticdb_srcs
         storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_settings.hpp
+        storage/mock/s3_mock_client.hpp
         storage/python_bindings_common.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
