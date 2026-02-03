@@ -227,6 +227,8 @@ class LocalVersionedEngine : public VersionedEngine {
             const VersionQuery& version_query, bool include_segment = false
     );
 
+    DescriptorItem get_descriptor_from_segment(const AtomKey& key, const SegmentInMemory& seg, bool include_segment);
+
     void create_column_stats_internal(
             const VersionedItem& versioned_item, ColumnStats& column_stats, const ReadOptions& read_options
     );

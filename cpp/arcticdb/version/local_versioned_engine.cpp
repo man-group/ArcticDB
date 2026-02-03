@@ -380,7 +380,10 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
             [&stream_id, &version_query, this](const TimestampVersionQuery& timestamp) {
                 return get_version_at_time(stream_id, timestamp.timestamp_, version_query);
             },
-            [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); }
+            [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); },
+            [](const IndexSegmentQuery& index_seg) -> std::optional<VersionedItem> {
+                return VersionedItem{index_seg.key_};
+            }
     );
 }
 
@@ -488,47 +491,53 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     return versioned_item;
 }
 
+DescriptorItem LocalVersionedEngine::get_descriptor_from_segment(
+        const AtomKey& key, const SegmentInMemory& seg, bool include_segment
+) {
+    std::optional<TimeseriesDescriptor> timeseries_descriptor;
+    if (seg.has_index_descriptor())
+        timeseries_descriptor.emplace(seg.index_descriptor());
+
+    std::optional<timestamp> start_index;
+    std::optional<timestamp> end_index;
+    if (seg.row_count() > 0) {
+        const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
+        entity::details::visit_type(
+                start_index_column.type().data_type(),
+                [&start_index_column, &start_index](auto column_desc_tag) {
+                    using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                    if constexpr (is_time_type(type_info::data_type)) {
+                        start_index = start_index_column.template scalar_at<timestamp>(0);
+                    }
+                }
+        );
+
+        const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
+        entity::details::visit_type(
+                end_index_column.type().data_type(),
+                [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
+                    using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                    if constexpr (is_time_type(type_info::data_type)) {
+                        // -1 as the end timestamp in the data keys is one nanosecond greater than the last value in
+                        // the index column
+                        end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
+                    }
+                }
+        );
+    }
+    DescriptorItem result{AtomKey{key}, start_index, end_index, std::move(timeseries_descriptor)};
+    if (include_segment) {
+        result.segment_ = seg;
+    }
+    return result;
+}
+
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, bool include_segment) {
     const auto key = std::move(k);
-    return store()->read(key).thenValue([include_segment](auto&& key_seg_pair) -> DescriptorItem {
+    return store()->read(key).thenValue([this, include_segment](auto&& key_seg_pair) -> DescriptorItem {
         auto key = to_atom(std::move(key_seg_pair.first));
         auto seg = std::move(key_seg_pair.second);
-        std::optional<TimeseriesDescriptor> timeseries_descriptor;
-        if (seg.has_index_descriptor())
-            timeseries_descriptor.emplace(seg.index_descriptor());
-
-        std::optional<timestamp> start_index;
-        std::optional<timestamp> end_index;
-        if (seg.row_count() > 0) {
-            const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
-            entity::details::visit_type(
-                    start_index_column.type().data_type(),
-                    [&start_index_column, &start_index](auto column_desc_tag) {
-                        using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
-                        if constexpr (is_time_type(type_info::data_type)) {
-                            start_index = start_index_column.template scalar_at<timestamp>(0);
-                        }
-                    }
-            );
-
-            const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
-            entity::details::visit_type(
-                    end_index_column.type().data_type(),
-                    [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
-                        using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
-                        if constexpr (is_time_type(type_info::data_type)) {
-                            // -1 as the end timestamp in the data keys is one nanosecond greater than the last value in
-                            // the index column
-                            end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
-                        }
-                    }
-            );
-        }
-        DescriptorItem result{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
-        if (include_segment) {
-            result.segment_ = std::move(seg);
-        }
-        return result;
+        return get_descriptor_from_segment(key, seg, include_segment);
     });
 }
 
@@ -553,6 +562,12 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
         const StreamId& stream_id, const VersionQuery& version_query, bool include_segment
 ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
+
+    // Check if we already have the segment from an IndexSegmentQuery
+    if (auto* index_seg = std::get_if<IndexSegmentQuery>(&version_query.content_)) {
+        return get_descriptor_from_segment(index_seg->key_, index_seg->segment_, include_segment);
+    }
+
     auto version = get_version_to_read(stream_id, version_query);
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
             version.has_value(),

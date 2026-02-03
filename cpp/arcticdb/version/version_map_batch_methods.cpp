@@ -42,6 +42,11 @@ void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery& snapshot
     snapshots_.push_back(snapshot_query.name_);
 }
 
+void StreamVersionData::do_react(const pipelines::IndexSegmentQuery& /* index_segment_query */) {
+    // IndexSegmentQuery already has the key and segment, no need to load from version map
+    ++count_;
+}
+
 std::optional<AtomKey> get_specific_version_from_entry(
         const std::shared_ptr<VersionMapEntry>& version_map_entry,
         const pipelines::SpecificVersionQuery& specific_version, bool include_deleted = false

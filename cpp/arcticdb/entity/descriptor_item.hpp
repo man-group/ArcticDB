@@ -40,5 +40,6 @@ struct DescriptorItem {
     std::optional<timestamp> end_index() const { return end_index_; }
     std::optional<TimeseriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
     const std::optional<SegmentInMemory>& segment() const { return segment_; }
+    const entity::AtomKey& key() const { return key_; }
 };
 } // namespace arcticdb

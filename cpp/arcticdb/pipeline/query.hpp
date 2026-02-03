@@ -10,6 +10,7 @@
 
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
@@ -17,6 +18,7 @@
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <algorithm>
 #include <vector>
 #include <string>
@@ -39,9 +41,14 @@ struct SpecificVersionQuery {
     bool iterate_snapshots_if_tombstoned;
 };
 
+struct IndexSegmentQuery {
+    entity::AtomKey key_;
+    SegmentInMemory segment_;
+};
+
 using VersionQueryType = std::variant<
         std::monostate, // Represents "latest"
-        SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery>;
+        SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery, IndexSegmentQuery>;
 
 struct VersionQuery {
     VersionQueryType content_;
@@ -54,6 +61,10 @@ struct VersionQuery {
 
     void set_version(SignedVersionId version, bool iterate_snapshots_if_tombstoned) {
         content_ = SpecificVersionQuery{version, iterate_snapshots_if_tombstoned};
+    }
+
+    void set_index_segment(entity::AtomKey key, SegmentInMemory segment) {
+        content_ = IndexSegmentQuery{std::move(key), std::move(segment)};
     }
 };
 
@@ -428,7 +439,8 @@ struct formatter<VersionQuery> {
                 },
                 [&ctx](const SnapshotVersionQuery& s) { return fmt::format_to(ctx.out(), "snapshot '{}'", s.name_); },
                 [&ctx](const TimestampVersionQuery& t) { return fmt::format_to(ctx.out(), "{}", t.timestamp_); },
-                [&ctx](const std::monostate&) { return fmt::format_to(ctx.out(), "latest"); }
+                [&ctx](const std::monostate&) { return fmt::format_to(ctx.out(), "latest"); },
+                [&ctx](const IndexSegmentQuery& i) { return fmt::format_to(ctx.out(), "index_segment key={}", i.key_); }
         );
     }
 };

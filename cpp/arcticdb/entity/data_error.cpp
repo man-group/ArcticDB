@@ -32,7 +32,11 @@ DataError::DataError(
                     version_request_type_ = VersionRequestType::SPECIFIC;
                     version_request_data_ = query.version_id_;
                 },
-                [this](const std::monostate&) { version_request_type_ = VersionRequestType::LATEST; }
+                [this](const std::monostate&) { version_request_type_ = VersionRequestType::LATEST; },
+                [this](const pipelines::IndexSegmentQuery& query) {
+                    version_request_type_ = VersionRequestType::SPECIFIC;
+                    version_request_data_ = static_cast<int64_t>(query.key_.version_id());
+                }
         );
     }
 }
