@@ -3397,3 +3397,73 @@ def test_version_chain_cache(basic_store, use_caching):
         lib.delete(symbol)
         for i in range(num_of_versions):
             assert_correct_dataframe(i, set(range(num_of_versions)))
+
+
+@pytest.mark.storage
+def test_read_specific_version_reloads_when_new_versions_written(basic_store_factory):
+    """
+    Test that reading a specific version correctly reloads the version chain when new versions
+    have been written by another client.
+
+    This tests the fix for has_cached_entry with DOWNTO LoadType where the cache might incorrectly
+    claim to have all versions loaded (is_earliest_version_loaded=true) but the specifically
+    requested version hasn't actually been loaded because it was written after the cache was populated.
+    """
+    # Set a very long reload interval to ensure the fix is being tested,
+    # not just the reload interval expiring
+    with config_context("VersionMap.ReloadInterval", sys.maxsize):
+        # Create two library instances pointing to the same storage (simulating two clients)
+        lib_a = basic_store_factory()
+        lib_b = basic_store_factory(reuse_name=True)
+
+        symbol = "test_reload_version"
+        dataframes = [sample_dataframe() for _ in range(6)]
+
+        # Client A writes initial versions v0, v1, v2
+        for i in range(3):
+            lib_a.write(symbol, dataframes[i])
+
+        # Client B reads all versions to populate its cache
+        # This sets is_earliest_version_loaded=true in its version map cache
+        all_versions_b = lib_b.list_versions(symbol)
+        assert len(all_versions_b) == 3
+
+        # Verify Client B can read all versions
+        for i in range(3):
+            result = lib_b.read(symbol, as_of=i)
+            assert result.version == i
+            assert_equal(result.data, dataframes[i])
+
+        # Client A writes new versions v3, v4, v5 that Client B doesn't know about
+        for i in range(3, 6):
+            lib_a.write(symbol, dataframes[i])
+
+        # Verify Client A can read the new versions
+        for i in range(6):
+            result = lib_a.read(symbol, as_of=i)
+            assert result.version == i
+
+        # Client B should be able to read the new versions by triggering a reload
+        # Test reading by explicit version number
+        for i in range(3, 6):
+            result = lib_b.read(symbol, as_of=i)
+            assert result.version == i
+            assert_equal(result.data, dataframes[i])
+
+        # Test reading by negative index (relative to latest)
+        # -1 should be v5, -2 should be v4, etc.
+        result = lib_b.read(symbol, as_of=-1)
+        assert result.version == 5
+        assert_equal(result.data, dataframes[5])
+
+        result = lib_b.read(symbol, as_of=-2)
+        assert result.version == 4
+        assert_equal(result.data, dataframes[4])
+
+        result = lib_b.read(symbol, as_of=-6)
+        assert result.version == 0
+        assert_equal(result.data, dataframes[0])
+
+        # Now list_versions should show all 6 versions
+        all_versions_b = lib_b.list_versions(symbol)
+        assert len(all_versions_b) == 6

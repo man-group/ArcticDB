@@ -1393,6 +1393,100 @@ TEST(VersionMap, TombstoneAllFromEntry) {
     ASSERT_EQ(version_id, 2);
 }
 
+// Test that has_cached_entry correctly returns false for DOWNTO requests
+// when the requested version hasn't been loaded, even if is_earliest_version_loaded is true.
+// This tests the fix for the case where:
+// 1. Client A loads all versions and caches them (is_earliest_version_loaded = true)
+// 2. Client B writes new versions to storage
+// 3. Client A's cache shouldn't claim to have versions it hasn't loaded
+TEST(VersionMap, HasCachedEntryDowntoReloadsWhenVersionNotLoaded) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    // Client A writes versions v0, v1, v2
+    auto version_map_a = std::make_shared<VersionMap>();
+    write_versions(store, version_map_a, id, 3);
+
+    // Client B creates a new version map and loads all versions
+    auto version_map_b = std::make_shared<VersionMap>();
+    auto entry = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+
+    // Verify that all versions are loaded and is_earliest_version_loaded is true
+    ASSERT_TRUE(entry->load_progress_.is_earliest_version_loaded);
+    ASSERT_EQ(entry->load_progress_.oldest_loaded_index_version_, VersionId{0});
+    ASSERT_EQ(entry->get_indexes(true).size(), 3); // v0, v1, v2
+
+    // Verify has_cached_entry returns true for all existing versions
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}
+    ));
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)}
+    ));
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(2)}
+    ));
+
+    // Client A writes new versions v3, v4, v5 that Client B doesn't know about
+    for (int i = 3; i < 6; ++i) {
+        auto key = atom_key_with_version(id, i, i);
+        version_map_a->write_version(store, key, std::nullopt);
+    }
+
+    // Client B's cache still has is_earliest_version_loaded = true, but it doesn't have v3, v4, v5
+    // has_cached_entry should return false for DOWNTO requests for these new versions
+    // because even though is_earliest_version_loaded is true, the specific versions aren't in the cache
+    EXPECT_FALSE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(3)}
+    ));
+    EXPECT_FALSE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(4)}
+    ));
+    EXPECT_FALSE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(5)}
+    ));
+
+    // DOWNTO with negative indices should also correctly reload
+    // At this point, Client B thinks latest is v2, so -1 = v2, -2 = v1, -3 = v0
+    // But in storage, latest is actually v5
+    // The cache can still serve requests that resolve to loaded versions
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-1)}
+    )); // -1 resolves to v2 in cache, which is loaded
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-2)}
+    )); // -2 resolves to v1 in cache, which is loaded
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-3)}
+    )); // -3 resolves to v0 in cache, which is loaded
+
+    // Trigger a reload by requesting version 5 via DOWNTO (which should return false
+    // from has_cached_entry, causing check_reload to actually reload from storage).
+    // Note: DOWNTO 5 will only load from latest (v5) down to v5, so just v5.
+    entry = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(5)}, __FUNCTION__
+    );
+    // The entry should now include version 5
+    auto opt_v5 = entry->get_first_index(true);
+    ASSERT_TRUE(opt_v5.first.has_value());
+    ASSERT_EQ(opt_v5.first->version_id(), 5);
+
+    // has_cached_entry should now return true for version 5
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(5)}
+    ));
+
+    // Now request ALL to load all versions. Since is_earliest_version_loaded is now false
+    // (we only loaded down to v5, not v0), has_cached_entry should return false and trigger a full reload.
+    entry = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_EQ(entry->get_indexes(true).size(), 6); // v0-v5
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
