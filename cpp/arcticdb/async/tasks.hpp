@@ -365,19 +365,31 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
         std::size_t bytes{0};
         interval timer;
         timer.start();
+        std::unordered_set<std::string> failed_targets;
         if (check_key_exists_on_targets_) {
             target_stores_.erase(
                     std::remove_if(
                             target_stores_.begin(),
                             target_stores_.end(),
-                            [that = this](const std::shared_ptr<Store>& target_store) {
-                                return target_store->key_exists_sync(that->key_to_read_);
+                            [that = this, &failed_targets](const std::shared_ptr<Store>& target_store) {
+                                try {
+                                    return target_store->key_exists_sync(that->key_to_read_);
+                                } catch (const std::exception& e) {
+                                    auto name = target_store->name();
+                                    log::storage().error(
+                                            "Failed to check if key {} exists on store {}: {}",
+                                            variant_key_view(that->key_to_read_),
+                                            name,
+                                            e.what()
+                                    );
+                                    failed_targets.insert(name);
+                                    return true; // Remove from list since we're marking it as failed
+                                }
                             }
                     ),
                     target_stores_.end()
             );
         }
-        std::unordered_set<std::string> failed_targets;
         if (!target_stores_.empty()) {
             storage::KeySegmentPair key_segment_pair;
             try {

@@ -33,7 +33,7 @@ struct S3Key {
 // The MockS3Client stores the segments in memory to simulate regular S3 behavior for unit tests.
 class MockS3Client : public S3ClientInterface {
   public:
-    MockS3Client() {};
+    MockS3Client() = default;
 
     [[nodiscard]] S3Result<std::monostate> head_object(
             const std::string& s3_object_name, const std::string& bucket_name
