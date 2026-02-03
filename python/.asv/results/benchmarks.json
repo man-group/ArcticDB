@@ -2396,18 +2396,19 @@
     },
     "version": 2,
     "version_chain.IterateVersionChain.time_list_undeleted_versions": {
-        "code": "class IterateVersionChain:\n    def time_list_undeleted_versions(self, num_versions, caching, deleted):\n        self.lib.list_versions(symbol=self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        if deleted:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)\n        else:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)\n        self.lib = ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class IterateVersionChain:\n    def time_list_undeleted_versions(self, num_versions, caching, deleted, read_delay_ms):\n        self.lib.list_versions(symbol=self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        adb._ext.set_config_int(\"Testing.MemoryStorage.AddDelays\", 1)\n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        adb._ext.set_config_int(\"Testing.MemoryStorage.ReadDelayMs\", read_delay_ms)",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_list_undeleted_versions",
         "number": 0,
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted"
+            "tail_deleted",
+            "read_delay_ms"
         ],
         "params": [
             [
-                "25000"
+                "5000"
             ],
             [
                 "'forever'",
@@ -2417,31 +2418,35 @@
             [
                 "True",
                 "False"
+            ],
+            [
+                "1",
+                "2"
             ]
         ],
-        "repeat": 5,
-        "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "version_chain:50",
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
-        "version": "c994d17e8987906e0964cc8145263dc8ddba0f0e1ec0b8fc729ea437a390605c",
+        "version": "2b8efaabd22d9f2a816d844814d964afc01fef46bf4593047989c42b8b50b05d",
         "warmup_time": -1
     },
     "version_chain.IterateVersionChain.time_load_all_versions": {
-        "code": "class IterateVersionChain:\n    def time_load_all_versions(self, num_versions, caching, deleted):\n        self.load_all(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        if deleted:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)\n        else:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)\n        self.lib = ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class IterateVersionChain:\n    def time_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):\n        self.load_all(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        adb._ext.set_config_int(\"Testing.MemoryStorage.AddDelays\", 1)\n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        adb._ext.set_config_int(\"Testing.MemoryStorage.ReadDelayMs\", read_delay_ms)",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_load_all_versions",
         "number": 0,
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted"
+            "tail_deleted",
+            "read_delay_ms"
         ],
         "params": [
             [
-                "25000"
+                "5000"
             ],
             [
                 "'forever'",
@@ -2451,31 +2456,35 @@
             [
                 "True",
                 "False"
+            ],
+            [
+                "1",
+                "2"
             ]
         ],
-        "repeat": 5,
-        "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "version_chain:50",
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
-        "version": "e68f85572eefce903e6c90ac005474274128cf893551579dded0dbfa891eb4bf",
+        "version": "e09ecb3a014384768a9d87cf53b42b5d781711e553aca81da63f4bb86a96ee81",
         "warmup_time": -1
     },
     "version_chain.IterateVersionChain.time_read_alternating": {
-        "code": "class IterateVersionChain:\n    def time_read_alternating(self, num_versions, caching, deleted):\n        self.read_from_epoch(self.symbol(num_versions))\n        self.read_v0(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        if deleted:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)\n        else:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)\n        self.lib = ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class IterateVersionChain:\n    def time_read_alternating(self, num_versions, caching, deleted, read_delay_ms):\n        self.read_from_epoch(self.symbol(num_versions))\n        self.read_v0(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        adb._ext.set_config_int(\"Testing.MemoryStorage.AddDelays\", 1)\n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        adb._ext.set_config_int(\"Testing.MemoryStorage.ReadDelayMs\", read_delay_ms)",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_read_alternating",
         "number": 0,
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted"
+            "tail_deleted",
+            "read_delay_ms"
         ],
         "params": [
             [
-                "25000"
+                "5000"
             ],
             [
                 "'forever'",
@@ -2485,31 +2494,35 @@
             [
                 "True",
                 "False"
+            ],
+            [
+                "1",
+                "2"
             ]
         ],
-        "repeat": 5,
-        "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "version_chain:50",
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
-        "version": "117a257c8033130bab1d83ea4c8993283739842e87dccd898107f8ecbd8fd714",
+        "version": "2934ee18c838cb25f4c9b84f8afeab24ff90d4a2276b0894d50d8ff7212add42",
         "warmup_time": -1
     },
     "version_chain.IterateVersionChain.time_read_from_epoch": {
-        "code": "class IterateVersionChain:\n    def time_read_from_epoch(self, num_versions, caching, deleted):\n        self.read_from_epoch(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        if deleted:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)\n        else:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)\n        self.lib = ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class IterateVersionChain:\n    def time_read_from_epoch(self, num_versions, caching, deleted, read_delay_ms):\n        self.read_from_epoch(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        adb._ext.set_config_int(\"Testing.MemoryStorage.AddDelays\", 1)\n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        adb._ext.set_config_int(\"Testing.MemoryStorage.ReadDelayMs\", read_delay_ms)",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_read_from_epoch",
         "number": 0,
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted"
+            "tail_deleted",
+            "read_delay_ms"
         ],
         "params": [
             [
-                "25000"
+                "5000"
             ],
             [
                 "'forever'",
@@ -2519,31 +2532,35 @@
             [
                 "True",
                 "False"
+            ],
+            [
+                "1",
+                "2"
             ]
         ],
-        "repeat": 5,
-        "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "version_chain:50",
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
-        "version": "65cf6d6226805c2655d981a065b9e345cc8b00424f8f35965407dfdc1b8da504",
+        "version": "aac74e7870a85347cec4f2def4faf3c89db868b1708430525fe664503f7190b2",
         "warmup_time": -1
     },
     "version_chain.IterateVersionChain.time_read_v0": {
-        "code": "class IterateVersionChain:\n    def time_read_v0(self, num_versions, caching, deleted):\n        self.read_v0(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        if deleted:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_TAIL_DELETED)\n        else:\n            ac = Arctic(IterateVersionChain.CONNECTION_STRING_UNDELETED)\n        self.lib = ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class IterateVersionChain:\n    def time_read_v0(self, num_versions, caching, deleted, read_delay_ms):\n        self.read_v0(self.symbol(num_versions))\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        adb._ext.set_config_int(\"Testing.MemoryStorage.AddDelays\", 1)\n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        adb._ext.set_config_int(\"Testing.MemoryStorage.ReadDelayMs\", read_delay_ms)",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_read_v0",
         "number": 0,
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted"
+            "tail_deleted",
+            "read_delay_ms"
         ],
         "params": [
             [
-                "25000"
+                "5000"
             ],
             [
                 "'forever'",
@@ -2553,16 +2570,19 @@
             [
                 "True",
                 "False"
+            ],
+            [
+                "1",
+                "2"
             ]
         ],
-        "repeat": 5,
-        "rounds": 2,
-        "sample_time": 1,
-        "setup_cache_key": "version_chain:50",
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
         "timeout": 1000,
         "type": "time",
         "unit": "seconds",
-        "version": "e086c5206ded034b9ab56b93a7c774085fd00125211350aee5d2fa3b2a700321",
+        "version": "57ead7d02454315a435a413da2a46bc96f49053dc3fbc916645a8862acc61c0f",
         "warmup_time": -1
     }
 }
