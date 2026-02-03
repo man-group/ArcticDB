@@ -21,6 +21,7 @@
 #include <memory>
 #include <utility>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 #include <folly/hash/Hash.h>
 
 namespace arcticdb {
@@ -214,6 +215,38 @@ inline void log_prometheus_gauge(const std::string& metric_name, const std::stri
 inline void log_prometheus_counter(const std::string& metric_name, const std::string& metric_desc, size_t val) {
     PrometheusInstance::instance()->registerMetric(prometheus::MetricType::Counter, metric_name, metric_desc, {});
     PrometheusInstance::instance()->incrementCounter(metric_name, static_cast<double>(val));
+}
+
+inline void configure_prometheus_from_proto(const arcticdb::proto::utils::PrometheusConfig& proto_config) {
+    MetricsConfig::Model model;
+    switch (proto_config.prometheus_model()) {
+        case arcticdb::proto::utils::PrometheusConfig_PrometheusModel_PUSH:
+            model = MetricsConfig::Model::PUSH;
+            break;
+        case arcticdb::proto::utils::PrometheusConfig_PrometheusModel_WEB:
+            model = MetricsConfig::Model::PULL;
+            break;
+        default:
+            model = MetricsConfig::Model::NO_INIT;
+            break;
+    }
+
+    if (model == MetricsConfig::Model::NO_INIT ||
+        proto_config.host().empty() ||
+        proto_config.port().empty()) {
+        return;
+    }
+
+    MetricsConfig config(
+        proto_config.host(),
+        proto_config.port(),
+        proto_config.job_name().empty() ? "arcticdb" : proto_config.job_name(),
+        proto_config.instance().empty() ? "local" : proto_config.instance(),
+        proto_config.prometheus_env().empty() ? "res" : proto_config.prometheus_env(),
+        model
+    );
+
+    PrometheusInstance::instance()->configure(config);
 }
 
 } // Namespace arcticdb

@@ -22,6 +22,7 @@
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/entity/metrics.hpp>
 
 namespace {
 using namespace arcticdb;
@@ -2199,6 +2200,10 @@ void LocalVersionedEngine::configure(const storage::LibraryDescriptor::VariantSt
                 }
                 if (cfg.write_options().has_sync_passive()) {
                     version_map->set_log_changes(cfg.write_options().sync_passive().enabled());
+                }
+                if (cfg.has_prometheus_config()) {
+                    configure_prometheus_from_proto(cfg.prometheus_config());
+                    ARCTICDB_DEBUG(log::version(), "Prometheus configured from library config");
                 }
             },
             [](const auto& conf) {

@@ -72,6 +72,7 @@ from arcticdb.options import (
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
+from arcticdb.config import set_prometheus_values
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -436,11 +437,12 @@ class NativeVersionStore:
         lib_cfg = NativeVersionStore.create_library_config(
             protobuf_cfg, env, lib_name, encoding_version=encoding_version
         )
-        lib = cls.create_lib_from_config((protobuf_cfg, native_cfg), env, lib_cfg.lib_desc.name, open_mode)
+        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode, native_cfg)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode, native_cfg=native_cfg)
 
     @staticmethod
     def create_lib_from_lib_config(lib_cfg, env, open_mode, native_cfg=None):
+        set_prometheus_values(lib_cfg, env)
         envs_cfg = _env_config_from_lib_config(lib_cfg, env)
         cfg_resolver = _create_mem_config_resolver(envs_cfg)
         lib_idx = _LibraryIndex.create_from_resolver(env, cfg_resolver)

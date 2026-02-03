@@ -57,6 +57,13 @@ _DEFAULT_LOG_LEVEL = "INFO"
 _DEFAULT_RUNTIME_CONF = arctic_native_path("conf/runtime.yaml")
 _DEFAULT_DATA_DIR = arctic_native_path("data")
 
+# Prometheus configuration defaults
+_DEFAULT_PUSHGATEWAY_ENV_VAR = "PROMETHEUS_GATEWAY"
+_DEFAULT_PROMETHEUS_ENV_VAR = "PROMETHEUS_ENVIRONMENT"
+_DEFAULT_PROMETHEUS_ENV_VALUE = "res"
+_DEFAULT_PROMETHEUS_MODE = 1  # PUSH mode
+_DEFAULT_PUSH_JOB_NAME = "arcticdb"
+
 
 # Public api defaults. Anything underscored is subject to change without warning
 class Defaults(object):
@@ -69,6 +76,12 @@ class Defaults(object):
     RUNTIME_CONF_FILE_PATH = _DEFAULT_RUNTIME_CONF
     DATA_DIR = _DEFAULT_DATA_DIR
     DEFAULT_LOG_LEVEL = _DEFAULT_LOG_LEVEL
+    # Prometheus defaults
+    DEFAULT_PUSHGATEWAY_ENV_VAR = _DEFAULT_PUSHGATEWAY_ENV_VAR
+    DEFAULT_PROMETHEUS_ENV_VAR = _DEFAULT_PROMETHEUS_ENV_VAR
+    DEFAULT_PROMETHEUS_ENV_VALUE = _DEFAULT_PROMETHEUS_ENV_VALUE
+    DEFAULT_PROMETHEUS_MODE = _DEFAULT_PROMETHEUS_MODE
+    DEFAULT_PUSH_JOB_NAME = _DEFAULT_PUSH_JOB_NAME
 
 
 def _extract_lib_config(env_cfg, lib_path):
@@ -248,3 +261,29 @@ def set_log_level(
 
 def default_loggers_config():
     return make_loggers_config("INFO")
+
+
+def set_prometheus_values(lib_cfg, env):
+    """
+    Set prometheus configuration values on the library config from environment variables.
+
+    If PROMETHEUS_GATEWAY environment variable is set, configures the library's prometheus_config
+    with the gateway host and port. This enables prometheus metrics pushing from the library.
+
+    Parameters
+    ----------
+    lib_cfg : LibraryConfig
+        The library configuration protobuf to modify
+    env : str
+        The environment name (used as prometheus instance identifier)
+    """
+    prometheus_url = os.getenv(Defaults.DEFAULT_PUSHGATEWAY_ENV_VAR)
+    if prometheus_url and lib_cfg.lib_desc.version.prometheus_config.host == "":
+        lib_cfg.lib_desc.version.prometheus_config.instance = env
+        lib_cfg.lib_desc.version.prometheus_config.host = prometheus_url.split(":")[0]
+        lib_cfg.lib_desc.version.prometheus_config.port = prometheus_url.split(":")[1]
+        lib_cfg.lib_desc.version.prometheus_config.job_name = Defaults.DEFAULT_PUSH_JOB_NAME
+        lib_cfg.lib_desc.version.prometheus_config.prometheus_env = os.getenv(
+            Defaults.DEFAULT_PROMETHEUS_ENV_VAR, Defaults.DEFAULT_PROMETHEUS_ENV_VALUE
+        )
+        lib_cfg.lib_desc.version.prometheus_config.prometheus_model = Defaults.DEFAULT_PROMETHEUS_MODE
