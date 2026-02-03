@@ -331,7 +331,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("start_index", &DescriptorItem::start_index)
             .def_property_readonly("end_index", &DescriptorItem::end_index)
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
-            .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+            .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
+            .def_property_readonly("segment", &DescriptorItem::segment);
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
@@ -862,12 +863,19 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Flush the version cache")
             .def("read_descriptor",
                  &PythonVersionStore::read_descriptor,
+                 py::arg("stream_id"),
+                 py::arg("version_query"),
+                 py::arg("include_segment") = false,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Get back the descriptor for a symbol.")
+                 "Get back the descriptor for a symbol. Optionally include the index segment.")
             .def("batch_read_descriptor",
                  &PythonVersionStore::batch_read_descriptor,
+                 py::arg("stream_ids"),
+                 py::arg("version_queries"),
+                 py::arg("batch_read_options"),
+                 py::arg("include_segment") = false,
                  py::call_guard<SingleThreadMutexHolder>(),
-                 "Get back the descriptor of a list of symbols.")
+                 "Get back the descriptor of a list of symbols. Optionally include the index segments.")
             .def(
                     "restore_version",
                     [&](PythonVersionStore& v,

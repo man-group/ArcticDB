@@ -1372,16 +1372,17 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
     return results;
 }
 
-DescriptorItem PythonVersionStore::read_descriptor(const StreamId& stream_id, const VersionQuery& version_query) {
-    return read_descriptor_internal(stream_id, version_query);
+DescriptorItem PythonVersionStore::read_descriptor(
+        const StreamId& stream_id, const VersionQuery& version_query, bool include_segment
+) {
+    return read_descriptor_internal(stream_id, version_query, include_segment);
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_read_descriptor(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        const BatchReadOptions& batch_read_options
+        const BatchReadOptions& batch_read_options, bool include_segment
 ) {
-
-    return batch_read_descriptor_internal(stream_ids, version_queries, batch_read_options);
+    return batch_read_descriptor_internal(stream_ids, version_queries, batch_read_options, include_segment);
 }
 
 ReadResult PythonVersionStore::read_index(

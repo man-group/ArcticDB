@@ -140,10 +140,12 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const BatchReadOptions& batch_read_options
+            const BatchReadOptions& batch_read_options, bool include_segment = false
     );
 
-    DescriptorItem read_descriptor(const StreamId& stream_id, const VersionQuery& version_query);
+    DescriptorItem read_descriptor(
+            const StreamId& stream_id, const VersionQuery& version_query, bool include_segment = false
+    );
 
     ReadResult read_index(
             const StreamId& stream_id, const VersionQuery& version_query, OutputFormat output_format,

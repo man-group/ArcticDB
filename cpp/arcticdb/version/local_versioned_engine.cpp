@@ -488,9 +488,9 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     return versioned_item;
 }
 
-folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, bool include_segment) {
     const auto key = std::move(k);
-    return store()->read(key).thenValue([](auto&& key_seg_pair) -> DescriptorItem {
+    return store()->read(key).thenValue([include_segment](auto&& key_seg_pair) -> DescriptorItem {
         auto key = to_atom(std::move(key_seg_pair.first));
         auto seg = std::move(key_seg_pair.second);
         std::optional<TimeseriesDescriptor> timeseries_descriptor;
@@ -524,29 +524,33 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) 
                     }
             );
         }
-        return DescriptorItem{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
+        DescriptorItem result{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
+        if (include_segment) {
+            result.segment_ = std::move(seg);
+        }
+        return result;
     });
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
         folly::Future<std::optional<AtomKey>>&& opt_index_key_fut, const StreamId& stream_id,
-        const VersionQuery& version_query
+        const VersionQuery& version_query, bool include_segment
 ) {
     return std::move(opt_index_key_fut)
-            .thenValue([this, &stream_id, &version_query](std::optional<AtomKey>&& opt_index_key) {
+            .thenValue([this, &stream_id, &version_query, include_segment](std::optional<AtomKey>&& opt_index_key) {
                 missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                         opt_index_key.has_value(),
                         "Unable to retrieve descriptor data. {}@{}: version not found",
                         stream_id,
                         version_query
                 );
-                return get_descriptor(std::move(*opt_index_key));
+                return get_descriptor(std::move(*opt_index_key), include_segment);
             })
             .via(&async::cpu_executor());
 }
 
 DescriptorItem LocalVersionedEngine::read_descriptor_internal(
-        const StreamId& stream_id, const VersionQuery& version_query
+        const StreamId& stream_id, const VersionQuery& version_query, bool include_segment
 ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
     auto version = get_version_to_read(stream_id, version_query);
@@ -556,19 +560,19 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
             stream_id,
             version_query
     );
-    return get_descriptor(std::move(version->key_)).get();
+    return get_descriptor(std::move(version->key_), include_segment).get();
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        const BatchReadOptions& batch_read_options
+        const BatchReadOptions& batch_read_options, bool include_segment
 ) {
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
-        descriptor_futures.emplace_back(
-                get_descriptor_async(std::move(opt_index_key_fut), stream_ids[idx], version_queries[idx])
-        );
+        descriptor_futures.emplace_back(get_descriptor_async(
+                std::move(opt_index_key_fut), stream_ids[idx], version_queries[idx], include_segment
+        ));
     }
     auto descriptors = folly::collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;

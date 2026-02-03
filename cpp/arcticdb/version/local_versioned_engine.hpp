@@ -166,7 +166,9 @@ class LocalVersionedEngine : public VersionedEngine {
             const ReadOptions& read_options, bool prune_previous_versions
     ) override;
 
-    DescriptorItem read_descriptor_internal(const StreamId& stream_id, const VersionQuery& version_query);
+    DescriptorItem read_descriptor_internal(
+            const StreamId& stream_id, const VersionQuery& version_query, bool include_segment = false
+    );
 
     StageResult write_parallel_frame(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index,
@@ -218,11 +220,11 @@ class LocalVersionedEngine : public VersionedEngine {
             const VersionQuery& version_query
     );
 
-    folly::Future<DescriptorItem> get_descriptor(AtomKey&& key);
+    folly::Future<DescriptorItem> get_descriptor(AtomKey&& key, bool include_segment = false);
 
     folly::Future<DescriptorItem> get_descriptor_async(
             folly::Future<std::optional<AtomKey>>&& opt_index_key_fut, const StreamId& stream_id,
-            const VersionQuery& version_query
+            const VersionQuery& version_query, bool include_segment = false
     );
 
     void create_column_stats_internal(
@@ -299,7 +301,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const BatchReadOptions& batch_read_options
+            const BatchReadOptions& batch_read_options, bool include_segment = false
     );
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
