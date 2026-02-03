@@ -216,6 +216,9 @@ set(arcticdb_srcs
         column_store/column.hpp
         column_store/column_algorithms.hpp
         column_store/column_utils.hpp
+        column_store/column_utils_python.hpp
+        column_store/column_python_adapters.hpp
+        column_store/buffer_protocol_python_adapters.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
@@ -451,6 +454,9 @@ set(arcticdb_srcs
         column_store/column.cpp
         column_store/column_data.cpp
         column_store/column_utils.cpp
+        column_store/column_utils_python.cpp
+        column_store/column_python_adapters.cpp
+        column_store/buffer_protocol_python_adapters.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
         column_store/memory_segment.cpp
