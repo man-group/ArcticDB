@@ -704,3 +704,119 @@ def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_s
     for test in [test_prune_previous_kwarg_batch_methods]:
         test()
         clear()
+
+
+def test_column_stats_query_optimization(lmdb_version_store_tiny_segment, any_output_format):
+    """
+    Test that column stats are used to optimize QueryBuilder queries by pruning segments.
+
+    The data is structured so that:
+    - Segment 0: col_1 values [1, 2] (min=1, max=2)
+    - Segment 1: col_1 values [3, 4] (min=3, max=4)
+
+    Query col_1 > 2.5 should only match segment 1 values.
+    With column stats, segment 0 should be pruned (max=2 < 2.5).
+    """
+    from arcticdb.version_store.processing import QueryBuilder
+
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_query_optimization"
+
+    # Segment 0: col_1 = [1, 2]
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    # Segment 1: col_1 = [3, 4]
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    # Create column stats for col_1
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    # Test 1: col_1 > 2 should return rows from both segments (but segment 0 has no matches)
+    # Result should be [3, 4] from segment 1
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 2
+    assert list(result["col_1"]) == [3, 4]
+
+    # Test 2: col_1 > 4 should return nothing (segment 1 max=4, so prune both)
+    q = QueryBuilder()
+    q = q[q["col_1"] > 4]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 0
+
+    # Test 3: col_1 < 2 should return [1] from segment 0 only
+    q = QueryBuilder()
+    q = q[q["col_1"] < 2]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 1
+    assert list(result["col_1"]) == [1]
+
+    # Test 4: col_1 == 3 should return [3] from segment 1 (segment 0 should be pruned)
+    q = QueryBuilder()
+    q = q[q["col_1"] == 3]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 1
+    assert list(result["col_1"]) == [3]
+
+    # Test 5: col_1 >= 1 should return all rows (no pruning possible)
+    q = QueryBuilder()
+    q = q[q["col_1"] >= 1]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 4
+    assert list(result["col_1"]) == [1, 2, 3, 4]
+
+
+def test_column_stats_query_optimization_without_stats(lmdb_version_store_tiny_segment, any_output_format):
+    """
+    Test that queries still work correctly when no column stats exist.
+    This ensures backward compatibility.
+    """
+    from arcticdb.version_store.processing import QueryBuilder
+
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_query_optimization_without_stats"
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    # No column stats created - query should still work
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 2
+    assert list(result["col_1"]) == [3, 4]
+
+
+def test_column_stats_query_optimization_column_not_in_stats(lmdb_version_store_tiny_segment, any_output_format):
+    """
+    Test that queries work when column stats exist but not for the filtered column.
+    """
+    from arcticdb.version_store.processing import QueryBuilder
+
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_query_optimization_column_not_in_stats"
+
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    # Create column stats for col_2 only, not col_1
+    lib.create_column_stats(sym, {"col_2": {"MINMAX"}})
+
+    # Query on col_1 (no stats) should still work
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 2
+    assert list(result["col_1"]) == [3, 4]

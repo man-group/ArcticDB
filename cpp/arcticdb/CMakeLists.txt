@@ -467,6 +467,7 @@ set(arcticdb_srcs
         log/log.cpp
         pipeline/column_mapping.cpp
         pipeline/column_stats.cpp
+        pipeline/column_stats_filter.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
@@ -490,6 +491,7 @@ set(arcticdb_srcs
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
+        processing/segment_filter_analysis.cpp
         processing/clause_utils.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp

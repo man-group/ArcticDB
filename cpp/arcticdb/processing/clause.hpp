@@ -78,6 +78,12 @@ struct IClause {
         OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const {
             return folly::poly_call<7>(*this, std::move(input_schemas));
         }
+
+        // Returns the expression context if this is a filter clause, nullptr otherwise
+        // Used for column stats pruning optimization
+        [[nodiscard]] const ExpressionContext* filter_expression_context() const {
+            return folly::poly_call<8>(*this);
+        }
     };
 
     template<class T>
@@ -87,7 +93,7 @@ struct IClause {
                     &T::structure_for_processing
             ),
             &T::process, &T::clause_info, &T::set_processing_config, &T::set_component_manager, &T::modify_schema,
-            &T::join_schemas>;
+            &T::join_schemas, &T::filter_expression_context>;
 };
 
 using Clause = folly::Poly<IClause>;
@@ -127,6 +133,8 @@ struct PassthroughClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
         util::raise_rte("PassThroughClause::join_schemas should never be called");
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct FilterClause {
@@ -188,6 +196,10 @@ struct FilterClause {
     void set_pipeline_optimisation(PipelineOptimisation pipeline_optimisation) {
         optimisation_ = pipeline_optimisation;
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const {
+        return expression_context_.get();
+    }
 };
 
 struct ProjectClause {
@@ -244,6 +256,8 @@ struct ProjectClause {
     }
 
     [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 
   private:
     void add_column(ProcessingUnit& proc, const ColumnWithStrings& col) const;
@@ -311,6 +325,8 @@ struct PartitionClause {
     }
 
     [[nodiscard]] std::string to_string() const { return fmt::format("GROUPBY Column[\"{}\"]", grouping_column_); }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct NamedAggregator {
@@ -366,6 +382,8 @@ struct AggregationClause {
     }
 
     [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 template<ResampleBoundary closed_boundary>
@@ -433,6 +451,8 @@ struct ResampleClause {
             const std::vector<std::shared_ptr<Column>>& input_index_columns,
             const std::vector<timestamp>& bucket_boundaries
     ) const;
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 template<typename T>
@@ -479,6 +499,8 @@ struct RemoveColumnPartitioningClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
         util::raise_rte("RemoveColumnPartitioningClause::join_schemas should never be called");
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct SplitClause {
@@ -514,6 +536,8 @@ struct SplitClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
         util::raise_rte("SplitClause::join_schemas should never be called");
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct SortClause {
@@ -553,6 +577,8 @@ struct SortClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
         util::raise_rte("SortClause::join_schemas should never be called");
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct MergeClause {
@@ -592,6 +618,8 @@ struct MergeClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
         util::raise_rte("MergeClause::join_schemas should never be called");
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct ColumnStatsGenerationClause {
@@ -640,6 +668,8 @@ struct ColumnStatsGenerationClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
         util::raise_rte("ColumnStatsGenerationClause::join_schemas should never be called");
     }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 // Used by head and tail to discard rows not requested by the user
@@ -717,6 +747,8 @@ struct RowRangeClause {
     [[nodiscard]] std::string to_string() const;
 
     void calculate_start_and_end(size_t total_rows);
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct DateRangeClause {
@@ -763,6 +795,8 @@ struct DateRangeClause {
     [[nodiscard]] timestamp end() const { return end_; }
 
     [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct ConcatClause {
@@ -797,6 +831,8 @@ struct ConcatClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const;
 
     [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct WriteClause {
@@ -832,6 +868,8 @@ struct WriteClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 
   private:
     stream::PartialKey create_partial_key(const SegmentInMemory& segment) const;
