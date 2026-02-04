@@ -56,10 +56,11 @@ std::vector<PruneablePredicate> extract_pruneable_predicates(const ExpressionCon
 
 /**
  * Statistics for a single segment/column combination.
+ * Stores min/max values in their native types to avoid precision loss.
  */
 struct ColumnStatValues {
-    std::optional<double> min_value;
-    std::optional<double> max_value;
+    std::optional<Value> min_value;
+    std::optional<Value> max_value;
 
     bool has_values() const { return min_value.has_value() && max_value.has_value(); }
 };
@@ -82,9 +83,10 @@ bool can_prune_segment(
 );
 
 /**
- * Convert a Value to double for comparison purposes.
- * Returns std::nullopt if the value type cannot be converted to double.
+ * Compare two numeric Value objects.
+ * Returns: negative if left < right, 0 if equal, positive if left > right
+ * Returns std::nullopt if the values cannot be compared (e.g., incompatible types).
  */
-std::optional<double> value_to_double(const Value& value);
+std::optional<int> compare_values(const Value& left, const Value& right);
 
 } // namespace arcticdb

@@ -103,9 +103,12 @@ void extract_predicates_recursive(
             predicates.push_back(std::move(*predicate));
         }
 
-        // For AND operations, recurse into both sides (both must be true, so we can prune if either allows)
-        // For now, we only handle top-level simple predicates - not nested AND/OR
-        // This is a simplification for the initial implementation
+        // For AND operations, recurse into both sides
+        // Since both conditions must be true, we can prune if either predicate allows pruning
+        if (node->operation_type_ == OperationType::AND) {
+            extract_predicates_recursive(node->left_, context, predicates);
+            extract_predicates_recursive(node->right_, context, predicates);
+        }
     }
 }
 
@@ -121,6 +124,19 @@ std::vector<PruneablePredicate> extract_pruneable_predicates(const ExpressionCon
     return predicates;
 }
 
+namespace {
+
+// Helper to compare two values of the same type
+template<typename T>
+int compare_typed(T left, T right) {
+    if (left < right)
+        return -1;
+    if (left > right)
+        return 1;
+    return 0;
+}
+
+// Convert a Value to double for comparison purposes
 std::optional<double> value_to_double(const Value& value) {
     switch (value.data_type()) {
     case DataType::UINT8:
@@ -146,9 +162,33 @@ std::optional<double> value_to_double(const Value& value) {
     case DataType::NANOSECONDS_UTC64:
         return static_cast<double>(value.get<int64_t>());
     default:
-        // String and other types not supported for comparison
         return std::nullopt;
     }
+}
+
+} // anonymous namespace
+
+std::optional<int> compare_values(const Value& left, const Value& right) {
+    // Compare using native types when both values have the same type
+    if (left.data_type() == right.data_type()) {
+        return details::visit_type(left.data_type(), [&left, &right]<typename TypeTag>(TypeTag) -> std::optional<int> {
+            using RawType = typename TypeTag::raw_type;
+            if constexpr (std::is_arithmetic_v<RawType>) {
+                auto left_val = left.get<RawType>();
+                auto right_val = right.get<RawType>();
+                return compare_typed(left_val, right_val);
+            }
+            return std::nullopt;
+        });
+    }
+
+    // Fall back to double comparison for different types
+    auto left_double = value_to_double(left);
+    auto right_double = value_to_double(right);
+    if (!left_double.has_value() || !right_double.has_value()) {
+        return std::nullopt;
+    }
+    return compare_typed(*left_double, *right_double);
 }
 
 bool can_prune_segment_with_predicate(const PruneablePredicate& predicate, const ColumnStatValues& stats) {
@@ -157,15 +197,18 @@ bool can_prune_segment_with_predicate(const PruneablePredicate& predicate, const
         return false;
     }
 
-    auto predicate_value = value_to_double(*predicate.value);
-    if (!predicate_value.has_value()) {
-        // Cannot convert predicate value to double, cannot prune
+    const Value& predicate_val = *predicate.value;
+    const Value& min_val = *stats.min_value;
+    const Value& max_val = *stats.max_value;
+
+    // Compare predicate value against min and max using native types
+    auto cmp_max = compare_values(predicate_val, max_val); // predicate_val vs max
+    auto cmp_min = compare_values(predicate_val, min_val); // predicate_val vs min
+
+    if (!cmp_max.has_value() || !cmp_min.has_value()) {
+        // Cannot compare values (incompatible types), cannot prune
         return false;
     }
-
-    const double val = *predicate_value;
-    const double min = *stats.min_value;
-    const double max = *stats.max_value;
 
     // Determine the effective operation based on column position
     // If column is on left: col OP value -> use op directly
@@ -197,26 +240,34 @@ bool can_prune_segment_with_predicate(const PruneablePredicate& predicate, const
     // Now check if we can prune based on the effective operation
     // We're checking: can ANY value in [min, max] satisfy "col effective_op val"?
     // If no value can satisfy it, we can prune.
+    //
+    // cmp_max: negative means predicate_val < max, 0 means equal, positive means predicate_val > max
+    // cmp_min: negative means predicate_val < min, 0 means equal, positive means predicate_val > min
     switch (effective_op) {
     case OperationType::GT:
         // col > val: prune if max <= val (no value in segment can be > val)
-        return max <= val;
+        // prune if predicate_val >= max (cmp_max >= 0)
+        return *cmp_max >= 0;
 
     case OperationType::GE:
         // col >= val: prune if max < val (no value in segment can be >= val)
-        return max < val;
+        // prune if predicate_val > max (cmp_max > 0)
+        return *cmp_max > 0;
 
     case OperationType::LT:
         // col < val: prune if min >= val (no value in segment can be < val)
-        return min >= val;
+        // prune if predicate_val <= min (cmp_min <= 0)
+        return *cmp_min <= 0;
 
     case OperationType::LE:
         // col <= val: prune if min > val (no value in segment can be <= val)
-        return min > val;
+        // prune if predicate_val < min (cmp_min < 0)
+        return *cmp_min < 0;
 
     case OperationType::EQ:
         // col == val: prune if val < min or val > max
-        return val < min || val > max;
+        // prune if predicate_val < min (cmp_min < 0) or predicate_val > max (cmp_max > 0)
+        return *cmp_min < 0 || *cmp_max > 0;
 
     default:
         return false;
@@ -239,10 +290,8 @@ bool can_prune_segment(
         if (can_prune_segment_with_predicate(predicate, *stats)) {
             ARCTICDB_DEBUG(
                     log::version(),
-                    "Column stats pruning: predicate on column '{}' allows pruning (min={}, max={})",
-                    predicate.column_name,
-                    stats->min_value.value_or(0.0),
-                    stats->max_value.value_or(0.0)
+                    "Column stats pruning: predicate on column '{}' allows pruning",
+                    predicate.column_name
             );
             return true;
         }

@@ -14,8 +14,23 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 
 enum class ColumnStatType { MINMAX };
 
+// Internal stat type distinguishing MIN from MAX (MINMAX maps to both)
+enum class ColumnStatTypeInternal { MIN, MAX };
+
 static const char* const start_index_column_name = "start_index";
 static const char* const end_index_column_name = "end_index";
+
+/**
+ * Parse a column stats segment column name and extract the stat type (MIN or MAX) and original column name.
+ * Expected format: "vX.Y_MIN(column)" or "vX.Y_MAX(column)"
+ *
+ * @param segment_column_name The column name from the stats segment
+ * @return A pair of (column_name, is_min) where is_min is true for MIN columns, false for MAX
+ *         Returns std::nullopt if the column name is not a valid stats column (e.g., start_index, end_index)
+ */
+std::optional<std::pair<std::string, ColumnStatTypeInternal>> parse_stats_column_name(
+        std::string_view segment_column_name
+);
 
 class ColumnStats {
   public:

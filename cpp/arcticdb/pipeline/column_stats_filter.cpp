@@ -9,82 +9,38 @@
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
+#include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/codec/segment.hpp>
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb {
 
 namespace {
 
-// Parse column stats segment column name to extract the original column name and stat type
-// Expected format: "vX.Y_MIN(column)" or "vX.Y_MAX(column)"
-std::optional<std::pair<std::string, bool>> parse_stats_column_name(std::string_view name) {
-    // Skip version prefix (e.g., "v1.0_")
-    auto underscore_pos = name.find('_');
-    if (underscore_pos == std::string_view::npos) {
-        return std::nullopt;
-    }
-
-    auto pattern = name.substr(underscore_pos + 1);
-
-    bool is_min = false;
-
-    if (pattern.starts_with("MIN(")) {
-        is_min = true;
-        pattern = pattern.substr(4); // Remove "MIN("
-    } else if (pattern.starts_with("MAX(")) {
-        // is_min stays false for MAX
-        pattern = pattern.substr(4); // Remove "MAX("
-    } else {
-        return std::nullopt;
-    }
-
-    // Remove trailing ")"
-    if (!pattern.ends_with(")")) {
-        return std::nullopt;
-    }
-    pattern = pattern.substr(0, pattern.size() - 1);
-
-    return std::make_pair(std::string(pattern), is_min);
-}
-
-// Get a double value from a segment column at a given row
-std::optional<double> get_double_value_at(const SegmentInMemory& segment, size_t col_idx, size_t row) {
+// Get a Value from a segment column at a given row, preserving the native type
+std::optional<Value> get_value_at(const SegmentInMemory& segment, size_t col_idx, size_t row) {
     if (row >= segment.row_count()) {
         return std::nullopt;
     }
 
     const auto& field = segment.descriptor().field(col_idx);
     const auto& column = segment.column(col_idx);
+    const auto data_type = field.type().data_type();
 
-    switch (field.type().data_type()) {
-    case DataType::UINT8:
-        return static_cast<double>(column.scalar_at<uint8_t>(row).value());
-    case DataType::UINT16:
-        return static_cast<double>(column.scalar_at<uint16_t>(row).value());
-    case DataType::UINT32:
-        return static_cast<double>(column.scalar_at<uint32_t>(row).value());
-    case DataType::UINT64:
-        return static_cast<double>(column.scalar_at<uint64_t>(row).value());
-    case DataType::INT8:
-        return static_cast<double>(column.scalar_at<int8_t>(row).value());
-    case DataType::INT16:
-        return static_cast<double>(column.scalar_at<int16_t>(row).value());
-    case DataType::INT32:
-        return static_cast<double>(column.scalar_at<int32_t>(row).value());
-    case DataType::INT64:
-        return static_cast<double>(column.scalar_at<int64_t>(row).value());
-    case DataType::FLOAT32:
-        return static_cast<double>(column.scalar_at<float>(row).value());
-    case DataType::FLOAT64:
-        return column.scalar_at<double>(row).value();
-    case DataType::NANOSECONDS_UTC64:
-        return static_cast<double>(column.scalar_at<int64_t>(row).value());
-    default:
+    return details::visit_type(data_type, [&column, row, data_type]<typename TypeTag>(TypeTag) -> std::optional<Value> {
+        using RawType = typename TypeTag::raw_type;
+        if constexpr (std::is_arithmetic_v<RawType>) {
+            auto val_opt = column.scalar_at<RawType>(row);
+            if (!val_opt.has_value()) {
+                return std::nullopt;
+            }
+            return Value(*val_opt, data_type);
+        }
         return std::nullopt;
-    }
+    });
 }
 
 } // anonymous namespace
@@ -116,12 +72,12 @@ std::optional<ColumnStatsData> try_load_column_stats(
             } else if (name == end_index_column_name) {
                 data.end_index_col = i;
             } else {
-                // Try to parse as a stats column
+                // Try to parse as a stats column using the shared parsing function
                 auto parsed = parse_stats_column_name(name);
                 if (parsed.has_value()) {
-                    const auto& [col_name, is_min] = *parsed;
+                    const auto& [col_name, stat_type] = *parsed;
                     auto& indices = data.column_min_max_indices[col_name];
-                    if (is_min) {
+                    if (stat_type == ColumnStatTypeInternal::MIN) {
                         indices.first = i;
                     } else {
                         indices.second = i;
@@ -146,9 +102,9 @@ std::optional<ColumnStatsData> try_load_column_stats(
         );
 
         return data;
-    } catch (const std::exception& e) {
-        // Column stats don't exist or failed to read - this is normal
-        ARCTICDB_DEBUG(log::version(), "No column stats available: {}", e.what());
+    } catch (const storage::KeyNotFoundException&) {
+        // Column stats key doesn't exist - this is normal when stats haven't been created
+        ARCTICDB_DEBUG(log::version(), "No column stats key found for this version");
         return std::nullopt;
     }
 }
@@ -218,14 +174,14 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
                             return std::nullopt;
                         }
 
-                        auto min_val = get_double_value_at(stats->segment, col_it->second.first, stats_row);
-                        auto max_val = get_double_value_at(stats->segment, col_it->second.second, stats_row);
+                        auto min_val = get_value_at(stats->segment, col_it->second.first, stats_row);
+                        auto max_val = get_value_at(stats->segment, col_it->second.second, stats_row);
 
                         if (!min_val.has_value() || !max_val.has_value()) {
                             return std::nullopt;
                         }
 
-                        return ColumnStatValues{min_val, max_val};
+                        return ColumnStatValues{std::move(min_val), std::move(max_val)};
                     });
 
             if (should_prune) {

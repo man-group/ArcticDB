@@ -834,3 +834,194 @@ def test_column_stats_query_optimization_column_not_in_stats(lmdb_version_store_
     result = lib.read(sym, query_builder=q).data
     assert len(result) == 2
     assert list(result["col_1"]) == [3, 4]
+
+
+@pytest.mark.parametrize("output_format", ["PANDAS", "PYARROW"])
+def test_column_stats_query_optimization_multiple_filters(s3_store_factory, output_format):
+    """
+    Test that column stats pruning works correctly with multiple filters on different columns.
+
+    The data is structured so that:
+    - Segment 0: col_1 = [1, 2], col_2 = [10, 20]  (col_1 min=1, max=2; col_2 min=10, max=20)
+    - Segment 1: col_1 = [3, 4], col_2 = [30, 40]  (col_1 min=3, max=4; col_2 min=30, max=40)
+    - Segment 2: col_1 = [5, 6], col_2 = [50, 60]  (col_1 min=5, max=6; col_2 min=50, max=60)
+
+    Test various combinations of filters on both columns.
+    """
+    from arcticdb.version_store.processing import QueryBuilder
+    import arcticdb.toolbox.query_stats as qs
+    from arcticdb import OutputFormat
+
+    # Create S3 store with tiny segments (2 rows per segment)
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    if output_format == "PYARROW":
+        lib._set_output_format_for_pipeline_tests(OutputFormat.PYARROW)
+    sym = "test_column_stats_query_optimization_multiple_filters"
+
+    # Create 3 segments with distinct ranges for both columns
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [50, 60]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    # Create column stats for both columns
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+
+    def get_table_data_read_count():
+        """Get the number of TABLE_DATA keys read from query stats."""
+        stats = qs.get_query_stats()
+        if not stats or "storage_operations" not in stats:
+            return 0
+        storage_ops = stats["storage_operations"]
+        if "S3_GetObject" not in storage_ops:
+            return 0
+        get_ops = storage_ops["S3_GetObject"]
+        if "TABLE_DATA" not in get_ops:
+            return 0
+        return get_ops["TABLE_DATA"]["count"]
+
+    qs.enable()
+    try:
+        # Test 1: col_1 > 2 AND col_2 < 50 should only read segment 1
+        # Segment 0: col_1 max=2 <= 2, pruned by col_1 filter
+        # Segment 1: col_1 in [3,4], col_2 in [30,40], both filters pass
+        # Segment 2: col_2 min=50 >= 50, pruned by col_2 filter
+        q = QueryBuilder()
+        q = q[(q["col_1"] > 2) & (q["col_2"] < 50)]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 2
+        assert list(result["col_1"]) == [3, 4]
+        assert list(result["col_2"]) == [30, 40]
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
+
+        # Test 2: col_1 >= 3 AND col_2 > 35 should read segments 1 and 2
+        # Segment 0: col_1 max=2 < 3, pruned by col_1 filter
+        # Segment 1: might have col_2 > 35 (has 40)
+        # Segment 2: both filters pass
+        q = QueryBuilder()
+        q = q[(q["col_1"] >= 3) & (q["col_2"] > 35)]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 3  # [4] from seg 1, [5, 6] from seg 2
+        assert list(result["col_1"]) == [4, 5, 6]
+        assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads (segments 1 and 2), got {table_data_reads}"
+
+        # Test 3: col_1 == 1 AND col_2 == 10 should only read segment 0
+        # Only segment 0 can have col_1=1 (range [1,2]) and col_2=10 (range [10,20])
+        q = QueryBuilder()
+        q = q[(q["col_1"] == 1) & (q["col_2"] == 10)]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 1
+        assert list(result["col_1"]) == [1]
+        assert list(result["col_2"]) == [10]
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 0 only), got {table_data_reads}"
+
+        # Test 4: col_1 > 6 AND col_2 > 0 should read no segments
+        # All segments have col_1 max <= 6, so all pruned
+        q = QueryBuilder()
+        q = q[(q["col_1"] > 6) & (q["col_2"] > 0)]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 0
+        assert table_data_reads == 0, f"Expected 0 TABLE_DATA reads (all segments pruned), got {table_data_reads}"
+
+        # Test 5: Filter only on col_1 with stats on both - col_1 > 4 should only read segment 2
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 2
+        assert list(result["col_1"]) == [5, 6]
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 2 only), got {table_data_reads}"
+
+    finally:
+        qs.disable()
+
+
+@pytest.mark.parametrize(
+    "dtype,values_seg0,values_seg1,filter_val,expected_reads",
+    [
+        # Integer types
+        (np.int8, [-100, -50], [50, 100], 0, 1),  # filter > 0 prunes seg0
+        (np.int16, [-1000, -500], [500, 1000], 0, 1),
+        (np.int32, [-100000, -50000], [50000, 100000], 0, 1),
+        (np.int64, [-(10**15), -(10**14)], [10**14, 10**15], 0, 1),
+        # Unsigned integer types
+        (np.uint8, [1, 10], [200, 250], 100, 1),  # filter > 100 prunes seg0
+        (np.uint16, [1, 100], [50000, 60000], 1000, 1),
+        (np.uint32, [1, 1000], [3000000000, 4000000000], 2000000000, 1),
+        (np.uint64, [1, 1000], [10**18, 10**18 + 1000], 10**17, 1),
+        # Float types
+        (np.float32, [1.5, 2.5], [10.5, 11.5], 5.0, 1),  # filter > 5.0 prunes seg0
+        (np.float64, [1.5e10, 2.5e10], [10.5e10, 11.5e10], 5.0e10, 1),
+    ],
+)
+def test_column_stats_query_optimization_different_types(
+    s3_store_factory, dtype, values_seg0, values_seg1, filter_val, expected_reads
+):
+    """
+    Test that column stats pruning works correctly with different numeric column types.
+
+    This ensures that native type comparisons work correctly without precision loss
+    from converting to double.
+    """
+    from arcticdb.version_store.processing import QueryBuilder
+    import arcticdb.toolbox.query_stats as qs
+
+    # Create S3 store with tiny segments (2 rows per segment)
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = f"test_column_stats_types_{dtype.__name__}"
+
+    # Create two segments with the specified dtype
+    df0 = pd.DataFrame(
+        {"col": np.array(values_seg0, dtype=dtype)}, index=pd.date_range("2000-01-01", periods=len(values_seg0))
+    )
+    df1 = pd.DataFrame(
+        {"col": np.array(values_seg1, dtype=dtype)}, index=pd.date_range("2000-01-03", periods=len(values_seg1))
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    # Create column stats
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    def get_table_data_read_count():
+        stats = qs.get_query_stats()
+        if not stats or "storage_operations" not in stats:
+            return 0
+        storage_ops = stats["storage_operations"]
+        if "S3_GetObject" not in storage_ops:
+            return 0
+        get_ops = storage_ops["S3_GetObject"]
+        if "TABLE_DATA" not in get_ops:
+            return 0
+        return get_ops["TABLE_DATA"]["count"]
+
+    qs.enable()
+    try:
+        # Filter should prune segment 0 based on the filter_val
+        q = QueryBuilder()
+        q = q[q["col"] > filter_val]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+
+        # Verify pruning happened correctly
+        assert (
+            table_data_reads == expected_reads
+        ), f"Expected {expected_reads} TABLE_DATA read(s) for dtype {dtype.__name__}, got {table_data_reads}"
+        # Verify we got the right data (from segment 1)
+        assert len(result) == len(values_seg1)
+    finally:
+        qs.disable()

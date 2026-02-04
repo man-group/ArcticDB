@@ -55,8 +55,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     return merged;
 }
 
-// Needed as MINMAX maps to 2 columns in the column stats object
-enum class ColumnStatTypeInternal { MIN, MAX };
+// Note: ColumnStatTypeInternal is now declared in the header file
 
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
     struct Tag {};
@@ -104,8 +103,8 @@ std::string to_segment_column_name(
 }
 
 // Expected to be of the form "<operation>(<column name>)"
-std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_view pattern) {
-    const semi::map<std::string, ColumnStatType> name_to_type_map;
+// Returns (column_name, internal_type) where internal_type distinguishes MIN from MAX
+std::pair<std::string, ColumnStatTypeInternal> from_segment_column_name_v1_internal(std::string_view pattern) {
     const ankerl::unordered_dense::map<std::string, ColumnStatTypeInternal> operator_string_to_type{
             {"MIN", ColumnStatTypeInternal::MIN}, {"MAX", ColumnStatTypeInternal::MAX}
     };
@@ -125,13 +124,37 @@ std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_v
             "Unexpected column stat column format: {}",
             pattern
     );
-    struct Tag {};
-    using InternalToExternalColumnStatType = semi::static_map<ColumnStatTypeInternal, ColumnStatType, Tag>;
-    InternalToExternalColumnStatType::get(ColumnStatTypeInternal::MIN) = ColumnStatType::MINMAX;
-    InternalToExternalColumnStatType::get(ColumnStatTypeInternal::MAX) = ColumnStatType::MINMAX;
-    return std::make_pair(
-            std::string(pattern.substr(1, pattern.size() - 2)), InternalToExternalColumnStatType::get(*type)
-    );
+    return std::make_pair(std::string(pattern.substr(1, pattern.size() - 2)), *type);
+}
+
+// Wrapper that returns the external ColumnStatType (MINMAX for both MIN and MAX)
+std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_view pattern) {
+    auto [column_name, internal_type] = from_segment_column_name_v1_internal(pattern);
+    return std::make_pair(std::move(column_name), ColumnStatType::MINMAX);
+}
+
+std::optional<std::pair<std::string, ColumnStatTypeInternal>> parse_stats_column_name(
+        std::string_view segment_column_name
+) {
+    // Skip special columns
+    if (segment_column_name == start_index_column_name || segment_column_name == end_index_column_name) {
+        return std::nullopt;
+    }
+
+    // Expected format: "vX.Y_<pattern>" - extract the version-specific pattern
+    auto underscore_pos = segment_column_name.find('_');
+    if (underscore_pos == std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    auto pattern = segment_column_name.substr(underscore_pos + 1);
+
+    // Use the existing parsing logic
+    try {
+        return from_segment_column_name_v1_internal(pattern);
+    } catch (const ArcticException&) {
+        return std::nullopt;
+    }
 }
 
 std::string type_to_name(ColumnStatType type) {
