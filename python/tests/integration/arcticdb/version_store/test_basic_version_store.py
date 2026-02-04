@@ -3467,3 +3467,64 @@ def test_read_specific_version_reloads_when_new_versions_written(basic_store_fac
         # Now list_versions should show all 6 versions
         all_versions_b = lib_b.list_versions(symbol)
         assert len(all_versions_b) == 6
+
+
+@pytest.mark.storage
+def test_as_of_timestamp_cache_invalidation_on_new_version(basic_store_factory):
+    """
+    Test that reading with as_of timestamp correctly reloads the version chain when new versions
+    have been written by another client after the cached newest version's timestamp.
+
+    This tests the fix for FROM_TIME cache validation where the cache needs to track the newest
+    loaded timestamp (latest_loaded_timestamp_) to detect when a requested timestamp is newer
+    than what's cached, potentially missing newly written versions.
+    """
+    # Set a very long reload interval to ensure the fix is being tested
+    with config_context("VersionMap.ReloadInterval", sys.maxsize):
+        # Create two library instances pointing to the same storage (simulating two clients)
+        lib_a = basic_store_factory()
+        lib_b = basic_store_factory(reuse_name=True)
+
+        symbol = "test_as_of_timestamp_reload"
+        dataframes = [sample_dataframe() for _ in range(4)]
+
+        # Client A writes initial versions v0, v1
+        timestamps = []
+        for i in range(2):
+            with distinct_timestamps(lib_a) as ts:
+                lib_a.write(symbol, dataframes[i])
+            timestamps.append(ts)
+
+        # Client B reads all versions to populate its cache
+        all_versions_b = lib_b.list_versions(symbol)
+        assert len(all_versions_b) == 2
+
+        # Verify Client B can read by timestamp within the cached range
+        result = lib_b.read(symbol, as_of=timestamps[1].after)
+        assert result.version == 1
+        assert_equal(result.data, dataframes[1])
+
+        result = lib_b.read(symbol, as_of=timestamps[0].after)
+        assert result.version == 0
+        assert_equal(result.data, dataframes[0])
+
+        # Client A writes new versions v2, v3
+        for i in range(2, 4):
+            with distinct_timestamps(lib_a) as ts:
+                lib_a.write(symbol, dataframes[i])
+            timestamps.append(ts)
+
+        # Client B should be able to read using a timestamp after the new versions
+        # This should trigger a reload since the timestamp is newer than Client B's cached newest
+        result = lib_b.read(symbol, as_of=timestamps[3].after)
+        assert result.version == 3
+        assert_equal(result.data, dataframes[3])
+
+        # Client B should also be able to read the intermediate version
+        result = lib_b.read(symbol, as_of=timestamps[2].after)
+        assert result.version == 2
+        assert_equal(result.data, dataframes[2])
+
+        # Verify all versions are now visible
+        all_versions_b = lib_b.list_versions(symbol)
+        assert len(all_versions_b) == 4

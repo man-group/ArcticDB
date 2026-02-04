@@ -738,14 +738,25 @@ class VersionMapImpl {
         }
 
         const bool has_loaded_everything = entry->load_progress_.is_earliest_version_loaded;
-        const bool has_loaded_requested_version = requested_load_type == LoadType::DOWNTO ?
+        const bool has_loaded_requested_version_id = requested_load_type == LoadType::DOWNTO ?
                 loaded_as_far_as_version_id(*entry, requested_load_strategy.load_until_version_.value()) :
+                true;
+        const bool has_loaded_requested_timestamp = requested_load_type == LoadType::FROM_TIME ?
+                loaded_as_far_as_timestamp(
+                        *entry, requested_load_strategy.load_from_time_.value(),
+                        requested_load_strategy.should_include_deleted()
+                ) :
                 true;
         const bool has_loaded_earliest_undeleted =
                 entry->tombstone_all_.has_value() &&
                 entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
-        if ((has_loaded_everything && has_loaded_requested_version) ||
-            (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted)) {
+        
+        if ((has_loaded_everything && 
+             has_loaded_requested_version_id && 
+             has_loaded_requested_timestamp) ||
+            (!requested_load_strategy.should_include_deleted() && 
+              has_loaded_earliest_undeleted && 
+              has_loaded_requested_timestamp)) {
             return true;
         }
 
@@ -763,13 +774,10 @@ class VersionMapImpl {
         }
         case LoadType::DOWNTO:
             // We check whether the oldest loaded version is before or at the requested one
-            return has_loaded_requested_version;
+            return has_loaded_requested_version_id;
         case LoadType::FROM_TIME: {
-            // We check whether the cached (deleted or undeleted) timestamp is before or at the requested one
-            auto cached_timestamp = requested_load_strategy.should_include_deleted()
-                                            ? entry->load_progress_.earliest_loaded_timestamp_
-                                            : entry->load_progress_.earliest_loaded_undeleted_timestamp_;
-            return cached_timestamp <= requested_load_strategy.load_from_time_.value();
+            // We check whether the cached timestamps cover the requested one
+            return has_loaded_requested_timestamp;
         }
         case LoadType::ALL:
         case LoadType::UNKNOWN:
@@ -891,6 +899,31 @@ class VersionMapImpl {
                     return true;
                 }
             }
+        }
+        return false;
+    }
+
+    /**
+     * Whether entry contains as much of the version map as specified by load_param. Checks whether
+     * the loaded timestamps cover the requested timestamp range.
+     */
+    bool loaded_as_far_as_timestamp(const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions) const {
+        // Upper bound: always use latest_loaded_timestamp (including deleted) because we need to
+        // know if the requested timestamp within the loaded range
+        timestamp latest_loaded_timestamp = entry.load_progress_.latest_loaded_timestamp_;
+
+        // Lower bound: use the appropriate timestamp based on whether we need deleted versions
+        timestamp earliest_loaded_timestamp = include_deleted_versions ?
+                entry.load_progress_.earliest_loaded_timestamp_ :
+                entry.load_progress_.earliest_loaded_undeleted_timestamp_;
+        if (latest_loaded_timestamp >= requested_timestamp && earliest_loaded_timestamp <= requested_timestamp) {
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "Loaded as far as required timestamp {}, have latest loaded timestamp {}",
+                    requested_timestamp,
+                    latest_loaded_timestamp
+            );
+            return true;
         }
         return false;
     }
