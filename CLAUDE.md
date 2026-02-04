@@ -45,6 +45,8 @@ cpp/out/<preset>-build/arcticdb/test_unit_arcticdb --gtest_filter="TestSuite.Tes
 
 ## Running Python Tests
 
+If you have changed the C++ code you must rebuild the project before you run the tests.
+
 ```bash
 # Run all tests
 python -m pytest python/tests
