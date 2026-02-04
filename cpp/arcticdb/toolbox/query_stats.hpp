@@ -29,6 +29,7 @@ enum class TaskType : size_t {
     Memory_PutObject = 7,
     Memory_GetObject = 8,
     Memory_DeleteObject = 9,
+    Memory_HeadObject = 10,
     END
 };
 

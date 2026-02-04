@@ -50,14 +50,16 @@ std::string task_type_to_string(TaskType task_type) {
         return "S3_DeleteObjects";
     case TaskType::S3_HeadObject:
         return "S3_HeadObject";
-    case TaskType::Memory_GetObject:
-        return "Memory_GetObject";
-    case TaskType::Memory_DeleteObject:
-        return "Memory_DeleteObject";
     case TaskType::Memory_ListObjects:
         return "Memory_ListObjects";
     case TaskType::Memory_PutObject:
         return "Memory_PutObject";
+    case TaskType::Memory_GetObject:
+        return "Memory_GetObject";
+    case TaskType::Memory_DeleteObject:
+        return "Memory_DeleteObject";
+    case TaskType::Memory_HeadObject:
+        return "Memory_HeadObject";
     default:
         log::version().warn("Unknown task type {}", static_cast<int>(task_type));
         return "Unknown";

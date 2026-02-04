@@ -122,7 +122,7 @@ KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
 bool MemoryStorage::do_key_exists(const VariantKey& key) {
     ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
     auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::Memory_GetObject, variant_key_type(key));
+            query_stats::add_task_count_and_time(query_stats::TaskType::Memory_HeadObject, variant_key_type(key));
     const auto& key_vec = data_[variant_key_type(key)];
     auto it = key_vec.find(key);
     return it != key_vec.end();
