@@ -32,6 +32,10 @@ def _log_and_run(*cmd, **kwargs):
 
 
 def cleanup_vcpkg_artifacts():
+    if os.environ.get("ARCTICDB_KEEP_VCPKG_SOURCES", "0") != "0":
+        print("ARCTICDB_KEEP_VCPKG_SOURCES is set, skipping vcpkg cleanup")
+        return
+
     cpp_dir = Path("cpp")
     if not cpp_dir.exists():
         return
