@@ -1,0 +1,59 @@
+name: Flaky Tests Summary
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aggregate_flaky_tests:
+    runs-on: ubuntu-22.04
+    container: # Native runner doesn't allow setting up the ca softlinks required below
+      image: ubuntu:22.04
+    strategy:
+      matrix:
+        period:
+          - name: "1 week"
+            days: 7
+          - name: "6 months"
+            days: 180
+    steps:
+      - name: Select Python
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.11"
+
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+
+      - name: Install requirements
+        run: |
+          apt update
+          apt install -y git
+          python3 -m pip install arcticdb[Testing] "pandas<3"
+
+      - name: Setup softlink for SSL
+        shell: bash -el {0}
+        run: |
+          mkdir -p /etc/pki/tls
+          ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+          ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          bucket: "arcticdb-ci-pytest-results"
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      - name: Calculate since date
+        id: date
+        run: |
+          echo "since_date=$(date -d '-${{ matrix.period.days }} days' '+%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Aggregate flaky tests (${{ matrix.period.name }})
+        run: |
+          echo "## Flaky Tests Summary (${{ matrix.period.name }})" >> "$GITHUB_STEP_SUMMARY"
+          python3 build_tooling/aggregate_flaky_tests.py --since "${{ steps.date.outputs.since_date }}" --output "$GITHUB_STEP_SUMMARY" --md
