@@ -129,6 +129,8 @@ class IterateVersionChain:
 
     def teardown(self, num_versions, caching, deleted):
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
+        query_stats.reset_stats()
+        query_stats.disable()
         del self.lib
 
     def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted):
