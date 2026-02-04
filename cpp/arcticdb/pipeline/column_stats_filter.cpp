@@ -181,18 +181,17 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             }
         }
 
-        // Get iterators for start_row and end_row in the index segment
-        auto start_row_iter = isr.column(pipelines::index::Fields::start_row)
-            .begin<stream::SliceTypeDescriptorTag>();
-        auto end_row_iter = isr.column(pipelines::index::Fields::end_row)
-            .begin<stream::SliceTypeDescriptorTag>();
+        // Get iterators for start_index and end_index in the index segment
+        // Note: Column stats store timestamp indices (nanoseconds), not row numbers
+        const auto& start_index_col = isr.column(pipelines::index::Fields::start_index);
+        const auto& end_index_col = isr.column(pipelines::index::Fields::end_index);
 
         size_t pruned_count = 0;
 
         // Process each row in the index segment
-        for (size_t r = 0; r < isr.size(); ++r, ++start_row_iter, ++end_row_iter) {
-            int64_t start_row = *start_row_iter;
-            int64_t end_row = *end_row_iter;
+        for (size_t r = 0; r < isr.size(); ++r) {
+            int64_t start_idx = start_index_col.scalar_at<int64_t>(r).value();
+            int64_t end_idx = end_index_col.scalar_at<int64_t>(r).value();
 
             // If there's an input bitset and this row is already excluded, skip it
             if (input && !input->test(r)) {
@@ -200,7 +199,7 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             }
 
             // Look up column stats for this segment
-            auto stats_it = stats_index.find(std::make_pair(start_row, end_row));
+            auto stats_it = stats_index.find(std::make_pair(start_idx, end_idx));
             if (stats_it == stats_index.end()) {
                 // No stats for this segment, include it
                 res->set_bit(r, true);
@@ -228,8 +227,8 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
 
             if (should_prune) {
                 ARCTICDB_DEBUG(log::version(),
-                    "Column stats pruning: Skipping segment {} (rows {}-{})",
-                    r, start_row, end_row);
+                    "Column stats pruning: Skipping segment {} (index {}-{})",
+                    r, start_idx, end_idx);
                 pruned_count++;
                 // Don't set the bit - segment is pruned
             } else {

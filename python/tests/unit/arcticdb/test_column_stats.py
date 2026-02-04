@@ -706,21 +706,28 @@ def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_s
         clear()
 
 
-def test_column_stats_query_optimization(lmdb_version_store_tiny_segment, any_output_format):
+@pytest.mark.parametrize("output_format", ["PANDAS", "PYARROW"])
+def test_column_stats_query_optimization(s3_store_factory, output_format):
     """
     Test that column stats are used to optimize QueryBuilder queries by pruning segments.
+
+    Uses S3 storage so that query_stats can be used to verify the number of TABLE_DATA
+    keys read (LMDB doesn't support query_stats).
 
     The data is structured so that:
     - Segment 0: col_1 values [1, 2] (min=1, max=2)
     - Segment 1: col_1 values [3, 4] (min=3, max=4)
 
-    Query col_1 > 2.5 should only match segment 1 values.
-    With column stats, segment 0 should be pruned (max=2 < 2.5).
+    Query col_1 > 2 should only need to read segment 1 (segment 0 max=2 <= 2).
     """
     from arcticdb.version_store.processing import QueryBuilder
+    import arcticdb.toolbox.query_stats as qs
+    from arcticdb import OutputFormat
 
-    lib = lmdb_version_store_tiny_segment
-    lib._set_output_format_for_pipeline_tests(any_output_format)
+    # Create S3 store with tiny segments (2 rows per segment)
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    if output_format == "PYARROW":
+        lib._set_output_format_for_pipeline_tests(OutputFormat.PYARROW)
     sym = "test_column_stats_query_optimization"
 
     # Segment 0: col_1 = [1, 2]
@@ -734,40 +741,72 @@ def test_column_stats_query_optimization(lmdb_version_store_tiny_segment, any_ou
     # Create column stats for col_1
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    # Test 1: col_1 > 2 should return rows from both segments (but segment 0 has no matches)
-    # Result should be [3, 4] from segment 1
-    q = QueryBuilder()
-    q = q[q["col_1"] > 2]
-    result = lib.read(sym, query_builder=q).data
-    assert len(result) == 2
-    assert list(result["col_1"]) == [3, 4]
+    def get_table_data_read_count():
+        """Get the number of TABLE_DATA keys read from query stats."""
+        stats = qs.get_query_stats()
+        if not stats or "storage_operations" not in stats:
+            return 0
+        storage_ops = stats["storage_operations"]
+        if "S3_GetObject" not in storage_ops:
+            return 0
+        get_ops = storage_ops["S3_GetObject"]
+        if "TABLE_DATA" not in get_ops:
+            return 0
+        return get_ops["TABLE_DATA"]["count"]
 
-    # Test 2: col_1 > 4 should return nothing (segment 1 max=4, so prune both)
-    q = QueryBuilder()
-    q = q[q["col_1"] > 4]
-    result = lib.read(sym, query_builder=q).data
-    assert len(result) == 0
+    qs.enable()
+    try:
+        # Test 1: col_1 > 2 should only read segment 1 (segment 0 max=2 <= 2, pruned)
+        # Result should be [3, 4] from segment 1
+        q = QueryBuilder()
+        q = q[q["col_1"] > 2]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 2
+        assert list(result["col_1"]) == [3, 4]
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
 
-    # Test 3: col_1 < 2 should return [1] from segment 0 only
-    q = QueryBuilder()
-    q = q[q["col_1"] < 2]
-    result = lib.read(sym, query_builder=q).data
-    assert len(result) == 1
-    assert list(result["col_1"]) == [1]
+        # Test 2: col_1 > 4 should read no segments (both segments pruned: max <= 4)
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 0
+        assert table_data_reads == 0, f"Expected 0 TABLE_DATA reads (all segments pruned), got {table_data_reads}"
 
-    # Test 4: col_1 == 3 should return [3] from segment 1 (segment 0 should be pruned)
-    q = QueryBuilder()
-    q = q[q["col_1"] == 3]
-    result = lib.read(sym, query_builder=q).data
-    assert len(result) == 1
-    assert list(result["col_1"]) == [3]
+        # Test 3: col_1 < 2 should only read segment 0 (segment 1 min=3 >= 2, pruned)
+        q = QueryBuilder()
+        q = q[q["col_1"] < 2]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 1
+        assert list(result["col_1"]) == [1]
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 0 only), got {table_data_reads}"
 
-    # Test 5: col_1 >= 1 should return all rows (no pruning possible)
-    q = QueryBuilder()
-    q = q[q["col_1"] >= 1]
-    result = lib.read(sym, query_builder=q).data
-    assert len(result) == 4
-    assert list(result["col_1"]) == [1, 2, 3, 4]
+        # Test 4: col_1 == 3 should only read segment 1 (segment 0 max=2 < 3, pruned)
+        q = QueryBuilder()
+        q = q[q["col_1"] == 3]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 1
+        assert list(result["col_1"]) == [3]
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
+
+        # Test 5: col_1 >= 1 should read both segments (no pruning possible)
+        q = QueryBuilder()
+        q = q[q["col_1"] >= 1]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = get_table_data_read_count()
+        assert len(result) == 4
+        assert list(result["col_1"]) == [1, 2, 3, 4]
+        assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads (both segments), got {table_data_reads}"
+    finally:
+        qs.disable()
 
 
 def test_column_stats_query_optimization_without_stats(lmdb_version_store_tiny_segment, any_output_format):
