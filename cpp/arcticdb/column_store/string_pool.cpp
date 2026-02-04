@@ -10,6 +10,7 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/segment_utils.hpp>
 #include <arcticdb/util/regex_filter.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -75,15 +76,6 @@ std::shared_ptr<StringPool> StringPool::clone() const {
     output->map_ = map_;
     output->shapes_ = shapes_.clone();
     return output;
-}
-
-StringPool& StringPool::operator=(StringPool&& that) noexcept {
-    if (this != &that) {
-        block_ = std::move(that.block_);
-        map_ = std::move(that.map_);
-        shapes_ = std::move(that.shapes_);
-    }
-    return *this;
 }
 
 ColumnData StringPool::column_data() const {

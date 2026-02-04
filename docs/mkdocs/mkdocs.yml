@@ -133,7 +133,8 @@ nav:
   - Staged Data Notebook: 'notebooks/ArcticDB_staged_data_with_tokens.ipynb'
   - Recursive normalizer Notebook: 'notebooks/ArcticDB_demo_recursive_normalizers.ipynb'
   - Arrow Notebook: 'notebooks/ArcticDB_demo_read_as_arrow.ipynb'
-- Python API Reference: 
+  - Merge Notebook: 'notebooks/ArcticDB_merge.ipynb'
+- Python API Reference:
   - Introduction: 'api/index.md'
   - Arctic: 'api/arctic.md'
   - Arctic URI: 'api/arctic_uri.md'

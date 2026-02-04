@@ -19,6 +19,12 @@ std::vector<std::vector<EntityId>> structure_by_row_slice(
         ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
     auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    return structure_by_row_slice(component_manager, std::move(entity_ids));
+}
+
+std::vector<std::vector<EntityId>> structure_by_row_slice(
+        ComponentManager& component_manager, std::vector<EntityId>&& entity_ids
+) {
     auto [row_ranges, col_ranges] =
             component_manager.get_entities<std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(entity_ids);
     std::vector<RangesAndEntity> ranges_and_entities;

@@ -221,6 +221,8 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
+        column_store/segment_utils.hpp
+        column_store/memory_segment_pretty_print.hpp
         entity/atom_key.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
@@ -276,6 +278,8 @@ set(arcticdb_srcs
         python/python_handler_data.hpp
         python/python_bindings_common.hpp
         python/python_utils.hpp
+        python/python_handlers.hpp
+        python/python_handlers_common.hpp
         pipeline/string_reducers.hpp
         processing/aggregation_utils.hpp
         processing/component_manager.hpp
@@ -331,6 +335,7 @@ set(arcticdb_srcs
         storage/s3/s3_client_interface.hpp
         storage/s3/s3_storage_tool.hpp
         storage/s3/s3_settings.hpp
+        storage/mock/s3_mock_client.hpp
         storage/python_bindings_common.hpp
         storage/storage_factory.hpp
         storage/storage_options.hpp
@@ -426,6 +431,7 @@ set(arcticdb_srcs
         version/version_store_api.hpp
         version/version_store_objects.hpp
         version/version_utils.hpp
+        version/python_bindings_common.hpp
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_output_frame.cpp
@@ -450,6 +456,7 @@ set(arcticdb_srcs
         column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
         entity/data_error.cpp
@@ -511,6 +518,7 @@ set(arcticdb_srcs
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
+        python/python_handlers.cpp
         storage/config_resolvers.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
@@ -573,13 +581,20 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         version/version_tasks.cpp
+        version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
-# Disable default api so both UTF-8 and UTF-32 can be supported
-target_compile_definitions(arcticdb_core_object PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
+target_compile_definitions(
+        arcticdb_core_object
+        PUBLIC
+            # Disable default api so both UTF-8 and UTF-32 can be supported
+            PCRE2_CODE_UNIT_WIDTH=0
+            ENTT_ID_TYPE=std::uint64_t
+            "ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=$<BOOL:${ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT}>"
+)
 
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_core_object")
@@ -876,9 +891,7 @@ set(arcticdb_python_srcs
         version/python_bindings.cpp
         util/python_bindings.cpp
         python/reader.hpp
-        python/adapt_read_dataframe.hpp
-        python/python_handlers.hpp
-        python/python_handlers.cpp)
+        python/adapt_read_dataframe.hpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
 
@@ -1034,6 +1047,7 @@ if(${TEST})
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
             processing/test/test_unsorted_aggregation.cpp
+            processing/test/test_merge_update.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
@@ -1071,6 +1085,11 @@ if(${TEST})
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
+            util/test/gtest_custom_formatters.hpp
+            util/test/gtest_utils.hpp
+            util/test/input_frame_utils.hpp
+            util/test/segment_generation_utils.hpp
+            util/test/segment_generation_utils.cpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
@@ -1158,6 +1177,17 @@ if(${TEST})
         target_include_directories(test_unit_arcticdb PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
     endif()
 
+    # In order for the custom formatting to work the ODR must be satisfied and every TU that uses gtest must include
+    # the gtest_custom_formatters.hpp https://github.com/google/googletest/issues/1149
+    target_compile_options(test_unit_arcticdb PRIVATE
+            $<$<CXX_COMPILER_ID:MSVC>:/FIutil/test/gtest_custom_formatters.hpp>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include util/test/gtest_custom_formatters.hpp>
+    )
+    target_compile_definitions(
+            test_unit_arcticdb
+            PRIVATE
+                "ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=$<BOOL:${ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT}>"
+    )
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(benchmark_srcs
@@ -1260,11 +1290,16 @@ if(${TEST})
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
             )
     endif()
+
     # Add third_party include directories for rapidcheck test targets (only used for vcpkg builds)
     if(NOT ${ARCTICDB_USING_CONDA})
         target_include_directories(arcticdb_rapidcheck_tests PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
     endif()
-
+    target_compile_definitions(
+            arcticdb_rapidcheck_tests
+            PRIVATE
+                "ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=$<BOOL:${ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT}>"
+    )
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
     if(${ARCTICDB_USE_PCH})
         message(STATUS "Using precompiled headers for target test_unit_arcticdb")

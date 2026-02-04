@@ -1221,3 +1221,15 @@ def test_polars_unsupported_small_string(lmdb_version_store_arrow):
 
     with pytest.raises(ValueError):
         lib.read(sym, arrow_string_format_per_column={"col": ArrowOutputStringFormat.SMALL_STRING}).data
+
+
+def test_arrow_read_all_empty_strings(lmdb_version_store_arrow, any_arrow_string_format):
+    lib = lmdb_version_store_arrow
+    sym = "test_arrow_read_all_empty_strings"
+
+    df = pd.DataFrame({"empty_string_col": [""] * 10})
+    lib.write(sym, df)
+
+    result = lib.read(sym, arrow_string_format_default=any_arrow_string_format).data
+    expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(result, expected)
