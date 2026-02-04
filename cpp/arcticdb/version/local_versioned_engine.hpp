@@ -447,6 +447,9 @@ class LocalVersionedEngine : public VersionedEngine {
     void add_to_symbol_list_on_compaction(
             const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
     );
+    std::optional<VersionedItem> get_version_to_read_internal(
+            const StreamId& stream_id, const VersionQuery& version_query
+    );
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

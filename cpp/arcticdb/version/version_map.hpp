@@ -210,6 +210,16 @@ class VersionMapImpl {
         map_.clear();
     }
 
+    /**
+     * Flush the cache entry for a specific stream/symbol.
+     * This is used to force a reload from storage on the next access,
+     * which helps handle stale cache issues in multi-process scenarios.
+     */
+    void flush_entry(const StreamId& stream_id) {
+        std::lock_guard lock(map_mutex_);
+        map_.erase(stream_id);
+    }
+
     void load_via_iteration(
             std::shared_ptr<Store> store, const StreamId& stream_id, std::shared_ptr<VersionMapEntry>& entry,
             bool use_index_keys_for_iteration = false

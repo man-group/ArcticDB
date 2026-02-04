@@ -378,7 +378,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
     return std::nullopt;
 }
 
-std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
+std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read_internal(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
     return util::variant_match(
@@ -394,6 +394,25 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
             },
             [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); }
     );
+}
+
+std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
+        const StreamId& stream_id, const VersionQuery& version_query
+) {
+    // First attempt - may use cached version chain
+    auto result = get_version_to_read_internal(stream_id, version_query);
+
+    if (!result) {
+        // Version not found - the cache may be stale (e.g., another process wrote a new version).
+        // Flush the cache entry for this symbol and retry to ensure we have the latest version chain.
+        ARCTICDB_DEBUG(log::version(),
+            "Version not found for stream_id: {}, flushing cache and retrying",
+            stream_id);
+        version_map()->flush_entry(stream_id);
+        result = get_version_to_read_internal(stream_id, version_query);
+    }
+
+    return result;
 }
 
 IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, const VersionQuery& version_query) {
