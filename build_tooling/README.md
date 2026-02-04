@@ -33,3 +33,12 @@ https://github.com/man-group/ArcticDB/blob/3dfbce874e9c914327592cfc0d38b7e18f335
 ### Running the persistent storage python tests locally
 
 For more information on running the persistent storage tests locally, please refer to the **Running the persistent storage Python** tests section in the [ArcticDB Development Setup](https://manwiki.maninvestments.com/display/AlphaTech/ArcticDB+Development+Setup).
+
+## Analyzing pytest results
+All pytest runs on the CI are recorded into an arcticdb library on AWS S3.
+
+### On the CI
+A cron workflow is running weekly that shows both a week and a 6-month table with failing tests.
+
+### Locally
+Run `aggregate_flaky_tests.py` script to visuallize most failing tests. `aggregate_flaky_tests.py -h` for more info and options
