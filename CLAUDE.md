@@ -45,7 +45,7 @@ Technical documentation in `docs/claude/` is **owned and maintained by Claude**.
 | [ADAPTERS.md](docs/claude/python/ADAPTERS.md) | Storage adapters |
 | [TOOLBOX.md](docs/claude/python/TOOLBOX.md) | Library inspection tools |
 
-**Important**: When making changes to architecture, caching, versioning, storage backends, or any C++/Python modules, Claude will update the corresponding documentation to keep it current.
+**Important**: When making changes to architecture, caching, versioning, storage backends, or any C++/Python modules, Claude must update the corresponding documentation to keep it current.
 
 ## User-Specific Settings
 

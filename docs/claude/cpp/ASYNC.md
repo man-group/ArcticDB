@@ -48,24 +48,24 @@ Central singleton managing all async task execution.
 ```cpp
 class TaskScheduler {
 public:
-    // Get singleton instance
-    static TaskScheduler& instance();
+    // Get singleton instance (returns pointer)
+    static TaskScheduler* instance();
 
-    // Submit CPU-bound task
-    template<typename F>
-    auto submit_cpu_task(F&& task) -> folly::Future<decltype(task())>;
+    // Submit CPU-bound task (task must derive from BaseTask)
+    template<class Task>
+    auto submit_cpu_task(Task&& task) -> folly::Future<...>;
 
-    // Submit I/O task
-    template<typename F>
-    auto submit_io_task(F&& task) -> folly::Future<decltype(task())>;
+    // Submit I/O task (task must derive from BaseTask)
+    template<class Task>
+    auto submit_io_task(Task&& task) -> folly::Future<...>;
 
     // Thread pool executors
-    folly::Executor* cpu_executor();
-    folly::Executor* io_executor();
+    SchedulerWrapper<CPUSchedulerType>& cpu_exec();
+    SchedulerWrapper<IOSchedulerType>& io_exec();
 };
 ```
 
-Note: Thread pool sizes are typically configured via environment variables or at initialization time, not via runtime setters.
+Note: All tasks submitted must derive from `BaseTask`. Thread pool sizes are configured via `ConfigsMap` settings or at initialization time.
 
 ## Thread Pools
 
@@ -77,24 +77,20 @@ For compute-intensive operations:
 - Aggregation calculations
 
 ```cpp
-// Submit CPU-bound work
-auto future = TaskScheduler::instance().submit_cpu_task([&]() {
-    return compress(data);
-});
+// Submit CPU-bound work (task must derive from BaseTask)
+auto future = TaskScheduler::instance()->submit_cpu_task(EncodeAtomTask{...});
 ```
 
 ### I/O Thread Pool
 
-For storage operations:
-- S3/Azure/LMDB reads and writes
-- Network requests
-- File system operations
+For storage backend operations:
+- Storage reads/writes (S3, Azure, LMDB, MongoDB, Memory backends)
+- Version map reload operations (`CheckReloadTask`)
+- Key existence checks, removes, object size calculations
 
 ```cpp
 // Submit I/O work
-auto future = TaskScheduler::instance().submit_io_task([&]() {
-    return storage.read(key);
-});
+auto future = TaskScheduler::instance()->submit_io_task(MyStorageTask{...});
 ```
 
 ## Async Store
@@ -213,10 +209,12 @@ Thread pool sizes are typically configured at initialization or via environment 
 
 ### Default Settings
 
-| Pool | Default Count | Rationale |
-|------|---------------|-----------|
-| CPU | `hardware_concurrency()` | Match physical cores |
-| I/O | 16-32 | Handle I/O latency |
+| Pool | Default Count | Config Override |
+|------|---------------|-----------------|
+| CPU | `hardware_concurrency()` (cgroup-aware) | `VersionStore.NumCPUThreads` |
+| I/O | `CPU threads × 1.5` | `VersionStore.NumIOThreads` |
+
+The CPU count respects cgroup CPU limits (v1 and v2) for containerized environments.
 
 ## Key Files
 
@@ -309,15 +307,8 @@ auto future = submit_io_task([&]() {
 
 ### Task Granularity
 
-- Too fine-grained: Overhead dominates
+- Too fine-grained: Scheduling overhead dominates
 - Too coarse-grained: Poor parallelism
-- Sweet spot: ~1ms+ per task
-
-### Memory Pressure
-
-- Pending tasks consume memory
-- Backpressure mechanism limits queue depth
-- Monitor queue depth in production
 
 ## Integration with Storage
 
