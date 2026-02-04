@@ -1487,6 +1487,142 @@ TEST(VersionMap, HasCachedEntryDowntoReloadsWhenVersionNotLoaded) {
     ASSERT_EQ(entry->get_indexes(true).size(), 6); // v0-v5
 }
 
+TEST(VersionMap, LatestLoadedTimestampTracking) {
+    // Test that latest_loaded_timestamp_ is correctly populated and used for FROM_TIME cache validation
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+
+    auto entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+
+    // Write versions with specific timestamps: v0 at ts=100, v1 at ts=200, v2 at ts=300
+    auto key0 = atom_key_with_version(id, 0, 100);
+    version_map->do_write(store, key0, entry);
+    write_symbol_ref(store, key0, std::nullopt, entry->head_.value());
+
+    auto key1 = atom_key_with_version(id, 1, 200);
+    version_map->do_write(store, key1, entry);
+    write_symbol_ref(store, key1, std::nullopt, entry->head_.value());
+
+    auto key2 = atom_key_with_version(id, 2, 300);
+    version_map->do_write(store, key2, entry);
+    write_symbol_ref(store, key2, std::nullopt, entry->head_.value());
+
+    // Create a fresh version_map to test caching behavior
+    version_map = std::make_shared<VersionMap>();
+
+    // Load only the latest version
+    entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_EQ(entry->get_indexes(true).size(), 1);
+    // After loading LATEST, latest_loaded_timestamp_ should be 300 (newest), earliest should also be 300
+    EXPECT_EQ(entry->load_progress_.latest_loaded_timestamp_, 300);
+    EXPECT_EQ(entry->load_progress_.earliest_loaded_timestamp_, 300);
+
+    // FROM_TIME with timestamp 250 should be cached (200 <= 300 newest, but need to load more for earliest)
+    // Since earliest is 300 and we need earliest <= 200, cache should NOT be valid
+    EXPECT_FALSE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(200)}
+    ));
+
+    // FROM_TIME with timestamp 350 should NOT be cached because 350 > 300 (newest loaded)
+    // This is the key test - we might have missed a version written at ts=320
+    EXPECT_FALSE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(350)}
+    ));
+
+    // Load all versions
+    entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_EQ(entry->get_indexes(true).size(), 3);
+    // After loading ALL, latest_loaded_timestamp_ should be 300 (newest), earliest should be 100 (oldest)
+    EXPECT_EQ(entry->load_progress_.latest_loaded_timestamp_, 300);
+    EXPECT_EQ(entry->load_progress_.earliest_loaded_timestamp_, 100);
+
+    // Now FROM_TIME with timestamp 200 should be cached (100 <= 200 <= 300)
+    EXPECT_TRUE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(200)}
+    ));
+
+    // FROM_TIME with timestamp 350 should still NOT be cached (350 > 300)
+    EXPECT_FALSE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(350)}
+    ));
+
+    // FROM_TIME with timestamp 50 is STILL cached because we've loaded everything.
+    // Even though 50 < 100 (earliest), we can answer "no version at that timestamp" from cache.
+    EXPECT_TRUE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(50)}
+    ));
+}
+
+TEST(VersionMap, FromTimeCacheInvalidationOnNewVersion) {
+    // Test that FROM_TIME cache correctly detects when new versions have been written
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    // Client A writes initial versions
+    auto version_map_a = std::make_shared<VersionMap>();
+    auto entry_a = version_map_a->check_reload(
+            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+
+    auto key0 = atom_key_with_version(id, 0, 100);
+    version_map_a->do_write(store, key0, entry_a);
+    write_symbol_ref(store, key0, std::nullopt, entry_a->head_.value());
+
+    auto key1 = atom_key_with_version(id, 1, 200);
+    version_map_a->do_write(store, key1, entry_a);
+    write_symbol_ref(store, key1, std::nullopt, entry_a->head_.value());
+
+    // Client B loads all versions
+    auto version_map_b = std::make_shared<VersionMap>();
+    auto entry_b = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_EQ(entry_b->get_indexes(true).size(), 2);
+    EXPECT_EQ(entry_b->load_progress_.latest_loaded_timestamp_, 200);
+    EXPECT_EQ(entry_b->load_progress_.earliest_loaded_timestamp_, 100);
+
+    // Client B's cache should be valid for timestamps between 100 and 200
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(150)}
+    ));
+
+    // Client A writes a new version at ts=300
+    auto key2 = atom_key_with_version(id, 2, 300);
+    version_map_a->do_write(store, key2, entry_a);
+    write_symbol_ref(store, key2, std::nullopt, entry_a->head_.value());
+
+    // Client B's cache should NOT be valid for timestamp 250 anymore
+    // because 250 > 200 (Client B's newest loaded timestamp)
+    // A version might have been written between 200 and 250
+    EXPECT_FALSE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(250)}
+    ));
+
+    // Client B reloads with FROM_TIME=250, which loads from newest (300) back to earliest <= 250 (200)
+    // This loads v2 (300) and v1 (200), but not v0 (100)
+    entry_b = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(250)}, __FUNCTION__
+    );
+    ASSERT_EQ(entry_b->get_indexes(true).size(), 2);  // v2 and v1
+    EXPECT_EQ(entry_b->load_progress_.latest_loaded_timestamp_, 300);  // newest loaded is v2
+    EXPECT_EQ(entry_b->load_progress_.earliest_loaded_timestamp_, 200);  // earliest loaded is v1
+
+    // Now Client B's cache should be valid for timestamp 250 (100 <= 250 <= 300)
+    // Wait, earliest is now 200, so 200 <= 250 <= 300 is still valid
+    EXPECT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(250)}
+    ));
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
