@@ -904,7 +904,8 @@ class VersionMapImpl {
      * Whether entry contains as much of the version map as specified by load_param. Checks whether
      * the loaded timestamps cover the requested timestamp range.
      */
-    bool loaded_as_far_as_timestamp(const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions) const {
+    bool loaded_as_far_as_timestamp(
+            const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions) const {
         // Upper bound: always use latest_loaded_timestamp (including deleted) because we need to
         // know if the requested timestamp within the loaded range
         timestamp latest_loaded_timestamp = entry.load_progress_.latest_loaded_timestamp_;
