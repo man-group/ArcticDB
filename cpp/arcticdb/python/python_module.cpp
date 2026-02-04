@@ -337,7 +337,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_configs_map_api(m);
     register_log(m.def_submodule("log"));
     register_instrumentation(m.def_submodule("instrumentation"));
-    register_metrics(m.def_submodule("metrics"), BindingScope::GLOBAL);
+    register_metrics(m.def_submodule("metrics"), BindingScope::LOCAL);
     register_type_handlers();
 
     register_termination_handler();
