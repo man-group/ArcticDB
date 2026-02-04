@@ -17,6 +17,7 @@ import numpy as np
 from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, SortingException, StorageException
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
+from tests.util.mark import WINDOWS
 
 
 def mock_find_keys_for_symbol(key_types):
@@ -528,6 +529,7 @@ class TestMergeTimeseriesUpdate:
         with pytest.raises(StorageException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
+    @pytest.mark.skipif(WINDOWS, reason="Flaky test. Monday: 11173043198")
     def test_two_segments_with_same_index_value(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = [

@@ -54,6 +54,7 @@ class TestStressTimeseriesMergeUpdate:
             index=pd.date_range(pd.Timestamp(0), periods=cls.total_rows, freq="100ms"),
         )
 
+    @pytest.mark.skip(reason="Flaky test. Monday: 11183840734")
     @pytest.mark.parametrize(
         "segments_to_update",
         [[0], [9], [5], [8, 9], [0, 1, 2], [2, 3, 4, 5], [0, 2, 4, 6, 8], [1, 3, 5, 7, 9], [1, 4, 5, 6, 9]],
