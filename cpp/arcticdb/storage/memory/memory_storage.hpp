@@ -54,17 +54,12 @@ class MemoryStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
-    void maybe_write_sleep() const;
-    void maybe_read_sleep() const;
-
     using KeyMap = folly::ConcurrentHashMap<VariantKey, Segment>;
     // This is pre-populated so that concurrent access is fine.
     // An outer folly::ConcurrentHashMap would only return const inner hash maps which is no good.
     using TypeMap = std::unordered_map<KeyType, KeyMap>;
 
     TypeMap data_;
-
-    bool testing_add_delays_{false};
 };
 
 inline arcticdb::proto::storage::VariantStorage pack_config() {

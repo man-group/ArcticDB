@@ -711,10 +711,11 @@ def test_query_stats_get_library_create_if_missing(s3_storage, clear_query_stats
 def test_query_stats_in_mem_read_write(in_memory_version_store, clear_query_stats):
     lib = in_memory_version_store
     qs.enable()
-    lib.write("a", 1)
-    lib.write("b", 2)
-    lib.read("a")
-    lib.read("b")
+    with config_context("VersionMap.ReloadInterval", 0):
+        lib.write("a", 1)
+        lib.write("b", 2)
+        lib.read("a")
+        lib.read("b")
     stats = qs.get_query_stats()
     assert stats
 
@@ -726,8 +727,11 @@ def test_query_stats_in_mem_read_write(in_memory_version_store, clear_query_stat
         assert reads[key_type]["count"] == 2
         assert reads[key_type]["size_bytes"] > 0
 
-    for key_type in ("VERSION", "VERSION_REF"):
-        assert reads[key_type]["count"] == 4
+    assert reads["VERSION_REF"]["count"] == 6
+    assert reads["VERSION_REF"]["size_bytes"] > 0
+    assert reads["VERSION"]["count"] == 4
+    assert reads["VERSION"]["size_bytes"] == 0  # this is from get_if_exists checks. We don't actually read the VERSION
+    # key here, instead shortcircuiting to the index key that the VERSION_REF key refers to.
 
     writes = storage_ops["Memory_PutObject"]
     for key_type in ("TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF", "SYMBOL_LIST"):

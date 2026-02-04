@@ -118,7 +118,6 @@ class IterateVersionChain:
             # Leave the default reload interval
             pass
 
-        adb._ext.set_config_int("Testing.MemoryStorage.AddDelays", 1)
         ac = self._setup()
         if deleted:
             self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]
@@ -128,13 +127,10 @@ class IterateVersionChain:
         if caching != "never":
             # Pre-load the cache
             self.load_all(self.symbol(num_versions))
-        adb._ext.set_config_int("Testing.MemoryStorage.ReadDelayMs", read_delay_ms)
         query_stats.enable()
 
     def teardown(self, num_versions, caching, deleted, read_delay_ms):
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
-        adb._ext.unset_config_int("Testing.MemoryStorage.AddDelays")
-        adb._ext.unset_config_int("Testing.MemoryStorage.ReadDelayMs")
         del self.lib
 
     def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):

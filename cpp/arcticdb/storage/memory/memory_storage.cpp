@@ -28,34 +28,11 @@ void add_serialization_fields(KeySegmentPair& kv) {
 
 std::string MemoryStorage::name() const { return "memory_storage-0"; }
 
-void MemoryStorage::maybe_read_sleep() const {
-    if (!testing_add_delays_) {
-        return;
-    }
-    static auto read_delay = ConfigsMap::instance()->get_int("Testing.MemoryStorage.ReadDelayMs", 0);
-    if (read_delay) {
-        log::storage().debug("Artificial delay set for memory backed reads {}ms", read_delay);
-        std::this_thread::sleep_for(std::chrono::milliseconds(read_delay));
-    }
-}
-
-void MemoryStorage::maybe_write_sleep() const {
-    if (!testing_add_delays_) {
-        return;
-    }
-    static auto write_delay = ConfigsMap::instance()->get_int("Testing.MemoryStorage.WriteDelayMs", 0);
-    if (write_delay) {
-        log::storage().debug("Artificial delay set for memory backed writes {}ms", write_delay);
-        std::this_thread::sleep_for(std::chrono::milliseconds(write_delay));
-    }
-}
-
 void MemoryStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
     auto query_stat_operation_time = query_stats::add_task_count_and_time(
             query_stats::TaskType::Memory_PutObject, variant_key_type(key_seg.variant_key())
     );
-    maybe_write_sleep();
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
 
@@ -89,7 +66,6 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     auto query_stat_operation_time = query_stats::add_task_count_and_time(
             query_stats::TaskType::Memory_PutObject, variant_key_type(key_seg.variant_key())
     );
-    maybe_write_sleep();
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
     auto it = key_vec.find(key_seg.variant_key());
@@ -115,7 +91,6 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 }
 
 void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
-    maybe_read_sleep();
     auto key_seg = do_read(std::move(variant_key), ReadKeyOpts{});
     visitor(key_seg.variant_key(), std::move(*key_seg.segment_ptr()));
 }
@@ -125,7 +100,6 @@ KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     auto query_stat_operation_time = query_stats::add_task_count_and_time(
             query_stats::TaskType::Memory_GetObject, variant_key_type(variant_key)
     );
-    maybe_read_sleep();
     auto& key_vec = data_[variant_key_type(variant_key)];
     auto it = key_vec.find(variant_key);
 
@@ -149,7 +123,6 @@ bool MemoryStorage::do_key_exists(const VariantKey& key) {
     ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
     auto query_stat_operation_time =
             query_stats::add_task_count_and_time(query_stats::TaskType::Memory_GetObject, variant_key_type(key));
-    maybe_read_sleep();
     const auto& key_vec = data_[variant_key_type(key)];
     auto it = key_vec.find(key);
     return it != key_vec.end();
@@ -160,7 +133,6 @@ void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     auto query_stat_operation_time = query_stats::add_task_count_and_time(
             query_stats::TaskType::Memory_DeleteObject, variant_key_type(variant_key)
     );
-    maybe_write_sleep();
     auto& key_vec = data_[variant_key_type(variant_key)];
 
     auto it = key_vec.find(variant_key);
@@ -198,7 +170,6 @@ bool MemoryStorage::do_iterate_type_until_match(
     ARCTICDB_SAMPLE(MemoryStorageItType, 0)
     auto query_stat_operation_time =
             query_stats::add_task_count_and_time(query_stats::TaskType::Memory_ListObjects, key_type);
-    maybe_read_sleep();
     auto& key_vec = data_[key_type];
     auto prefix_matcher = stream_id_prefix_matcher(prefix);
 
@@ -217,11 +188,6 @@ bool MemoryStorage::do_iterate_type_until_match(
 MemoryStorage::MemoryStorage(const LibraryPath& library_path, OpenMode mode, const Config&) :
     Storage(library_path, mode) {
     arcticdb::entity::foreach_key_type([this](KeyType&& key_type) { data_[key_type]; });
-    static auto add_delays = ConfigsMap::instance()->get_int("Testing.MemoryStorage.AddDelays", 0);
-    if (add_delays) {
-        log::storage().info("Artificial delay set for memory backed reads");
-        testing_add_delays_ = true;
-    }
 }
 
 } // namespace arcticdb::storage::memory
