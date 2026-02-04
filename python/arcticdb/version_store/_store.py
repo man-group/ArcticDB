@@ -60,8 +60,8 @@ from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _Python
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
-from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction
+from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery as _PreloadedIndexQuery
+from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction, _modify_schema
 from arcticdb.options import (
     RuntimeOptions,
     OutputFormat,
@@ -260,7 +260,7 @@ def _env_config_from_lib_config(lib_cfg, env):
     return cfg
 
 
-VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
+VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None, _PreloadedIndexQuery]
 
 
 def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
@@ -2045,6 +2045,8 @@ class NativeVersionStore:
             version_query.set_version(as_of, iterate_snapshots_if_tombstoned)
         elif isinstance(as_of, (datetime, Timestamp)):
             version_query.set_timestamp(Timestamp(as_of).value, iterate_snapshots_if_tombstoned)
+        elif isinstance(as_of, _PreloadedIndexQuery):
+            version_query.set_preloaded_index(as_of)
         elif as_of is not None:
             raise ArcticNativeException("Unexpected combination of read parameters")
 
@@ -3453,8 +3455,7 @@ class NativeVersionStore:
         `bool`
             True if the symbol is pickled, False otherwise.
         """
-        version_query = self._get_version_query(as_of, **kwargs)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self._get_info(symbol, as_of, **kwargs)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
     @staticmethod
@@ -3551,8 +3552,7 @@ class NativeVersionStore:
         `Optional[int]`
             The number of rows in the specified revision of the symbol, or `None` if the symbol is pickled.
         """
-        version_query = self._get_version_query(as_of)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self._get_info(symbol, as_of, **kwargs)
         return None if self.is_pickled_descriptor(dit.timeseries_descriptor) else dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):
@@ -3638,6 +3638,27 @@ class NativeVersionStore:
             "sorted": sorted_value_name(timeseries_descriptor.sorted),
         }
 
+    def _modify_schema(
+        self,
+        preloaded_index: _PreloadedIndexQuery,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+        **kwargs,
+    ):
+        read_options = self._get_read_options_and_output_format(output_format=OutputFormat.POLARS, **kwargs)[0]
+        # Take a copy as _get_read_query can modify the input argument, which makes reusing the input counter-intuitive
+        query_builder = copy.deepcopy(query_builder)
+        read_query = self._get_read_query(date_range=None, row_range=None, columns=columns, query_builder=query_builder)
+        record_batch, norm = _modify_schema(preloaded_index, read_query, read_options)
+        record_batch = pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema())
+        data = self._normalizer.denormalize(pa.Table.from_batches([record_batch]), norm)
+        return pl.Schema(data.schema)
+
+    def _get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs):
+        version_query = self._get_version_query(version, **kwargs)
+        include_index_segment = kwargs.get("include_index_segment", False)
+        return self.version_store.read_descriptor(symbol, version_query, include_index_segment)
+
     def get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs) -> Dict[str, Any]:
         """
         Returns descriptive data for `symbol`.
@@ -3665,9 +3686,8 @@ class NativeVersionStore:
             - date_range, `tuple`
             - sorted, `str`
         """
+        dit = self._get_info(symbol, version, **kwargs)
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
-        version_query = self._get_version_query(version, **kwargs)
-        dit = self.version_store.read_descriptor(symbol, version_query)
         return self._process_info(dit, date_range_ns_precision)
 
     def batch_get_info(
