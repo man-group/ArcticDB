@@ -137,6 +137,8 @@ struct RowSliceClause {
     OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
 
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 struct RestructuringClause {
@@ -192,6 +194,8 @@ struct RestructuringClause {
     OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
 
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
+
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return nullptr; }
 };
 
 TEST(Clause, ScheduleClauseProcessingStress) {

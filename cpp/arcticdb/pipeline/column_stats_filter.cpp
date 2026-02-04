@@ -96,7 +96,11 @@ std::optional<ColumnStatsData> try_load_column_stats(
     auto column_stats_key = version_store::index_key_to_column_stats_key(versioned_item.key_);
 
     try {
-        auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
+        // Use read_compressed_sync instead of read_compressed().get() to avoid deadlock.
+        // This function may be called from an IO thread (via SetupPipelineContextTask),
+        // and read_compressed().get() would submit another task to the same IO pool
+        // and block waiting for it, potentially causing a deadlock if no threads are free.
+        auto segment = store->read_compressed_sync(column_stats_key).segment_ptr();
         auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
 
         ColumnStatsData data;
