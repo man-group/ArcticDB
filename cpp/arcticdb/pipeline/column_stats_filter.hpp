@@ -41,8 +41,7 @@ struct ColumnStatsData {
  * Returns std::nullopt if no column stats exist for this version.
  */
 std::optional<ColumnStatsData> try_load_column_stats(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item
 );
 
 /**
@@ -54,8 +53,7 @@ std::optional<ColumnStatsData> try_load_column_stats(
  * @return A filter query that can be used with filter_index()
  */
 pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats_filter(
-    std::shared_ptr<ColumnStatsData> column_stats_data,
-    std::vector<PruneablePredicate> predicates
+        std::shared_ptr<ColumnStatsData> column_stats_data, std::vector<PruneablePredicate> predicates
 );
 
 /**
@@ -67,9 +65,8 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
  * @return A filter query if column stats exist and contain relevant columns, std::nullopt otherwise
  */
 std::optional<pipelines::FilterQuery<pipelines::index::IndexSegmentReader>> try_create_column_stats_filter_for_clauses(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item,
-    const std::vector<std::shared_ptr<Clause>>& clauses
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
+        const std::vector<std::shared_ptr<Clause>>& clauses
 );
 
 } // namespace arcticdb

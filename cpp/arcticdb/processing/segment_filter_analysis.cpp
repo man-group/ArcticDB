@@ -16,20 +16,19 @@ namespace {
 
 bool is_pruneable_comparison_op(OperationType op) {
     switch (op) {
-        case OperationType::LT:
-        case OperationType::LE:
-        case OperationType::GT:
-        case OperationType::GE:
-        case OperationType::EQ:
-            return true;
-        default:
-            return false;
+    case OperationType::LT:
+    case OperationType::LE:
+    case OperationType::GT:
+    case OperationType::GE:
+    case OperationType::EQ:
+        return true;
+    default:
+        return false;
     }
 }
 
 std::optional<PruneablePredicate> try_extract_predicate_from_node(
-    const ExpressionNode& node,
-    const ExpressionContext& context
+        const ExpressionNode& node, const ExpressionContext& context
 ) {
     if (!is_pruneable_comparison_op(node.operation_type_)) {
         return std::nullopt;
@@ -78,17 +77,12 @@ std::optional<PruneablePredicate> try_extract_predicate_from_node(
     }
 
     return PruneablePredicate{
-        .column_name = *column_name,
-        .op = node.operation_type_,
-        .value = value,
-        .column_on_left = column_on_left
+            .column_name = *column_name, .op = node.operation_type_, .value = value, .column_on_left = column_on_left
     };
 }
 
 void extract_predicates_recursive(
-    const VariantNode& node_ref,
-    const ExpressionContext& context,
-    std::vector<PruneablePredicate>& predicates
+        const VariantNode& node_ref, const ExpressionContext& context, std::vector<PruneablePredicate>& predicates
 ) {
     if (std::holds_alternative<ExpressionName>(node_ref)) {
         const auto& expr_name = std::get<ExpressionName>(node_ref).value;
@@ -129,38 +123,35 @@ std::vector<PruneablePredicate> extract_pruneable_predicates(const ExpressionCon
 
 std::optional<double> value_to_double(const Value& value) {
     switch (value.data_type()) {
-        case DataType::UINT8:
-            return static_cast<double>(value.get<uint8_t>());
-        case DataType::UINT16:
-            return static_cast<double>(value.get<uint16_t>());
-        case DataType::UINT32:
-            return static_cast<double>(value.get<uint32_t>());
-        case DataType::UINT64:
-            return static_cast<double>(value.get<uint64_t>());
-        case DataType::INT8:
-            return static_cast<double>(value.get<int8_t>());
-        case DataType::INT16:
-            return static_cast<double>(value.get<int16_t>());
-        case DataType::INT32:
-            return static_cast<double>(value.get<int32_t>());
-        case DataType::INT64:
-            return static_cast<double>(value.get<int64_t>());
-        case DataType::FLOAT32:
-            return static_cast<double>(value.get<float>());
-        case DataType::FLOAT64:
-            return value.get<double>();
-        case DataType::NANOSECONDS_UTC64:
-            return static_cast<double>(value.get<int64_t>());
-        default:
-            // String and other types not supported for comparison
-            return std::nullopt;
+    case DataType::UINT8:
+        return static_cast<double>(value.get<uint8_t>());
+    case DataType::UINT16:
+        return static_cast<double>(value.get<uint16_t>());
+    case DataType::UINT32:
+        return static_cast<double>(value.get<uint32_t>());
+    case DataType::UINT64:
+        return static_cast<double>(value.get<uint64_t>());
+    case DataType::INT8:
+        return static_cast<double>(value.get<int8_t>());
+    case DataType::INT16:
+        return static_cast<double>(value.get<int16_t>());
+    case DataType::INT32:
+        return static_cast<double>(value.get<int32_t>());
+    case DataType::INT64:
+        return static_cast<double>(value.get<int64_t>());
+    case DataType::FLOAT32:
+        return static_cast<double>(value.get<float>());
+    case DataType::FLOAT64:
+        return value.get<double>();
+    case DataType::NANOSECONDS_UTC64:
+        return static_cast<double>(value.get<int64_t>());
+    default:
+        // String and other types not supported for comparison
+        return std::nullopt;
     }
 }
 
-bool can_prune_segment_with_predicate(
-    const PruneablePredicate& predicate,
-    const ColumnStatValues& stats
-) {
+bool can_prune_segment_with_predicate(const PruneablePredicate& predicate, const ColumnStatValues& stats) {
     if (!stats.has_values()) {
         // No stats available, cannot prune
         return false;
@@ -183,12 +174,23 @@ bool can_prune_segment_with_predicate(
     if (!predicate.column_on_left) {
         // Flip the operation: "5 < col" becomes "col > 5"
         switch (predicate.op) {
-            case OperationType::LT: effective_op = OperationType::GT; break;
-            case OperationType::LE: effective_op = OperationType::GE; break;
-            case OperationType::GT: effective_op = OperationType::LT; break;
-            case OperationType::GE: effective_op = OperationType::LE; break;
-            case OperationType::EQ: effective_op = OperationType::EQ; break;  // EQ is symmetric
-            default: return false;
+        case OperationType::LT:
+            effective_op = OperationType::GT;
+            break;
+        case OperationType::LE:
+            effective_op = OperationType::GE;
+            break;
+        case OperationType::GT:
+            effective_op = OperationType::LT;
+            break;
+        case OperationType::GE:
+            effective_op = OperationType::LE;
+            break;
+        case OperationType::EQ:
+            effective_op = OperationType::EQ;
+            break; // EQ is symmetric
+        default:
+            return false;
         }
     }
 
@@ -196,34 +198,34 @@ bool can_prune_segment_with_predicate(
     // We're checking: can ANY value in [min, max] satisfy "col effective_op val"?
     // If no value can satisfy it, we can prune.
     switch (effective_op) {
-        case OperationType::GT:
-            // col > val: prune if max <= val (no value in segment can be > val)
-            return max <= val;
+    case OperationType::GT:
+        // col > val: prune if max <= val (no value in segment can be > val)
+        return max <= val;
 
-        case OperationType::GE:
-            // col >= val: prune if max < val (no value in segment can be >= val)
-            return max < val;
+    case OperationType::GE:
+        // col >= val: prune if max < val (no value in segment can be >= val)
+        return max < val;
 
-        case OperationType::LT:
-            // col < val: prune if min >= val (no value in segment can be < val)
-            return min >= val;
+    case OperationType::LT:
+        // col < val: prune if min >= val (no value in segment can be < val)
+        return min >= val;
 
-        case OperationType::LE:
-            // col <= val: prune if min > val (no value in segment can be <= val)
-            return min > val;
+    case OperationType::LE:
+        // col <= val: prune if min > val (no value in segment can be <= val)
+        return min > val;
 
-        case OperationType::EQ:
-            // col == val: prune if val < min or val > max
-            return val < min || val > max;
+    case OperationType::EQ:
+        // col == val: prune if val < min or val > max
+        return val < min || val > max;
 
-        default:
-            return false;
+    default:
+        return false;
     }
 }
 
 bool can_prune_segment(
-    const std::vector<PruneablePredicate>& predicates,
-    const std::function<std::optional<ColumnStatValues>(const std::string&)>& get_column_stats
+        const std::vector<PruneablePredicate>& predicates,
+        const std::function<std::optional<ColumnStatValues>(const std::string&)>& get_column_stats
 ) {
     // For multiple predicates at the top level, they are implicitly ANDed.
     // We can prune if ANY predicate allows pruning (since all must be true).
@@ -235,9 +237,13 @@ bool can_prune_segment(
         }
 
         if (can_prune_segment_with_predicate(predicate, *stats)) {
-            ARCTICDB_DEBUG(log::version(),
-                "Column stats pruning: predicate on column '{}' allows pruning (min={}, max={})",
-                predicate.column_name, stats->min_value.value_or(0.0), stats->max_value.value_or(0.0));
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "Column stats pruning: predicate on column '{}' allows pruning (min={}, max={})",
+                    predicate.column_name,
+                    stats->min_value.value_or(0.0),
+                    stats->max_value.value_or(0.0)
+            );
             return true;
         }
     }

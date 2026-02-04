@@ -34,9 +34,9 @@ namespace arcticdb {
  */
 struct PruneablePredicate {
     std::string column_name;
-    OperationType op;  // LT, LE, GT, GE, EQ
+    OperationType op; // LT, LE, GT, GE, EQ
     std::shared_ptr<Value> value;
-    bool column_on_left;  // True if predicate is "col OP value", false if "value OP col"
+    bool column_on_left; // True if predicate is "col OP value", false if "value OP col"
 };
 
 /**
@@ -61,9 +61,7 @@ struct ColumnStatValues {
     std::optional<double> min_value;
     std::optional<double> max_value;
 
-    bool has_values() const {
-        return min_value.has_value() && max_value.has_value();
-    }
+    bool has_values() const { return min_value.has_value() && max_value.has_value(); }
 };
 
 /**
@@ -72,18 +70,15 @@ struct ColumnStatValues {
  *
  * Returns true if the segment should be skipped, false if it might contain matching rows.
  */
-bool can_prune_segment_with_predicate(
-    const PruneablePredicate& predicate,
-    const ColumnStatValues& stats
-);
+bool can_prune_segment_with_predicate(const PruneablePredicate& predicate, const ColumnStatValues& stats);
 
 /**
  * Check if a segment can be pruned based on multiple predicates.
  * Returns true if ANY predicate allows pruning (since they are implicitly ANDed at the top level).
  */
 bool can_prune_segment(
-    const std::vector<PruneablePredicate>& predicates,
-    const std::function<std::optional<ColumnStatValues>(const std::string&)>& get_column_stats
+        const std::vector<PruneablePredicate>& predicates,
+        const std::function<std::optional<ColumnStatValues>(const std::string&)>& get_column_stats
 );
 
 /**

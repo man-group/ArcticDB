@@ -81,9 +81,7 @@ struct IClause {
 
         // Returns the expression context if this is a filter clause, nullptr otherwise
         // Used for column stats pruning optimization
-        [[nodiscard]] const ExpressionContext* filter_expression_context() const {
-            return folly::poly_call<8>(*this);
-        }
+        [[nodiscard]] const ExpressionContext* filter_expression_context() const { return folly::poly_call<8>(*this); }
     };
 
     template<class T>
@@ -197,9 +195,7 @@ struct FilterClause {
         optimisation_ = pipeline_optimisation;
     }
 
-    [[nodiscard]] const ExpressionContext* filter_expression_context() const {
-        return expression_context_.get();
-    }
+    [[nodiscard]] const ExpressionContext* filter_expression_context() const { return expression_context_.get(); }
 };
 
 struct ProjectClause {

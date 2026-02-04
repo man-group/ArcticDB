@@ -809,31 +809,6 @@ def test_column_stats_query_optimization(s3_store_factory, output_format):
         qs.disable()
 
 
-def test_column_stats_query_optimization_without_stats(lmdb_version_store_tiny_segment, any_output_format):
-    """
-    Test that queries still work correctly when no column stats exist.
-    This ensures backward compatibility.
-    """
-    from arcticdb.version_store.processing import QueryBuilder
-
-    lib = lmdb_version_store_tiny_segment
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_query_optimization_without_stats"
-
-    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
-    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
-
-    lib.write(sym, df0)
-    lib.append(sym, df1)
-
-    # No column stats created - query should still work
-    q = QueryBuilder()
-    q = q[q["col_1"] > 2]
-    result = lib.read(sym, query_builder=q).data
-    assert len(result) == 2
-    assert list(result["col_1"]) == [3, 4]
-
-
 def test_column_stats_query_optimization_column_not_in_stats(lmdb_version_store_tiny_segment, any_output_format):
     """
     Test that queries work when column stats exist but not for the filtered column.

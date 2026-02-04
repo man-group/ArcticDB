@@ -33,10 +33,10 @@ std::optional<std::pair<std::string, bool>> parse_stats_column_name(std::string_
 
     if (pattern.starts_with("MIN(")) {
         is_min = true;
-        pattern = pattern.substr(4);  // Remove "MIN("
+        pattern = pattern.substr(4); // Remove "MIN("
     } else if (pattern.starts_with("MAX(")) {
         // is_min stays false for MAX
-        pattern = pattern.substr(4);  // Remove "MAX("
+        pattern = pattern.substr(4); // Remove "MAX("
     } else {
         return std::nullopt;
     }
@@ -60,38 +60,37 @@ std::optional<double> get_double_value_at(const SegmentInMemory& segment, size_t
     const auto& column = segment.column(col_idx);
 
     switch (field.type().data_type()) {
-        case DataType::UINT8:
-            return static_cast<double>(column.scalar_at<uint8_t>(row).value());
-        case DataType::UINT16:
-            return static_cast<double>(column.scalar_at<uint16_t>(row).value());
-        case DataType::UINT32:
-            return static_cast<double>(column.scalar_at<uint32_t>(row).value());
-        case DataType::UINT64:
-            return static_cast<double>(column.scalar_at<uint64_t>(row).value());
-        case DataType::INT8:
-            return static_cast<double>(column.scalar_at<int8_t>(row).value());
-        case DataType::INT16:
-            return static_cast<double>(column.scalar_at<int16_t>(row).value());
-        case DataType::INT32:
-            return static_cast<double>(column.scalar_at<int32_t>(row).value());
-        case DataType::INT64:
-            return static_cast<double>(column.scalar_at<int64_t>(row).value());
-        case DataType::FLOAT32:
-            return static_cast<double>(column.scalar_at<float>(row).value());
-        case DataType::FLOAT64:
-            return column.scalar_at<double>(row).value();
-        case DataType::NANOSECONDS_UTC64:
-            return static_cast<double>(column.scalar_at<int64_t>(row).value());
-        default:
-            return std::nullopt;
+    case DataType::UINT8:
+        return static_cast<double>(column.scalar_at<uint8_t>(row).value());
+    case DataType::UINT16:
+        return static_cast<double>(column.scalar_at<uint16_t>(row).value());
+    case DataType::UINT32:
+        return static_cast<double>(column.scalar_at<uint32_t>(row).value());
+    case DataType::UINT64:
+        return static_cast<double>(column.scalar_at<uint64_t>(row).value());
+    case DataType::INT8:
+        return static_cast<double>(column.scalar_at<int8_t>(row).value());
+    case DataType::INT16:
+        return static_cast<double>(column.scalar_at<int16_t>(row).value());
+    case DataType::INT32:
+        return static_cast<double>(column.scalar_at<int32_t>(row).value());
+    case DataType::INT64:
+        return static_cast<double>(column.scalar_at<int64_t>(row).value());
+    case DataType::FLOAT32:
+        return static_cast<double>(column.scalar_at<float>(row).value());
+    case DataType::FLOAT64:
+        return column.scalar_at<double>(row).value();
+    case DataType::NANOSECONDS_UTC64:
+        return static_cast<double>(column.scalar_at<int64_t>(row).value());
+    default:
+        return std::nullopt;
     }
 }
 
 } // anonymous namespace
 
 std::optional<ColumnStatsData> try_load_column_stats(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item
 ) {
     auto column_stats_key = version_store::index_key_to_column_stats_key(versioned_item.key_);
 
@@ -132,14 +131,19 @@ std::optional<ColumnStatsData> try_load_column_stats(
         }
 
         if (!data.start_index_col.has_value() || !data.end_index_col.has_value()) {
-            ARCTICDB_DEBUG(log::version(),
-                "Column stats segment missing start_index or end_index columns, cannot use for pruning");
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "Column stats segment missing start_index or end_index columns, cannot use for pruning"
+            );
             return std::nullopt;
         }
 
-        ARCTICDB_DEBUG(log::version(),
-            "Loaded column stats with {} rows and {} column stats",
-            data.segment.row_count(), data.column_min_max_indices.size());
+        ARCTICDB_DEBUG(
+                log::version(),
+                "Loaded column stats with {} rows and {} column stats",
+                data.segment.row_count(),
+                data.column_min_max_indices.size()
+        );
 
         return data;
     } catch (const std::exception& e) {
@@ -150,13 +154,11 @@ std::optional<ColumnStatsData> try_load_column_stats(
 }
 
 pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats_filter(
-    std::shared_ptr<ColumnStatsData> column_stats_data,
-    std::vector<PruneablePredicate> predicates
+        std::shared_ptr<ColumnStatsData> column_stats_data, std::vector<PruneablePredicate> predicates
 ) {
     return [stats = std::move(column_stats_data), preds = std::move(predicates)](
-        const pipelines::index::IndexSegmentReader& isr,
-        std::unique_ptr<util::BitSet>&& input
-    ) mutable -> std::unique_ptr<util::BitSet> {
+                   const pipelines::index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input
+           ) mutable -> std::unique_ptr<util::BitSet> {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
 
         if (!stats || preds.empty()) {
@@ -164,7 +166,7 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             if (input) {
                 return std::move(input);
             }
-            res->set();  // All bits set (include all)
+            res->set(); // All bits set (include all)
             return res;
         }
 
@@ -209,26 +211,27 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             size_t stats_row = stats_it->second;
 
             // Check if we can prune this segment based on any predicate
-            bool should_prune = can_prune_segment(preds, [&](const std::string& col_name) -> std::optional<ColumnStatValues> {
-                auto col_it = stats->column_min_max_indices.find(col_name);
-                if (col_it == stats->column_min_max_indices.end()) {
-                    return std::nullopt;
-                }
+            bool should_prune =
+                    can_prune_segment(preds, [&](const std::string& col_name) -> std::optional<ColumnStatValues> {
+                        auto col_it = stats->column_min_max_indices.find(col_name);
+                        if (col_it == stats->column_min_max_indices.end()) {
+                            return std::nullopt;
+                        }
 
-                auto min_val = get_double_value_at(stats->segment, col_it->second.first, stats_row);
-                auto max_val = get_double_value_at(stats->segment, col_it->second.second, stats_row);
+                        auto min_val = get_double_value_at(stats->segment, col_it->second.first, stats_row);
+                        auto max_val = get_double_value_at(stats->segment, col_it->second.second, stats_row);
 
-                if (!min_val.has_value() || !max_val.has_value()) {
-                    return std::nullopt;
-                }
+                        if (!min_val.has_value() || !max_val.has_value()) {
+                            return std::nullopt;
+                        }
 
-                return ColumnStatValues{min_val, max_val};
-            });
+                        return ColumnStatValues{min_val, max_val};
+                    });
 
             if (should_prune) {
-                ARCTICDB_DEBUG(log::version(),
-                    "Column stats pruning: Skipping segment {} (index {}-{})",
-                    r, start_idx, end_idx);
+                ARCTICDB_DEBUG(
+                        log::version(), "Column stats pruning: Skipping segment {} (index {}-{})", r, start_idx, end_idx
+                );
                 pruned_count++;
                 // Don't set the bit - segment is pruned
             } else {
@@ -241,18 +244,15 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             *res &= *input;
         }
 
-        ARCTICDB_DEBUG(log::version(),
-            "Column stats filter pruned {} of {} segments",
-            pruned_count, isr.size());
+        ARCTICDB_DEBUG(log::version(), "Column stats filter pruned {} of {} segments", pruned_count, isr.size());
 
         return res;
     };
 }
 
 std::optional<pipelines::FilterQuery<pipelines::index::IndexSegmentReader>> try_create_column_stats_filter_for_clauses(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item,
-    const std::vector<std::shared_ptr<Clause>>& clauses
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
+        const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
     // Look for FilterClause in the clauses by checking for expression context
     for (const auto& clause : clauses) {
@@ -287,15 +287,13 @@ std::optional<pipelines::FilterQuery<pipelines::index::IndexSegmentReader>> try_
         }
 
         if (!has_relevant_stats) {
-            ARCTICDB_DEBUG(log::version(),
-                "Column stats exist but don't contain relevant columns for predicates");
+            ARCTICDB_DEBUG(log::version(), "Column stats exist but don't contain relevant columns for predicates");
             return std::nullopt;
         }
 
         // Create and return the filter
         return create_column_stats_filter(
-            std::make_shared<ColumnStatsData>(std::move(*column_stats)),
-            std::move(predicates)
+                std::make_shared<ColumnStatsData>(std::move(*column_stats)), std::move(predicates)
         );
     }
 
