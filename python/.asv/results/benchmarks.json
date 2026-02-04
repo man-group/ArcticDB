@@ -2396,13 +2396,12 @@
     },
     "version": 2,
     "version_chain.IterateVersionChain.track_num_ver_reads_list_undeleted_versions": {
-        "code": "class IterateVersionChain:\n    def track_num_ver_reads_list_undeleted_versions(self, num_versions, caching, deleted, read_delay_ms):\n        query_stats.reset_stats()\n        self.lib.list_versions(symbol=self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
+        "code": "class IterateVersionChain:\n    def track_num_ver_reads_list_undeleted_versions(self, num_versions, caching, deleted):\n        query_stats.reset_stats()\n        self.lib.list_versions(symbol=self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
         "name": "version_chain.IterateVersionChain.track_num_ver_reads_list_undeleted_versions",
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted",
-            "read_delay_ms"
+            "tail_deleted"
         ],
         "params": [
             [
@@ -2416,25 +2415,19 @@
             [
                 "True",
                 "False"
-            ],
-            [
-                "1",
-                "10"
             ]
         ],
-        "timeout": 1000,
         "type": "track",
         "unit": "unit",
-        "version": "ff224b61560b308bf5c8928dcb8c1b7edf28c9d470343b6942d04b086cf72ed6"
+        "version": "6c43bd4b095463b0dedc0491cefbe92815b55b3fe31093e80d9fd8ab5cffb1e2"
     },
     "version_chain.IterateVersionChain.track_num_ver_reads_load_all_versions": {
-        "code": "class IterateVersionChain:\n    def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):\n        query_stats.reset_stats()\n        self.load_all(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
+        "code": "class IterateVersionChain:\n    def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted):\n        query_stats.reset_stats()\n        self.load_all(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
         "name": "version_chain.IterateVersionChain.track_num_ver_reads_load_all_versions",
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted",
-            "read_delay_ms"
+            "tail_deleted"
         ],
         "params": [
             [
@@ -2448,25 +2441,19 @@
             [
                 "True",
                 "False"
-            ],
-            [
-                "1",
-                "10"
             ]
         ],
-        "timeout": 1000,
         "type": "track",
         "unit": "unit",
-        "version": "ef2c0e839197ad0fff7e0a30edc7e0c733af17770b534b731fc7404e8077fcea"
+        "version": "62bfd1aaf7ff82577a691181423531d06ed7a55d29e6e90203101c5f45516c9a"
     },
     "version_chain.IterateVersionChain.track_num_ver_reads_read_from_epoch": {
-        "code": "class IterateVersionChain:\n    def track_num_ver_reads_read_from_epoch(self, num_versions, caching, deleted, read_delay_ms):\n        query_stats.reset_stats()\n        self.read_from_epoch(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
+        "code": "class IterateVersionChain:\n    def track_num_ver_reads_read_from_epoch(self, num_versions, caching, deleted):\n        query_stats.reset_stats()\n        self.read_from_epoch(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
         "name": "version_chain.IterateVersionChain.track_num_ver_reads_read_from_epoch",
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted",
-            "read_delay_ms"
+            "tail_deleted"
         ],
         "params": [
             [
@@ -2480,25 +2467,19 @@
             [
                 "True",
                 "False"
-            ],
-            [
-                "1",
-                "10"
             ]
         ],
-        "timeout": 1000,
         "type": "track",
         "unit": "unit",
-        "version": "dd46c1fcf06d439f13ab8b6e94e8542e84368ba02db211e63f2a74d7c145de11"
+        "version": "b2c92fce8c863add9f716d7a2cefdca637b2117d8ba1ac7b0b8544cfa8e45015"
     },
     "version_chain.IterateVersionChain.track_num_ver_reads_read_v0": {
-        "code": "class IterateVersionChain:\n    def track_num_ver_reads_read_v0(self, num_versions, caching, deleted, read_delay_ms):\n        query_stats.reset_stats()\n        self.read_v0(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
+        "code": "class IterateVersionChain:\n    def track_num_ver_reads_read_v0(self, num_versions, caching, deleted):\n        query_stats.reset_stats()\n        self.read_v0(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
         "name": "version_chain.IterateVersionChain.track_num_ver_reads_read_v0",
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted",
-            "read_delay_ms"
+            "tail_deleted"
         ],
         "params": [
             [
@@ -2512,25 +2493,19 @@
             [
                 "True",
                 "False"
-            ],
-            [
-                "1",
-                "10"
             ]
         ],
-        "timeout": 1000,
         "type": "track",
         "unit": "unit",
-        "version": "4530efb975b6a82b85156b077c6f2559931181d71456344ecff9af15c0733eb8"
+        "version": "0ed06e659040e01d1c02c81778c1e343d0f7281301cd2b149a8f5afac64b8a0f"
     },
     "version_chain.IterateVersionChain.track_num_ver_reads_time_read_alternating": {
-        "code": "class IterateVersionChain:\n    def track_num_ver_reads_time_read_alternating(self, num_versions, caching, deleted, read_delay_ms):\n        query_stats.reset_stats()\n        self.read_from_epoch(self.symbol(num_versions))\n        self.read_v0(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted, read_delay_ms):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
+        "code": "class IterateVersionChain:\n    def track_num_ver_reads_time_read_alternating(self, num_versions, caching, deleted):\n        query_stats.reset_stats()\n        self.read_from_epoch(self.symbol(num_versions))\n        self.read_v0(self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
         "name": "version_chain.IterateVersionChain.track_num_ver_reads_time_read_alternating",
         "param_names": [
             "num_versions",
             "caching",
-            "tail_deleted",
-            "read_delay_ms"
+            "tail_deleted"
         ],
         "params": [
             [
@@ -2544,15 +2519,10 @@
             [
                 "True",
                 "False"
-            ],
-            [
-                "1",
-                "10"
             ]
         ],
-        "timeout": 1000,
         "type": "track",
         "unit": "unit",
-        "version": "edf8858800bafc1960df087125ff33fbf95002566181bd6ec35c43208de4170f"
+        "version": "0055459dae3b5d58af29abca982fcdd1e187ff18810517da4c8f61dd7ec78e57"
     }
 }

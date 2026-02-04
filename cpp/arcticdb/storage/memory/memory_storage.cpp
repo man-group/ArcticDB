@@ -12,7 +12,7 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
-#include "toolbox/query_stats.hpp"
+#include <arcticdb/toolbox/query_stats.hpp>
 
 namespace arcticdb::storage::memory {
 

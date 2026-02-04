@@ -24,8 +24,6 @@ def count_version_reads(qs):
 
 
 class IterateVersionChain:
-    timeout = 1000
-
     # rounds = repeat = 1 so that we do not run the slow setup more than we need to
     rounds = 1
     repeat = 1
@@ -37,11 +35,11 @@ class IterateVersionChain:
     LIB_NAME_UNDELETED = "lib_undeleted"
     LIB_NAME_DELETED = "lib_deleted"
 
-    params = ([100], ["forever", "default", "never"], [True, False], [1, 10])
+    params = ([100], ["forever", "default", "never"], [True, False])
 
     # In the tail_deleted case we delete the symbol after writing the DELETION_POINT fraction of the versions,
     # so the tail of the version chain is deleted.
-    param_names = ["num_versions", "caching", "tail_deleted", "read_delay_ms"]
+    param_names = ["num_versions", "caching", "tail_deleted"]
 
     def symbol(self, num_versions):
         return f"symbol_{num_versions}"
@@ -53,7 +51,7 @@ class IterateVersionChain:
     def _setup(self) -> Arctic:
         ac = Arctic(IterateVersionChain.CONNECTION_STRING)
 
-        num_versions_list, caching_list, deleted_list, read_delay_ms = IterateVersionChain.params
+        num_versions_list, caching_list, deleted_list = IterateVersionChain.params
 
         lib_undeleted = ac.create_library(IterateVersionChain.LIB_NAME_UNDELETED)
         lib_deleted = ac.create_library(IterateVersionChain.LIB_NAME_DELETED)
@@ -106,7 +104,7 @@ class IterateVersionChain:
         except NoSuchVersionException:
             pass
 
-    def setup(self, num_versions, caching, deleted, read_delay_ms):
+    def setup(self, num_versions, caching, deleted):
         # Disable warnings for version not found
         set_log_level("ERROR")
 
@@ -129,35 +127,35 @@ class IterateVersionChain:
             self.load_all(self.symbol(num_versions))
         query_stats.enable()
 
-    def teardown(self, num_versions, caching, deleted, read_delay_ms):
+    def teardown(self, num_versions, caching, deleted):
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
         del self.lib
 
-    def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_load_all_versions(self, num_versions, caching, deleted):
         query_stats.reset_stats()
         self.load_all(self.symbol(num_versions))
         stats = query_stats.get_query_stats()
         return count_version_reads(stats)
 
-    def track_num_ver_reads_list_undeleted_versions(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_list_undeleted_versions(self, num_versions, caching, deleted):
         query_stats.reset_stats()
         self.lib.list_versions(symbol=self.symbol(num_versions))
         stats = query_stats.get_query_stats()
         return count_version_reads(stats)
 
-    def track_num_ver_reads_read_v0(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_read_v0(self, num_versions, caching, deleted):
         query_stats.reset_stats()
         self.read_v0(self.symbol(num_versions))
         stats = query_stats.get_query_stats()
         return count_version_reads(stats)
 
-    def track_num_ver_reads_read_from_epoch(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_read_from_epoch(self, num_versions, caching, deleted):
         query_stats.reset_stats()
         self.read_from_epoch(self.symbol(num_versions))
         stats = query_stats.get_query_stats()
         return count_version_reads(stats)
 
-    def track_num_ver_reads_time_read_alternating(self, num_versions, caching, deleted, read_delay_ms):
+    def track_num_ver_reads_time_read_alternating(self, num_versions, caching, deleted):
         query_stats.reset_stats()
         self.read_from_epoch(self.symbol(num_versions))
         self.read_v0(self.symbol(num_versions))
