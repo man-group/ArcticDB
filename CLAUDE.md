@@ -6,46 +6,46 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
-## Developer Documentation
+## Claude-Maintained Documentation
 
-Detailed technical documentation is maintained in `docs/dev/`. **Always consult and update these documents when making significant changes.**
+Technical documentation in `docs/claude/` is **owned and maintained by Claude**. This documentation is automatically kept up-to-date as Claude makes changes to the codebase. Always consult these documents when working on related areas.
 
 ### Core Documentation
 
 | Document | Content |
 |----------|---------|
-| [docs/dev/README.md](docs/dev/README.md) | Documentation index |
-| [docs/dev/ARCHITECTURE.md](docs/dev/ARCHITECTURE.md) | Overall architecture, repository structure, build system |
+| [docs/claude/README.md](docs/claude/README.md) | Documentation index |
+| [docs/claude/ARCHITECTURE.md](docs/claude/ARCHITECTURE.md) | Overall architecture, repository structure, build system |
 
-### C++ Documentation (`docs/dev/cpp/`)
-
-| Document | Content |
-|----------|---------|
-| [CACHING.md](docs/dev/cpp/CACHING.md) | Version map caching system, multi-process behavior |
-| [VERSIONING.md](docs/dev/cpp/VERSIONING.md) | Version chain structure, write/read paths, tombstones |
-| [STORAGE_BACKENDS.md](docs/dev/cpp/STORAGE_BACKENDS.md) | S3, Azure, LMDB, MongoDB backend implementations |
-| [ENTITY.md](docs/dev/cpp/ENTITY.md) | Core data types, keys, type system |
-| [CODEC.md](docs/dev/cpp/CODEC.md) | Compression, encoding, segment format |
-| [COLUMN_STORE.md](docs/dev/cpp/COLUMN_STORE.md) | Columnar data layout, memory management |
-| [PIPELINE.md](docs/dev/cpp/PIPELINE.md) | Read/write data pipelines |
-| [PROCESSING.md](docs/dev/cpp/PROCESSING.md) | Query processing, clauses, expressions |
-| [STREAM.md](docs/dev/cpp/STREAM.md) | Data streaming, aggregation |
-| [ASYNC.md](docs/dev/cpp/ASYNC.md) | Task scheduling, thread pools |
-| [PYTHON_BINDINGS.md](docs/dev/cpp/PYTHON_BINDINGS.md) | pybind11 bindings to Python
-
-### Python Module Documentation (`docs/dev/python/`)
+### C++ Documentation (`docs/claude/cpp/`)
 
 | Document | Content |
 |----------|---------|
-| [ARCTIC_CLASS.md](docs/dev/python/ARCTIC_CLASS.md) | Arctic class, library management, URI parsing |
-| [LIBRARY_API.md](docs/dev/python/LIBRARY_API.md) | Library class V2 API (read/write/update) |
-| [NATIVE_VERSION_STORE.md](docs/dev/python/NATIVE_VERSION_STORE.md) | V1 API, C++ bridge |
-| [QUERY_PROCESSING.md](docs/dev/python/QUERY_PROCESSING.md) | QueryBuilder, expressions |
-| [NORMALIZATION.md](docs/dev/python/NORMALIZATION.md) | DataFrame normalization |
-| [ADAPTERS.md](docs/dev/python/ADAPTERS.md) | Storage adapters |
-| [TOOLBOX.md](docs/dev/python/TOOLBOX.md) | Library inspection tools |
+| [CACHING.md](docs/claude/cpp/CACHING.md) | Version map caching system, multi-process behavior |
+| [VERSIONING.md](docs/claude/cpp/VERSIONING.md) | Version chain structure, write/read paths, tombstones |
+| [STORAGE_BACKENDS.md](docs/claude/cpp/STORAGE_BACKENDS.md) | S3, Azure, LMDB, MongoDB backend implementations |
+| [ENTITY.md](docs/claude/cpp/ENTITY.md) | Core data types, keys, type system |
+| [CODEC.md](docs/claude/cpp/CODEC.md) | Compression, encoding, segment format |
+| [COLUMN_STORE.md](docs/claude/cpp/COLUMN_STORE.md) | Columnar data layout, memory management |
+| [PIPELINE.md](docs/claude/cpp/PIPELINE.md) | Read/write data pipelines |
+| [PROCESSING.md](docs/claude/cpp/PROCESSING.md) | Query processing, clauses, expressions |
+| [STREAM.md](docs/claude/cpp/STREAM.md) | Data streaming, aggregation |
+| [ASYNC.md](docs/claude/cpp/ASYNC.md) | Task scheduling, thread pools |
+| [PYTHON_BINDINGS.md](docs/claude/cpp/PYTHON_BINDINGS.md) | pybind11 bindings to Python
 
-**Important**: When making changes to architecture, caching, versioning, storage backends, or any C++/Python modules, update the corresponding documentation to keep it current for future development.
+### Python Module Documentation (`docs/claude/python/`)
+
+| Document | Content |
+|----------|---------|
+| [ARCTIC_CLASS.md](docs/claude/python/ARCTIC_CLASS.md) | Arctic class, library management, URI parsing |
+| [LIBRARY_API.md](docs/claude/python/LIBRARY_API.md) | Library class V2 API (read/write/update) |
+| [NATIVE_VERSION_STORE.md](docs/claude/python/NATIVE_VERSION_STORE.md) | V1 API, C++ bridge |
+| [QUERY_PROCESSING.md](docs/claude/python/QUERY_PROCESSING.md) | QueryBuilder, expressions |
+| [NORMALIZATION.md](docs/claude/python/NORMALIZATION.md) | DataFrame normalization |
+| [ADAPTERS.md](docs/claude/python/ADAPTERS.md) | Storage adapters |
+| [TOOLBOX.md](docs/claude/python/TOOLBOX.md) | Library inspection tools |
+
+**Important**: When making changes to architecture, caching, versioning, storage backends, or any C++/Python modules, Claude will update the corresponding documentation to keep it current.
 
 ## User-Specific Settings
 

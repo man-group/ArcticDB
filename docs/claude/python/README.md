@@ -1,5 +1,7 @@
 # ArcticDB Python Documentation
 
+> **Note**: This documentation is **owned and maintained by Claude**. It is automatically kept up-to-date as Claude makes changes to the codebase.
+
 This directory contains detailed documentation for the Python layer of ArcticDB.
 
 ## Module Index

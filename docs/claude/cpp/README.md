@@ -1,5 +1,7 @@
 # ArcticDB C++ Documentation
 
+> **Note**: This documentation is **owned and maintained by Claude**. It is automatically kept up-to-date as Claude makes changes to the codebase.
+
 This directory contains detailed documentation for the C++ layer of ArcticDB.
 
 ## System Documentation

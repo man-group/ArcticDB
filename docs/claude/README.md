@@ -1,5 +1,7 @@
 # ArcticDB Developer Documentation
 
+> **Note**: This documentation is **owned and maintained by Claude**. It is automatically kept up-to-date as Claude makes changes to the codebase. Human developers should treat this as authoritative technical reference.
+
 This directory contains technical documentation for developing and maintaining ArcticDB. These documents are intended for contributors and maintainers.
 
 ## Documentation Index
@@ -61,7 +63,7 @@ Detailed documentation for the Python layer (`python/arcticdb/`):
 ## Directory Structure
 
 ```
-docs/dev/
+docs/claude/
 ├── README.md              # This file
 ├── ARCHITECTURE.md        # System architecture overview
 ├── cpp/                   # C++ documentation
@@ -88,16 +90,16 @@ docs/dev/
     └── TOOLBOX.md
 ```
 
-## Keeping Documentation Updated
+## Documentation Maintenance
 
-When making significant changes to ArcticDB:
+This documentation is maintained by Claude. When Claude makes significant changes to ArcticDB, it will automatically update the relevant documentation:
 
-1. **Architecture changes** - Update [ARCHITECTURE.md](ARCHITECTURE.md)
-2. **Cache behavior changes** - Update [cpp/CACHING.md](cpp/CACHING.md)
-3. **Version chain changes** - Update [cpp/VERSIONING.md](cpp/VERSIONING.md)
-4. **Storage backend changes** - Update [cpp/STORAGE_BACKENDS.md](cpp/STORAGE_BACKENDS.md)
-5. **C++ module changes** - Update relevant file in [cpp/](cpp/)
-6. **Python module changes** - Update relevant file in [python/](python/)
+1. **Architecture changes** - [ARCHITECTURE.md](ARCHITECTURE.md)
+2. **Cache behavior changes** - [cpp/CACHING.md](cpp/CACHING.md)
+3. **Version chain changes** - [cpp/VERSIONING.md](cpp/VERSIONING.md)
+4. **Storage backend changes** - [cpp/STORAGE_BACKENDS.md](cpp/STORAGE_BACKENDS.md)
+5. **C++ module changes** - Relevant file in [cpp/](cpp/)
+6. **Python module changes** - Relevant file in [python/](python/)
 
 ## Related Documentation
 
