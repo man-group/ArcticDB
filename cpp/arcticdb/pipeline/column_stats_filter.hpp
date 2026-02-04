@@ -14,7 +14,7 @@
 #include <arcticdb/processing/segment_filter_analysis.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/version/versioned_item.hpp>
+#include <arcticdb/entity/versioned_item.hpp>
 
 #include <memory>
 #include <optional>

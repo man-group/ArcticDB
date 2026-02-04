@@ -30,13 +30,12 @@ std::optional<std::pair<std::string, bool>> parse_stats_column_name(std::string_
     auto pattern = name.substr(underscore_pos + 1);
 
     bool is_min = false;
-    bool is_max = false;
 
     if (pattern.starts_with("MIN(")) {
         is_min = true;
         pattern = pattern.substr(4);  // Remove "MIN("
     } else if (pattern.starts_with("MAX(")) {
-        is_max = true;
+        // is_min stays false for MAX
         pattern = pattern.substr(4);  // Remove "MAX("
     } else {
         return std::nullopt;
@@ -94,7 +93,7 @@ std::optional<ColumnStatsData> try_load_column_stats(
     const std::shared_ptr<Store>& store,
     const VersionedItem& versioned_item
 ) {
-    auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+    auto column_stats_key = version_store::index_key_to_column_stats_key(versioned_item.key_);
 
     try {
         auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
