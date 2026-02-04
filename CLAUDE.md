@@ -148,4 +148,10 @@ VERSION_REF (symbol)
 
 ### Code Style
 
-- Code style enforced by `./build_tooling/format.py`
+Run:
+
+`python ./build_tooling/format.py --install-tools` once per session.
+
+Before each commit run:
+
+`python ./build_tooling/format.py --in-place --type all`
