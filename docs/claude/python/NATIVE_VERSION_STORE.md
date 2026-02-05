@@ -76,193 +76,41 @@ versions = nvs.list_versions("symbol")
 
 ### Write Operations
 
-```python
-def write(
-    self,
-    symbol: str,
-    data: Any,
-    metadata: Any = None,
-    prune_previous_version: bool = False,
-    pickle_on_failure: bool = False
-) -> VersionedItem:
-    """
-    Write data to storage.
-
-    Args:
-        symbol: Symbol name
-        data: DataFrame or compatible data
-        metadata: User metadata (pickled)
-        prune_previous_version: Delete old versions after write
-        pickle_on_failure: Fall back to pickle if normalization fails
-    """
-
-def append(
-    self,
-    symbol: str,
-    data: Any,
-    metadata: Any = None,
-    prune_previous_version: bool = False,
-    upsert: bool = False
-) -> VersionedItem:
-    """Append rows to existing symbol."""
-
-def update(
-    self,
-    symbol: str,
-    data: Any,
-    metadata: Any = None,
-    upsert: bool = False,
-    date_range: Tuple = None
-) -> VersionedItem:
-    """Update rows by index range."""
-```
+- `write(symbol, data, metadata, prune_previous_version, pickle_on_failure)` - Write data (note: singular `prune_previous_version` in V1)
+- `append(symbol, data, metadata, prune_previous_version, upsert)` - Append rows
+- `update(symbol, data, metadata, upsert, date_range)` - Update rows by index range
 
 ### Read Operations
 
-```python
-def read(
-    self,
-    symbol: str,
-    as_of: Optional[int] = None,
-    date_range: Tuple = None,
-    row_range: Tuple = None,
-    columns: List[str] = None,
-    query_builder: QueryBuilder = None
-) -> VersionedItem:
-    """Read data from storage."""
-
-def read_metadata(
-    self,
-    symbol: str,
-    as_of: Optional[int] = None
-) -> VersionedItem:
-    """Read only metadata (no data)."""
-
-def get_info(
-    self,
-    symbol: str,
-    as_of: Optional[int] = None
-) -> Dict:
-    """Get symbol information without reading data."""
-```
+- `read(symbol, as_of, date_range, row_range, columns, query_builder)` - Read data
+- `read_metadata(symbol, as_of)` - Read only metadata
+- `get_info(symbol, as_of)` - Get symbol info without reading data
 
 ### Version Operations
 
-```python
-def list_versions(
-    self,
-    symbol: str = None,
-    snapshot: str = None,
-    skip_snapshots: bool = False
-) -> List[VersionInfo]:
-    """List versions for a symbol."""
-
-def delete_version(
-    self,
-    symbol: str,
-    version: int
-) -> None:
-    """Delete a specific version."""
-
-def prune_previous_versions(
-    self,
-    symbol: str
-) -> List[int]:
-    """Delete all but the latest version."""
-```
+- `list_versions(symbol, snapshot, skip_snapshots)` - List versions
+- `delete_version(symbol, version)` - Delete specific version
+- `prune_previous_versions(symbol)` - Delete all but latest
 
 ### Snapshot Operations
 
-```python
-def snapshot(
-    self,
-    snap_name: str,
-    metadata: Any = None,
-    skip_symbols: List[str] = None,
-    versions: Dict[str, int] = None
-) -> None:
-    """Create a named snapshot."""
-
-def list_snapshots(self) -> Dict[str, Any]:
-    """List all snapshots."""
-
-def delete_snapshot(self, snap_name: str) -> None:
-    """Delete a snapshot."""
-```
+- `snapshot(snap_name, metadata, skip_symbols, versions)` - Create snapshot
+- `list_snapshots()` - List all snapshots
+- `delete_snapshot(snap_name)` - Delete snapshot
 
 ## C++ Interface
 
 ### How It Connects
 
-```python
-class NativeVersionStore:
-    def __init__(self, library):
-        # library is C++ PythonVersionStore
-        self._library = library
-
-    def write(self, symbol, data, ...):
-        # Normalize Python data
-        normalized = normalize(data)
-
-        # Call C++ write
-        return self._library.write(
-            symbol,
-            normalized,
-            ...
-        )
-
-    def read(self, symbol, ...):
-        # Call C++ read
-        result = self._library.read(symbol, ...)
-
-        # Denormalize to Python
-        return denormalize(result)
-```
+`NativeVersionStore._library` is a `PythonVersionStore` instance created via pybind11. Write operations normalize Python data before calling C++; read operations denormalize C++ results back to Python.
 
 ### Binding to C++
 
-The `_library` attribute is a `PythonVersionStore` instance created via pybind11:
-
-```cpp
-// In cpp/arcticdb/version/version_store_api.cpp
-class PythonVersionStore {
-    void write(
-        const StreamId& stream_id,
-        const InputTensorFrame& frame,
-        ...
-    );
-
-    OutputTensorFrame read(
-        const StreamId& stream_id,
-        const VersionQuery& version_query,
-        ...
-    );
-};
-```
+`PythonVersionStore` is defined in `cpp/arcticdb/version/version_store_api.cpp` and provides `write()` and `read()` methods that work with `InputTensorFrame` and `OutputTensorFrame`.
 
 ## Configuration
 
-### Store Configuration
-
-```python
-# Configuration passed to C++
-config = {
-    "lib_cfg": library_config_proto,
-    "env_cfg": environment_config_proto,
-    "open_mode": "write",  # or "read"
-}
-
-nvs = NativeVersionStore.create_store_from_config(config)
-```
-
-### Runtime Settings
-
-```python
-from arcticdb_ext import set_config_int
-
-# Set cache reload interval
-set_config_int("VersionMap.ReloadInterval", 5_000_000_000)
-```
+Store configuration is passed to C++ via `NativeVersionStore.create_store_from_config(config)`. Runtime settings can be adjusted via `arcticdb_ext.set_config_int()` and `set_config_string()`.
 
 ## Advanced Features
 

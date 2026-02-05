@@ -37,29 +37,12 @@ SegmentInMemory
 
 ### Key Methods
 
-```cpp
-class SegmentInMemory {
-public:
-    // Construction
-    SegmentInMemory(const StreamDescriptor& desc);
-
-    // Row operations
-    void end_row();                    // Finalize current row
-    size_t row_count() const;
-
-    // Column access
-    Column& column(size_t idx);
-    const Column& column(size_t idx) const;
-    size_t num_columns() const;
-
-    // String pool
-    StringPool& string_pool();
-
-    // Iteration
-    auto begin() { return columns_.begin(); }
-    auto end() { return columns_.end(); }
-};
-```
+`SegmentInMemory` class provides:
+- `end_row()` - Finalize current row
+- `row_count()` - Number of rows
+- `column(idx)` / `num_columns()` - Column access
+- `string_pool()` - Access shared string storage
+- `begin()` / `end()` - Iterate over columns
 
 ## Column
 
@@ -84,47 +67,13 @@ Column
 
 ### Key Methods
 
-```cpp
-class Column {
-public:
-    // Type information
-    TypeDescriptor type() const;  // Access data_type via type().data_type()
-
-    // Data access
-    template<typename T>
-    void set_scalar(size_t row, T val);
-
-    template<typename T>
-    T scalar_at(size_t row) const;
-
-    // Buffer access
-    ChunkedBuffer& buffer();
-    const ChunkedBuffer& buffer() const;
-
-    // Column data wrapper for iteration
-    ColumnData data() const;
-
-    // Sparse support
-    bool is_sparse() const;
-    util::BitSet& sparse_map();
-
-    // Type modification
-    void change_type(DataType target_type);
-};
-```
-
-### Type-Safe Access
-
-```cpp
-// Reading values
-const Column& col = segment.column(0);
-if (col.type().data_type() == DataType::FLOAT64) {
-    double val = col.scalar_at<double>(row_idx);
-}
-
-// Writing values (via segment set_scalar)
-segment.set_scalar<int64_t>(col_idx, 42);
-```
+`Column` class provides:
+- `type()` - Get `TypeDescriptor` (access data_type via `type().data_type()`)
+- `set_scalar<T>(row, val)` / `scalar_at<T>(row)` - Type-safe value access
+- `buffer()` - Access underlying `ChunkedBuffer`
+- `data()` - Get `ColumnData` wrapper for iteration
+- `is_sparse()` / `sparse_map()` - Sparse column support
+- `change_type(target)` - Type modification
 
 ## String Pool
 
@@ -156,39 +105,14 @@ Example:
 
 ### Key Methods
 
-```cpp
-class StringPool {
-public:
-    using offset_t = position_t;
-
-    // Add string and get offset (deduplicate by default)
-    // Note: Method is called get(), not add()
-    OffsetString get(std::string_view s, bool deduplicate = true);
-    OffsetString get(const char* data, size_t size, bool deduplicate = true);
-
-    // Retrieve string by offset
-    std::string_view get_view(offset_t o);
-    std::string_view get_const_view(offset_t o) const;
-
-    // Memory management
-    void clear();
-    std::shared_ptr<StringPool> clone() const;
-};
-```
+`StringPool` class provides:
+- `get(string_view, deduplicate=true)` - Add string and get offset (note: method is named `get()`, not `add()`)
+- `get_view(offset)` / `get_const_view(offset)` - Retrieve string by offset
+- `clear()` / `clone()` - Memory management
 
 ### String Column Storage
 
-String columns store offsets into the string pool rather than the strings themselves:
-
-```cpp
-// Column data contains offsets
-Column string_col(TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::SCALAR});
-
-// Add string to pool using get(), store offset in column
-// get() returns OffsetString which contains the offset
-auto off_string = segment.string_pool().get("hello world");
-string_col.push_back(off_string);
-```
+String columns store offsets into the string pool rather than the strings themselves. Call `segment.string_pool().get("hello")` to get an `OffsetString` containing the offset.
 
 ## ChunkedBuffer
 
@@ -259,55 +183,9 @@ ARCTICDB_TRACE_FREE(size);
 | `chunked_buffer.hpp` | ChunkedBuffer class |
 | `column_data.hpp` | Column data accessors |
 
-## Usage Examples
+## Usage
 
-### Creating a Segment
-
-```cpp
-#include <arcticdb/column_store/memory_segment.hpp>
-
-// Define schema
-StreamDescriptor desc;
-desc.add_field(FieldRef{TypeDescriptor{DataType::INT64, Dimension::SCALAR}, "id"});
-desc.add_field(FieldRef{TypeDescriptor{DataType::FLOAT64, Dimension::SCALAR}, "value"});
-
-// Create segment
-SegmentInMemory segment(desc);
-
-// Add rows
-segment.set_scalar<int64_t>(0, 1);     // Column 0
-segment.set_scalar<double>(1, 3.14);   // Column 1
-segment.end_row();
-
-segment.set_scalar<int64_t>(0, 2);
-segment.set_scalar<double>(1, 2.71);
-segment.end_row();
-```
-
-### Iterating Over Columns
-
-```cpp
-for (size_t i = 0; i < segment.num_columns(); ++i) {
-    const Column& col = segment.column(i);
-    std::cout << "Column " << i << ": type=" << col.type()
-              << ", rows=" << col.row_count() << std::endl;
-}
-```
-
-### Working with Strings
-
-```cpp
-// Add string column
-desc.add_field(FieldRef{TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::SCALAR}, "name"});
-SegmentInMemory segment(desc);
-
-// Add string value
-segment.set_string(2, "Alice");
-segment.end_row();
-
-// Read string value
-std::string_view name = segment.string_at(2, 0);  // Column 2, row 0
-```
+Create segments via `SegmentInMemory(StreamDescriptor)`. Add rows using `set_scalar<T>(col, val)` and `end_row()`. Access strings via `set_string(col, str)` and `string_at(col, row)`. See `cpp/arcticdb/column_store/memory_segment.hpp` for full API.
 
 ## Performance Considerations
 

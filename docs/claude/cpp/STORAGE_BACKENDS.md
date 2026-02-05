@@ -43,28 +43,10 @@ ArcticDB abstracts storage through a common interface, allowing data to be store
 
 The storage layer has two main abstractions:
 
-1. **Store** (`store.hpp`) - High-level interface inheriting from `StreamSink` and `StreamSource`
-2. **Storage** (`storage.hpp`) - Base class for backend implementations
+1. **Store** (`cpp/arcticdb/storage/store.hpp`) - High-level interface inheriting from `StreamSink` and `StreamSource`
+2. **Storage** (`cpp/arcticdb/storage/storage.hpp`) - Base class for backend implementations
 
-```cpp
-// cpp/arcticdb/storage/storage.hpp
-// Base class that backends (S3, Azure, LMDB, etc.) inherit from
-
-class Storage {
-protected:
-    // Override these in backend implementations
-    virtual void do_write(Composite<KeySegmentPair>&& kvs) = 0;
-    virtual void do_read(Composite<VariantKey>&& ks,
-                         const ReadVisitor& visitor,
-                         ReadKeyOpts opts) = 0;
-    virtual void do_remove(Composite<VariantKey>&& ks,
-                           RemoveOpts opts) = 0;
-    virtual bool do_key_exists(const VariantKey& key) = 0;
-    virtual void do_iterate_type(KeyType key_type,
-                                 const IterateTypeVisitor& visitor,
-                                 const std::string& prefix) = 0;
-};
-```
+Backends inherit from `Storage` and implement: `do_write()`, `do_read()`, `do_remove()`, `do_key_exists()`, and `do_iterate_type()`.
 
 ## S3 Storage
 
@@ -232,36 +214,15 @@ lib = ac.create_library("test")
 
 ## Storage Factory
 
-### Key Enumeration
-
-```cpp
-// cpp/arcticdb/storage/storage_factory.cpp
-
-Storage* create_storage(const LibraryDescriptor& library_desc) {
-    switch (library_desc.storage_type()) {
-        case StorageType::S3:
-            return new S3Storage(...);
-        case StorageType::AZURE:
-            return new AzureStorage(...);
-        case StorageType::LMDB:
-            return new LMDBStorage(...);
-        // ...
-    }
-}
-```
+`create_storage()` in `cpp/arcticdb/storage/storage_factory.cpp` creates the appropriate backend based on `StorageType` (S3, AZURE, LMDB, etc.).
 
 ### URI Parsing
 
-URI parsing is handled by each storage adapter in Python. Each adapter has a `ParsedQuery` class and parsing logic:
-
-```python
-# Each adapter in python/arcticdb/adapters/ handles its own URI scheme:
-# - s3_library_adapter.py      → s3://, s3s://
-# - azure_library_adapter.py   → azure://
-# - lmdb_library_adapter.py    → lmdb://
-# - gcpxml_library_adapter.py  → gcpxml://
-# - mongo_library_adapter.py   → mongodb://
-```
+URI parsing is handled by Python storage adapters in `python/arcticdb/adapters/`:
+- `s3_library_adapter.py` → s3://, s3s://
+- `azure_library_adapter.py` → azure://
+- `lmdb_library_adapter.py` → lmdb://
+- `mongo_library_adapter.py` → mongodb://
 
 ## Adding a New Storage Backend
 
@@ -281,17 +242,7 @@ URI parsing is handled by each storage adapter in Python. Each adapter has a `Pa
 
 ### Required Methods
 
-```cpp
-class NewStorage : public Storage {
-    void do_write(Composite<KeySegmentPair>&& kvs) override;
-    void do_read(Composite<VariantKey>&& ks,
-                 const ReadVisitor& visitor) override;
-    void do_remove(Composite<VariantKey>&& ks) override;
-    bool do_key_exists(const VariantKey& key) override;
-    void do_iterate_type(KeyType key_type,
-                         const IterateTypeVisitor& visitor) override;
-};
-```
+New backends must implement: `do_write()`, `do_read()`, `do_remove()`, `do_key_exists()`, and `do_iterate_type()`. See `cpp/arcticdb/storage/storage.hpp` for the interface.
 
 ## Backend-Specific Considerations
 
@@ -314,16 +265,4 @@ class NewStorage : public Storage {
 
 ### Testing
 
-Use fixtures in `python/arcticdb/storage_fixtures/`:
-
-```python
-# python/tests/conftest.py
-
-@pytest.fixture
-def lmdb_storage(tmp_path):
-    yield LmdbStorageFixture(tmp_path)
-
-@pytest.fixture
-def s3_storage():
-    yield S3StorageFixture()  # Uses moto mock
-```
+Use fixtures in `python/arcticdb/storage_fixtures/` and `python/tests/conftest.py`. LMDB tests use `LmdbStorageFixture`, S3 tests use `S3StorageFixture` (with moto mock).

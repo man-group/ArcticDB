@@ -373,67 +373,22 @@ Note: LazyDataFrame uses `col()` function for column references, while QueryBuil
 
 ### QueryBuilder
 
-```python
-class QueryBuilder:
-    def __getitem__(self, expr) -> QueryBuilder:
-        """Add filter clause using bracket notation."""
-
-    def groupby(self, name: str) -> QueryBuilder:
-        """Set groupby column (single column only)."""
-
-    def agg(self, aggregations: Dict[str, str]) -> QueryBuilder:
-        """Set aggregation functions."""
-
-    def resample(self, rule: str) -> QueryBuilder:
-        """Set resample frequency."""
-
-    def head(self, n: int) -> QueryBuilder:
-        """Limit to first n rows."""
-
-    def tail(self, n: int) -> QueryBuilder:
-        """Limit to last n rows."""
-
-    def apply(self, name: str, expr) -> QueryBuilder:
-        """Add computed column."""
-```
+`QueryBuilder` in `python/arcticdb/version_store/processing.py` provides:
+- `__getitem__(expr)` - Add filter clause (bracket notation)
+- `groupby(name)` - Set groupby column (single column only)
+- `agg(aggregations)` - Set aggregation functions
+- `resample(rule)` - Set resample frequency
+- `head(n)` / `tail(n)` - Limit rows
+- `apply(name, expr)` - Add computed column
 
 ### ExpressionNode
 
-```python
-class ExpressionNode:
-    """Represents an expression in the filter."""
-
-    def __and__(self, other) -> ExpressionNode:
-        """AND operator (&)."""
-
-    def __or__(self, other) -> ExpressionNode:
-        """OR operator (|)."""
-
-    def __invert__(self) -> ExpressionNode:
-        """NOT operator (~)."""
-
-    def __xor__(self, other) -> ExpressionNode:
-        """XOR operator (^)."""
-
-    # Comparison operators
-    def __gt__(self, other) -> ExpressionNode: ...
-    def __lt__(self, other) -> ExpressionNode: ...
-    def __eq__(self, other) -> ExpressionNode: ...
-    # ... etc
-
-    # Null checking
-    def isna(self) -> ExpressionNode: ...
-    def isnull(self) -> ExpressionNode: ...
-    def notna(self) -> ExpressionNode: ...
-    def notnull(self) -> ExpressionNode: ...
-
-    # List membership
-    def isin(self, values: list) -> ExpressionNode: ...
-    def isnotin(self, values: list) -> ExpressionNode: ...
-
-    # Regex
-    def regex_match(self, pattern: str) -> ExpressionNode: ...
-```
+`ExpressionNode` supports:
+- Logical: `&` (AND), `|` (OR), `~` (NOT), `^` (XOR)
+- Comparison: `>`, `<`, `>=`, `<=`, `==`, `!=`
+- Null checking: `isna()`, `isnull()`, `notna()`, `notnull()`
+- List membership: `isin(values)`, `isnotin(values)`
+- Regex: `regex_match(pattern)`
 
 ## Key Files
 

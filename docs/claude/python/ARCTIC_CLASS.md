@@ -50,44 +50,13 @@ ac.delete_library("my_library")
 
 ## Class Definition
 
-```python
-class Arctic:
-    def __init__(
-        self,
-        uri: str,
-        encoding_version: int = DEFAULT_ENCODING_VERSION
-    ):
-        """
-        Initialize Arctic connection.
-
-        Args:
-            uri: Storage URI (e.g., "s3://bucket/prefix", "lmdb://./path")
-            encoding_version: Data encoding version (1 or 2)
-        """
-
-    def create_library(
-        self,
-        name: str,
-        library_options: Optional[LibraryOptions] = None
-    ) -> Library:
-        """Create a new library."""
-
-    def get_library(
-        self,
-        name: str,
-        create_if_missing: bool = False
-    ) -> Library:
-        """Get an existing library."""
-
-    def delete_library(self, name: str) -> None:
-        """Delete a library and all its data."""
-
-    def list_libraries(self) -> List[str]:
-        """List all library names."""
-
-    def __getitem__(self, name: str) -> Library:
-        """Shorthand for get_library()."""
-```
+`Arctic` class in `python/arcticdb/arctic.py` provides:
+- `__init__(uri, encoding_version)` - Initialize connection
+- `create_library(name, library_options)` - Create a new library
+- `get_library(name, create_if_missing)` - Get existing library
+- `delete_library(name)` - Delete a library and all its data
+- `list_libraries()` - List all library names
+- `__getitem__(name)` - Shorthand for `get_library()`
 
 ## URI Formats
 
@@ -163,23 +132,7 @@ Returns: S3LibraryAdapter instance
 
 ### Adapter Resolution
 
-```python
-# In arctic.py
-def _resolve_adapter(uri: str) -> ArcticLibraryAdapter:
-    scheme = urlparse(uri).scheme
-
-    adapters = {
-        "s3": S3LibraryAdapter,
-        "s3s": S3LibraryAdapter,  # HTTPS
-        "azure": AzureLibraryAdapter,
-        "lmdb": LmdbLibraryAdapter,
-        "mongodb": MongoLibraryAdapter,
-        "mem": MemoryLibraryAdapter,
-    }
-
-    adapter_class = adapters.get(scheme)
-    return adapter_class.from_uri(uri)
-```
+The URI scheme (s3, s3s, azure, lmdb, mongodb, mem) determines which adapter class handles the connection. Adapters are defined in `python/arcticdb/adapters/`.
 
 ## Configuration
 
@@ -232,32 +185,7 @@ except ArcticException:
 
 ## Implementation Details
 
-### Lazy Initialization
-
-```python
-class Arctic:
-    def __init__(self, uri: str):
-        self._uri = uri
-        self._adapter = None  # Lazy initialization
-
-    @property
-    def adapter(self):
-        if self._adapter is None:
-            self._adapter = _resolve_adapter(self._uri)
-        return self._adapter
-```
-
-### Library Caching
-
-Libraries may be cached to avoid repeated lookups:
-
-```python
-# First call - creates/fetches library
-lib1 = ac["my_lib"]
-
-# Second call - may return cached instance
-lib2 = ac["my_lib"]
-```
+The `Arctic` class uses lazy initialization for the adapter (created on first access). Libraries may be cached to avoid repeated lookups.
 
 ## Key Files
 

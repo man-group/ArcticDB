@@ -55,37 +55,11 @@ Python DataFrame
 
 ### Key Functions
 
-```cpp
-// Main entry point - returns a future with the index key
-folly::Future<entity::AtomKey> write_frame(
-    IndexPartialKey&& key,
-    const std::shared_ptr<InputFrame>& frame,
-    const SlicingPolicy& slicing,
-    const std::shared_ptr<Store>& store,
-    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool allow_sparse = false
-);
+In `cpp/arcticdb/pipeline/write_frame.hpp`:
+- `write_frame()` - Main entry point, returns `folly::Future<AtomKey>` for the index key
+- `slice_and_write()` - Slices and writes, returns futures for slice keys
 
-// Slicing and writing - returns futures for slice keys
-folly::Future<std::vector<SliceAndKey>> slice_and_write(
-    const std::shared_ptr<InputFrame>& frame,
-    const SlicingPolicy& slicing,
-    IndexPartialKey&& partial_key,
-    const std::shared_ptr<stream::StreamSink>& sink,
-    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool allow_sparse = false
-);
-```
-
-### WriteOptions (used at higher level)
-
-```cpp
-struct WriteOptions {
-    bool prune_previous_version = false;  // Note: singular
-    bool validate_index = true;
-    // ... configured via LibraryOptions
-};
-```
+`WriteOptions` struct configures write behavior including `prune_previous_version` and `validate_index`.
 
 ## Read Pipeline
 
@@ -136,28 +110,10 @@ Read Request
 
 ### Key Functions
 
-```cpp
-// Main entry point
-ReadResult read_frame(
-    const StreamId& stream_id,
-    const VersionQuery& version_query,
-    const ReadQuery& read_query
-);
-
-// Fetch and decode data
-void fetch_data(
-    const std::vector<AtomKey>& keys,
-    const Store& store,
-    DecodeCallback callback
-);
-
-// Decode segment into frame
-void decode_into_frame(
-    Segment&& segment,
-    PipelineContext& context,
-    SegmentInMemory& output
-);
-```
+In `cpp/arcticdb/pipeline/read_frame.hpp`:
+- `read_frame()` - Main entry point taking stream_id, version_query, and read_query
+- `fetch_data()` - Fetch and decode data from keys
+- `decode_into_frame()` - Decode segment into SegmentInMemory
 
 ## Slicing
 
@@ -199,27 +155,12 @@ Original DataFrame (100 columns)
 
 ### Slicing Policy
 
-SlicingPolicy is a variant type that supports different slicing strategies:
+`SlicingPolicy` (in `cpp/arcticdb/pipeline/slicing.hpp`) is a `std::variant<NoSlicing, FixedSlicer, HashedSlicer>`:
+- `NoSlicing` - Single segment, no slicing
+- `FixedSlicer` - Fixed row/column counts (default: 100,000 rows)
+- `HashedSlicer` - Hash-based slicing for partitioning
 
-```cpp
-// In slicing.hpp
-using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
-
-// NoSlicing - no slicing, single segment
-struct NoSlicing {};
-
-// FixedSlicer - fixed row/column counts per segment
-struct FixedSlicer {
-    size_t col_per_slice_;  // Columns per segment
-    size_t row_per_slice_;  // Rows per segment (default: 100,000)
-};
-
-// HashedSlicer - hash-based slicing for partitioning
-struct HashedSlicer { ... };
-
-// Get slicing policy from write options
-SlicingPolicy get_slicing_policy(const WriteOptions& options, const InputFrame& frame);
-```
+Use `get_slicing_policy(WriteOptions, InputFrame)` to create the appropriate policy.
 
 ## Pipeline Context
 
@@ -233,15 +174,7 @@ Holds state shared across pipeline operations.
 
 ### Structure
 
-```cpp
-struct PipelineContext {
-    StreamDescriptor descriptor_;     // Schema information
-    std::vector<SliceInfo> slices_;   // Slice metadata
-    std::optional<FilterClause> filter_;
-    std::vector<std::string> columns_; // Requested columns
-    // ...
-};
-```
+`PipelineContext` holds: `descriptor_` (schema), `slices_` (slice metadata), optional `filter_`, and requested `columns_`.
 
 ## Query Types
 
@@ -251,29 +184,19 @@ struct PipelineContext {
 
 ### VersionQuery
 
-```cpp
-using VersionQuery = std::variant<
-    std::monostate,           // Latest version
-    SpecificVersionQuery,     // By version ID (as_of=5)
-    TimestampVersionQuery,    // By timestamp (as_of="2024-01-01")
-    SnapshotVersionQuery      // By snapshot name
->;
-```
+`VersionQuery` (in `cpp/arcticdb/pipeline/query.hpp`) is a `std::variant` of:
+- `std::monostate` - Latest version
+- `SpecificVersionQuery` - By version ID (as_of=5)
+- `TimestampVersionQuery` - By timestamp
+- `SnapshotVersionQuery` - By snapshot name
 
 ### ReadQuery
 
-```cpp
-// In read_query.hpp
-struct ReadQuery {
-    // std::nullopt -> all columns
-    // empty vector -> only the index
-    mutable std::optional<std::vector<std::string>> columns;
-    std::optional<SignedRowRange> row_range;
-    FilterRange row_filter;  // Date/row range filter (no filter by default)
-    std::vector<std::shared_ptr<Clause>> clauses_;  // Processing clauses
-    bool needs_post_processing{true};
-};
-```
+`ReadQuery` (in `cpp/arcticdb/pipeline/read_query.hpp`) contains:
+- `columns` - `std::nullopt` for all columns, empty vector for index only
+- `row_range` - Optional row range filter
+- `row_filter` - Date/row range filter
+- `clauses_` - Processing clauses (filter, aggregate, etc.)
 
 ## Append and Update
 
@@ -291,27 +214,7 @@ Updates rows within an index range. Like append, the main logic is in the versio
 
 ## Parallel Processing
 
-### Async Fetch
-
-```cpp
-// Fetch multiple segments in parallel
-auto futures = schedule_fetch(keys, store);
-
-for (auto& future : futures) {
-    auto segment = future.get();
-    process(segment);
-}
-```
-
-### Parallel Encoding
-
-```cpp
-// Encode segments in parallel during write
-parallel_for(slices, [&](const Slice& slice) {
-    auto segment = encode(slice);
-    store.write(key, segment);
-});
-```
+Multiple segments are fetched and decoded in parallel using Folly futures. Encoding during writes is also parallelized across slices.
 
 ## Key Files
 
@@ -328,49 +231,9 @@ parallel_for(slices, [&](const Slice& slice) {
 | `frame_slice.hpp` | Slice data structures |
 | `input_frame.hpp` | Input data format |
 
-## Usage Examples
+## Usage
 
-### Writing Data
-
-```cpp
-// In version_store_api.cpp
-auto frame = std::make_shared<InputFrame>();
-// ... populate frame from Python ...
-
-SlicingPolicy slicing;
-// Slicing configured via LibraryOptions
-
-auto result = write_frame(
-    IndexPartialKey{"my_symbol", KeyType::TABLE_INDEX},
-    frame,
-    slicing,
-    store
-);
-```
-
-### Reading Data
-
-```cpp
-// Read specific columns
-ReadQuery query;
-query.columns = {"price", "volume"};
-
-auto result = read_frame(
-    "my_symbol",
-    VersionQuery{},  // Latest version
-    query
-);
-```
-
-### Filtered Read
-
-```cpp
-// Read with row filter
-ReadQuery query;
-query.clauses = build_filter_clause("price > 100");
-
-auto result = read_frame("my_symbol", VersionQuery{}, query);
-```
+Write using `write_frame(IndexPartialKey, frame, slicing, store)`. Read using `read_frame(stream_id, VersionQuery, ReadQuery)`. Configure column selection via `ReadQuery.columns` and filtering via `ReadQuery.clauses`. See `cpp/arcticdb/version/version_store_api.cpp` for integration examples.
 
 ## Performance Considerations
 

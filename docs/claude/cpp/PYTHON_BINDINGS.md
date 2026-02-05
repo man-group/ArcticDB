@@ -53,74 +53,19 @@ Note: Bindings are distributed across modules. Each module directory (e.g., `asy
 
 ## Binding Definitions
 
-### Module Definition
+The main module is defined in `cpp/arcticdb/python/python_module.cpp` using `PYBIND11_MODULE(arcticdb_ext, m)`. It registers types (`bind_version_store`, `bind_library_manager`, etc.) and configuration functions.
 
-```cpp
-// python_module.cpp
-
-PYBIND11_MODULE(arcticdb_ext, m) {
-    m.doc() = "ArcticDB C++ extension module";
-
-    // Register types
-    bind_version_store(m);
-    bind_library_manager(m);
-    bind_storage(m);
-    bind_processing(m);
-
-    // Register functions
-    m.def("set_config_int", &set_config_int);
-    m.def("set_config_string", &set_config_string);
-}
-```
-
-### Class Bindings
-
-```cpp
-// Example: Binding PythonVersionStore
-
-void bind_version_store(py::module& m) {
-    py::class_<PythonVersionStore>(m, "VersionStore")
-        .def(py::init<>())
-        .def("write", &PythonVersionStore::write,
-             py::arg("symbol"),
-             py::arg("data"),
-             py::arg("prune_previous") = false)
-        .def("read", &PythonVersionStore::read,
-             py::arg("symbol"),
-             py::arg("as_of") = py::none())
-        .def("list_symbols", &PythonVersionStore::list_symbols)
-        // ...
-    ;
-}
-```
+Bindings are distributed across modules - each module directory may contain its own `python_bindings.hpp` or `python_bindings.cpp`. Class bindings use pybind11's `py::class_<>` with method definitions via `.def()`.
 
 ## Type Conversions
 
 ### Python to C++
 
-```cpp
-// python_to_tensor_frame.hpp
-
-// Input type is a variant that can hold different input formats
-using InputItem = std::variant<py::tuple, std::vector<RecordBatchData>>;
-
-// Conversion functions handle:
-// - pandas DataFrame → pipelines::InputFrame
-// - NumPy arrays → Column data
-// - Python lists → appropriate C++ containers
-// - Scalar values → typed values
-```
+Conversions in `cpp/arcticdb/python/python_to_tensor_frame.hpp` handle pandas DataFrame → `InputFrame`, NumPy arrays → Column data, Python lists → C++ containers, and scalar values → typed values.
 
 ### C++ to Python
 
-```cpp
-// python_handlers.hpp
-
-// Produces:
-// - pandas DataFrame (default)
-// - PyArrow Table (if requested)
-// - NumPy arrays (for specific columns)
-```
+Conversions in `cpp/arcticdb/python/python_handlers.hpp` produce pandas DataFrame (default), PyArrow Table (if requested), or NumPy arrays.
 
 ### Type Mapping
 
@@ -151,138 +96,32 @@ The Python GIL must be:
 
 ### Utilities
 
-```cpp
-// Release GIL for C++ work
-{
-    py::gil_scoped_release release;
-    // C++ code runs without holding GIL
-    do_heavy_computation();
-}
-// GIL automatically reacquired
-
-// Acquire GIL for Python interaction
-{
-    py::gil_scoped_acquire acquire;
-    // Safe to call Python
-    py::object result = py::eval("1 + 1");
-}
-```
-
-### Patterns
-
-```cpp
-// Typical read operation
-py::object read(const std::string& symbol) {
-    OutputTensorFrame frame;
-
-    {
-        py::gil_scoped_release release;
-        // Do all C++ work without GIL
-        frame = version_store_.read(symbol);
-    }
-
-    // GIL held, safe to create Python objects
-    return tensor_frame_to_python(frame);
-}
-```
+Use `py::gil_scoped_release` for long C++ operations and `py::gil_scoped_acquire` when calling Python code. Typical pattern: release GIL, do C++ work, reacquire GIL, convert to Python objects.
 
 ## Error Handling
 
-### Exception Translation
+C++ exceptions are registered with pybind11 and automatically translate to Python exceptions:
+- `NoSuchVersionException` → `KeyError`
+- `StorageException` → `IOError`
+- `SchemaException` → `ValueError`
 
-```cpp
-// C++ exceptions automatically translate to Python
-
-void bind_exceptions(py::module& m) {
-    py::register_exception<NoSuchVersionException>(
-        m, "NoSuchVersionException", PyExc_KeyError
-    );
-    py::register_exception<StorageException>(
-        m, "StorageException", PyExc_IOError
-    );
-    py::register_exception<SchemaException>(
-        m, "SchemaException", PyExc_ValueError
-    );
-}
-```
-
-### Error Propagation
-
-```cpp
-// C++ code
-if (!symbol_exists(symbol)) {
-    throw NoSuchVersionException(
-        "Symbol '{}' not found", symbol
-    );
-}
-
-// In Python
-try:
-    lib.read("nonexistent")
-except KeyError as e:
-    print(f"Symbol not found: {e}")
-```
+Exception registration is done via `py::register_exception<>()` in the binding code.
 
 ## DataFrame Handling
 
 ### Input (Python → C++)
 
-```cpp
-// python_to_tensor_frame.hpp
-
-InputTensorFrame process_dataframe(py::object df) {
-    // Extract index
-    auto index = df.attr("index");
-
-    // Extract columns
-    auto columns = df.attr("columns").cast<std::vector<std::string>>();
-
-    // Extract data arrays
-    for (const auto& col : columns) {
-        auto array = df[col.c_str()].attr("values");
-        // Convert numpy array to Column
-        process_array(array, col);
-    }
-
-    return frame;
-}
-```
+`process_dataframe()` in `python_to_tensor_frame.hpp` extracts index and columns from pandas DataFrame, converts NumPy arrays to Column data.
 
 ### Output (C++ → Python)
 
-```cpp
-// python_handlers.hpp
-
-py::object create_dataframe(const OutputTensorFrame& frame) {
-    py::dict data;
-
-    for (const auto& col : frame.columns()) {
-        // Convert Column to numpy array
-        py::array arr = column_to_numpy(col);
-        data[col.name().c_str()] = arr;
-    }
-
-    // Create DataFrame
-    py::object pd = py::module::import("pandas");
-    return pd.attr("DataFrame")(data);
-}
-```
+`create_dataframe()` in `python_handlers.hpp` converts `OutputTensorFrame` columns to NumPy arrays and constructs a pandas DataFrame.
 
 ## NumPy Integration
 
 ### Zero-Copy Where Possible
 
-```cpp
-// Create numpy array from C++ buffer without copy
-py::array_t<double> create_array(const Column& col) {
-    return py::array_t<double>(
-        {col.row_count()},                    // Shape
-        {sizeof(double)},                      // Strides
-        reinterpret_cast<double*>(col.data()), // Data pointer
-        py::capsule(col.data(), [](void*){})   // Prevent deallocation
-    );
-}
-```
+For large numeric arrays, `py::array_t<>` can wrap C++ buffers without copying using `py::capsule` for memory management.
 
 ### Type Mapping
 
@@ -296,25 +135,7 @@ py::array_t<double> create_array(const Column& col) {
 
 ## Configuration Interface
 
-### From Python
-
-```python
-from arcticdb_ext import set_config_int, set_config_string
-
-# Set cache reload interval
-set_config_int("VersionMap.ReloadInterval", 5_000_000_000)
-
-# Set log level
-set_config_string("Log.Level", "DEBUG")
-```
-
-### C++ Implementation
-
-```cpp
-void set_config_int(const std::string& key, int64_t value) {
-    ConfigsMap::instance()->set_int(key, value);
-}
-```
+Configuration functions `set_config_int()` and `set_config_string()` are exposed to Python via `arcticdb_ext`. These call into `ConfigsMap::instance()` on the C++ side.
 
 ## Key Files
 
@@ -349,20 +170,7 @@ void set_config_int(const std::string& key, int64_t value) {
 
 ## Debugging
 
-### Enable Debug Output
-
-```python
-import arcticdb_ext
-arcticdb_ext.set_config_string("Log.Level", "DEBUG")
-```
-
-### Check Binding
-
-```python
-import arcticdb_ext
-print(dir(arcticdb_ext))  # List available bindings
-help(arcticdb_ext.VersionStore)  # Get docstrings
-```
+Enable debug logging: `arcticdb_ext.set_config_string("Log.Level", "DEBUG")`. Inspect bindings with `dir(arcticdb_ext)` and `help(arcticdb_ext.VersionStore)`.
 
 ## Related Documentation
 

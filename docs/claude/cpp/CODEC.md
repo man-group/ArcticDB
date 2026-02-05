@@ -64,36 +64,13 @@ A segment is the fundamental unit of storage in ArcticDB. It contains:
 
 ### Codec Selection
 
-```cpp
-// In storage/memory_layout.hpp
-
-enum class Codec : uint16_t {
-    UNKNOWN = 0,
-    ZSTD,      // High compression
-    PFOR,      // Patched frame-of-reference (integers)
-    LZ4,       // Fast compression (default)
-    PASS,      // No compression (passthrough)
-};
-```
+The `Codec` enum in `cpp/arcticdb/storage/memory_layout.hpp` defines: `UNKNOWN`, `ZSTD`, `PFOR` (integers), `LZ4` (default), and `PASS` (passthrough).
 
 ### Compression Interface
 
-```cpp
-// Encode (compress) data
-void encode(
-    const ColumnData& column,
-    EncodedField& field,
-    Buffer& out,
-    const EncodingOptions& opts
-);
-
-// Decode (decompress) data
-void decode(
-    const EncodedField& field,
-    const uint8_t* input,
-    ColumnData& output
-);
-```
+Encoding/decoding functions in `cpp/arcticdb/codec/codec.cpp`:
+- `encode()` - Compress column data into an EncodedField
+- `decode()` - Decompress EncodedField back to ColumnData
 
 ## Encoding Versions
 
@@ -119,16 +96,7 @@ Location: `cpp/arcticdb/codec/encode_v2.cpp`
 
 ### Format Selection
 
-```cpp
-// EncodingVersion in segment_header.hpp
-enum class EncodingVersion : uint16_t {
-    V1 = 0,
-    V2 = 1,
-};
-
-// Configured via LibraryOptions
-lib_opts.encoding_version = EncodingVersion::V2;
-```
+`EncodingVersion` enum in `cpp/arcticdb/codec/segment_header.hpp` defines `V1` (0) and `V2` (1). Configured via `LibraryOptions.encoding_version`.
 
 ## Encoding Pipeline
 
@@ -186,65 +154,22 @@ Raw Data
 
 ### Segment
 
-```cpp
-// cpp/arcticdb/codec/segment.hpp
-
-class Segment {
-public:
-    // Access header
-    const SegmentHeader& header() const;
-
-    // Get compressed data buffer
-    const Buffer& buffer() const;
-
-    // Field information
-    const FieldCollection& fields() const;
-    size_t row_count() const;
-};
-```
+`Segment` class in `cpp/arcticdb/codec/segment.hpp` provides access to:
+- `header()` - Segment metadata (encoding version, field descriptors, row count)
+- `buffer()` - Compressed data buffer
+- `fields()` - Field/column information
 
 ### EncodedField
 
-```cpp
-// Represents a compressed column
-struct EncodedField {
-    FieldDescriptor::Proto descriptor;
-    std::vector<EncodedBlock> shapes;   // For V2 encoding
-    std::vector<EncodedBlock> values;   // Compressed data blocks
-};
-```
+`EncodedField` represents a compressed column with a descriptor, shapes (for V2), and values (compressed data blocks).
 
 ### Buffer
 
-```cpp
-// Memory buffer for segment data
-class Buffer {
-public:
-    uint8_t* data();
-    size_t size();
-    void resize(size_t new_size);
-    // ...
-};
-```
+`Buffer` class manages memory for segment data with `data()`, `size()`, and `resize()` methods.
 
 ## Configuration Options
 
-### Compression Level
-
-```python
-# Python API
-from arcticdb import LibraryOptions
-
-opts = LibraryOptions()
-opts.encoding_version = 1  # V2 encoding
-```
-
-### Segment Size
-
-```python
-# Control segment row count (affects compression efficiency)
-lib.write("symbol", df, segment_row_size=100_000)  # Default
-```
+Encoding version is configured via `LibraryOptions.encoding_version`. Segment row size (default 100,000 rows) is configured via `segment_row_size` parameter in write operations.
 
 ## Key Files
 

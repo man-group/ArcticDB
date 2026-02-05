@@ -18,57 +18,22 @@ This module contains:
 
 ### Key Classes
 
-```cpp
-// Two main key types:
-// 1. AtomKey - immutable, content-addressed keys
-// 2. RefKey - mutable reference keys (pointers to AtomKeys)
+Two main key types exist:
+1. **AtomKey** - immutable, content-addressed keys (defined in `cpp/arcticdb/entity/atom_key.hpp`)
+2. **RefKey** - mutable reference keys that point to AtomKeys (defined in `cpp/arcticdb/entity/ref_key.hpp`)
 
-enum class KeyType : int {
-    STREAM_GROUP = 0,        // For streaming (not in general use)
-    GENERATION = 1,          // For streaming (not in general use)
-    TABLE_DATA = 2,          // Actual data segments (leaf nodes)
-    TABLE_INDEX = 3,         // Index pointing to TABLE_DATA keys
-    VERSION = 4,             // Version metadata + link to TABLE_INDEX
-    VERSION_JOURNAL = 5,     // Legacy, not used anymore
-    METRICS = 6,             // Legacy, not used anymore
-    SNAPSHOT = 7,            // Legacy, replaced by SNAPSHOT_REF
-    SYMBOL_LIST = 8,         // Symbol list entries
-    VERSION_REF = 9,         // Reference to latest VERSION
-    STORAGE_INFO = 10,       // Storage information (last sync time)
-    APPEND_REF = 11,         // Incomplete append chain head
-    MULTI_KEY = 12,          // Index of indexes
-    LOCK = 13,               // Distributed lock key
-    SNAPSHOT_REF = 14,       // Named snapshot reference
-    TOMBSTONE = 15,          // Deleted version marker (lives inside VERSION)
-    APPEND_DATA = 16,        // Incomplete appended segment
-    LOG = 17,                // Log entries (for replication)
-    PARTITION = 18,          // Partition references
-    OFFSET = 19,             // Stream offsets
-    BACKUP_SNAPSHOT_REF = 20,// Temporary backup snapshot reference
-    TOMBSTONE_ALL = 21,      // Marks all prior versions deleted
-    LIBRARY_CONFIG = 22,     // Library configuration
-    SNAPSHOT_TOMBSTONE = 23, // Marks SNAPSHOT_REF for removal
-    LOG_COMPACTED = 24,      // Compacted log entries
-    COLUMN_STATS = 25,       // Column statistics
-    REPLICATION_FAIL_INFO = 26, // Failed replication info
-    BLOCK_VERSION_REF = 27,  // Block version reference for background jobs
-    ATOMIC_LOCK = 28,        // List-based reliable storage lock
-    UNDEFINED                // Sentinel value
-};
-```
+The `KeyType` enum in `cpp/arcticdb/entity/key.hpp` defines all key types. Key types include:
+- `TABLE_DATA` (2) - Actual data segments (leaf nodes)
+- `TABLE_INDEX` (3) - Index pointing to TABLE_DATA keys
+- `VERSION` (4) - Version metadata + link to TABLE_INDEX
+- `SYMBOL_LIST` (8) - Symbol list entries
+- `VERSION_REF` (9) - Reference to latest VERSION
+- `SNAPSHOT_REF` (14) - Named snapshot reference
+- `TOMBSTONE` (15) - Deleted version marker
+- `TOMBSTONE_ALL` (21) - Marks all prior versions deleted
+- `LOCK` (13) / `ATOMIC_LOCK` (28) - Distributed lock keys
 
-### AtomKey Structure
-
-```cpp
-struct AtomKey {
-    StreamId id_;              // Symbol name
-    VersionId version_id_;     // Version number
-    timestamp creation_ts_;    // Creation timestamp
-    ContentHash content_hash_; // Hash of content
-    KeyType type_;             // Key type
-    // ... methods
-};
-```
+The `AtomKey` struct contains: `StreamId` (symbol name), `VersionId`, `timestamp` (creation time), `ContentHash`, and `KeyType`.
 
 ### Key Hierarchy
 
@@ -94,49 +59,25 @@ AtomKey (immutable, content-addressed)
 
 ### Type Enumeration
 
-```cpp
-enum class DataType : uint8_t {
-    UINT8,
-    UINT16,
-    UINT32,
-    UINT64,
-    INT8,
-    INT16,
-    INT32,
-    INT64,
-    FLOAT32,
-    FLOAT64,
-    BOOL8,
-    NANOSECONDS_UTC64,  // Timestamp (nanoseconds since epoch)
-    ASCII_FIXED64,      // Fixed-width ASCII string
-    ASCII_DYNAMIC64,    // Variable-length ASCII string
-    UTF_FIXED64,        // Fixed-width UTF-8 string
-    UTF_DYNAMIC64,      // Variable-length UTF-8 string
-    EMPTYVAL,           // Empty/null value
-    BOOL_OBJECT8,       // Boolean with null support
-    UTF_DYNAMIC32,      // UTF-8 string (32-bit size)
-    UNKNOWN = 0,
-};
-```
+The `DataType` enum in `cpp/arcticdb/entity/types.hpp` defines supported data types:
+
+| Category | Types |
+|----------|-------|
+| Integers | `INT8`, `INT16`, `INT32`, `INT64`, `UINT8`, `UINT16`, `UINT32`, `UINT64` |
+| Floats | `FLOAT32`, `FLOAT64` |
+| Boolean | `BOOL8`, `BOOL_OBJECT8` (nullable) |
+| Timestamp | `NANOSECONDS_UTC64` (nanoseconds since epoch) |
+| Strings | `ASCII_FIXED64`, `ASCII_DYNAMIC64`, `UTF_FIXED64`, `UTF_DYNAMIC64`, `UTF_DYNAMIC32` |
+| Special | `EMPTYVAL` (null), `UNKNOWN` |
 
 ### Type Properties
 
-```cpp
-// Get size of a data type
-constexpr size_t get_type_size(DataType dt) noexcept;
-
-// Check if type is floating point
-constexpr bool is_floating_point_type(DataType dt);
-
-// Check if type is integer
-constexpr bool is_integer_type(DataType dt);
-
-// Check if type is numeric
-constexpr bool is_numeric_type(DataType dt);
-
-// Check if type is sequence (string/array)
-constexpr bool is_sequence_type(DataType dt);
-```
+Helper functions in `cpp/arcticdb/entity/types.hpp`:
+- `get_type_size(DataType)` - Returns byte size of type
+- `is_floating_point_type(DataType)` - Check if float type
+- `is_integer_type(DataType)` - Check if integer type
+- `is_numeric_type(DataType)` - Check if numeric (int or float)
+- `is_sequence_type(DataType)` - Check if string/array type
 
 ## Type Descriptors
 
@@ -146,40 +87,13 @@ constexpr bool is_sequence_type(DataType dt);
 
 ### TypeDescriptor
 
-Describes a column's type:
-
-```cpp
-struct TypeDescriptor {
-    DataType data_type_;
-    Dimension dimension_;  // Dim0 (scalar), Dim1 (1D array), Dim2 (2D array)
-
-    // Helper methods
-    DataType data_type() const;
-    Dimension dimension() const;
-    size_t get_type_byte_size() const;
-};
-```
-
-### Dimension Enum
-
-```cpp
-enum class Dimension : uint8_t {
-    Dim0 = 0,  // Scalar value
-    Dim1 = 1,  // 1-dimensional array (e.g., string, list)
-    Dim2 = 2,  // 2-dimensional array
-};
-```
+`TypeDescriptor` (in `cpp/arcticdb/entity/types.hpp`) describes a column's type, combining:
+- `DataType data_type_` - The underlying data type
+- `Dimension dimension_` - `Dim0` (scalar), `Dim1` (1D array), or `Dim2` (2D array)
 
 ### FieldRef
 
-Reference to a column in a segment:
-
-```cpp
-struct FieldRef {
-    TypeDescriptor type_;
-    std::string_view name_;
-};
-```
+`FieldRef` (in `cpp/arcticdb/entity/field_collection.hpp`) references a column in a segment with its `TypeDescriptor` and `name_`.
 
 ## Error Handling
 
@@ -189,55 +103,25 @@ struct FieldRef {
 
 ### Error Codes
 
-Error codes are defined using a macro:
-
-```cpp
-// In error_code.hpp
-enum class ErrorCode : detail::BaseType {
-    // Codes defined via ARCTIC_ERROR_CODES macro
-    E_UNSPECIFIED,
-    E_KEY_NOT_FOUND,
-    E_SYMBOL_NOT_FOUND,
-    E_VERSION_NOT_FOUND,
-    E_STORAGE_ERROR,
-    E_INVALID_ARGUMENT,
-    E_INTERNAL_ERROR,
-    // ... additional codes
-};
-```
+Error codes are defined via the `ARCTIC_ERROR_CODES` macro in `error_code.hpp`. Common codes include:
+- `E_KEY_NOT_FOUND`, `E_SYMBOL_NOT_FOUND`, `E_VERSION_NOT_FOUND` - Lookup failures
+- `E_STORAGE_ERROR` - Storage backend errors
+- `E_INVALID_ARGUMENT` - User input errors
+- `E_INTERNAL_ERROR` - Internal bugs/assertions
 
 ### Exceptions
 
-ArcticDB uses custom exception types. Key exception classes:
-
-```cpp
-// Defined in cpp/arcticdb/util/
-class ArcticException : public std::exception;
-
-// Storage-related exceptions
-class StorageException;
-
-// User errors (invalid arguments, not found, etc.)
-class UserInputException;
-
-// Internal errors (bugs, assertions)
-class InternalException;
-```
+ArcticDB exception classes (in `cpp/arcticdb/util/`):
+- `ArcticException` - Base exception class
+- `StorageException` - Storage-related errors
+- `UserInputException` - Invalid arguments, not found, etc.
+- `InternalException` - Internal errors (bugs, assertions)
 
 ## Stream ID
 
-### Location
-
-`cpp/arcticdb/entity/types.hpp`
-
-### Definition
-
-```cpp
-using StreamId = std::variant<StringId, NumericId>;
-
-// StringId: Symbol name as string ("my_symbol")
-// NumericId: Symbol as numeric ID (for internal use)
-```
+`StreamId` (in `cpp/arcticdb/entity/types.hpp`) is a `std::variant<StringId, NumericId>`:
+- `StringId` - Symbol name as string (e.g., "my_symbol")
+- `NumericId` - Symbol as numeric ID (internal use)
 
 ## Key Files
 
@@ -250,33 +134,9 @@ using StreamId = std::variant<StringId, NumericId>;
 | `field_collection.hpp` | Field/column collection |
 | `protobufs.hpp` | Protobuf conversion helpers |
 
-## Usage Examples
+## Usage
 
-### Creating a Key
-
-```cpp
-#include <arcticdb/entity/atom_key.hpp>
-
-// Create a TABLE_DATA key
-auto key = atom_key_builder()
-    .gen_id(1)
-    .start_index(0)
-    .end_index(100000)
-    .creation_ts(now())
-    .content_hash(hash)
-    .build("my_symbol", KeyType::TABLE_DATA);
-```
-
-### Working with Types
-
-```cpp
-#include <arcticdb/entity/types.hpp>
-
-TypeDescriptor float_type{DataType::FLOAT64, Dimension::Dim0};
-bool is_fp = is_floating_point_type(float_type.data_type());  // true
-
-size_t size = get_type_size(DataType::INT32);  // 4
-```
+Keys are created using `atom_key_builder()` in `cpp/arcticdb/entity/atom_key.hpp`. Type descriptors are constructed with `TypeDescriptor{DataType, Dimension}`.
 
 ## Related Documentation
 

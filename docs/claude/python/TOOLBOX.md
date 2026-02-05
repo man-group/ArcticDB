@@ -179,39 +179,9 @@ print(props)  # {'id': 'symbol', 'version_id': 0, 'creation_ts': ..., ...}
 key = props_dict_to_atom_key(props)
 ```
 
-## Example: Investigate Storage Structure
+## Example Usage
 
-```python
-from arcticdb.toolbox.library_tool import LibraryTool
-from arcticdb_ext.storage import KeyType
-from arcticdb import Arctic
-
-ac = Arctic("lmdb://./my_db")
-lib = ac["my_lib"]
-tool = lib.library_tool()
-
-# 1. Find VERSION keys for symbol
-version_keys = tool.find_keys_for_symbol(KeyType.VERSION, "my_symbol")
-print(f"Found {len(version_keys)} version keys")
-
-# 2. Read a VERSION key to see what's inside
-if version_keys:
-    latest_version = version_keys[0]
-    print(f"Version key: {latest_version}")
-
-    # Read the segment as DataFrame
-    version_df = tool.read_to_dataframe(latest_version)
-    print(version_df)
-
-    # Extract the TABLE_INDEX keys from the VERSION segment
-    index_keys = tool.read_to_keys(latest_version, id="my_symbol",
-                                    filter_key_type=KeyType.TABLE_INDEX)
-    print(f"Found {len(index_keys)} index keys")
-
-# 3. Read the index to see data segments
-index_df = tool.read_index("my_symbol")
-print(index_df)
-```
+Get a `LibraryTool` via `lib.library_tool()`. Use `find_keys_for_symbol(KeyType, symbol)` to find keys, `read_to_dataframe(key)` to examine key contents, and `read_index(symbol)` to see data segments. See the [GitHub Wiki](https://github.com/man-group/ArcticDB/wiki/Using-the-LibraryTool-to-look-at-a-library's-internal-state) for detailed examples.
 
 ## Key Files
 

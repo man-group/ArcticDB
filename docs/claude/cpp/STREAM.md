@@ -50,27 +50,11 @@ Incoming Rows
 
 ### Key Methods
 
-```cpp
-// Template class parameterized by Index, Schema, SegmentingPolicy, DensityPolicy
-template<typename Index, typename Schema, typename SegmentingPolicy, typename DensityPolicy>
-class Aggregator {
-public:
-    using RowBuilderType = RowBuilder<IndexType, Schema, SelfType>;
-    using Callback = folly::Function<void(SegmentInMemory&&)>;
-
-    // Start a row for writing
-    RowBuilderType& start_row(const IndexType& idx);
-
-    // End the current row
-    void end_row();
-
-    // Commit current segment (calls callback)
-    void commit();
-
-    // Finalize and return any remaining segment
-    void finalize();
-};
-```
+`Aggregator` template class (parameterized by Index, Schema, SegmentingPolicy, DensityPolicy) provides:
+- `start_row(idx)` - Start a row for writing (returns RowBuilder reference)
+- `end_row()` - End the current row
+- `commit()` - Commit current segment (triggers callback)
+- `finalize()` - Finalize and return any remaining segment
 
 ## Index Types
 
@@ -89,34 +73,11 @@ public:
 
 ### TimeseriesIndex
 
-```cpp
-class TimeseriesIndex : public BaseIndex<TimeseriesIndex> {
-public:
-    static constexpr const char* DefaultName = "time";
-    using TypeDescTag = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, DimensionTag<Dimension::Dim0>>;
-
-    static constexpr IndexDescriptorImpl::Type type() {
-        return IndexDescriptorImpl::Type::TIMESTAMP;
-    }
-
-    // Used for segment time range tracking
-    static constexpr timestamp min_index_value();
-    static constexpr timestamp max_index_value();
-};
-```
+`TimeseriesIndex` uses `NANOSECONDS_UTC64` for timestamp-based indexing. Default column name is "time". Provides `min_index_value()` and `max_index_value()` for segment time range tracking.
 
 ### RowCountIndex
 
-```cpp
-class RowCountIndex : public BaseIndex<RowCountIndex> {
-public:
-    static constexpr IndexDescriptorImpl::Type type() {
-        return IndexDescriptorImpl::Type::ROWCOUNT;
-    }
-
-    static constexpr size_t field_count() { return 0; }  // No index column stored
-};
-```
+`RowCountIndex` uses row numbers as index. No index column is stored (`field_count() == 0`).
 
 ### Index Resolution
 
@@ -151,18 +112,7 @@ Builds rows for writing into segments.
 
 ### Usage
 
-```cpp
-RowBuilder builder(descriptor);
-
-// Set column values
-builder.set_scalar<int64_t>(0, 42);
-builder.set_scalar<double>(1, 3.14);
-builder.set_string(2, "hello");
-
-// Add to aggregator
-aggregator.add_row(index, builder);
-builder.clear();
-```
+Create `RowBuilder(descriptor)`, set column values with `set_scalar<T>(col, val)` and `set_string(col, str)`, then add to aggregator with `add_row(index, builder)` and `clear()`.
 
 ## Incomplete Writes
 
@@ -212,21 +162,7 @@ APPEND_REF ("my_symbol")
 
 ### Purpose
 
-Higher-level aggregator that manages segment lifecycle.
-
-```cpp
-class SegmentAggregator {
-public:
-    // Start new segment
-    void start_segment(const StreamDescriptor& desc);
-
-    // Add data
-    void add_segment(SegmentInMemory&& segment);
-
-    // Finalize and get output
-    SegmentInMemory finalize();
-};
-```
+`SegmentAggregator` manages segment lifecycle with `start_segment(desc)`, `add_segment(segment)`, and `finalize()`.
 
 ## Protobuf Segment
 
@@ -236,15 +172,7 @@ public:
 
 ### Purpose
 
-Convert between in-memory segments and protobuf format for storage.
-
-```cpp
-// To protobuf
-arcticc::pb2::Segment to_proto(const SegmentInMemory& segment);
-
-// From protobuf
-SegmentInMemory from_proto(const arcticc::pb2::Segment& proto);
-```
+Convert between in-memory segments and protobuf format using `to_proto(SegmentInMemory)` and `from_proto(arcticc::pb2::Segment)`.
 
 ## Key Files
 
@@ -258,49 +186,9 @@ SegmentInMemory from_proto(const arcticc::pb2::Segment& proto);
 | `protobuf_mappings.hpp` | Protobuf conversion |
 | `stream_sink.hpp` | Output sink interface |
 
-## Usage Examples
+## Usage
 
-### Building Segments
-
-```cpp
-#include <arcticdb/stream/aggregator.hpp>
-
-// Create descriptor
-StreamDescriptor desc;
-desc.add_field(scalar_field(DataType::INT64, "id"));
-desc.add_field(scalar_field(DataType::FLOAT64, "value"));
-
-// Create aggregator
-Aggregator<RowCountIndex> agg(desc, 100'000);
-
-// Add rows
-RowBuilder builder(desc);
-for (int i = 0; i < 250'000; ++i) {
-    builder.set_scalar<int64_t>(0, i);
-    builder.set_scalar<double>(1, i * 1.5);
-    agg.add_row(RowCountIndex{i}, builder);
-    builder.clear();
-}
-
-// Get completed segments
-auto segments = agg.finalize();
-// segments.size() == 3 (two full + one partial)
-```
-
-### Time Series Index
-
-```cpp
-// Create timeseries aggregator
-Aggregator<TimeseriesIndex> ts_agg(desc, 100'000);
-
-// Add timestamped rows
-for (const auto& row : data) {
-    builder.set_scalar<timestamp>(0, row.time);
-    builder.set_scalar<double>(1, row.value);
-    ts_agg.add_row(TimeseriesIndex{row.time, row.time + 1}, builder);
-    builder.clear();
-}
-```
+Create an `Aggregator` with a `StreamDescriptor` and segment size (default 100,000 rows). Add rows via `RowBuilder`, call `add_row()` and `clear()`. When segment fills up, aggregator automatically emits it. Call `finalize()` to get remaining data. See `cpp/arcticdb/stream/aggregator.hpp` for details.
 
 ## Performance Considerations
 

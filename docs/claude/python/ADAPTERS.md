@@ -37,34 +37,10 @@ Storage Backend Instance
 
 ## Adapter Base Class
 
-```python
-# python/arcticdb/adapters/arctic_library_adapter.py
-
-class ArcticLibraryAdapter:
-    """Base class for storage adapters."""
-
-    @staticmethod
-    def supports_uri(uri: str) -> bool:
-        """Check if this adapter supports the given URI."""
-        raise NotImplementedError
-
-    @property
-    def config_library(self):
-        """Return the configuration library for this adapter."""
-        raise NotImplementedError
-
-    def add_library(self, name: str, options: LibraryOptions) -> Library:
-        """Add a library with the given name and options."""
-
-    def get_library(self, name: str) -> Library:
-        """Get an existing library by name."""
-
-    def delete_library(self, name: str) -> None:
-        """Delete a library."""
-
-    def list_libraries(self) -> List[str]:
-        """List available libraries."""
-```
+`ArcticLibraryAdapter` in `python/arcticdb/adapters/arctic_library_adapter.py` provides:
+- `supports_uri(uri)` - Check if adapter supports the URI
+- `config_library` - Return configuration library
+- `add_library(name, options)` / `get_library(name)` / `delete_library(name)` / `list_libraries()` - Library management
 
 ## S3 Adapter
 
@@ -103,19 +79,7 @@ s3s://s3.amazonaws.com:my-bucket?region=us-east-1
 
 ### ParsedQuery
 
-```python
-@dataclass
-class ParsedQuery:
-    region: str = ""
-    access: str = ""                    # Access key
-    secret: str = ""                    # Secret key
-    path_prefix: str = ""
-    aws_auth: AWSAuthMethod = AWSAuthMethod.DEFAULT
-    port: Optional[int] = None
-    ssl: Optional[bool] = False
-    CA_cert_path: Optional[str] = ""
-    CA_cert_dir: Optional[str] = ""
-```
+`ParsedQuery` dataclass contains: `region`, `access`, `secret`, `path_prefix`, `aws_auth`, `port`, `ssl`, `CA_cert_path`, `CA_cert_dir`.
 
 ### Usage
 
@@ -175,18 +139,7 @@ azure://BlobEndpoint=https://myaccount.blob.core.windows.net;Container=mycontain
 
 ### ParsedQuery
 
-```python
-@dataclass
-class ParsedQuery:
-    Container: str = ""
-    AccountName: str = ""
-    AccountKey: str = ""
-    SharedAccessSignature: str = ""
-    BlobEndpoint: str = ""
-    Path_prefix: str = ""
-    CA_cert_path: Optional[str] = None
-    CA_cert_dir: Optional[str] = None
-```
+`ParsedQuery` dataclass contains: `Container`, `AccountName`, `AccountKey`, `SharedAccessSignature`, `BlobEndpoint`, `Path_prefix`, `CA_cert_path`, `CA_cert_dir`.
 
 ### Usage
 
@@ -214,11 +167,7 @@ lmdb://path?map_size=10737418240  # 10GB
 
 ### ParsedQuery
 
-```python
-@dataclass
-class ParsedQuery:
-    map_size: int  # Maximum database size in bytes
-```
+`ParsedQuery` dataclass contains: `map_size` (maximum database size in bytes).
 
 ### Usage
 
@@ -262,58 +211,12 @@ lib = ac.create_library("test")
 
 ## Creating Custom Adapters
 
-### Step 1: Define ParsedQuery
+To create a custom adapter:
+1. Define a `ParsedQuery` dataclass for URI parameters
+2. Implement adapter class inheriting from `ArcticLibraryAdapter`, with `supports_uri()`, `__init__()`, and `config_library`
+3. Add the adapter to the adapter list in `arctic.py`
 
-```python
-@dataclass
-class MyParsedQuery:
-    host: str = ""
-    port: int = 0
-    database: str = ""
-    # ... other options
-```
-
-### Step 2: Implement Adapter
-
-```python
-class MyStorageAdapter(ArcticLibraryAdapter):
-    REGEX = r"myscheme://(?P<host>[^:]+):(?P<port>\d+)/(?P<database>\w+)"
-
-    @staticmethod
-    def supports_uri(uri: str) -> bool:
-        return uri.startswith("myscheme://")
-
-    def __init__(self, uri: str, encoding_version: EncodingVersion, *args, **kwargs):
-        match = re.match(self.REGEX, uri)
-        self._host = match["host"]
-        self._port = int(match["port"])
-        self._database = match["database"]
-        self._encoding_version = encoding_version
-        super().__init__(uri, self._encoding_version)
-
-    @property
-    def config_library(self):
-        # Create and return configuration library
-        pass
-```
-
-### Step 3: Register Adapter
-
-```python
-# In arctic.py
-def _get_adapter(uri: str, encoding_version) -> ArcticLibraryAdapter:
-    adapters = [
-        S3LibraryAdapter,
-        AzureLibraryAdapter,
-        LmdbLibraryAdapter,
-        InMemoryLibraryAdapter,
-        MyStorageAdapter,  # Add your adapter
-    ]
-    for adapter_class in adapters:
-        if adapter_class.supports_uri(uri):
-            return adapter_class(uri, encoding_version)
-    raise ValueError(f"Unsupported URI: {uri}")
-```
+See existing adapters in `python/arcticdb/adapters/` for reference.
 
 ## Key Files
 

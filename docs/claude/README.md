@@ -1,8 +1,8 @@
 # ArcticDB Developer Documentation
 
-> **Note**: This documentation is **owned and maintained by Claude**. It is automatically kept up-to-date as Claude makes changes to the codebase. Human developers should treat this as authoritative technical reference.
+> **Note**: This documentation is **owned and maintained by Claude**. It is automatically kept up-to-date as Claude makes changes to the codebase. This may be helpful to developers, but may not yet be 100% accurate.
 
-This directory contains technical documentation for developing and maintaining ArcticDB. These documents are intended for contributors and maintainers.
+This directory contains technical documentation for developing and maintaining ArcticDB.
 
 ## Documentation Index
 

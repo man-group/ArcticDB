@@ -94,55 +94,14 @@ lib.delete("my_symbol")
 
 ## Class Definition
 
-```python
-class Library:
-    def write(
-        self,
-        symbol: str,
-        data: DataFrameType,
-        metadata: Optional[Any] = None,
-        prune_previous_versions: bool = False,  # Note: plural
-        staged: bool = False,
-        validate_index: bool = True
-    ) -> VersionedItem:
-        """Write data to the library."""
+`Library` class in `python/arcticdb/version_store/library.py` provides:
+- `write(symbol, data, metadata, prune_previous_versions, staged, validate_index)` - Write data
+- `read(symbol, as_of, date_range, columns, query_builder)` - Read data
+- `append(symbol, data, metadata, prune_previous_versions)` - Append rows
+- `update(symbol, data, metadata, upsert, date_range)` - Update rows
+- `delete(symbol, versions)` - Delete symbol or specific versions
 
-    def read(
-        self,
-        symbol: str,
-        as_of: Optional[VersionQueryType] = None,
-        date_range: Optional[Tuple[Timestamp, Timestamp]] = None,
-        columns: Optional[List[str]] = None,
-        query_builder: Optional[QueryBuilder] = None
-    ) -> VersionedItem:
-        """Read data from the library."""
-
-    def append(
-        self,
-        symbol: str,
-        data: DataFrameType,
-        metadata: Optional[Any] = None,
-        prune_previous_versions: bool = False  # Note: plural
-    ) -> VersionedItem:
-        """Append rows to existing symbol."""
-
-    def update(
-        self,
-        symbol: str,
-        data: DataFrameType,
-        metadata: Optional[Any] = None,
-        upsert: bool = False,
-        date_range: Optional[Tuple[Timestamp, Timestamp]] = None
-    ) -> VersionedItem:
-        """Update rows in existing symbol."""
-
-    def delete(
-        self,
-        symbol: str,
-        versions: Optional[List[int]] = None
-    ) -> None:
-        """Delete symbol or specific versions."""
-```
+Note: The parameter is `prune_previous_versions` (plural) in V2 API.
 
 ## Version Management
 
@@ -245,25 +204,11 @@ lib.write_batch({
 
 ### VersionedItem
 
-```python
-class VersionedItem:
-    symbol: str           # Symbol name
-    library: str          # Library name
-    version: int          # Version number
-    metadata: Any         # User metadata
-    data: pd.DataFrame    # The data (lazy-loaded)
-    date_range: Tuple     # Data date range
-```
+Contains: `symbol`, `library`, `version`, `metadata`, `data` (pd.DataFrame, lazy-loaded), `date_range`.
 
 ### VersionInfo
 
-```python
-class VersionInfo:
-    version: int          # Version number
-    date: datetime        # Write timestamp
-    deleted: bool         # Whether tombstoned
-    snapshots: List[str]  # Snapshots containing this version
-```
+Contains: `version`, `date` (write timestamp), `deleted` (tombstoned), `snapshots` (list of snapshot names).
 
 ## Error Handling
 

@@ -28,22 +28,9 @@ DatetimeIndex variations    →       Nanosecond timestamps
 
 ## NormalizedInput
 
-### What It Is
-
-`NormalizedInput` is the result of normalization, containing data and metadata:
-
-```python
-# NormalizedInput is a named tuple
-NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
-# item: NPDDataFrame ready for C++ (numpy arrays in a structured format)
-# metadata: NormalizationMetadata protobuf message
-
-# NormalizationMetadata contains:
-# - df: DataFrame-specific metadata
-# - ts: TimeFrame-specific metadata
-# - np: ndarray-specific metadata
-# - msg_pack_frame: MsgPack fallback metadata
-```
+`NormalizedInput` is a named tuple with:
+- `item` - NPDDataFrame ready for C++ (numpy arrays in structured format)
+- `metadata` - NormalizationMetadata protobuf containing df/ts/np/msg_pack_frame metadata
 
 ### Conversion Flow
 
@@ -71,19 +58,7 @@ pandas.DataFrame
 
 ### Input Normalization
 
-```python
-def normalize(data, string_max_len=None):
-    """
-    Convert pandas DataFrame to NPDDataFrame.
-
-    Handles:
-    - Index extraction and standardization
-    - Column type inference
-    - String encoding
-    - Datetime conversion
-    - Missing value handling
-    """
-```
+`normalize(data, string_max_len)` converts pandas DataFrame to NPDDataFrame, handling index extraction, column type inference, string encoding, datetime conversion, and missing values.
 
 ### Type Conversion
 
@@ -129,57 +104,11 @@ df = pd.DataFrame(
 
 ## Denormalization Process
 
-### Output Denormalization
-
-```python
-def denormalize(frame, original_columns=None):
-    """
-    Convert OutputTensorFrame back to pandas DataFrame.
-
-    Handles:
-    - Reconstruct DataFrame structure
-    - Restore index
-    - Convert types back to pandas equivalents
-    - Handle metadata
-    """
-```
-
-### Index Reconstruction
-
-```python
-# Row count index restored to RangeIndex
-df.index  # RangeIndex(start=0, stop=100, step=1)
-
-# Timestamp index restored to DatetimeIndex
-df.index  # DatetimeIndex(['2024-01-01', ...], freq='D')
-```
+`denormalize(frame, original_columns)` converts OutputTensorFrame back to pandas DataFrame, reconstructing the DataFrame structure, restoring index (RangeIndex or DatetimeIndex), and converting types.
 
 ## Custom Normalizers
 
-ArcticDB uses a type-based dispatch system for normalization. The normalizers are selected based on the input data type.
-
-### Built-in Normalizer Selection
-
-The normalization system uses `_normalize()` and the `Normalizer` abstract base class. Each normalizer implements `normalize()` and corresponding denormalization methods.
-
-```python
-# Example: Creating a custom normalizer (advanced usage)
-from arcticdb.version_store._normalization import Normalizer
-
-class MyCustomNormalizer(Normalizer):
-    TYPE = "mycustom"  # Type identifier
-
-    def normalize(self, data, **kwargs):
-        # Convert custom type to NPDDataFrame
-        ...
-        return NormalizedInput(item=npd_dataframe, metadata=norm_metadata)
-
-    def denormalize(self, item, norm_meta):
-        # Convert back to custom type
-        ...
-```
-
-Note: Custom normalizer registration is not directly exposed via a public API. The built-in normalizers handle most use cases.
+ArcticDB uses a type-based dispatch system. Normalizers inherit from `Normalizer` base class and implement `normalize()` and `denormalize()` methods. Custom normalizer registration is not directly exposed via public API.
 
 ### Built-in Normalizers
 
@@ -298,27 +227,7 @@ df["status"] = pd.Categorical(["A", "B", "A", "A", "B"])
 
 ## Debugging
 
-### Check Normalized Form
-
-```python
-from arcticdb.version_store._normalization import DataFrameNormalizer
-
-df = pd.DataFrame({"a": [1, 2, 3]})
-normalizer = DataFrameNormalizer()
-normalized = normalizer.normalize(df)
-
-# normalized.item contains the data arrays
-# normalized.norm_meta contains metadata protobuf
-print(f"Metadata: {normalized.norm_meta}")
-```
-
-### Schema Inspection
-
-```python
-# Get info about stored schema
-info = lib.get_info("symbol")
-print(info["dtype"])  # Column types as stored
-```
+Use `DataFrameNormalizer().normalize(df)` to inspect normalized form. Use `lib.get_info("symbol")` to inspect stored schema (access `info["dtype"]` for column types).
 
 ## Related Documentation
 
