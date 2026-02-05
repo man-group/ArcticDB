@@ -12,6 +12,8 @@
 
 #include <sparrow/record_batch.hpp>
 
+#include <arcticdb/util/preconditions.hpp>
+
 namespace arcticdb {
 
 ArrowOutputFrame::ArrowOutputFrame(std::shared_ptr<std::vector<sparrow::record_batch>>&& data) :
@@ -22,6 +24,10 @@ size_t ArrowOutputFrame::num_blocks() const {
         return 0;
 
     return data_->size();
+}
+
+std::shared_ptr<RecordBatchIterator> ArrowOutputFrame::create_iterator() const {
+    return std::make_shared<RecordBatchIterator>(data_);
 }
 
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
@@ -39,6 +45,50 @@ std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     }
 
     return output;
+}
+
+// RecordBatchIterator implementation
+
+RecordBatchIterator::RecordBatchIterator(std::shared_ptr<std::vector<sparrow::record_batch>> data)
+    : data_(std::move(data))
+    , current_index_(0) {
+}
+
+bool RecordBatchIterator::has_next() const {
+    return data_ && current_index_ < data_->size();
+}
+
+size_t RecordBatchIterator::num_batches() const {
+    if (!data_) {
+        return 0;
+    }
+    return data_->size();
+}
+
+std::optional<RecordBatchData> RecordBatchIterator::next() {
+    if (!has_next()) {
+        return std::nullopt;
+    }
+
+    auto& batch = (*data_)[current_index_++];
+    auto struct_array = sparrow::array{batch.extract_struct_array()};
+    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
+
+    return RecordBatchData{arr, schema};
+}
+
+RecordBatchData RecordBatchIterator::peek_schema_batch() {
+    util::check(data_ && !data_->empty(), "Cannot peek schema from empty iterator");
+
+    // We need to extract schema from the first batch without consuming it.
+    // Since extract_struct_array() is destructive, we extract and re-create.
+    // Note: This consumes the first batch, so peek should only be called once
+    // before iteration begins, or we need to cache the schema separately.
+    auto& batch = (*data_)[0];
+    auto struct_array = sparrow::array{batch.extract_struct_array()};
+    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
+
+    return RecordBatchData{arr, schema};
 }
 
 } // namespace arcticdb

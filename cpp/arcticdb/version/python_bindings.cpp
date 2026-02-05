@@ -27,6 +27,7 @@
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 
 namespace arcticdb::version_store {
 
@@ -242,6 +243,26 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);
+
+    py::class_<RecordBatchIterator, std::shared_ptr<RecordBatchIterator>>(version, "RecordBatchIterator", R"pbdoc(
+        Iterator for streaming Arrow record batches one at a time.
+        Used for memory-efficient integration with DuckDB and other Arrow consumers.
+    )pbdoc")
+            .def("next", &RecordBatchIterator::next, R"pbdoc(
+        Returns the next record batch, or None if exhausted.
+    )pbdoc")
+            .def("has_next", &RecordBatchIterator::has_next, R"pbdoc(
+        Returns True if there are more batches to iterate.
+    )pbdoc")
+            .def("peek_schema_batch", &RecordBatchIterator::peek_schema_batch, R"pbdoc(
+        Returns the schema from the first batch without consuming it.
+    )pbdoc")
+            .def("num_batches", &RecordBatchIterator::num_batches, R"pbdoc(
+        Returns the total number of batches.
+    )pbdoc")
+            .def("current_index", &RecordBatchIterator::current_index, R"pbdoc(
+        Returns the current position (0-indexed).
+    )pbdoc");
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.

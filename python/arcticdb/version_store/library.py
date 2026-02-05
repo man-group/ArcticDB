@@ -2112,6 +2112,256 @@ class Library:
                 iterate_snapshots_if_tombstoned=False,
             )
 
+    def read_as_record_batch_reader(
+        self,
+        symbol: str,
+        as_of: Optional[AsOf] = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+    ) -> "ArcticRecordBatchReader":
+        """
+        Read data and return a lazy Arrow RecordBatchReader that streams data segment-by-segment.
+
+        This method is memory-efficient for large datasets as it doesn't materialize all data
+        at once. The returned reader implements the PyArrow RecordBatchReader protocol and
+        can be passed directly to DuckDB, Polars, or other Arrow-compatible tools.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name to read.
+        as_of : AsOf, default=None
+            Version to read. See `read()` for details.
+        date_range : Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
+            Date range filter. See `read()` for details.
+        row_range : Tuple[int, int], default=None
+            Row range filter. See `read()` for details.
+        columns : List[str], default=None
+            Columns to read. See `read()` for details.
+        query_builder : QueryBuilder, default=None
+            Query builder for filtering/projections.
+
+        Returns
+        -------
+        ArcticRecordBatchReader
+            A lazy record batch reader that can be iterated over or passed to DuckDB.
+
+        Examples
+        --------
+        >>> # Basic usage - iterate over batches
+        >>> reader = lib.read_as_record_batch_reader("my_symbol")
+        >>> for batch in reader:
+        ...     process(batch)
+
+        >>> # Use with DuckDB for SQL queries
+        >>> import duckdb
+        >>> reader = lib.read_as_record_batch_reader("my_symbol")
+        >>> result = duckdb.from_arrow(reader).filter("price > 100").arrow()
+
+        >>> # With date range filter
+        >>> reader = lib.read_as_record_batch_reader(
+        ...     "my_symbol",
+        ...     date_range=(datetime(2024, 1, 1), datetime(2024, 12, 31))
+        ... )
+
+        See Also
+        --------
+        read : Standard read method that returns all data at once.
+        sql : Execute SQL queries directly on ArcticDB symbols.
+        duckdb_context : Context manager for complex multi-symbol SQL queries.
+        """
+        from arcticdb.version_store.arrow_reader import ArcticRecordBatchReader
+
+        cpp_iterator = self._nvs.read_as_record_batch_iterator(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+        )
+
+        return ArcticRecordBatchReader(cpp_iterator)
+
+    def sql(
+        self,
+        query: str,
+        as_of: Optional[AsOf] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ) -> VersionedItem:
+        """
+        Execute SQL query on ArcticDB symbols using DuckDB.
+
+        Symbols referenced in the query (via FROM or JOIN clauses) are automatically
+        registered as tables in DuckDB. Data is streamed segment-by-segment for
+        memory efficiency.
+
+        Parameters
+        ----------
+        query : str
+            SQL query. Reference ArcticDB symbols as table names.
+            Example: "SELECT col1, SUM(col2) FROM my_symbol WHERE col1 > 100 GROUP BY col1"
+        as_of : AsOf, default=None
+            Version to query. Applies to all symbols referenced in the query.
+            See `read()` for details on version specification.
+        output_format : OutputFormat, default=None
+            Format for the result. Defaults to PANDAS.
+            Options: OutputFormat.PANDAS, OutputFormat.PYARROW, OutputFormat.POLARS
+
+        Returns
+        -------
+        VersionedItem
+            Query result with data in the requested format.
+            The symbol field contains a comma-separated list of queried symbols.
+            The version field is None (SQL results don't have a single version).
+
+        Examples
+        --------
+        >>> # Simple filter and aggregation
+        >>> result = lib.sql('''
+        ...     SELECT ticker, AVG(price) as avg_price
+        ...     FROM trades
+        ...     WHERE date > '2024-01-01'
+        ...     GROUP BY ticker
+        ... ''')
+        >>> print(result.data)
+
+        >>> # Get result as Arrow table
+        >>> result = lib.sql(
+        ...     "SELECT * FROM prices WHERE price > 100",
+        ...     output_format=OutputFormat.PYARROW
+        ... )
+
+        Raises
+        ------
+        ImportError
+            If duckdb package is not installed.
+        ValueError
+            If no symbols could be extracted from the query.
+
+        Notes
+        -----
+        - DuckDB is an optional dependency. Install with: pip install duckdb
+        - For complex queries with multiple symbols or custom table aliases,
+          use `duckdb_context()` instead.
+        - Data is processed using streaming Arrow record batches for memory efficiency.
+
+        See Also
+        --------
+        duckdb_context : Context manager for complex multi-symbol SQL queries.
+        read_as_record_batch_reader : Low-level streaming Arrow reader.
+        """
+        from arcticdb.version_store.duckdb_integration import (
+            _check_duckdb_available,
+            _extract_symbols_from_query,
+        )
+
+        duckdb = _check_duckdb_available()
+
+        # Extract symbol names from query
+        symbols = _extract_symbols_from_query(query)
+
+        # Create temporary DuckDB connection
+        conn = duckdb.connect(":memory:")
+
+        try:
+            # Register each symbol as a table with streaming reader
+            for symbol in symbols:
+                reader = self.read_as_record_batch_reader(symbol, as_of=as_of)
+                # Convert to native PyArrow RecordBatchReader for DuckDB compatibility
+                conn.register(symbol, reader.to_pyarrow_reader())
+
+            # Execute query and get Arrow result
+            result_arrow = conn.execute(query).arrow()
+
+            # Convert to requested format
+            # Normalize output_format to string for comparison
+            if output_format is None:
+                output_fmt_str = OutputFormat.PANDAS.lower()
+            elif isinstance(output_format, OutputFormat):
+                output_fmt_str = output_format.lower()
+            else:
+                output_fmt_str = str(output_format).lower()
+
+            if output_fmt_str == OutputFormat.PYARROW.lower():
+                data = result_arrow
+            elif output_fmt_str == OutputFormat.POLARS.lower():
+                import polars as pl
+
+                data = pl.from_arrow(result_arrow)
+            else:
+                # Default to pandas
+                data = result_arrow.to_pandas()
+
+            return VersionedItem(
+                symbol=",".join(symbols),
+                library=self._nvs._library.library_path,
+                data=data,
+                version=None,
+                metadata={"query": query},
+                host="",
+            )
+
+        finally:
+            conn.close()
+
+    def duckdb_context(self) -> "DuckDBContext":
+        """
+        Create a DuckDB context for complex multi-symbol SQL queries.
+
+        The context manager allows explicit symbol registration with custom
+        aliases, filters, and versions. Use this for JOINs across multiple
+        symbols or when you need fine-grained control over the query.
+
+        Returns
+        -------
+        DuckDBContext
+            Context manager for SQL queries.
+
+        Examples
+        --------
+        >>> with lib.duckdb_context() as ddb:
+        ...     # Register symbols with different versions/filters
+        ...     ddb.register_symbol("trades", date_range=(start, end))
+        ...     ddb.register_symbol("prices", as_of=-1, alias="latest_prices")
+        ...
+        ...     # Execute JOIN query
+        ...     result = ddb.query('''
+        ...         SELECT t.ticker, t.quantity * p.price as notional
+        ...         FROM trades t
+        ...         JOIN latest_prices p ON t.ticker = p.ticker
+        ...         WHERE t.quantity > 1000
+        ...     ''')
+
+        >>> # Method chaining
+        >>> with lib.duckdb_context() as ddb:
+        ...     result = (ddb
+        ...         .register_symbol("trades")
+        ...         .register_symbol("prices")
+        ...         .query("SELECT * FROM trades JOIN prices USING (ticker)"))
+
+        Raises
+        ------
+        ImportError
+            If duckdb package is not installed.
+
+        Notes
+        -----
+        - DuckDB is an optional dependency. Install with: pip install duckdb
+        - Data is streamed lazily; symbols are not fully loaded until queried.
+        - The connection is automatically closed when exiting the context.
+
+        See Also
+        --------
+        sql : Simple SQL queries on single symbols.
+        read_as_record_batch_reader : Low-level streaming Arrow reader.
+        """
+        from arcticdb.version_store.duckdb_integration import DuckDBContext
+
+        return DuckDBContext(self)
+
     def read_batch(
         self,
         symbols: List[Union[str, ReadRequest]],
