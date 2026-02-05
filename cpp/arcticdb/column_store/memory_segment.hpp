@@ -94,12 +94,6 @@ class SegmentInMemory {
         impl_->set_array(pos, val);
     }
 
-    template<class T>
-    requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
-        impl_->set_array(pos, val);
-    }
-
     void set_string(position_t pos, std::string_view str);
 
     void set_string_at(position_t col, position_t row, const char* str, size_t size);

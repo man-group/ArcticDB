@@ -52,20 +52,6 @@ class RowRef {
     }
 
   private:
-    static py::buffer_info from_string_array(const Column::StringArrayData& data) {
-        std::vector<ssize_t> shapes{data.num_strings_};
-        std::vector<ssize_t> strides{data.string_size_};
-
-        return py::buffer_info{
-                (void*)data.data_,
-                data.string_size_,
-                std::string(fmt::format("{}{}", data.string_size_, 's')),
-                ssize_t(Dimension::Dim1),
-                shapes,
-                strides
-        };
-    }
-
     size_t row_pos_ = 0u;
     SegmentInMemory segment_;
 };
