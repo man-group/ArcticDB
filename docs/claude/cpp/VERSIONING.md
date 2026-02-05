@@ -291,14 +291,17 @@ Resolved in `get_version_id_negative_index()`.
 
 ## Concurrency
 
-### Write Locks
+### Write Behavior
 
-Concurrent writes to the same symbol are serialized using LOCK keys:
+ArcticDB does not use locks for symbol writes. Concurrent writes use a **last-writer-wins** policy:
 
-```
-Process A: write("sym") ──► acquire_lock("sym") ──► write ──► release_lock
-Process B: write("sym") ──► acquire_lock("sym") [blocks] ──► write ──► release_lock
-```
+1. Each write creates unique atom keys (data keys, index keys, version keys)
+2. Only after writing atom keys, the VERSION_REF key is updated
+3. The last writer to update VERSION_REF wins
+
+**Caveats:**
+- Concurrent appends may appear out of order or one may be dropped
+- Parallel writes to the same symbol are not recommended for modification operations
 
 ### Read Concurrency
 
@@ -307,10 +310,19 @@ Reads are lock-free:
 - Reads see a consistent snapshot (version chain is immutable)
 - Cache may return stale "latest" but specific version reads are accurate
 
+### LOCK Keys
+
+LOCK keys are only used for the compaction phase of the symbol list concurrent data structure, not for symbol writes.
+
+| Lock Type | Purpose |
+|-----------|---------|
+| `LOCK` | Best-effort lock for symbol list compaction (does not 100% guarantee single holder) |
+| `ATOMIC_LOCK` | Uses atomic S3 primitives for stronger guarantees (assuming no long process sleeps) |
+
 ### Key Files
 
 | File | Purpose |
 |------|---------|
 | `cpp/arcticdb/util/storage_lock.hpp` | Storage lock interface |
 | `cpp/arcticdb/util/reliable_storage_lock.hpp` | Reliable distributed locking |
-| `cpp/arcticdb/version/local_versioned_engine.cpp` | Lock acquisition |
+| `cpp/arcticdb/version/local_versioned_engine.cpp` | Version management |

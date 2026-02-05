@@ -233,3 +233,4 @@ print(index_df)
 - [LIBRARY_API.md](LIBRARY_API.md) - High-level API
 - [NATIVE_VERSION_STORE.md](NATIVE_VERSION_STORE.md) - Store internals
 - [../cpp/VERSIONING.md](../cpp/VERSIONING.md) - Version chain structure
+- [GitHub Wiki: Using the LibraryTool](https://github.com/man-group/ArcticDB/wiki/Using-the-LibraryTool-to-look-at-a-library's-internal-state) - Detailed usage guide

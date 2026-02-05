@@ -83,11 +83,9 @@ source /turbo/<username>/pyenvs/arcticdb-dev/bin/activate
 # Initialize git submodules (required for vcpkg)
 git submodule update --init --recursive
 
-# Build with linux-debug preset (limit parallelism)
-CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+# Build with linux-debug preset (limit parallelism, use protobuf 4)
+ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 ```
-
-**Note**: The protobuf 5 compilation step may fail due to `grpcio-tools>=1.68.1` not being available in the internal Pegasus registry (only 1.56.2). This is non-fatal - protobuf 4 is compiled successfully and the package works correctly.
 
 ### Building a Wheel
 
@@ -199,60 +197,6 @@ python -m asv run --python=$(which python) -v          # Use current env (faster
 ```
 
 See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
-
-## Storage Model
-
-ArcticDB stores data as **keys** in the underlying storage backend. Each key contains a segment with either data or references to other keys, forming a tree structure called the **version chain**.
-
-### Key Types (defined in `cpp/arcticdb/entity/key.hpp`)
-
-- **VERSION_REF**: Head of the version chain for a symbol, points to the latest VERSION key
-- **VERSION**: Contains a link to TABLE_INDEX for this version plus link to previous version (forming a linked list) 
-- **TABLE_INDEX**: Points to TABLE_DATA keys containing the actual data segments
-- **TABLE_DATA**: Leaf nodes containing compressed data for a row and columns slice from the original dataframe
-- **TOMBSTONE**: Marks a deleted version (exists only inside VERSION key segments, not standalone)
-- **TOMBSTONE_ALL**: Marks all versions before its version as deleted (exists only inside VERSION key segments, not standalone)
-- **SNAPSHOT_REF**: References multiple TABLE_INDEX keys for a snapshot
-- **SYMBOL_LIST**: Contains symbol list modifications (adds and removes) to form a concurrent data structure for fast `list_symbols()` operations
-
-### Version Chain Structure
-
-```
-VERSION_REF (symbol)
-    └── VERSION (latest, v3)
-            ├── TABLE_INDEX ──► TABLE_DATA (actual data)
-            └── VERSION (v2)
-                    ├── TABLE_INDEX ──► TABLE_DATA
-                    └── VERSION (v1)
-                            └── TABLE_INDEX ──► TABLE_DATA
-```
-
-## Code Architecture
-
-### Python Layer (`python/arcticdb/`)
-
-- `arctic.py` - `Arctic` class: top-level library management, URI parsing, library creation
-- `version_store/library.py` - `Library` class: main user-facing V2 API for read/write/update operations
-- `version_store/_store.py` - `NativeVersionStore`: V1 legacy API wrapping C++ bindings. It is called by the V2 API
-
-### C++ Layer (`cpp/arcticdb/`)
-
-- `*/python_bindings.cpp` - Python bindings for C++ methods
-- `version/` - Version management, symbol lists, snapshots
-  - `local_versioned_engine.cpp` - Core versioned storage engine
-  - `version_store_api.cpp` - Main C++ API exposed to Python
-- `storage/` - Storage backend implementations
-  - `s3/`, `lmdb/`, `azure/`, `mongo/`, `memory/` - Backend-specific code
-  - `library_manager.cpp` - Library configuration and management
-- `pipeline/` - Read/write pipeline for data processing
-  - `read_frame.cpp` / `write_frame.cpp` - Data serialization/deserialization
-- `processing/` - Query processing
-  - `clause.cpp` - Query clause execution (filter, project, aggregate)
-  - `expression_node.cpp` - Expression tree for query builder
-  - `read_and_schedule_processing()` - Entrypoint method for reading with processing
-- `codec/` - Compression and encoding (LZ4, ZSTD)
-- `column_store/` - Column-oriented data layout and memory management
-- `entity/` - Core data types (keys, data types, error codes)
 
 ## Key Development Guidelines
 

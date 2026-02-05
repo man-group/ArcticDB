@@ -37,7 +37,8 @@ ArcticDB caches version chain information in memory to reduce storage round-trip
 Each `VersionMapEntry` contains:
 - `head_`: Pointer to the latest VERSION key
 - `keys_`: Deque of version/index keys loaded from storage
-- `tombstones_`: Map of deleted version IDs
+- `tombstones_`: Map of individually deleted version IDs
+- `tombstone_all_`: Version ID marking that all versions before it are deleted (more efficient than storing thousands of entries in `tombstones_`)
 - `last_reload_time_`: Timestamp of last reload from storage
 - `load_progress_`: How much of the version chain has been loaded
 

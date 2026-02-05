@@ -4,12 +4,6 @@
 
 ArcticDB is a **high-performance, serverless DataFrame database** for Python data science. It provides a Python API backed by a C++ processing engine with columnar storage, compression, and versioning. Data can be stored on S3, Azure Blob, LMDB, MongoDB, or in-memory.
 
-**Key Stats:**
-- ~111,500 lines of C++ code
-- ~21,800 lines of Python code
-- ~50 external C++ dependencies (via vcpkg)
-- License: Business Source License 1.1 (converts to Apache 2.0)
-
 ---
 
 ## 1. Top-Level Repository Structure
@@ -269,7 +263,7 @@ setup.py
 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 
 # Build wheel
-ARCTICDB_PROTOC_VERS=4 pip wheel .
+pip wheel .
 
 # CMake presets available
 linux-debug, linux-release, linux-conda-debug, linux-conda-release
@@ -376,9 +370,10 @@ lib.read("symbol", columns=["price", "volume"], query_builder=q.filter(col("pric
 
 ### Concurrency Model
 
-- **Optimistic concurrency** - No locks for reads
-- **Write locks** - LOCK keys prevent concurrent writes to same symbol
-- **Symbol list** - Lock-free concurrent data structure for `list_symbols()`
+- **No locks for reads or writes** - ArcticDB does not use locks for symbol reads or writes
+- **Last writer wins** - Concurrent writes to the same symbol use a last-writer-wins policy. This is guaranteed by writing unique atom keys (data keys, index keys, version keys) first, then updating the non-unique VERSION_REF key. The last writer to update VERSION_REF wins.
+- **Concurrent write caveats** - Last-writer-wins can have surprising consequences for modification operations like `append()`. Concurrent appends may appear out of order or one may be dropped. Parallel writes to the same symbol are not recommended.
+- **Symbol list** - Lock-free concurrent data structure for `list_symbols()`. LOCK keys are only used for the compaction phase of the symbol list.
 - **Async I/O** - Parallel segment fetches during read
 
 ---

@@ -108,6 +108,8 @@ Location: `cpp/arcticdb/codec/encode_v1.cpp`
 
 ### V2 Encoding
 
+**Note: V2 Encoding is experimental and not currently used by any clients.**
+
 Newer, more sophisticated encoding:
 - Shape encoding for sparse data
 - Better handling of repeated values

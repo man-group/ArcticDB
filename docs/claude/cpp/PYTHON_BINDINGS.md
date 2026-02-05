@@ -137,6 +137,8 @@ using InputItem = std::variant<py::tuple, std::vector<RecordBatchData>>;
 
 ## GIL Management
 
+**Warning: Operate on the GIL with extreme care.** Incorrect GIL handling can produce very surprising and hard-to-test bugs.
+
 ### Location
 
 `cpp/arcticdb/python/gil_lock.hpp`
