@@ -25,10 +25,45 @@ namespace arcticdb {
 class RecordBatchIterator;
 
 // C arrow representation of a record batch. Can be converted to a pyarrow.RecordBatch zero copy.
+// Follows Rule of Five: move-only semantics to prevent double-free of Arrow structures.
 struct RecordBatchData {
-    RecordBatchData() = default;
+    RecordBatchData() {
+        array_.release = nullptr;
+        schema_.release = nullptr;
+    }
 
     RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
+
+    // Delete copy operations to prevent double-free
+    RecordBatchData(const RecordBatchData&) = delete;
+    RecordBatchData& operator=(const RecordBatchData&) = delete;
+
+    // Move constructor - transfers ownership
+    RecordBatchData(RecordBatchData&& other) noexcept : array_(other.array_), schema_(other.schema_) {
+        // Clear source to prevent double-free
+        other.array_.release = nullptr;
+        other.schema_.release = nullptr;
+    }
+
+    // Move assignment - transfers ownership
+    RecordBatchData& operator=(RecordBatchData&& other) noexcept {
+        if (this != &other) {
+            // Release current resources if owned
+            release_if_owned();
+            // Take ownership from other
+            array_ = other.array_;
+            schema_ = other.schema_;
+            // Clear source
+            other.array_.release = nullptr;
+            other.schema_.release = nullptr;
+        }
+        return *this;
+    }
+
+    // Destructor - releases Arrow resources if not already transferred to Python
+    ~RecordBatchData() {
+        release_if_owned();
+    }
 
     ArrowArray array_;
     ArrowSchema schema_;
@@ -36,6 +71,18 @@ struct RecordBatchData {
     uintptr_t array() { return reinterpret_cast<uintptr_t>(&array_); }
 
     uintptr_t schema() { return reinterpret_cast<uintptr_t>(&schema_); }
+
+private:
+    void release_if_owned() {
+        // Arrow C Data Interface: release is set to nullptr after being called
+        // If release is non-null, we still own the memory and must free it
+        if (array_.release != nullptr) {
+            array_.release(&array_);
+        }
+        if (schema_.release != nullptr) {
+            schema_.release(&schema_);
+        }
+    }
 };
 
 struct ArrowOutputFrame {
@@ -66,10 +113,6 @@ public:
 
     // Returns true if there are more batches to iterate.
     [[nodiscard]] bool has_next() const;
-
-    // Returns the schema from the first batch without consuming it.
-    // Throws if iterator is empty.
-    RecordBatchData peek_schema_batch();
 
     // Returns the total number of batches.
     [[nodiscard]] size_t num_batches() const;

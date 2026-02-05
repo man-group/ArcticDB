@@ -2206,19 +2206,13 @@ class Library:
         --------
         duckdb : Context manager for complex multi-symbol SQL queries.
         """
-        from arcticdb.version_store.duckdb.integration import (
-            _check_duckdb_available,
-            _extract_symbols_from_query,
-        )
+        from arcticdb.version_store.duckdb.integration import _check_duckdb_available
         from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
 
         duckdb = _check_duckdb_available()
 
-        # Extract symbol names from query
-        symbols = _extract_symbols_from_query(query)
-
-        # Extract pushdown info directly from SQL AST (no tables needed)
-        pushdown_by_table = extract_pushdown_from_sql(query, symbols)
+        # Extract symbol names and pushdown info from SQL AST in a single parse
+        pushdown_by_table, symbols = extract_pushdown_from_sql(query)
 
         # Create DuckDB connection and register data with pushdown applied
         conn = duckdb.connect(":memory:")

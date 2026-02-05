@@ -222,6 +222,21 @@ Code style is enforced by `./build_tooling/format.py`. **Always run the formatte
 python ./build_tooling/format.py --in-place --type all
 ```
 
+
+## Code Review
+
+When reviewing changes on a branch before submitting upstream, see **[docs/claude/skills/code-review.md](docs/claude/skills/code-review.md)** for detailed instructions covering:
+
+- C++ memory safety (Rule of Five, Arrow C Data Interface, RAII)
+- Python code quality (exception handling, duplicate code, state management)
+- Test coverage analysis (happy path, error handling, edge cases, parameter coverage)
+- Error handling review (fail fast, helpful messages, exception types)
+- Type handling (numeric, temporal, string, complex types)
+- Documentation and performance considerations
+
+Use sub-agents to review in parallel. Write findings to `docs/claude/plans/` for tracking.
+
+
 ### Git Commits
 
 - Do not add "Generated with AI" or "Co-Authored-By" lines to commit messages

@@ -77,18 +77,4 @@ std::optional<RecordBatchData> RecordBatchIterator::next() {
     return RecordBatchData{arr, schema};
 }
 
-RecordBatchData RecordBatchIterator::peek_schema_batch() {
-    util::check(data_ && !data_->empty(), "Cannot peek schema from empty iterator");
-
-    // We need to extract schema from the first batch without consuming it.
-    // Since extract_struct_array() is destructive, we extract and re-create.
-    // Note: This consumes the first batch, so peek should only be called once
-    // before iteration begins, or we need to cache the schema separately.
-    auto& batch = (*data_)[0];
-    auto struct_array = sparrow::array{batch.extract_struct_array()};
-    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
-
-    return RecordBatchData{arr, schema};
-}
-
 } // namespace arcticdb

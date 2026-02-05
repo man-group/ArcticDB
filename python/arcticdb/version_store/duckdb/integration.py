@@ -50,33 +50,11 @@ def _extract_symbols_from_query(query: str) -> List[str]:
     ValueError
         If no symbols could be extracted from the query.
     """
-    from arcticdb.version_store.duckdb.pushdown import _get_sql_ast, _extract_tables_from_ast
+    from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
 
-    ast = _get_sql_ast(query)
-    if ast is None:
-        raise ValueError(
-            "Could not parse SQL query. "
-            "Ensure query is valid SQL, or use duckdb() to register symbols explicitly."
-        )
-
-    table_map = _extract_tables_from_ast(ast)
-
-    if not table_map:
-        raise ValueError(
-            "Could not extract symbol names from query. "
-            "Ensure query contains FROM or JOIN clauses with symbol names, "
-            "or use duckdb() to register symbols explicitly."
-        )
-
-    # Return unique table names (not aliases)
-    seen = set()
-    unique_symbols = []
-    for table_name in table_map.values():
-        if table_name.lower() not in seen:
-            seen.add(table_name.lower())
-            unique_symbols.append(table_name)
-
-    return unique_symbols
+    # Use the combined function which parses the SQL only once
+    _, symbols = extract_pushdown_from_sql(query)
+    return symbols
 
 
 class DuckDBContext:
@@ -217,6 +195,11 @@ class DuckDBContext:
         pandas.DataFrame, pyarrow.Table, or polars.DataFrame
             Query result in the requested format.
 
+        Raises
+        ------
+        RuntimeError
+            If called outside of a 'with' block or if no symbols have been registered.
+
         Examples
         --------
         >>> result = ddb.query('''
@@ -228,6 +211,12 @@ class DuckDBContext:
         """
         if self._conn is None:
             raise RuntimeError("DuckDBContext must be used within a 'with' block")
+
+        if not self._registered_symbols:
+            raise RuntimeError(
+                "No symbols have been registered. "
+                "Use register_symbol() to register ArcticDB symbols as tables before querying."
+            )
 
         if output_format == "arrow":
             return self._conn.execute(sql).arrow()

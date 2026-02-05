@@ -254,9 +254,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("has_next", &RecordBatchIterator::has_next, R"pbdoc(
         Returns True if there are more batches to iterate.
     )pbdoc")
-            .def("peek_schema_batch", &RecordBatchIterator::peek_schema_batch, R"pbdoc(
-        Returns the schema from the first batch without consuming it.
-    )pbdoc")
             .def("num_batches", &RecordBatchIterator::num_batches, R"pbdoc(
         Returns the total number of batches.
     )pbdoc")

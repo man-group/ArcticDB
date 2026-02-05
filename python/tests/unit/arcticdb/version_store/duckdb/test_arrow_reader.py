@@ -98,6 +98,132 @@ class TestRecordBatchReader:
         assert "b" not in table.column_names
 
 
+class TestRecordBatchReaderEdgeCases:
+    """Tests for edge cases and error handling in ArcticRecordBatchReader."""
+
+    def test_is_exhausted_property(self, lmdb_library):
+        """Test is_exhausted property tracks reader state."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        assert not reader.is_exhausted
+
+        # Exhaust the reader
+        list(reader)
+
+        assert reader.is_exhausted
+
+    def test_num_batches_property(self, lmdb_library):
+        """Test num_batches property returns batch count."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        assert reader.num_batches >= 1
+
+    def test_current_index_property(self, lmdb_library):
+        """Test current_index tracks iteration progress."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        initial_index = reader.current_index
+
+        # Read one batch
+        next(reader)
+
+        assert reader.current_index > initial_index
+
+    def test_len_returns_batch_count(self, lmdb_library):
+        """Test __len__ returns the number of batches."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        assert len(reader) == reader.num_batches
+
+    def test_iterate_exhausted_reader_raises(self, lmdb_library):
+        """Test that iterating over exhausted reader raises helpful error."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        # Exhaust the reader
+        list(reader)
+
+        with pytest.raises(RuntimeError, match="Cannot iterate over exhausted reader"):
+            list(reader)
+
+    def test_read_all_after_iteration_raises(self, lmdb_library):
+        """Test that read_all() after partial iteration raises error."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        # Start iteration
+        next(reader)
+
+        with pytest.raises(RuntimeError, match="Cannot call read_all"):
+            reader.read_all()
+
+    def test_read_next_batch_returns_none_when_exhausted(self, lmdb_library):
+        """Test that read_next_batch returns None when exhausted."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        reader = lib._read_as_record_batch_reader("test_symbol")
+
+        # Exhaust the reader
+        while reader.read_next_batch() is not None:
+            pass
+
+        # Should return None consistently
+        assert reader.read_next_batch() is None
+        assert reader.read_next_batch() is None
+
+    def test_with_row_range(self, lmdb_library):
+        """Test record batch reader with row_range filter."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("test_symbol", df)
+
+        # Read only rows 10-30 (exclusive end)
+        reader = lib._read_as_record_batch_reader("test_symbol", row_range=(10, 30))
+
+        table = reader.read_all()
+        assert len(table) == 20
+
+    def test_with_as_of_version(self, lmdb_library):
+        """Test record batch reader with as_of parameter."""
+        lib = lmdb_library
+        df1 = pd.DataFrame({"x": [1, 2, 3]})
+        df2 = pd.DataFrame({"x": [10, 20, 30]})
+
+        lib.write("test_symbol", df1)  # version 0
+        lib.write("test_symbol", df2)  # version 1
+
+        # Read version 0
+        reader = lib._read_as_record_batch_reader("test_symbol", as_of=0)
+        table = reader.read_all()
+
+        # Should get first version data
+        assert table.column("x").to_pylist() == [1, 2, 3]
+
+
 class TestDuckDBIntegrationWithArrow:
     """Tests verifying the DuckDB integration uses Arrow correctly."""
 

@@ -26,6 +26,11 @@ class ArcticRecordBatchReader:
     record batches one at a time instead of materializing the entire dataset.
 
     This is primarily used internally by Library.sql() and Library.duckdb().
+
+    Note
+    ----
+    This reader is single-use. Once exhausted, it cannot be reset or reused.
+    Attempting to iterate over an exhausted reader will immediately raise StopIteration.
     """
 
     def __init__(self, cpp_iterator: "RecordBatchIterator"):
@@ -42,6 +47,7 @@ class ArcticRecordBatchReader:
         self._first_batch: Optional[pa.RecordBatch] = None  # Cache for first batch
         self._first_batch_returned = False
         self._exhausted = False
+        self._iteration_started = False
 
     def _ensure_schema(self) -> None:
         """Extract schema from first batch if not already done."""
@@ -83,6 +89,8 @@ class ArcticRecordBatchReader:
         if self._exhausted:
             return None
 
+        self._iteration_started = True
+
         # First, ensure schema is extracted (which caches first batch)
         self._ensure_schema()
 
@@ -110,14 +118,39 @@ class ArcticRecordBatchReader:
         -------
         pa.Table
             A PyArrow Table containing all data.
+
+        Raises
+        ------
+        RuntimeError
+            If called after iteration has already started (reader is single-use).
         """
+        if self._iteration_started:
+            raise RuntimeError(
+                "Cannot call read_all() after iteration has started. "
+                "ArcticRecordBatchReader is single-use - create a new reader to read all data."
+            )
+
         batches = list(self)
         if not batches:
-            return pa.Table.from_arrays([])
+            # Return empty table with schema if available
+            self._ensure_schema()
+            if self._schema and len(self._schema) > 0:
+                return pa.Table.from_pydict({field.name: [] for field in self._schema}, schema=self._schema)
+            return pa.table({})
         return pa.Table.from_batches(batches)
+
+    @property
+    def is_exhausted(self) -> bool:
+        """Return True if the reader has been fully consumed."""
+        return self._exhausted
 
     def __iter__(self) -> Iterator[pa.RecordBatch]:
         """Iterate over record batches."""
+        if self._exhausted:
+            raise RuntimeError(
+                "Cannot iterate over exhausted reader. "
+                "ArcticRecordBatchReader is single-use - create a new reader to iterate again."
+            )
         return self
 
     def __next__(self) -> pa.RecordBatch:
