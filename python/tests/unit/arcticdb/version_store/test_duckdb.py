@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.options import OutputFormat
-from arcticdb.version_store.duckdb_integration import (
+from arcticdb.version_store.duckdb.integration import (
     _extract_symbols_from_query,
 )
 
@@ -69,7 +69,7 @@ class TestRecordBatchReader:
         df = pd.DataFrame({"x": np.arange(100), "y": np.arange(100, 200)})
         lib.write("test_symbol", df)
 
-        reader = lib.read_as_record_batch_reader("test_symbol")
+        reader = lib._read_as_record_batch_reader("test_symbol")
 
         # Should be able to iterate
         batches = list(reader)
@@ -85,7 +85,7 @@ class TestRecordBatchReader:
         df = pd.DataFrame({"x": np.arange(50)})
         lib.write("test_symbol", df)
 
-        reader = lib.read_as_record_batch_reader("test_symbol")
+        reader = lib._read_as_record_batch_reader("test_symbol")
         table = reader.read_all()
 
         import pyarrow as pa
@@ -99,7 +99,7 @@ class TestRecordBatchReader:
         df = pd.DataFrame({"col_int": [1, 2, 3], "col_float": [1.0, 2.0, 3.0]})
         lib.write("test_symbol", df)
 
-        reader = lib.read_as_record_batch_reader("test_symbol")
+        reader = lib._read_as_record_batch_reader("test_symbol")
 
         # Schema should have our columns
         schema = reader.schema
@@ -115,7 +115,7 @@ class TestRecordBatchReader:
         lib.write("test_symbol", df)
 
         # Read only January data
-        reader = lib.read_as_record_batch_reader(
+        reader = lib._read_as_record_batch_reader(
             "test_symbol",
             date_range=(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-31")),
         )
@@ -129,7 +129,7 @@ class TestRecordBatchReader:
         df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
         lib.write("test_symbol", df)
 
-        reader = lib.read_as_record_batch_reader("test_symbol", columns=["a", "c"])
+        reader = lib._read_as_record_batch_reader("test_symbol", columns=["a", "c"])
 
         table = reader.read_all()
         assert "a" in table.column_names
@@ -226,7 +226,7 @@ class TestDuckDBContext:
         df = pd.DataFrame({"x": [1, 2, 3]})
         lib.write("test_symbol", df)
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
             result = ddb.query("SELECT * FROM test_symbol")
 
@@ -243,7 +243,7 @@ class TestDuckDBContext:
         lib.write("trades", trades)
         lib.write("prices", prices)
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol("trades")
             ddb.register_symbol("prices")
 
@@ -264,7 +264,7 @@ class TestDuckDBContext:
         df = pd.DataFrame({"x": [1, 2, 3]})
         lib.write("test_symbol", df)
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol", alias="my_table")
             result = ddb.query("SELECT * FROM my_table")
 
@@ -277,7 +277,7 @@ class TestDuckDBContext:
         df = pd.DataFrame({"value": np.arange(100)}, index=dates)
         lib.write("test_symbol", df)
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol(
                 "test_symbol",
                 alias="jan_data",
@@ -303,7 +303,7 @@ class TestDuckDBContext:
         df = pd.DataFrame({"x": [1, 2, 3]})
         lib.write("test_symbol", df)
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
             result = ddb.query("SELECT * FROM test_symbol", output_format="arrow")
 
@@ -315,7 +315,7 @@ class TestDuckDBContext:
         lib.write("sym1", pd.DataFrame({"x": [1, 2]}))
         lib.write("sym2", pd.DataFrame({"y": [3, 4]}))
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             result = ddb.register_symbol("sym1").register_symbol("sym2").query("SELECT * FROM sym1, sym2")
 
         # Cross join should give 4 rows
@@ -327,7 +327,7 @@ class TestDuckDBContext:
         df = pd.DataFrame({"x": [1, 2, 3]})
         lib.write("test_symbol", df)
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
             # Create a view using execute
             ddb.execute("CREATE VIEW filtered AS SELECT * FROM test_symbol WHERE x > 1")
@@ -341,7 +341,7 @@ class TestDuckDBContext:
         lib.write("sym1", pd.DataFrame({"x": [1]}))
         lib.write("sym2", pd.DataFrame({"y": [2]}))
 
-        with lib.duckdb_context() as ddb:
+        with lib.duckdb() as ddb:
             ddb.register_symbol("sym1")
             ddb.register_symbol("sym2", alias="alias2", as_of=-1)
 
@@ -356,7 +356,7 @@ class TestDuckDBContext:
         """Test that using context outside 'with' raises error."""
         lib = lmdb_library
 
-        ddb = lib.duckdb_context()
+        ddb = lib.duckdb()
 
         with pytest.raises(RuntimeError, match="must be used within"):
             ddb.register_symbol("test")
@@ -584,7 +584,7 @@ class TestDuckDBIntegrationWithArrow:
         df = pd.DataFrame({"x": np.arange(100), "y": np.arange(100, 200)})
         lib.write("test_symbol", df)
 
-        reader = lib.read_as_record_batch_reader("test_symbol")
+        reader = lib._read_as_record_batch_reader("test_symbol")
 
         # Convert to PyArrow reader for DuckDB compatibility
         pa_reader = reader.to_pyarrow_reader()
@@ -602,7 +602,7 @@ class TestDuckDBIntegrationWithArrow:
         df = pd.DataFrame({"x": np.arange(1000)})
         lib.write("test_symbol", df)
 
-        reader = lib.read_as_record_batch_reader("test_symbol")
+        reader = lib._read_as_record_batch_reader("test_symbol")
 
         batch_count = 0
         total_rows = 0

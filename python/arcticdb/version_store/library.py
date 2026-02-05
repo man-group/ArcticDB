@@ -2112,7 +2112,7 @@ class Library:
                 iterate_snapshots_if_tombstoned=False,
             )
 
-    def read_as_record_batch_reader(
+    def _read_as_record_batch_reader(
         self,
         symbol: str,
         as_of: Optional[AsOf] = None,
@@ -2124,55 +2124,9 @@ class Library:
         """
         Read data and return a lazy Arrow RecordBatchReader that streams data segment-by-segment.
 
-        This method is memory-efficient for large datasets as it doesn't materialize all data
-        at once. The returned reader implements the PyArrow RecordBatchReader protocol and
-        can be passed directly to DuckDB, Polars, or other Arrow-compatible tools.
-
-        Parameters
-        ----------
-        symbol : str
-            Symbol name to read.
-        as_of : AsOf, default=None
-            Version to read. See `read()` for details.
-        date_range : Tuple[Optional[Timestamp], Optional[Timestamp]], default=None
-            Date range filter. See `read()` for details.
-        row_range : Tuple[int, int], default=None
-            Row range filter. See `read()` for details.
-        columns : List[str], default=None
-            Columns to read. See `read()` for details.
-        query_builder : QueryBuilder, default=None
-            Query builder for filtering/projections.
-
-        Returns
-        -------
-        ArcticRecordBatchReader
-            A lazy record batch reader that can be iterated over or passed to DuckDB.
-
-        Examples
-        --------
-        >>> # Basic usage - iterate over batches
-        >>> reader = lib.read_as_record_batch_reader("my_symbol")
-        >>> for batch in reader:
-        ...     process(batch)
-
-        >>> # Use with DuckDB for SQL queries
-        >>> import duckdb
-        >>> reader = lib.read_as_record_batch_reader("my_symbol")
-        >>> result = duckdb.from_arrow(reader).filter("price > 100").arrow()
-
-        >>> # With date range filter
-        >>> reader = lib.read_as_record_batch_reader(
-        ...     "my_symbol",
-        ...     date_range=(datetime(2024, 1, 1), datetime(2024, 12, 31))
-        ... )
-
-        See Also
-        --------
-        read : Standard read method that returns all data at once.
-        sql : Execute SQL queries directly on ArcticDB symbols.
-        duckdb_context : Context manager for complex multi-symbol SQL queries.
+        This is an internal method used by sql() and duckdb() for memory-efficient streaming.
         """
-        from arcticdb.version_store.arrow_reader import ArcticRecordBatchReader
+        from arcticdb.version_store.duckdb import ArcticRecordBatchReader
 
         cpp_iterator = self._nvs.read_as_record_batch_iterator(
             symbol=symbol,
@@ -2245,19 +2199,18 @@ class Library:
         -----
         - DuckDB is an optional dependency. Install with: pip install duckdb
         - For complex queries with multiple symbols or custom table aliases,
-          use `duckdb_context()` instead.
+          use `duckdb()` instead.
         - Data is processed using streaming Arrow record batches for memory efficiency.
 
         See Also
         --------
-        duckdb_context : Context manager for complex multi-symbol SQL queries.
-        read_as_record_batch_reader : Low-level streaming Arrow reader.
+        duckdb : Context manager for complex multi-symbol SQL queries.
         """
-        from arcticdb.version_store.duckdb_integration import (
+        from arcticdb.version_store.duckdb.integration import (
             _check_duckdb_available,
             _extract_symbols_from_query,
         )
-        from arcticdb.version_store.sql_pushdown import extract_pushdown_from_sql
+        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
 
         duckdb = _check_duckdb_available()
 
@@ -2274,7 +2227,7 @@ class Library:
             for symbol in symbols:
                 pushdown = pushdown_by_table.get(symbol)
                 if pushdown:
-                    reader = self.read_as_record_batch_reader(
+                    reader = self._read_as_record_batch_reader(
                         symbol,
                         as_of=as_of,
                         columns=pushdown.columns,
@@ -2282,7 +2235,7 @@ class Library:
                         query_builder=pushdown.query_builder,
                     )
                 else:
-                    reader = self.read_as_record_batch_reader(symbol, as_of=as_of)
+                    reader = self._read_as_record_batch_reader(symbol, as_of=as_of)
 
                 conn.register(symbol, reader.to_pyarrow_reader())
 
@@ -2345,7 +2298,7 @@ class Library:
         finally:
             conn.close()
 
-    def duckdb_context(self) -> "DuckDBContext":
+    def duckdb(self) -> "DuckDBContext":
         """
         Create a DuckDB context for complex multi-symbol SQL queries.
 
@@ -2360,7 +2313,7 @@ class Library:
 
         Examples
         --------
-        >>> with lib.duckdb_context() as ddb:
+        >>> with lib.duckdb() as ddb:
         ...     # Register symbols with different versions/filters
         ...     ddb.register_symbol("trades", date_range=(start, end))
         ...     ddb.register_symbol("prices", as_of=-1, alias="latest_prices")
@@ -2374,7 +2327,7 @@ class Library:
         ...     ''')
 
         >>> # Method chaining
-        >>> with lib.duckdb_context() as ddb:
+        >>> with lib.duckdb() as ddb:
         ...     result = (ddb
         ...         .register_symbol("trades")
         ...         .register_symbol("prices")
@@ -2394,9 +2347,8 @@ class Library:
         See Also
         --------
         sql : Simple SQL queries on single symbols.
-        read_as_record_batch_reader : Low-level streaming Arrow reader.
         """
-        from arcticdb.version_store.duckdb_integration import DuckDBContext
+        from arcticdb.version_store.duckdb import DuckDBContext
 
         return DuckDBContext(self)
 

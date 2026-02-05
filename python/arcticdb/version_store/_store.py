@@ -2450,8 +2450,8 @@ class NativeVersionStore:
         Read data and return a streaming record batch iterator.
 
         Returns the raw C++ RecordBatchIterator that yields Arrow record batches
-        one at a time. This is a low-level method; use Library.read_as_record_batch_reader()
-        for the high-level Python API.
+        one at a time. This is a low-level internal method used by Library.sql()
+        and Library.duckdb().
 
         Parameters
         ----------

@@ -7,7 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 be governed by the Apache License, version 2.0.
 """
 
-import re
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 if TYPE_CHECKING:
@@ -31,10 +30,10 @@ def _check_duckdb_available():
 
 def _extract_symbols_from_query(query: str) -> List[str]:
     """
-    Extract symbol names from SQL query by parsing FROM and JOIN clauses.
+    Extract symbol names from SQL query using DuckDB's AST parser.
 
-    This is a simplified parser that handles common cases. For complex queries,
-    use the DuckDBContext API which allows explicit symbol registration.
+    Uses DuckDB's json_serialize_sql() to parse the query and extract table
+    names from FROM and JOIN clauses.
 
     Parameters
     ----------
@@ -51,25 +50,31 @@ def _extract_symbols_from_query(query: str) -> List[str]:
     ValueError
         If no symbols could be extracted from the query.
     """
-    # Pattern to match table names after FROM and JOIN keywords
-    # Handles: FROM symbol, JOIN symbol, LEFT JOIN symbol, etc.
-    pattern = r"\b(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)"
-    matches = re.findall(pattern, query, re.IGNORECASE)
+    from arcticdb.version_store.duckdb.pushdown import _get_sql_ast, _extract_tables_from_ast
 
-    if not matches:
+    ast = _get_sql_ast(query)
+    if ast is None:
+        raise ValueError(
+            "Could not parse SQL query. "
+            "Ensure query is valid SQL, or use duckdb() to register symbols explicitly."
+        )
+
+    table_map = _extract_tables_from_ast(ast)
+
+    if not table_map:
         raise ValueError(
             "Could not extract symbol names from query. "
             "Ensure query contains FROM or JOIN clauses with symbol names, "
-            "or use duckdb_context() to register symbols explicitly."
+            "or use duckdb() to register symbols explicitly."
         )
 
-    # Return unique symbols preserving order
+    # Return unique table names (not aliases)
     seen = set()
     unique_symbols = []
-    for symbol in matches:
-        if symbol.lower() not in seen:
-            seen.add(symbol.lower())
-            unique_symbols.append(symbol)
+    for table_name in table_map.values():
+        if table_name.lower() not in seen:
+            seen.add(table_name.lower())
+            unique_symbols.append(table_name)
 
     return unique_symbols
 
@@ -96,7 +101,6 @@ class DuckDBContext:
     See Also
     --------
     Library.sql : Simple SQL queries on single symbols.
-    Library.read_as_record_batch_reader : Low-level streaming Arrow reader.
     """
 
     def __init__(self, library: "Library"):
@@ -164,7 +168,7 @@ class DuckDBContext:
 
         Examples
         --------
-        >>> with lib.duckdb_context() as ddb:
+        >>> with lib.duckdb() as ddb:
         ...     ddb.register_symbol("trades")
         ...     ddb.register_symbol("trades", alias="recent_trades",
         ...                         date_range=(datetime(2024, 1, 1), None))
@@ -174,7 +178,7 @@ class DuckDBContext:
 
         table_name = alias or symbol
 
-        reader = self._library.read_as_record_batch_reader(
+        reader = self._library._read_as_record_batch_reader(
             symbol=symbol,
             as_of=as_of,
             date_range=date_range,
