@@ -198,3 +198,7 @@ Code style is enforced by `./build_tooling/format.py`. **Always run the formatte
 # Format all code
 python ./build_tooling/format.py --in-place --type all
 ```
+
+### Git Commits
+
+- Do not add "Generated with AI" or "Co-Authored-By" lines to commit messages
