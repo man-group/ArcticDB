@@ -2292,13 +2292,22 @@ class Library:
         finally:
             conn.close()
 
-    def duckdb(self) -> "DuckDBContext":
+    def duckdb(self, connection: Any = None) -> "DuckDBContext":
         """
         Create a DuckDB context for complex multi-symbol SQL queries.
 
         The context manager allows explicit symbol registration with custom
         aliases, filters, and versions. Use this for JOINs across multiple
         symbols or when you need fine-grained control over the query.
+
+        Parameters
+        ----------
+        connection : duckdb.DuckDBPyConnection, optional
+            External DuckDB connection to use. If provided, ArcticDB will register
+            symbols into this connection but will NOT close it when the context exits.
+            This allows joining ArcticDB data with data from other sources (Parquet
+            files, CSV, other databases) that are already registered in the connection.
+            If not provided, a new in-memory connection is created and closed on exit.
 
         Returns
         -------
@@ -2307,6 +2316,8 @@ class Library:
 
         Examples
         --------
+        Basic usage with ArcticDB symbols only:
+
         >>> with lib.duckdb() as ddb:
         ...     # Register symbols with different versions/filters
         ...     ddb.register_symbol("trades", date_range=(start, end))
@@ -2319,6 +2330,25 @@ class Library:
         ...         JOIN latest_prices p ON t.ticker = p.ticker
         ...         WHERE t.quantity > 1000
         ...     ''')
+
+        Join ArcticDB data with external data sources:
+
+        >>> import duckdb
+        >>> # Create connection with external data
+        >>> conn = duckdb.connect()
+        >>> conn.execute("CREATE TABLE benchmarks AS SELECT * FROM 'benchmarks.parquet'")
+        >>>
+        >>> # Join ArcticDB data with external tables
+        >>> with lib.duckdb(connection=conn) as ddb:
+        ...     ddb.register_symbol("portfolio_returns")
+        ...     result = ddb.query('''
+        ...         SELECT r.date, r.ticker, r.return - b.return as alpha
+        ...         FROM portfolio_returns r
+        ...         JOIN benchmarks b ON r.date = b.date
+        ...     ''')
+        >>>
+        >>> # Connection is still open - ArcticDB did not close it
+        >>> conn.execute("SELECT COUNT(*) FROM benchmarks")
 
         >>> # Method chaining
         >>> with lib.duckdb() as ddb:
@@ -2336,7 +2366,10 @@ class Library:
         -----
         - DuckDB is an optional dependency. Install with: pip install duckdb
         - Data is streamed lazily; symbols are not fully loaded until queried.
-        - The connection is automatically closed when exiting the context.
+        - When no connection is provided, a new in-memory connection is created
+          and automatically closed when exiting the context.
+        - When an external connection is provided, ArcticDB will NOT close it,
+          allowing continued use after the context exits.
 
         See Also
         --------
@@ -2344,7 +2377,7 @@ class Library:
         """
         from arcticdb.version_store.duckdb import DuckDBContext
 
-        return DuckDBContext(self)
+        return DuckDBContext(self, connection=connection)
 
     def read_batch(
         self,

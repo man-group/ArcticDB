@@ -508,3 +508,155 @@ class TestDuckDBEdgeCases:
         result = lib.sql("SELECT SUM(value) as total FROM test_symbol WHERE flag")
 
         assert result.data["total"].iloc[0] == 4  # 1 + 3
+
+
+class TestExternalDuckDBConnection:
+    """Tests for using external DuckDB connections with ArcticDB."""
+
+    def test_external_connection_not_closed(self, lmdb_library):
+        """Test that external connections are NOT closed when context exits."""
+        import duckdb
+
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        # Create external connection
+        conn = duckdb.connect(":memory:")
+        conn.execute("CREATE TABLE external_data AS SELECT 10 as y")
+
+        # Use with ArcticDB
+        with lib.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("test_symbol")
+            result = ddb.query("SELECT * FROM test_symbol")
+            assert len(result) == 3
+
+        # Connection should still be usable after context exits
+        result = conn.execute("SELECT * FROM external_data").fetchall()
+        assert result == [(10,)]
+
+        # Clean up
+        conn.close()
+
+    def test_internal_connection_closed(self, lmdb_library):
+        """Test that internal connections ARE closed when context exits."""
+        import duckdb
+
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        # Get reference to internal connection
+        internal_conn = None
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("test_symbol")
+            internal_conn = ddb.connection
+
+        # Connection should be closed (attempting to use it should fail)
+        with pytest.raises(duckdb.ConnectionException):
+            internal_conn.execute("SELECT 1")
+
+    def test_join_arcticdb_with_external_table(self, lmdb_library):
+        """Test joining ArcticDB data with external DuckDB tables."""
+        import duckdb
+
+        lib = lmdb_library
+
+        # Write ArcticDB data
+        trades = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "MSFT"],
+            "quantity": [100, 200, 150]
+        })
+        lib.write("trades", trades)
+
+        # Create external connection with reference data
+        conn = duckdb.connect(":memory:")
+        conn.execute("""
+            CREATE TABLE sectors AS
+            SELECT * FROM (VALUES
+                ('AAPL', 'Technology'),
+                ('GOOG', 'Technology'),
+                ('MSFT', 'Technology'),
+                ('JPM', 'Finance')
+            ) AS t(ticker, sector)
+        """)
+
+        # Join ArcticDB data with external table
+        with lib.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("trades")
+            result = ddb.query("""
+                SELECT t.ticker, t.quantity, s.sector
+                FROM trades t
+                JOIN sectors s ON t.ticker = s.ticker
+                ORDER BY t.ticker
+            """)
+
+        assert len(result) == 3
+        assert list(result["sector"]) == ["Technology", "Technology", "Technology"]
+
+        # Verify connection still works
+        assert conn.execute("SELECT COUNT(*) FROM sectors").fetchone()[0] == 4
+        conn.close()
+
+    def test_external_connection_with_multiple_symbols(self, lmdb_library):
+        """Test joining multiple ArcticDB symbols with external data."""
+        import duckdb
+
+        lib = lmdb_library
+
+        # Write multiple symbols
+        trades = pd.DataFrame({"ticker": ["AAPL", "GOOG"], "qty": [100, 200]})
+        prices = pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]})
+        lib.write("trades", trades)
+        lib.write("prices", prices)
+
+        # External multiplier data
+        conn = duckdb.connect(":memory:")
+        conn.execute("""
+            CREATE TABLE multipliers AS
+            SELECT * FROM (VALUES ('AAPL', 1.1), ('GOOG', 1.2)) AS t(ticker, mult)
+        """)
+
+        # Three-way join
+        with lib.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("trades")
+            ddb.register_symbol("prices")
+            result = ddb.query("""
+                SELECT t.ticker, t.qty * p.price * m.mult as adjusted_value
+                FROM trades t
+                JOIN prices p ON t.ticker = p.ticker
+                JOIN multipliers m ON t.ticker = m.ticker
+                ORDER BY t.ticker
+            """)
+
+        assert len(result) == 2
+        # AAPL: 100 * 150 * 1.1 = 16500
+        # GOOG: 200 * 2800 * 1.2 = 672000
+        assert result["adjusted_value"].iloc[0] == pytest.approx(16500.0)
+        assert result["adjusted_value"].iloc[1] == pytest.approx(672000.0)
+
+        conn.close()
+
+    def test_external_connection_preserves_existing_tables(self, lmdb_library):
+        """Test that registering ArcticDB symbols doesn't affect existing tables."""
+        import duckdb
+
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("arcticdb_data", df)
+
+        # Create connection with existing tables
+        conn = duckdb.connect(":memory:")
+        conn.execute("CREATE TABLE existing1 AS SELECT 'a' as col")
+        conn.execute("CREATE TABLE existing2 AS SELECT 'b' as col")
+
+        with lib.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("arcticdb_data")
+            # Query should work on ArcticDB data
+            result = ddb.query("SELECT * FROM arcticdb_data")
+            assert len(result) == 3
+
+        # Existing tables should still be intact
+        assert conn.execute("SELECT col FROM existing1").fetchone()[0] == "a"
+        assert conn.execute("SELECT col FROM existing2").fetchone()[0] == "b"
+        conn.close()
