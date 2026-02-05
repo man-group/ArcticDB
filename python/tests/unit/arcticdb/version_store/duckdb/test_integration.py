@@ -117,6 +117,17 @@ class TestDuckDBSimpleSQL:
 
         assert isinstance(result.data, pl.DataFrame)
 
+    def test_output_format_pandas(self, lmdb_library):
+        """Test SQL with explicit Pandas output format."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PANDAS)
+
+        assert isinstance(result.data, pd.DataFrame)
+        assert list(result.data["x"]) == [1, 2, 3]
+
     def test_metadata_contains_query(self, lmdb_library):
         """Test that result metadata contains the query."""
         lib = lmdb_library
@@ -297,6 +308,33 @@ class TestDuckDBContext:
             result = ddb.query("SELECT * FROM test_symbol", output_format="arrow")
 
         assert isinstance(result, pa.Table)
+
+    def test_output_format_polars(self, lmdb_library):
+        """Test context query with Polars output."""
+        pl = pytest.importorskip("polars")
+
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("test_symbol")
+            result = ddb.query("SELECT * FROM test_symbol", output_format="polars")
+
+        assert isinstance(result, pl.DataFrame)
+
+    def test_output_format_pandas(self, lmdb_library):
+        """Test context query with explicit Pandas output."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("test_symbol")
+            result = ddb.query("SELECT * FROM test_symbol", output_format="pandas")
+
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["x"]) == [1, 2, 3]
 
     def test_method_chaining(self, lmdb_library):
         """Test method chaining with register_symbol."""
