@@ -97,6 +97,7 @@ nav:
 - Guides:
   - Tutorials:
     - Fundamentals: 'tutorials/fundamentals.md'
+    - SQL Queries: 'tutorials/sql_queries.md'
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'

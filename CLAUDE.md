@@ -223,6 +223,27 @@ python ./build_tooling/format.py --in-place --type all
 ```
 
 
+### Documentation
+
+**New features must include documentation.** Documentation lives in `docs/mkdocs/docs/`:
+
+- **Tutorials** (`tutorials/`): Step-by-step guides for features (e.g., `sql_queries.md`)
+- **API Reference** (`api/`): Auto-generated from docstrings via mkdocstrings
+- **Technical docs** (`technical/`): Architecture and implementation details
+
+When adding a new feature:
+
+1. **Add/update docstrings** in the Python code (NumPy format)
+2. **Create a tutorial** if the feature has multiple use cases or nuances
+3. **Update `mkdocs.yml`** nav section to include new pages
+4. **Build docs locally** to verify: `cd docs/mkdocs && mkdocs serve`
+
+Documentation checklist:
+- [ ] Public API has complete docstrings (Parameters, Returns, Raises, Examples)
+- [ ] Complex features have a tutorial with code examples
+- [ ] Edge cases and limitations are documented
+- [ ] When to use feature A vs feature B is explained (if applicable)
+
 ## Code Review
 
 When reviewing changes on a branch before submitting upstream, see **[docs/claude/skills/code-review.md](docs/claude/skills/code-review.md)** for detailed instructions covering:
