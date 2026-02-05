@@ -185,6 +185,16 @@ See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-B
 
 ## Key Development Guidelines
 
+### Git Workflow
+
+**Always confirm with the developer before committing and pushing changes upstream.** Do not assume that passing tests means the changes are ready for review. The developer may want to:
+- Review the implementation approach
+- Make additional changes or refinements
+- Squash or reorganize commits
+- Add to the commit message or PR description
+
+Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
+
 ### Backwards Compatibility
 
 - Data written by newer clients should be readable by older clients - document breaking changes clearly
