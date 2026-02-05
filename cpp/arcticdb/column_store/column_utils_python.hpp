@@ -7,7 +7,17 @@
  */
 
 #pragma once
+#include <arcticdb/column_store/memory_segment.hpp>
 
-// This header is deprecated. Use column_utils_python.hpp for Python-specific utilities
-// or column_utils_core.hpp for pure C++ utilities.
-#include <arcticdb/column_store/column_utils_python.hpp>
+#include <pybind11/numpy.h>
+
+#include <cstddef>
+
+namespace arcticdb::detail {
+
+/**
+ * Python-specific column utility: converts a column in SegmentInMemory to a NumPy array
+ */
+pybind11::array array_at(const SegmentInMemory& frame, size_t col_pos);
+
+} // namespace arcticdb::detail

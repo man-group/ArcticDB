@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/column_store/buffer_protocol_python_adapters.hpp>
 
 namespace py = pybind11;
 
@@ -24,7 +25,7 @@ void register_column_store(py::module& m) {
     py::class_<StringPool>(m, "StringPool")
             .def(py::init())
             .def_property_readonly("nbytes", &StringPool::size)
-            .def("as_buffer_info", &StringPool::as_buffer_info);
+            .def("as_buffer_info", &python_util::string_pool_as_buffer_info);
 }
 
 } // namespace arcticdb::column_store
