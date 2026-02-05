@@ -14,14 +14,14 @@ template<class T>
 requires std::is_integral_v<T> || std::is_floating_point_v<T>
 void column_set_array(Column& col, ssize_t row_offset, py::array_t<T>& val) {
     // Delegate to the generic template set_array method which accepts any Tensor-like type
-    col.set_array(row_offset, val);
+    col.set_array<T, py::array_t>(row_offset, val);
 }
 
 template<class T>
 requires std::integral<T> || std::floating_point<T>
 void segment_set_array(SegmentInMemory& seg, position_t pos, py::array_t<T>& val) {
     // Delegate to the generic template set_array method which accepts any Tensor-like type
-    seg.set_array(pos, val);
+    seg.set_array<T, py::array_t>(pos, val);
 }
 
 // Explicit template instantiations for common types
