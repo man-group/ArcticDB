@@ -185,6 +185,19 @@ See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-B
 
 ## Key Development Guidelines
 
+### Test-Driven Development
+
+**Every code change must be accompanied by a failing test that the change fixes.** This ensures:
+- The bug or missing feature is properly understood before fixing
+- The fix actually addresses the issue
+- Regressions are caught if the code is modified later
+
+When fixing a bug or adding a feature:
+1. Write a test that demonstrates the bug or missing functionality
+2. Verify the test fails
+3. Implement the fix
+4. Verify the test passes
+
 ### Git Workflow
 
 **Always confirm with the developer before committing and pushing changes upstream.** Do not assume that passing tests means the changes are ready for review. The developer may want to:
