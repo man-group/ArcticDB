@@ -266,6 +266,47 @@ with lib.duckdb() as ddb:
     conn.execute("SET threads=4")
 ```
 
+### External DuckDB Connections
+
+Join ArcticDB data with other data sources by providing your own DuckDB connection:
+
+```python
+import duckdb
+
+# Create a DuckDB connection with external data
+conn = duckdb.connect()
+conn.execute("CREATE TABLE benchmarks AS SELECT * FROM 'benchmarks.parquet'")
+conn.execute("CREATE TABLE sectors AS SELECT * FROM 's3://bucket/sectors.csv'")
+
+# Use it with ArcticDB - join ArcticDB data with external tables
+with lib.duckdb(connection=conn) as ddb:
+    ddb.register_symbol("portfolio_returns")
+    result = ddb.query("""
+        SELECT
+            r.date,
+            r.ticker,
+            s.sector,
+            r.return - b.return as alpha
+        FROM portfolio_returns r
+        JOIN benchmarks b ON r.date = b.date
+        JOIN sectors s ON r.ticker = s.ticker
+    """)
+
+# Connection is still open - ArcticDB did NOT close it
+# You can continue using it
+more_results = conn.execute("SELECT * FROM benchmarks WHERE date > '2024-01-01'").df()
+```
+
+!!! note
+    When you provide an external connection, ArcticDB will **not** close it when the context exits. This allows you to continue using the connection for other queries. When no connection is provided, ArcticDB creates and manages its own connection.
+
+This is useful for:
+
+- **Joining with Parquet/CSV files**: Load external files into DuckDB and join with ArcticDB data
+- **Cross-database queries**: Query data from multiple sources in a single SQL statement
+- **Persistent connections**: Reuse a connection across multiple ArcticDB context managers
+- **DuckDB extensions**: Configure DuckDB extensions (httpfs, postgres, etc.) before using with ArcticDB
+
 ## Performance Considerations
 
 ### Automatic Pushdown Optimization

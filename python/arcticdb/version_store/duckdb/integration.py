@@ -64,9 +64,14 @@ class DuckDBContext:
     Provides fine-grained control over symbol registration and query execution,
     enabling complex queries including JOINs across multiple symbols.
 
+    Can optionally use an external DuckDB connection, allowing joins between
+    ArcticDB data and other DuckDB data sources (Parquet files, CSV, other databases, etc.).
+
     Examples
     --------
-    >>> with lib.duckdb_context() as ddb:
+    Basic usage:
+
+    >>> with lib.duckdb() as ddb:
     ...     ddb.register_symbol("trades", date_range=(start, end))
     ...     ddb.register_symbol("prices", as_of=-1, alias="latest_prices")
     ...     result = ddb.query('''
@@ -76,12 +81,27 @@ class DuckDBContext:
     ...         WHERE t.quantity > 1000
     ...     ''')
 
+    Join with external data sources using your own DuckDB connection:
+
+    >>> import duckdb
+    >>> conn = duckdb.connect()
+    >>> conn.execute("CREATE TABLE benchmarks AS SELECT * FROM 'benchmarks.parquet'")
+    >>> with lib.duckdb(connection=conn) as ddb:
+    ...     ddb.register_symbol("returns")
+    ...     result = ddb.query('''
+    ...         SELECT r.date, r.return - b.return as alpha
+    ...         FROM returns r
+    ...         JOIN benchmarks b ON r.date = b.date
+    ...     ''')
+    >>> # Connection is still open - ArcticDB did not close it
+    >>> conn.execute("SELECT * FROM benchmarks")  # Still works
+
     See Also
     --------
     Library.sql : Simple SQL queries on single symbols.
     """
 
-    def __init__(self, library: "Library"):
+    def __init__(self, library: "Library", connection: Any = None):
         """
         Initialize the DuckDB context.
 
@@ -89,20 +109,35 @@ class DuckDBContext:
         ----------
         library : Library
             The ArcticDB library to query.
+        connection : duckdb.DuckDBPyConnection, optional
+            External DuckDB connection to use. If provided, ArcticDB will register
+            symbols into this connection but will NOT close it when the context exits.
+            This allows joining ArcticDB data with other data already in the connection.
+            If not provided, a new in-memory connection is created and closed on exit.
         """
         self._library = library
+        self._external_conn = connection
         self._conn = None
+        self._owns_connection = False
         self._registered_symbols: Dict[str, Dict[str, Any]] = {}
 
     def __enter__(self) -> "DuckDBContext":
-        duckdb = _check_duckdb_available()
-        self._conn = duckdb.connect(":memory:")
+        if self._external_conn is not None:
+            # Use externally provided connection - don't close it on exit
+            self._conn = self._external_conn
+            self._owns_connection = False
+        else:
+            # Create our own connection - we're responsible for closing it
+            duckdb = _check_duckdb_available()
+            self._conn = duckdb.connect(":memory:")
+            self._owns_connection = True
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._conn:
+        # Only close the connection if we created it
+        if self._conn and self._owns_connection:
             self._conn.close()
-            self._conn = None
+        self._conn = None
         return False
 
     def register_symbol(
