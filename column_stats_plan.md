@@ -25,7 +25,8 @@ Use column stats to eliminate unnecessary IOs with the QueryBuilder. Should incl
 ### Step 1
 
 The hook in the code is `read_indexed_keys_to_pipeline`. This reads the index key. Once we have the index key, we should read the column stats key, using existing
-functionality to read column stats.
+functionality to read column stats. Fetch the column stats key before `filter_index()` is called (simpler logic, even if we sometimes
+fetch stats for symbols where no data matches the date range).
 
 If there is no column stats key, proceed without pruning based on column stats, rather than erroring.
 
@@ -35,9 +36,12 @@ out any columns and date ranges that are not in the query).
 
 We should read through the clauses, applying column stats filtering to any FilterClause that we see along the way.
 As soon as we see any clause other than a FilterClause we should stop applying the column stats filtering.
+For example, if the user does `q.apply("new_col", q["col1"] * 2)[q["col1"] > 5]` (ProjectClause then FilterClause),
+we should NOT apply column stats to that FilterClause even if `col1` has stats.
 
 Column stats segments only have the statistics themselves and a start and end index. They apply to any rows in the index segment
-with the same start and end index.
+with the same start and end index. The TABLE_INDEX contains `start_index` and `end_index` in its rows that can be compared exactly
+with the column stats rows to match them up.
 
 We need to evaluate the FilterClause AST, creating a bitset of rows in the index segment that are ruled in or out for loading
 based on the column statistics. At leaf nodes in the AST we will evaluate them against column stats, for example for a node:
@@ -63,7 +67,8 @@ It is very important that the bitset represents rows to keep because that is com
 If the column stats are not relevant to the given filter (eg a filter references column col_a but column stats only exist for col_b)
 we should return an "all-true" bitset as no pruning is possible.
 
-Null handling should be the same as with existing query builder filters, for example in this snippet q["a"] < 2 filters out the np.nan:
+Null handling: Prune purely based on MIN/MAX values. NaN values in segments don't affect the pruning decision because
+NaN rows will be filtered out by the runtime filter regardless. For example in this snippet q["a"] < 2 filters out the np.nan:
 
 ```
 
@@ -118,3 +123,5 @@ Do not implement support for `isin` and `isnotin` yet.
 
 Work in small steps. Write tests as early as possible. Commit whenever you have a working piece of code with tests, even if it isn't enough to
 implement the whole plan.
+
+Stop and ask clarifying questions when you are confused.
