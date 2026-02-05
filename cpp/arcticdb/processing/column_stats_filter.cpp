@@ -15,60 +15,82 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/variant.hpp>
 
-#include <regex>
-
 namespace arcticdb {
 
 namespace {
 
-// Column stats column names are in the format "v1.0_MIN(col_name)" and "v1.0_MAX(col_name)"
+// Column stats column names are in the format "vX.Y_MIN(col_name)" or "vX.Y_MAX(col_name)"
 // Extract the column name and operation (MIN/MAX) from the column name
 struct ParsedColumnStatName {
     std::string column_name;
     bool is_min;  // true for MIN, false for MAX
 };
 
-// TODO aseaton use the existing APIs in column_stats.hpp to do the parsing, like `from_segment_column_name`
+// Parse column stat name without regex for performance
+// Format: vX.Y_MIN(col_name) or vX.Y_MAX(col_name)
 std::optional<ParsedColumnStatName> parse_column_stat_name(std::string_view name) {
-    // Pattern: vX.Y_MIN(col_name) or vX.Y_MAX(col_name)
-    static const std::regex pattern(R"(v\d+\.\d+_(MIN|MAX)\((.+)\))");
-    std::string name_str(name);
-    std::smatch match;
-    if (std::regex_match(name_str, match, pattern)) {
-        return ParsedColumnStatName{
-            .column_name = match[2].str(),
-            .is_min = (match[1].str() == "MIN")
-        };
+    // Find the underscore after the version prefix
+    auto underscore_pos = name.find('_');
+    if (underscore_pos == std::string_view::npos) {
+        return std::nullopt;
     }
-    return std::nullopt;
+
+    // Check version prefix starts with 'v'
+    if (name.empty() || name[0] != 'v') {
+        return std::nullopt;
+    }
+
+    auto after_underscore = name.substr(underscore_pos + 1);
+
+    // Check for MIN or MAX prefix
+    bool is_min;
+    std::string_view after_op;
+    if (after_underscore.substr(0, 4) == "MIN(") {
+        is_min = true;
+        after_op = after_underscore.substr(4);
+    } else if (after_underscore.substr(0, 4) == "MAX(") {
+        is_min = false;
+        after_op = after_underscore.substr(4);
+    } else {
+        return std::nullopt;
+    }
+
+    // Extract column name from between parentheses
+    if (after_op.empty() || after_op.back() != ')') {
+        return std::nullopt;
+    }
+
+    return ParsedColumnStatName{
+        .column_name = std::string(after_op.substr(0, after_op.size() - 1)),
+        .is_min = is_min
+    };
 }
 
-// TODO aseaton this can return a Value with DataType::UNKNOWN. It would be much better to return a nullopt.
 // Extract a value from a segment column at a given row
-std::shared_ptr<Value> extract_value_from_column(const Column& column, size_t row, DataType data_type) {
-    auto value = std::make_shared<Value>();
-    details::visit_type(data_type, [&column, row, &value](auto tag) {
+// Returns std::nullopt if the value cannot be extracted
+std::optional<Value> extract_value_from_column(const Column& column, size_t row, DataType data_type) {
+    std::optional<Value> result;
+    details::visit_type(data_type, [&column, row, &result](auto tag) {
         using TagType = decltype(tag);
         using RawType = typename TagType::raw_type;
         if constexpr (is_numeric_type(TagType::data_type) || is_time_type(TagType::data_type)) {
             auto opt_val = column.scalar_at<RawType>(row);
             if (opt_val.has_value()) {
-                *value = Value(*opt_val, TagType::data_type);
+                result = Value(*opt_val, TagType::data_type);
             }
         }
     });
-    return value;
+    return result;
 }
 
 }  // anonymous namespace
 
 // Returns true if the segment MIGHT contain matching data (should be kept)
 // Returns false if the segment CANNOT contain matching data (can be pruned)
-template<typename CompareFunc>
 bool compare_value_with_stats(
     const Value& query_value,
-    const std::shared_ptr<Value>& min_value,
-    const std::shared_ptr<Value>& max_value,
+    const std::optional<Value>& min_value,
+    const std::optional<Value>& max_value,
     OperationType op
 ) {
     if (!min_value || !max_value) {
@@ -100,15 +122,43 @@ bool compare_value_with_stats(
     // Get the data type for comparison - use the query value's type
     DataType compare_type = query_value.data_type();
 
+    // Check if types are compatible - if not, we cannot safely compare
+    // For numeric types, we need to handle type promotion
+    if (!is_numeric_type(compare_type) && !is_time_type(compare_type)) {
+        // Non-numeric types not supported for column stats filtering
+        return true;
+    }
+
     return details::visit_type(compare_type, [&](auto tag) {
         using TagType = decltype(tag);
         using RawType = typename TagType::raw_type;
 
         if constexpr (is_numeric_type(TagType::data_type) || is_time_type(TagType::data_type)) {
             RawType qval = query_value.get<RawType>();
-            // TODO aseaton minval and maxval may not have same type as min_value and max_value
-            RawType minval = min_value->get<RawType>();
-            RawType maxval = max_value->get<RawType>();
+
+            // Convert min/max values to the query type for comparison
+            // If types don't match, we need to cast. For safety, if the stats type
+            // differs significantly, we don't prune.
+            RawType minval, maxval;
+
+            auto extract_as = [](const Value& v, DataType expected_type, RawType& out) -> bool {
+                return details::visit_type(v.data_type(), [&v, expected_type, &out](auto val_tag) {
+                    using ValTagType = decltype(val_tag);
+                    using ValRawType = typename ValTagType::raw_type;
+                    if constexpr (is_numeric_type(ValTagType::data_type) || is_time_type(ValTagType::data_type)) {
+                        // Safe cast between numeric types
+                        out = static_cast<RawType>(v.get<ValRawType>());
+                        return true;
+                    }
+                    return false;
+                });
+            };
+
+            if (!extract_as(*min_value, compare_type, minval) ||
+                !extract_as(*max_value, compare_type, maxval)) {
+                // Could not convert stats values, cannot prune
+                return true;
+            }
 
             switch (op) {
             case OperationType::GT:
@@ -268,7 +318,7 @@ bool evaluate_expression_node_against_stats(
             }
         }
 
-        return compare_value_with_stats<void>(*query_value, min_value, max_value, effective_op);
+        return compare_value_with_stats(*query_value, min_value, max_value, effective_op);
     }
 
     // For any other operation type, we cannot prune
@@ -386,10 +436,14 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
     std::vector<std::pair<std::shared_ptr<ExpressionContext>, ExpressionName>> filter_expressions;
 
     for (const auto& clause : clauses) {
-        // TODO aseaton skip any DateRangeClause or RowRangeClause, but do not stop processing if you see them
+        // Skip DateRangeClause and RowRangeClause - these don't affect column stats filtering
+        if (folly::poly_type(*clause) == typeid(DateRangeClause) ||
+            folly::poly_type(*clause) == typeid(RowRangeClause)) {
+            continue;
+        }
         // Check if this clause is a FilterClause
         if (folly::poly_type(*clause) != typeid(FilterClause)) {
-            // Not a FilterClause, stop processing
+            // Not a FilterClause (and not DateRange/RowRange), stop processing
             break;
         }
         const auto& filter_clause = folly::poly_cast<FilterClause>(*clause);
@@ -469,12 +523,6 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             } else {
                 pruned_count++;
             }
-        }
-
-        // TODO aseaton this is redundant because the loop above already skips rows not set in input
-        // Combine with input bitset if provided
-        if (input) {
-            *res &= *input;
         }
 
         ARCTICDB_DEBUG(

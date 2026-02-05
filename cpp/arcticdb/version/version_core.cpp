@@ -1363,11 +1363,25 @@ static void read_indexed_keys_to_pipeline(
             read_query, pipeline_context, dynamic_schema, bucketize_dynamic
     );
 
-    // TODO aseaton do column stats filtering only if `clauses_` includes a `FilterClause` preceded only by
-    // `FilterClause`, `DateRangeClause` and `RowRangeClause`. Otherwise column stats cannot be applied
-    // so there is no need to read the column stats key or do any of this work.
     // Try to use column stats for segment pruning if there are filter clauses
-    if (!read_query.clauses_.empty()) {
+    // Only attempt this if there's at least one FilterClause preceded only by allowed clause types
+    // (FilterClause, DateRangeClause, RowRangeClause)
+    auto has_applicable_filter_clause = [&read_query]() {
+        for (const auto& clause : read_query.clauses_) {
+            if (folly::poly_type(*clause) == typeid(FilterClause)) {
+                return true;
+            }
+            if (folly::poly_type(*clause) == typeid(DateRangeClause) ||
+                folly::poly_type(*clause) == typeid(RowRangeClause)) {
+                continue;
+            }
+            // Found a non-allowed clause before any FilterClause
+            return false;
+        }
+        return false;
+    };
+
+    if (has_applicable_filter_clause()) {
         auto column_stats_key = index_key_to_column_stats_key(version_info.key_);
         std::optional<SegmentInMemory> column_stats_segment;
         try {

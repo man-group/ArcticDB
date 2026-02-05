@@ -1053,7 +1053,6 @@ def test_column_stats_multiple_filter_clauses(s3_store_factory, clear_query_stat
         assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
 
 
-@pytest.mark.xfail(reason="Bug: column stats filtering with non-filter clauses before filter causes segment index error")
 def test_column_stats_non_filter_clause_before_filter_disables_pruning(s3_store_factory, clear_query_stats):
     """Filter clause after non-filter clause should NOT use column stats pruning."""
     lib = s3_store_factory(column_group_size=2, segment_row_size=2)

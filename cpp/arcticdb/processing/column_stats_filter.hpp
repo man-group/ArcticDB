@@ -14,22 +14,11 @@
 #include <arcticdb/pipeline/read_query.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <folly/hash/Hash.h>
 #include <optional>
 #include <memory>
 
 namespace arcticdb {
-
-namespace util {
-// TODO aseaton Use folly::Hash not this
-struct PairHasher {
-    template<typename T1, typename T2>
-    std::size_t operator()(const std::pair<T1, T2>& p) const {
-        auto h1 = std::hash<T1>{}(p.first);
-        auto h2 = std::hash<T2>{}(p.second);
-        return h1 ^ (h2 << 1);
-    }
-};
-}  // namespace util
 
 /**
  * Represents column statistics for a single row-slice, mapping column names to their MIN/MAX values.
@@ -39,8 +28,7 @@ struct ColumnStatsRow {
     timestamp start_index;
     timestamp end_index;
     // Map from column name to pair of (min_value, max_value) stored as Value objects
-    // TODO aseaton store std::optional<Value> not std::shared_ptr<Value>
-    std::unordered_map<std::string, std::pair<std::shared_ptr<Value>, std::shared_ptr<Value>>> column_min_max;
+    std::unordered_map<std::string, std::pair<std::optional<Value>, std::optional<Value>>> column_min_max;
 };
 
 /**
@@ -73,7 +61,7 @@ private:
     std::vector<ColumnStatsRow> rows_;
     std::unordered_set<std::string> columns_with_stats_;
     // Map from (start_index, end_index) -> row index for fast lookup
-    std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
+    std::unordered_map<std::pair<timestamp, timestamp>, size_t, folly::hasher<std::pair<timestamp, timestamp>>> index_to_row_;
 };
 
 /**
