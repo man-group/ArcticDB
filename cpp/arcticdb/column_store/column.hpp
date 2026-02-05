@@ -347,7 +347,7 @@ class Column {
         shapes_.ensure<shape_t>(val.ndim());
         memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
-        util::FlattenHelper<T, Tensor> flatten(val);
+        util::FlattenHelper flatten(val);
         auto data_ptr = reinterpret_cast<T*>(data_.cursor());
         flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
         update_offsets(val.nbytes());
