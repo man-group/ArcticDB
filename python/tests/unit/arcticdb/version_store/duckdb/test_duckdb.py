@@ -8,7 +8,7 @@ be governed by the Apache License, version 2.0.
 """
 
 """
-Unit tests for duckdb/integration.py - DuckDBContext and Library.sql() integration.
+Unit tests for duckdb/duckdb.py - DuckDBContext and Library.sql() integration.
 
 Tests verify the high-level SQL interface for querying ArcticDB data with DuckDB.
 """
@@ -18,7 +18,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.options import OutputFormat
-from arcticdb.version_store.duckdb.integration import (
+from arcticdb.version_store.duckdb.duckdb import (
     _extract_symbols_from_query,
 )
 

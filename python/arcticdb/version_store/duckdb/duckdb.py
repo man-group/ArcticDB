@@ -22,7 +22,6 @@ def _check_duckdb_available():
     """Check if duckdb is installed and raise helpful error if not."""
     try:
         import duckdb
-
         return duckdb
     except ImportError:
         raise ImportError("DuckDB integration requires the 'duckdb' package. " "Install it with: pip install duckdb")
@@ -101,7 +100,7 @@ class DuckDBContext:
     Library.sql : Simple SQL queries on single symbols.
     """
 
-    def __init__(self, library: "Library", connection: Any = None):
+    def __init__(self, library: "Library", connection: Any=None):
         """
         Initialize the DuckDB context.
 
@@ -143,12 +142,12 @@ class DuckDBContext:
     def register_symbol(
         self,
         symbol: str,
-        alias: Optional[str] = None,
-        as_of: Optional[AsOf] = None,
-        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        row_range: Optional[Tuple[int, int]] = None,
-        columns: Optional[List[str]] = None,
-        query_builder: Optional["QueryBuilder"] = None,
+        alias: Optional[str]=None,
+        as_of: Optional[AsOf]=None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]=None,
+        row_range: Optional[Tuple[int, int]]=None,
+        columns: Optional[List[str]]=None,
+        query_builder: Optional["QueryBuilder"]=None,
     ) -> "DuckDBContext":
         """
         Register an ArcticDB symbol as a DuckDB table.
@@ -213,7 +212,7 @@ class DuckDBContext:
     def query(
         self,
         sql: str,
-        output_format: str = "pandas",
+        output_format: str="pandas",
     ) -> Any:
         """
         Execute SQL query and return results.
