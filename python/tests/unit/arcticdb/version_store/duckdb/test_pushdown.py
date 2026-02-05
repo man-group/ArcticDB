@@ -443,20 +443,21 @@ class TestExtractPushdownFromSql:
 
     def test_returns_info_for_requested_tables(self):
         """Test that PushdownInfo is returned for each requested table."""
-        result = extract_pushdown_from_sql("SELECT * FROM test_table", ["test_table"])
+        result, symbols = extract_pushdown_from_sql("SELECT * FROM test_table", ["test_table"])
         assert "test_table" in result
         assert isinstance(result["test_table"], PushdownInfo)
+        assert "test_table" in symbols
 
     def test_limit_extracted_from_query(self):
         """Test LIMIT is extracted from query."""
-        result = extract_pushdown_from_sql("SELECT x FROM test_table LIMIT 10", ["test_table"])
+        result, _ = extract_pushdown_from_sql("SELECT x FROM test_table LIMIT 10", ["test_table"])
         info = result["test_table"]
         assert info.limit == 10
         assert info.limit_pushed_down == 10
 
     def test_unknown_table_returns_default(self):
         """Test unknown table returns default PushdownInfo with LIMIT still applied."""
-        result = extract_pushdown_from_sql("SELECT * FROM test_table LIMIT 5", ["unknown_table"])
+        result, _ = extract_pushdown_from_sql("SELECT * FROM test_table LIMIT 5", ["unknown_table"])
         assert "unknown_table" in result
         info = result["unknown_table"]
         # LIMIT still applies to all requested tables
@@ -464,7 +465,7 @@ class TestExtractPushdownFromSql:
 
     def test_multiple_tables(self):
         """Test extracting pushdown for multiple tables."""
-        result = extract_pushdown_from_sql("SELECT * FROM test_table, other_table LIMIT 5", ["test_table", "other_table"])
+        result, _ = extract_pushdown_from_sql("SELECT * FROM test_table, other_table LIMIT 5", ["test_table", "other_table"])
         assert "test_table" in result
         assert "other_table" in result
         # LIMIT applies to both
@@ -473,14 +474,14 @@ class TestExtractPushdownFromSql:
 
     def test_where_filter_pushdown(self):
         """Test WHERE clause filter is pushed down."""
-        result = extract_pushdown_from_sql("SELECT * FROM test_table WHERE x > 100", ["test_table"])
+        result, _ = extract_pushdown_from_sql("SELECT * FROM test_table WHERE x > 100", ["test_table"])
         info = result["test_table"]
         assert info.filter_pushed_down is True
         assert info.query_builder is not None
 
     def test_date_range_pushdown(self):
         """Test date range from index filter is pushed down."""
-        result = extract_pushdown_from_sql(
+        result, _ = extract_pushdown_from_sql(
             "SELECT * FROM test_table WHERE index BETWEEN '2024-01-01' AND '2024-12-31'", ["test_table"]
         )
         info = result["test_table"]
@@ -491,27 +492,51 @@ class TestExtractPushdownFromSql:
 
     def test_column_projection_pushdown(self):
         """Test column projection is pushed down."""
-        result = extract_pushdown_from_sql("SELECT x, y FROM test_table", ["test_table"])
+        result, _ = extract_pushdown_from_sql("SELECT x, y FROM test_table", ["test_table"])
         info = result["test_table"]
         assert info.columns_pushed_down is not None
         assert set(info.columns_pushed_down) == {"x", "y"}
 
     def test_select_star_no_column_pushdown(self):
         """Test SELECT * doesn't push down column projection."""
-        result = extract_pushdown_from_sql("SELECT * FROM test_table", ["test_table"])
+        result, _ = extract_pushdown_from_sql("SELECT * FROM test_table", ["test_table"])
         info = result["test_table"]
         # SELECT * means no specific column projection
         assert info.columns is None
 
     def test_join_query(self):
         """Test pushdown extraction for JOIN query."""
-        result = extract_pushdown_from_sql(
+        result, symbols = extract_pushdown_from_sql(
             "SELECT a.x, b.y FROM table_a a JOIN table_b b ON a.id = b.id LIMIT 10", ["table_a", "table_b"]
         )
         assert "table_a" in result
         assert "table_b" in result
         assert result["table_a"].limit == 10
         assert result["table_b"].limit == 10
+        assert "table_a" in symbols
+        assert "table_b" in symbols
+
+    def test_extracts_symbols_when_none_provided(self):
+        """Test that symbols are extracted from query when table_names is None."""
+        result, symbols = extract_pushdown_from_sql("SELECT * FROM my_symbol")
+        assert symbols == ["my_symbol"]
+        assert "my_symbol" in result
+
+    def test_raises_on_empty_sql(self):
+        """Test that ValueError is raised for empty SQL (no tables)."""
+        # Empty string is parseable but has no tables
+        with pytest.raises(ValueError, match="Could not extract symbol names"):
+            extract_pushdown_from_sql("")
+
+    def test_raises_on_invalid_sql(self):
+        """Test that ValueError is raised for invalid SQL syntax."""
+        with pytest.raises(ValueError, match="Could not parse SQL query"):
+            extract_pushdown_from_sql("SELECT * FORM invalid_syntax")
+
+    def test_raises_on_no_tables(self):
+        """Test that ValueError is raised when no tables in query."""
+        with pytest.raises(ValueError, match="Could not extract symbol names"):
+            extract_pushdown_from_sql("SELECT 1 + 1")
 
 
 class TestPushdownInfoDataclass:

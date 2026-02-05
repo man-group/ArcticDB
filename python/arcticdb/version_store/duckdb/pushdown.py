@@ -8,10 +8,13 @@ be governed by the Apache License, version 2.0.
 """
 
 import json
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from arcticdb.version_store.processing import QueryBuilder
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -52,8 +55,65 @@ def _extract_limit_from_ast(ast: Dict) -> Optional[int]:
                         return int(value)
 
         return None
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to extract LIMIT from AST: %s", e)
         return None
+
+
+def _extract_column_refs_from_node(
+    node: Dict,
+    table_alias_map: Dict[str, str],
+    columns_by_table: Dict[str, Set[str]],
+) -> None:
+    """
+    Recursively extract column references from an AST node.
+
+    Parameters
+    ----------
+    node : dict
+        AST node to traverse.
+    table_alias_map : dict
+        Mapping of alias -> table_name.
+    columns_by_table : dict
+        Output dict mapping table_name -> set of column names (mutated in place).
+    """
+    if not isinstance(node, dict):
+        return
+
+    if node.get("class") == "COLUMN_REF":
+        col_names = node.get("column_names", [])
+        if col_names:
+            if len(col_names) >= 2:
+                # Qualified: table.column or alias.column
+                table_ref = col_names[0]
+                col_name = col_names[-1]
+                # Resolve alias to table name
+                table_name = table_alias_map.get(table_ref.lower(), table_ref)
+            else:
+                # Unqualified column - we'll add to all tables
+                col_name = col_names[0]
+                table_name = None
+
+            if table_name:
+                if table_name not in columns_by_table:
+                    columns_by_table[table_name] = set()
+                columns_by_table[table_name].add(col_name)
+            else:
+                # Add to all known tables (will be refined later)
+                for tbl in table_alias_map.values():
+                    if tbl not in columns_by_table:
+                        columns_by_table[tbl] = set()
+                    columns_by_table[tbl].add(col_name)
+        return
+
+    # Recurse into child nodes
+    for key, value in node.items():
+        if isinstance(value, dict):
+            _extract_column_refs_from_node(value, table_alias_map, columns_by_table)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    _extract_column_refs_from_node(item, table_alias_map, columns_by_table)
 
 
 def _extract_columns_from_select_list(select_list: List[Dict], table_alias_map: Dict[str, str]) -> Dict[str, Set[str]]:
@@ -73,93 +133,16 @@ def _extract_columns_from_select_list(select_list: List[Dict], table_alias_map: 
         Mapping of table_name -> set of column names.
     """
     columns_by_table: Dict[str, Set[str]] = {}
-
-    def extract_column_refs(node: Dict) -> None:
-        if not isinstance(node, dict):
-            return
-
-        if node.get("class") == "COLUMN_REF":
-            col_names = node.get("column_names", [])
-            if col_names:
-                if len(col_names) >= 2:
-                    # Qualified: table.column or alias.column
-                    table_ref = col_names[0]
-                    col_name = col_names[-1]
-                    # Resolve alias to table name
-                    table_name = table_alias_map.get(table_ref.lower(), table_ref)
-                else:
-                    # Unqualified column - we'll add to all tables
-                    col_name = col_names[0]
-                    table_name = None
-
-                if table_name:
-                    if table_name not in columns_by_table:
-                        columns_by_table[table_name] = set()
-                    columns_by_table[table_name].add(col_name)
-                else:
-                    # Add to all known tables (will be refined later)
-                    for tbl in table_alias_map.values():
-                        if tbl not in columns_by_table:
-                            columns_by_table[tbl] = set()
-                        columns_by_table[tbl].add(col_name)
-            return
-
-        # Recurse into child nodes
-        for key, value in node.items():
-            if isinstance(value, dict):
-                extract_column_refs(value)
-            elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        extract_column_refs(item)
-
     for item in select_list:
-        extract_column_refs(item)
-
+        _extract_column_refs_from_node(item, table_alias_map, columns_by_table)
     return columns_by_table
 
 
 def _extract_columns_from_where(where_clause: Dict, table_alias_map: Dict[str, str]) -> Dict[str, Set[str]]:
     """Extract column references from WHERE clause, grouped by table."""
     columns_by_table: Dict[str, Set[str]] = {}
-
-    def extract_column_refs(node: Dict) -> None:
-        if not isinstance(node, dict):
-            return
-
-        if node.get("class") == "COLUMN_REF":
-            col_names = node.get("column_names", [])
-            if col_names:
-                if len(col_names) >= 2:
-                    table_ref = col_names[0]
-                    col_name = col_names[-1]
-                    table_name = table_alias_map.get(table_ref.lower(), table_ref)
-                else:
-                    col_name = col_names[0]
-                    table_name = None
-
-                if table_name:
-                    if table_name not in columns_by_table:
-                        columns_by_table[table_name] = set()
-                    columns_by_table[table_name].add(col_name)
-                else:
-                    for tbl in table_alias_map.values():
-                        if tbl not in columns_by_table:
-                            columns_by_table[tbl] = set()
-                        columns_by_table[tbl].add(col_name)
-            return
-
-        for key, value in node.items():
-            if isinstance(value, dict):
-                extract_column_refs(value)
-            elif isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict):
-                        extract_column_refs(item)
-
     if where_clause:
-        extract_column_refs(where_clause)
-
+        _extract_column_refs_from_node(where_clause, table_alias_map, columns_by_table)
     return columns_by_table
 
 
@@ -204,8 +187,8 @@ def _extract_tables_from_ast(ast: Dict) -> Dict[str, str]:
 
         extract_tables(from_table)
 
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to extract tables from AST: %s", e)
 
     return alias_map
 
@@ -536,8 +519,9 @@ def _build_query_builder(parsed_filters: List[Dict]) -> Optional[QueryBuilder]:
             else:
                 filter_expr = filter_expr & expr
 
-        except Exception:
-            # Skip filters that can't be converted
+        except Exception as e:
+            # Skip filters that can't be converted to QueryBuilder
+            logger.debug("Skipping filter that couldn't be converted to QueryBuilder: %s (error: %s)", f, e)
             continue
 
     if filter_expr is not None:
@@ -619,15 +603,20 @@ def _get_sql_ast(query: str) -> Optional[Dict]:
                 ast = json.loads(result[0])
                 if not ast.get("error"):
                     return ast
+                else:
+                    logger.debug("DuckDB returned error parsing SQL: %s", ast.get("error"))
         finally:
             conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("Failed to parse SQL to AST: %s", e)
 
     return None
 
 
-def extract_pushdown_from_sql(query: str, table_names: List[str]) -> Dict[str, PushdownInfo]:
+def extract_pushdown_from_sql(
+    query: str,
+    table_names: Optional[List[str]] = None,
+) -> Tuple[Dict[str, PushdownInfo], List[str]]:
     """
     Parse SQL and extract pushdown information for each table using AST parsing.
 
@@ -639,26 +628,54 @@ def extract_pushdown_from_sql(query: str, table_names: List[str]) -> Dict[str, P
     ----------
     query : str
         SQL query to analyze.
-    table_names : list
+    table_names : list, optional
         List of table names to extract pushdown info for.
+        If None, table names are extracted from the query.
 
     Returns
     -------
-    dict
-        Mapping of table_name -> PushdownInfo
+    tuple
+        (mapping of table_name -> PushdownInfo, list of extracted symbols)
+
+    Raises
+    ------
+    ValueError
+        If no symbols could be extracted from the query.
     """
+    ast = _get_sql_ast(query)
+    if ast is None:
+        raise ValueError(
+            "Could not parse SQL query. "
+            "Ensure query is valid SQL, or use duckdb() to register symbols explicitly."
+        )
+
+    # Extract table alias mapping
+    table_alias_map = _extract_tables_from_ast(ast)
+
+    # Extract unique symbols from the alias map
+    seen = set()
+    extracted_symbols = []
+    for tbl_name in table_alias_map.values():
+        if tbl_name.lower() not in seen:
+            seen.add(tbl_name.lower())
+            extracted_symbols.append(tbl_name)
+
+    if not extracted_symbols:
+        raise ValueError(
+            "Could not extract symbol names from query. "
+            "Ensure query contains FROM or JOIN clauses with symbol names, "
+            "or use duckdb() to register symbols explicitly."
+        )
+
+    # Use provided table_names or extracted ones
+    if table_names is None:
+        table_names = extracted_symbols
+
     result = {}
 
     # Initialize default PushdownInfo for each table
     for table in table_names:
         result[table] = PushdownInfo()
-
-    ast = _get_sql_ast(query)
-    if ast is None:
-        return result
-
-    # Extract table alias mapping
-    table_alias_map = _extract_tables_from_ast(ast)
 
     # Ensure all requested tables are in the alias map
     for table in table_names:
@@ -669,7 +686,7 @@ def extract_pushdown_from_sql(query: str, table_names: List[str]) -> Dict[str, P
     try:
         select_node = ast["statements"][0]["node"]
     except (KeyError, IndexError):
-        return result
+        return result, extracted_symbols
 
     # Extract LIMIT
     limit = _extract_limit_from_ast(ast)
@@ -734,4 +751,4 @@ def extract_pushdown_from_sql(query: str, table_names: List[str]) -> Dict[str, P
 
         result[table] = pushdown
 
-    return result
+    return result, extracted_symbols

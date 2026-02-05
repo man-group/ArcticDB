@@ -289,3 +289,124 @@ class TestDuckDBContext:
 
         with pytest.raises(RuntimeError, match="must be used within"):
             ddb.register_symbol("test")
+
+    def test_query_without_registration_raises(self, lmdb_library):
+        """Test that querying without registering symbols raises helpful error."""
+        lib = lmdb_library
+        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with lib.duckdb() as ddb:
+            with pytest.raises(RuntimeError, match="No symbols have been registered"):
+                ddb.query("SELECT * FROM test_symbol")
+
+    def test_with_as_of_version(self, lmdb_library):
+        """Test register_symbol with as_of parameter."""
+        lib = lmdb_library
+        df1 = pd.DataFrame({"x": [1, 2, 3]})
+        df2 = pd.DataFrame({"x": [10, 20, 30]})
+
+        lib.write("test_symbol", df1)  # version 0
+        lib.write("test_symbol", df2)  # version 1
+
+        with lib.duckdb() as ddb:
+            # Read version 0
+            ddb.register_symbol("test_symbol", alias="v0", as_of=0)
+            result = ddb.query("SELECT SUM(x) as total FROM v0")
+
+        assert result["total"].iloc[0] == 6  # 1 + 2 + 3
+
+    def test_with_row_range(self, lmdb_library):
+        """Test register_symbol with row_range parameter."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("test_symbol", df)
+
+        with lib.duckdb() as ddb:
+            # Read only rows 10-20
+            ddb.register_symbol("test_symbol", row_range=(10, 20))
+            result = ddb.query("SELECT COUNT(*) as cnt FROM test_symbol")
+
+        assert result["cnt"].iloc[0] == 10
+
+
+class TestDuckDBEdgeCases:
+    """Tests for edge cases and special scenarios."""
+
+    def test_empty_dataframe(self, lmdb_library):
+        """Test SQL on empty DataFrame."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": pd.Series([], dtype=np.int64), "y": pd.Series([], dtype=np.float64)})
+        lib.write("empty_symbol", df)
+
+        result = lib.sql("SELECT * FROM empty_symbol")
+
+        assert len(result.data) == 0
+
+    def test_dataframe_with_nulls(self, lmdb_library):
+        """Test SQL on DataFrame with null values."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, None, 3], "y": [None, "b", None]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT * FROM test_symbol WHERE x IS NOT NULL")
+
+        assert len(result.data) == 2  # Two non-null x values
+
+    def test_special_characters_in_values(self, lmdb_library):
+        """Test SQL on DataFrame with special characters in string values."""
+        lib = lmdb_library
+        df = pd.DataFrame({"text": ["hello", "world's", '"quoted"', "new\nline"]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT * FROM test_symbol")
+
+        assert len(result.data) == 4
+        assert "world's" in list(result.data["text"])
+
+    def test_large_string_values(self, lmdb_library):
+        """Test SQL on DataFrame with large string values."""
+        lib = lmdb_library
+        large_string = "x" * 10000
+        df = pd.DataFrame({"text": [large_string, "small"]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT LENGTH(text) as len FROM test_symbol")
+
+        assert result.data["len"].max() == 10000
+
+    def test_float_special_values(self, lmdb_library):
+        """Test SQL on DataFrame with special float values."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1.0, float("inf"), float("-inf"), float("nan")]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT * FROM test_symbol WHERE x = 1.0")
+
+        assert len(result.data) == 1
+
+    def test_mixed_numeric_types(self, lmdb_library):
+        """Test SQL on DataFrame with mixed numeric types."""
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "int8": np.array([1, 2, 3], dtype=np.int8),
+                "int64": np.array([1, 2, 3], dtype=np.int64),
+                "float32": np.array([1.0, 2.0, 3.0], dtype=np.float32),
+                "float64": np.array([1.0, 2.0, 3.0], dtype=np.float64),
+            }
+        )
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT int8 + int64 + float32 + float64 as total FROM test_symbol")
+
+        assert len(result.data) == 3
+
+    def test_boolean_columns(self, lmdb_library):
+        """Test SQL on DataFrame with boolean columns."""
+        lib = lmdb_library
+        df = pd.DataFrame({"flag": [True, False, True], "value": [1, 2, 3]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT SUM(value) as total FROM test_symbol WHERE flag")
+
+        assert result.data["total"].iloc[0] == 4  # 1 + 3
