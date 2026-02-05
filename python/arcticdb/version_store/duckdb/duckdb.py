@@ -287,6 +287,40 @@ class DuckDBContext:
         self._conn.execute(sql)
         return self
 
+    def register_all_symbols(self, as_of: Optional[AsOf] = None) -> "DuckDBContext":
+        """
+        Register all symbols from the library as DuckDB tables.
+
+        This enables data discovery queries like SHOW TABLES and SHOW ALL TABLES
+        to list all symbols stored in the ArcticDB library.
+
+        Parameters
+        ----------
+        as_of : AsOf, optional
+            Version to read for all symbols. See Library.read() for details.
+            If not specified, reads the latest version of each symbol.
+
+        Returns
+        -------
+        DuckDBContext
+            Self, to allow method chaining.
+
+        Examples
+        --------
+        >>> with lib.duckdb() as ddb:
+        ...     ddb.register_all_symbols()
+        ...     tables = ddb.query("SHOW TABLES")
+        ...     print(tables)  # Lists all symbols in the library
+        """
+        if self._conn is None:
+            raise RuntimeError("DuckDBContext must be used within a 'with' block")
+
+        symbols = self._library.list_symbols()
+        for symbol in symbols:
+            self.register_symbol(symbol, as_of=as_of)
+
+        return self
+
     @property
     def registered_symbols(self) -> Dict[str, Dict[str, Any]]:
         """Return information about registered symbols."""

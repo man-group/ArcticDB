@@ -150,9 +150,44 @@ def _extract_tables_from_ast(ast: Dict) -> Dict[str, str]:
     """
     Extract table references from AST, returning mapping of alias -> table_name.
 
-    Handles FROM clause and JOINs.
+    Handles FROM clause, JOINs, and DDL queries like DESCRIBE/SHOW.
     """
     alias_map: Dict[str, str] = {}
+
+    def extract_tables_recursive(node: Any) -> None:
+        """Recursively search for BASE_TABLE nodes anywhere in the AST."""
+        if not isinstance(node, dict):
+            return
+
+        node_type = node.get("type", "")
+
+        if node_type == "BASE_TABLE":
+            table_name = node.get("table_name", "")
+            alias = node.get("alias", "") or table_name
+            if table_name:
+                alias_map[alias.lower()] = table_name
+                alias_map[table_name.lower()] = table_name
+
+        elif node_type in ("JOIN", "INNER_JOIN", "LEFT_JOIN", "RIGHT_JOIN", "FULL_JOIN", "CROSS_JOIN"):
+            left = node.get("left", {})
+            right = node.get("right", {})
+            extract_tables_recursive(left)
+            extract_tables_recursive(right)
+
+        elif node_type == "SUBQUERY":
+            # For subqueries, we don't push down
+            pass
+
+        else:
+            # Recursively search all dict values for nested table references
+            # This handles DESCRIBE/SHOW queries where table is at from_table.query.from_table
+            for key, value in node.items():
+                if isinstance(value, dict):
+                    extract_tables_recursive(value)
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            extract_tables_recursive(item)
 
     try:
         statements = ast.get("statements", [])
@@ -160,32 +195,7 @@ def _extract_tables_from_ast(ast: Dict) -> Dict[str, str]:
             return alias_map
 
         node = statements[0].get("node", {})
-        from_table = node.get("from_table", {})
-
-        def extract_tables(table_node: Dict) -> None:
-            if not isinstance(table_node, dict):
-                return
-
-            node_type = table_node.get("type", "")
-
-            if node_type == "BASE_TABLE":
-                table_name = table_node.get("table_name", "")
-                alias = table_node.get("alias", "") or table_name
-                if table_name:
-                    alias_map[alias.lower()] = table_name
-                    alias_map[table_name.lower()] = table_name
-
-            elif node_type in ("JOIN", "INNER_JOIN", "LEFT_JOIN", "RIGHT_JOIN", "FULL_JOIN", "CROSS_JOIN"):
-                left = table_node.get("left", {})
-                right = table_node.get("right", {})
-                extract_tables(left)
-                extract_tables(right)
-
-            elif node_type == "SUBQUERY":
-                # For subqueries, we don't push down
-                pass
-
-        extract_tables(from_table)
+        extract_tables_recursive(node)
 
     except Exception as e:
         logger.debug("Failed to extract tables from AST: %s", e)
@@ -611,6 +621,48 @@ def _get_sql_ast(query: str) -> Optional[Dict]:
         logger.debug("Failed to parse SQL to AST: %s", e)
 
     return None
+
+
+def is_table_discovery_query(query: str) -> bool:
+    """
+    Check if a SQL query is a table discovery query (SHOW TABLES, SHOW ALL TABLES).
+
+    Uses DuckDB's AST parser to detect these queries rather than string matching.
+
+    Parameters
+    ----------
+    query : str
+        SQL query to check.
+
+    Returns
+    -------
+    bool
+        True if the query is SHOW TABLES or SHOW ALL TABLES, False otherwise.
+    """
+    ast = _get_sql_ast(query)
+    if ast is None:
+        return False
+
+    try:
+        statements = ast.get("statements", [])
+        if not statements:
+            return False
+
+        node = statements[0].get("node", {})
+        from_table = node.get("from_table", {})
+
+        # SHOW TABLES and SHOW ALL TABLES are parsed as SELECT with SHOW_REF from_table
+        if from_table.get("type") == "SHOW_REF":
+            table_name = from_table.get("table_name", "")
+            # SHOW TABLES -> table_name = '"tables"'
+            # SHOW ALL TABLES -> table_name = '__show_tables_expanded'
+            if table_name in ('"tables"', "__show_tables_expanded"):
+                return True
+
+        return False
+    except Exception as e:
+        logger.debug("Failed to check if query is table discovery: %s", e)
+        return False
 
 
 def extract_pushdown_from_sql(

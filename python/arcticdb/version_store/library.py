@@ -2207,12 +2207,18 @@ class Library:
         duckdb : Context manager for complex multi-symbol SQL queries.
         """
         from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
-        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
+        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql, is_table_discovery_query
 
         duckdb = _check_duckdb_available()
 
-        # Extract symbol names and pushdown info from SQL AST in a single parse
-        pushdown_by_table, symbols = extract_pushdown_from_sql(query)
+        # Check if this is a table discovery query (SHOW TABLES, SHOW ALL TABLES)
+        if is_table_discovery_query(query):
+            # For table discovery queries, register all symbols from the library
+            symbols = self.list_symbols()
+            pushdown_by_table = {}
+        else:
+            # Extract symbol names and pushdown info from SQL AST in a single parse
+            pushdown_by_table, symbols = extract_pushdown_from_sql(query)
 
         # Create DuckDB connection and register data with pushdown applied
         conn = duckdb.connect(":memory:")
