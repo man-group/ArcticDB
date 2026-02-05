@@ -691,9 +691,9 @@ def test_arrow_string_layout_after_truncation(version_store_factory, row_range_a
     lib = version_store_factory(segment_row_size=10, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
     sym = "test_arrow_string_layout_after_truncation"
-    df = pd.DataFrame(
-        {"str_col": [f"string_{i:02d}" for i in range(25)], "cat_col": [f"string_{i:02d}" for i in range(25)]}
-    )
+    # Each string is of the same width for easier calculation of buffer sizes
+    str_values = [f"string_{i:02d}" for i in range(25)]
+    df = pd.DataFrame({"str_col": str_values, "cat_col": str_values})
     lib.write(sym, df)
     table = lib.read(
         sym,
@@ -708,14 +708,20 @@ def test_arrow_string_layout_after_truncation(version_store_factory, row_range_a
     batches = table.to_batches()
     assert len(batches) == len(expected_segment_sizes)
     for record_batch, expected_size in zip(batches, expected_segment_sizes):
+        # Arrow string arrays's offsets buffer has one more element than the number of strings because it includes the end offset of the last string
+        # Each offset for large_string is an int64 (8 bytes)
+        expected_offset_buffer_size_bytes = (expected_size + 1) * 8
+        # Arrow string arrays's strings buffer has all concatenated string data. Since all strings are of the same length, we can calculate the expected size as:
+        expected_strings_buffer_size_bytes = expected_size * len("string_00")
+
         str_arr, cat_arr = record_batch.columns
         assert str_arr.type == pa.large_string()
-        assert str_arr.buffers()[1].size == (expected_size + 1) * 8  # Offsets buffer size
-        assert str_arr.buffers()[2].size == expected_size * len("string_00")  # Strings buffer size
+        assert str_arr.buffers()[1].size == expected_offset_buffer_size_bytes  # Offsets buffer size
+        assert str_arr.buffers()[2].size == expected_strings_buffer_size_bytes  # Strings buffer size
         assert cat_arr.type == pa.dictionary(pa.int32(), pa.large_string())
         assert cat_arr.buffers()[1].size == expected_size * 4  # Keys buffer size
-        assert cat_arr.dictionary.buffers()[1].size == (expected_size + 1) * 8  # Offsets buffer size
-        assert cat_arr.dictionary.buffers()[2].size == expected_size * len("string_00")  # Strings buffer size
+        assert cat_arr.dictionary.buffers()[1].size == expected_offset_buffer_size_bytes  # Offsets buffer size
+        assert cat_arr.dictionary.buffers()[2].size == expected_strings_buffer_size_bytes  # Strings buffer size
 
 
 @pytest.mark.parametrize(
@@ -1002,7 +1008,7 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
 def test_arrow_dynamic_schema_row_range(
     version_store_factory, row_range_start, row_range_width, use_query_builder, any_arrow_string_format
 ):
-    lib = version_store_factory(segment_row_size=3, dynamic_schema=True)
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     sym = "test_arrow_dynamic_schema_row_range"
@@ -1032,8 +1038,6 @@ def test_arrow_dynamic_schema_row_range(
 
     row_range = (row_range_start, row_range_start + row_range_width)
     expected = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
-    # With pandas output format, missing string columns are filled with empty strings
-    expected["b"] = expected["b"].replace("", None)
     if use_query_builder:
         q = QueryBuilder().row_range(row_range)
         result = lib.read(
@@ -1051,7 +1055,7 @@ def test_arrow_dynamic_schema_row_range(
 def test_arrow_dynamic_schema_date_range(
     version_store_factory, date_range_start, date_range_width, use_query_builder, any_arrow_string_format
 ):
-    lib = version_store_factory(segment_row_size=3, dynamic_schema=True)
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     sym = "test_arrow_dynamic_schema_date_range"
@@ -1084,8 +1088,6 @@ def test_arrow_dynamic_schema_date_range(
         pd.Timestamp("2025-01-01") + pd.Timedelta(days=date_range_start + date_range_width - 1),
     )
     expected = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
-    # With pandas output format, missing string columns are filled with empty strings
-    expected["b"] = expected["b"].replace("", None)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
         result = lib.read(sym, query_builder=q).data

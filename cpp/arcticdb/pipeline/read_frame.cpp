@@ -802,7 +802,7 @@ void decode_into_frame_dynamic(
             // We decode only the columns in `seg` and they are truncated during decoding. We need to truncate the
             // remaining columns in `frame` that were not present in `seg`.
             for (auto frame_col = index_fieldcount; frame_col < frame.descriptor().field_count(); ++frame_col) {
-                if (truncated_column_indices.find(frame_col) == truncated_column_indices.end()) {
+                if (!truncated_column_indices.contains(frame_col)) {
                     auto& column = frame.column(static_cast<position_t>(frame_col));
                     handle_truncation(column, truncate_range);
                 }

@@ -288,26 +288,21 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
         if (allocation_type_ == entity::AllocationType::DETACHABLE) {
-            // TODO: Update doc
             // Some constructions of a PRESIZED ChunkedBuffer can produce a single block with only a beginning offset,
             // so we can't unify with below upper_bound logic.
-            // TODO: Make sure all constructions of ChunkedBuffer have valid block offsets.
+            // TODO: Make sure all constructions of ChunkedBuffer have valid block_offsets_ and unify this if with the
+            // rest.
             util::check(!block_offsets_.empty(), "Detachable chunked buffer has no blocks");
             util::check(
-                    pos_bytes >= block_offsets_.front(),
-                    "Requested position {} before first block offset {}",
+                    pos_bytes >= block_offsets_.front() && pos_bytes < block_offsets_.back(),
+                    "Requested position {} outside of block offset range [{}, {})",
                     pos_bytes,
-                    block_offsets_.front()
-            );
-            util::check(
-                    pos_bytes < block_offsets_.back(),
-                    "Requested position {} after last block offset {}",
-                    pos_bytes,
+                    block_offsets_.front(),
                     block_offsets_.back()
             );
 
             // We want to get the block where block_offsets_[i] <= pos_bytes < block_offsets_[i+1]
-            auto block_offset = std::upper_bound(std::begin(block_offsets_), std::end(block_offsets_), pos_bytes);
+            auto block_offset = std::ranges::upper_bound(block_offsets_, pos_bytes);
             --block_offset;
 
             auto block_pos = std::distance(block_offsets_.begin(), block_offset);
@@ -537,6 +532,10 @@ class ChunkedBufferImpl {
     void truncate_single_block(size_t start_offset, size_t end_offset) {
         // Inclusive of start_offset, exclusive of end_offset
         util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "Truncate single block is only supported for detachable buffers"
+        );
+        util::check(
                 end_offset >= start_offset,
                 "Truncate single block expects end ({}) >= start ({})",
                 end_offset,
@@ -569,6 +568,10 @@ class ChunkedBufferImpl {
     }
 
     void truncate_first_block(size_t bytes) {
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "Truncate first block is only supported for detachable buffers"
+        );
         util::check(blocks_.size() > 0, "Truncate first block expected at least one block");
         auto block = blocks_[0];
         auto block_bytes_without_extra = block->bytes() - extra_bytes_per_block_;
@@ -596,6 +599,10 @@ class ChunkedBufferImpl {
 
     void truncate_last_block(size_t bytes) {
         // bytes is the number of bytes to remove, and is asserted to be in the last block of the buffer
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "Truncate last block is only supported for detachable buffers"
+        );
         auto [block, offset, ts] = block_and_offset(bytes_ - bytes);
         auto block_bytes_without_extra = block->bytes() - extra_bytes_per_block_;
         util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
