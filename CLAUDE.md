@@ -150,6 +150,8 @@ same threadpool, as this can deadlock. This means you might need to use synchron
 
 Do not write comments except where they are very valuable. Keep them as brief as possible.
 
+Prefer writing pytests as standalone functions rather than wrapping them in a class.
+
 ### Backwards Compatibility
 
 - Data written by newer clients should be readable by older clients - document breaking changes clearly
