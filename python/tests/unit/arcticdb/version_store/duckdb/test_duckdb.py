@@ -660,3 +660,240 @@ class TestExternalDuckDBConnection:
         assert conn.execute("SELECT col FROM existing1").fetchone()[0] == "a"
         assert conn.execute("SELECT col FROM existing2").fetchone()[0] == "b"
         conn.close()
+
+
+class TestDocumentationExamples:
+    """Tests for examples from the SQL queries documentation (docs/mkdocs/docs/tutorials/sql_queries.md)."""
+
+    def test_quick_start_aggregation(self, lmdb_library):
+        """Test the Quick Start example with GROUP BY aggregation."""
+        lib = lmdb_library
+
+        trades = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "AAPL", "MSFT"],
+            "price": [150.0, 2800.0, 151.0, 300.0],
+            "quantity": [100, 50, 200, 75]
+        })
+        lib.write("trades", trades)
+
+        result = lib.sql("""
+            SELECT ticker, AVG(price) as avg_price, SUM(quantity) as total_qty
+            FROM trades
+            GROUP BY ticker
+            ORDER BY total_qty DESC
+        """)
+
+        assert len(result.data) == 3
+        # AAPL has total_qty 300, should be first
+        assert result.data.iloc[0]["ticker"] == "AAPL"
+        assert result.data.iloc[0]["total_qty"] == 300
+        assert result.data.iloc[0]["avg_price"] == pytest.approx(150.5)
+
+    def test_join_with_market_value(self, lmdb_library):
+        """Test JOIN example calculating market value."""
+        lib = lmdb_library
+
+        trades = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "AAPL", "MSFT"],
+            "price": [150.0, 2800.0, 151.0, 300.0],
+            "quantity": [100, 50, 200, 75]
+        })
+        prices = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "MSFT"],
+            "current_price": [155.0, 2850.0, 310.0]
+        })
+        lib.write("trades", trades)
+        lib.write("prices", prices)
+
+        result = lib.sql("""
+            SELECT t.ticker, t.quantity, p.current_price,
+                   t.quantity * p.current_price as market_value
+            FROM trades t
+            JOIN prices p ON t.ticker = p.ticker
+        """)
+
+        assert len(result.data) == 4  # All trades have matching prices
+        assert "market_value" in result.data.columns
+        # Check one calculation: AAPL 100 * 155 = 15500
+        aapl_rows = result.data[result.data["ticker"] == "AAPL"]
+        assert 15500.0 in list(aapl_rows["market_value"])
+
+    def test_window_function_lag_daily_returns(self, lmdb_library):
+        """Test Financial Analytics example: daily returns with LAG window function."""
+        lib = lmdb_library
+
+        # Create price data with dates
+        prices = pd.DataFrame({
+            "ticker": ["AAPL", "AAPL", "AAPL", "GOOG", "GOOG", "GOOG"],
+            "date": pd.to_datetime([
+                "2024-01-01", "2024-01-02", "2024-01-03",
+                "2024-01-01", "2024-01-02", "2024-01-03"
+            ]),
+            "close": [150.0, 152.0, 151.0, 2800.0, 2850.0, 2820.0]
+        })
+        lib.write("prices", prices)
+
+        result = lib.sql("""
+            SELECT
+                ticker,
+                date,
+                close,
+                (close - LAG(close) OVER (PARTITION BY ticker ORDER BY date)) /
+                    LAG(close) OVER (PARTITION BY ticker ORDER BY date) as daily_return
+            FROM prices
+            ORDER BY ticker, date
+        """)
+
+        assert len(result.data) == 6
+        assert "daily_return" in result.data.columns
+        # First day of each ticker should have NULL return
+        aapl_returns = result.data[result.data["ticker"] == "AAPL"]["daily_return"].tolist()
+        assert pd.isna(aapl_returns[0])  # First day has no previous
+        # Second day: (152 - 150) / 150 = 0.0133...
+        assert aapl_returns[1] == pytest.approx(2.0 / 150.0)
+
+    def test_portfolio_value_calculation(self, lmdb_library):
+        """Test Financial Analytics example: portfolio value with positions and prices."""
+        lib = lmdb_library
+
+        positions = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "MSFT"],
+            "shares": [100, 50, 75]
+        })
+        prices = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "MSFT"],
+            "price": [155.0, 2850.0, 310.0]
+        })
+        lib.write("positions", positions)
+        lib.write("prices", prices)
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("positions")
+            ddb.register_symbol("prices")
+
+            result = ddb.query("""
+                SELECT
+                    pos.ticker,
+                    pos.shares,
+                    p.price,
+                    pos.shares * p.price as market_value
+                FROM positions pos
+                JOIN prices p ON pos.ticker = p.ticker
+            """)
+
+        assert len(result) == 3
+        # AAPL: 100 * 155 = 15500
+        aapl_row = result[result["ticker"] == "AAPL"].iloc[0]
+        assert aapl_row["market_value"] == pytest.approx(15500.0)
+        # Total portfolio value
+        total_value = result["market_value"].sum()
+        # 100*155 + 50*2850 + 75*310 = 15500 + 142500 + 23250 = 181250
+        assert total_value == pytest.approx(181250.0)
+
+    def test_time_series_ohlc_resampling(self, lmdb_library):
+        """Test Time Series Analysis example: resample to daily OHLC."""
+        lib = lmdb_library
+
+        # Create tick data with timestamps
+        ticks = pd.DataFrame({
+            "price": [100.0, 102.0, 99.0, 101.0, 105.0, 103.0, 102.0, 108.0],
+            "volume": [1000, 500, 800, 1200, 600, 900, 700, 1100]
+        }, index=pd.to_datetime([
+            "2024-01-01 09:30:00", "2024-01-01 10:00:00",
+            "2024-01-01 11:00:00", "2024-01-01 16:00:00",
+            "2024-01-02 09:30:00", "2024-01-02 10:00:00",
+            "2024-01-02 11:00:00", "2024-01-02 16:00:00",
+        ]))
+        lib.write("ticks", ticks)
+
+        result = lib.sql("""
+            SELECT
+                DATE_TRUNC('day', index) as date,
+                FIRST(price) as open,
+                MAX(price) as high,
+                MIN(price) as low,
+                LAST(price) as close,
+                SUM(volume) as volume
+            FROM ticks
+            GROUP BY DATE_TRUNC('day', index)
+            ORDER BY date
+        """)
+
+        assert len(result.data) == 2  # Two days
+        day1 = result.data.iloc[0]
+        day2 = result.data.iloc[1]
+
+        # Day 1: open=100, high=102, low=99, close=101, volume=3500
+        assert day1["open"] == pytest.approx(100.0)
+        assert day1["high"] == pytest.approx(102.0)
+        assert day1["low"] == pytest.approx(99.0)
+        assert day1["close"] == pytest.approx(101.0)
+        assert day1["volume"] == 3500
+
+        # Day 2: open=105, high=108, low=102, close=108, volume=3300
+        assert day2["open"] == pytest.approx(105.0)
+        assert day2["high"] == pytest.approx(108.0)
+        assert day2["low"] == pytest.approx(102.0)
+        assert day2["close"] == pytest.approx(108.0)
+        assert day2["volume"] == 3300
+
+    def test_data_quality_find_gaps(self, lmdb_library):
+        """Test Data Quality example: find gaps in time series using window functions."""
+        lib = lmdb_library
+
+        # Create data with a gap (missing Jan 3)
+        prices = pd.DataFrame({
+            "price": [100.0, 101.0, 103.0, 104.0]
+        }, index=pd.to_datetime([
+            "2024-01-01", "2024-01-02", "2024-01-04", "2024-01-05"  # Note: Jan 3 is missing
+        ]))
+        lib.write("prices", prices)
+
+        # Use duckdb() context to avoid CTE name being treated as a symbol
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("prices")
+            result = ddb.query("""
+                WITH date_series AS (
+                    SELECT DISTINCT DATE_TRUNC('day', index) as date FROM prices
+                )
+                SELECT
+                    date,
+                    LEAD(date) OVER (ORDER BY date) as next_date,
+                    LEAD(date) OVER (ORDER BY date) - date as gap
+                FROM date_series
+                ORDER BY date
+            """)
+
+        assert len(result) == 4
+        # Check that we can detect the gap between Jan 2 and Jan 4
+        gaps = result.dropna(subset=["gap"])
+        # The gap column might be returned as interval or integer days
+        # Find the row with the 2-day gap (gap > 1 day)
+        gap_values = gaps["gap"]
+        if hasattr(gap_values.iloc[0], "days"):
+            # Timedelta/interval type
+            large_gaps = gaps[gap_values.apply(lambda x: x.days > 1)]
+        else:
+            # Integer days
+            large_gaps = gaps[gap_values > 1]
+        assert len(large_gaps) == 1
+        assert pd.Timestamp(large_gaps.iloc[0]["date"]).date() == pd.Timestamp("2024-01-02").date()
+
+    def test_version_selection_as_of(self, lmdb_library):
+        """Test Version Selection example: query specific version."""
+        lib = lmdb_library
+
+        # Write multiple versions
+        trades_v0 = pd.DataFrame({"ticker": ["AAPL"], "price": [150.0]})
+        trades_v1 = pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [155.0, 2800.0]})
+
+        lib.write("trades", trades_v0)  # version 0
+        lib.write("trades", trades_v1)  # version 1
+
+        # Query version 0
+        result_v0 = lib.sql("SELECT * FROM trades", as_of=0)
+        assert len(result_v0.data) == 1
+
+        # Query latest (version 1)
+        result_v1 = lib.sql("SELECT * FROM trades")
+        assert len(result_v1.data) == 2
