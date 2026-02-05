@@ -13,6 +13,9 @@ import pytest
 from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException, InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException
+from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.util.test import assert_frame_equal, config_context
+import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
 
@@ -704,3 +707,515 @@ def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_s
     for test in [test_prune_previous_kwarg_batch_methods]:
         test()
         clear()
+
+
+# ==================== Column Stats Query Optimization Tests ====================
+# These tests verify that column stats are used to prune segments during queries
+
+
+def get_table_data_read_count(stats):
+    """Get the number of TABLE_DATA reads from query stats."""
+    storage_ops = stats.get("storage_operations", {})
+    for op_name, key_types in storage_ops.items():
+        if "GetObject" in op_name and "TABLE_DATA" in key_types:
+            return key_types["TABLE_DATA"]["count"]
+    return 0
+
+
+def test_column_stats_filter_prunes_segments(s3_store_factory, clear_query_stats):
+    """Filter on a column with stats should prune segments that cannot match."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_filter_with_stats"
+
+    # Write 3 segments with col_1 values:
+    # seg0: [1, 2], seg1: [3, 4], seg2: [5, 6]
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1, df2])
+        expected = expected[expected["col_1"] > 4]
+        assert_frame_equal(result, expected)
+
+        # Should only read 1 TABLE_DATA segment (seg2), not all 3
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_filter_without_stats_no_pruning(s3_store_factory, clear_query_stats):
+    """Filter on a column without stats should return correct results without pruning."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_filter_without_stats"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    # Create column stats for col_1, but query col_2
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        q = QueryBuilder()
+        q = q[q["col_2"] > 7]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1, df2])
+        expected = expected[expected["col_2"] > 7]
+        assert_frame_equal(result, expected)
+
+        # Should read all 3 TABLE_DATA segments (no pruning possible)
+        assert table_data_reads == 3, f"Expected 3 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_and_filter_one_column_with_stats(s3_store_factory, clear_query_stats):
+    """AND filter with one column having stats should prune based on that column."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_and_filter"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 > 4 AND col_2 > 7
+        q = QueryBuilder()
+        q = q[(q["col_1"] > 4) & (q["col_2"] > 7)]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1, df2])
+        expected = expected[(expected["col_1"] > 4) & (expected["col_2"] > 7)]
+        assert_frame_equal(result, expected)
+
+        # Should read 1 segment (only seg2 can match col_1 > 4)
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_or_filter(s3_store_factory, clear_query_stats):
+    """OR filter should only prune segments ruled out by ALL conditions."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_or_filter"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 < 2 OR col_1 > 5
+        # seg0: [1,2] can match col_1 < 2
+        # seg1: [3,4] cannot match either
+        # seg2: [5,6] can match col_1 > 5
+        q = QueryBuilder()
+        q = q[(q["col_1"] < 2) | (q["col_1"] > 5)]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1, df2])
+        expected = expected[(expected["col_1"] < 2) | (expected["col_1"] > 5)]
+        assert_frame_equal(result, expected)
+
+        # Should read 2 segments (seg0 and seg2), seg1 is pruned
+        assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_all_segments_pruned_returns_empty(s3_store_factory, clear_query_stats):
+    """When all segments are pruned, should return empty result."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_all_pruned"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 > 100 cannot match any segment (max is 6)
+        q = QueryBuilder()
+        q = q[q["col_1"] > 100]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        assert len(result) == 0
+        assert table_data_reads == 0, f"Expected 0 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_boundary_value_greater_than_max(s3_store_factory, clear_query_stats):
+    """Querying for values > MAX should prune all segments."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_boundary_gt_max"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 > 4 (max in data is 4)
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        assert len(result) == 0
+        assert table_data_reads == 0, f"Expected 0 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_boundary_value_equals_max_not_pruned(s3_store_factory, clear_query_stats):
+    """Querying for values == MAX should NOT prune that segment."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_boundary_eq_max"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 == 4 (max of seg1)
+        q = QueryBuilder()
+        q = q[q["col_1"] == 4]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1])
+        expected = expected[expected["col_1"] == 4]
+        assert_frame_equal(result, expected)
+
+        # seg0 should be pruned (col_1 values 1,2), seg1 should not (col_1 values 3,4)
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_boundary_value_equals_min_not_pruned(s3_store_factory, clear_query_stats):
+    """Querying for values == MIN should NOT prune that segment."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_boundary_eq_min"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 == 1 (min of seg0)
+        q = QueryBuilder()
+        q = q[q["col_1"] == 1]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1])
+        expected = expected[expected["col_1"] == 1]
+        assert_frame_equal(result, expected)
+
+        # seg1 should be pruned (col_1 values 3,4), seg0 should not
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_negation_not_equals(s3_store_factory, clear_query_stats):
+    """Test != operator pruning."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_negation_ne"
+
+    # Create segments where one segment has single value
+    df_single = pd.DataFrame({"col_1": [5, 5]}, index=pd.date_range("2000-01-01", periods=2))
+    df_range = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df_single)
+    lib.append(sym, df_range)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # col_1 != 5
+        # seg0 has only [5,5], so MIN==MAX==5, can be pruned
+        # seg1 has [3,4], cannot be pruned
+        q = QueryBuilder()
+        q = q[q["col_1"] != 5]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df_single, df_range])
+        expected = expected[expected["col_1"] != 5]
+        assert_frame_equal(result, expected)
+
+        # seg0 can be pruned (all values are 5), seg1 cannot
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_multiple_filter_clauses(s3_store_factory, clear_query_stats):
+    """Multiple consecutive filter clauses should all apply pruning."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_multiple_filters"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # First filter: col_1 > 2 rules out seg0
+        # Second filter: col_2 < 9 rules out seg2
+        q = QueryBuilder()
+        q = q[q["col_1"] > 2]
+        q = q[q["col_2"] < 9]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1, df2])
+        expected = expected[(expected["col_1"] > 2) & (expected["col_2"] < 9)]
+        assert_frame_equal(result, expected)
+
+        # Only seg1 should be read
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_non_filter_clause_before_filter_disables_pruning(s3_store_factory, clear_query_stats):
+    """Filter clause after non-filter clause should NOT use column stats pruning."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_non_filter_before"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # Apply projection first, then filter
+        q = QueryBuilder()
+        q = q.apply("new_col", q["col_1"] * 2)
+        q = q[q["col_1"] > 4]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        # All 3 segments should be read (no column stats pruning for filter after project)
+        assert table_data_reads == 3, f"Expected 3 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_filter_before_project_uses_pruning(s3_store_factory, clear_query_stats):
+    """Filter clause before non-filter clause should still use column stats pruning."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_filter_before_project"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        # Filter first, then project
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        q = q.apply("new_col", q["col_1"] * 2)
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        # Only seg2 should be read
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_no_stats_still_returns_correct_results(s3_store_factory, clear_query_stats):
+    """When no column stats exist, queries should still return correct results."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_no_stats"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df0, df1, df2])
+        expected = expected[expected["col_1"] > 4]
+        assert_frame_equal(result, expected)
+
+        # All 3 segments should be read
+        assert table_data_reads == 3, f"Expected 3 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_dynamic_schema_column_type_varies(s3_store_factory, clear_query_stats):
+    """Test pruning when column type varies across segments (dynamic schema)."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+    sym = "test_dynamic_type"
+
+    df_int8 = pd.DataFrame({"col_1": np.array([1, 2], dtype=np.int8)}, index=pd.date_range("2000-01-01", periods=2))
+    df_int32 = pd.DataFrame(
+        {"col_1": np.array([100, 200], dtype=np.int32)}, index=pd.date_range("2000-01-03", periods=2)
+    )
+
+    lib.write(sym, df_int8)
+    lib.append(sym, df_int32)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        q = QueryBuilder()
+        q = q[q["col_1"] > 50]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df_int8, df_int32])
+        expected = expected[expected["col_1"] > 50]
+        assert_frame_equal(result, expected)
+
+        # seg0 should be pruned (max is 2)
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_dynamic_schema_new_column_added(s3_store_factory, clear_query_stats):
+    """Test when a column is added in later segments (not present in older segments)."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+    sym = "test_new_column"
+
+    df_no_col2 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df_with_col2 = pd.DataFrame({"col_1": [3, 4], "col_2": [10, 20]}, index=pd.date_range("2000-01-03", periods=2))
+    df_with_col2_2 = pd.DataFrame({"col_1": [5, 6], "col_2": [30, 40]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df_no_col2)
+    lib.append(sym, df_with_col2)
+    lib.append(sym, df_with_col2_2)
+
+    lib.create_column_stats(sym, {"col_2": {"MINMAX"}})
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        qs.reset_stats()
+
+        q = QueryBuilder()
+        q = q[q["col_2"] > 25]
+        result = lib.read(sym, query_builder=q).data
+
+        stats = qs.get_query_stats()
+        table_data_reads = get_table_data_read_count(stats)
+
+        expected = pd.concat([df_no_col2, df_with_col2, df_with_col2_2])
+        expected = expected[expected["col_2"] > 25]
+        assert_frame_equal(result, expected)
+
+        # seg1 can be pruned (max is 20), seg0 has no col_2 (NULL stats), seg2 matches
+        assert table_data_reads <= 2, f"Expected at most 2 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_comparison_operators(s3_store_factory, clear_query_stats):
+    """Test all comparison operators for pruning."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_operators"
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    test_cases = [
+        (lambda q: q["col_1"] > 4, 1, "col_1 > 4"),
+        (lambda q: q["col_1"] >= 5, 1, "col_1 >= 5"),
+        (lambda q: q["col_1"] < 2, 1, "col_1 < 2"),
+        (lambda q: q["col_1"] <= 1, 1, "col_1 <= 1"),
+        (lambda q: q["col_1"] == 3, 1, "col_1 == 3"),
+        (lambda q: q["col_1"] != 3, 3, "col_1 != 3"),
+    ]
+
+    for query_expr, expected_reads, desc in test_cases:
+        with config_context("VersionMap.ReloadInterval", 0):
+            qs.enable()
+            qs.reset_stats()
+
+            q = QueryBuilder()
+            q = q[query_expr(q)]
+            lib.read(sym, query_builder=q).data
+
+            stats = qs.get_query_stats()
+            table_data_reads = get_table_data_read_count(stats)
+
+            assert (
+                table_data_reads == expected_reads
+            ), f"For {desc}: expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"

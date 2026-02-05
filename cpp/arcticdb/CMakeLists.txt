@@ -295,6 +295,7 @@ set(arcticdb_srcs
         processing/clause_utils.hpp
         processing/expression_context.hpp
         processing/expression_node.hpp
+        processing/column_stats_filter.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
         processing/ternary_utils.hpp
@@ -500,6 +501,7 @@ set(arcticdb_srcs
         processing/clause_utils.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
+        processing/column_stats_filter.cpp
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp

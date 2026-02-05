@@ -35,6 +35,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/processing/column_stats_filter.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <iterator>
@@ -1361,6 +1362,32 @@ static void read_indexed_keys_to_pipeline(
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
             read_query, pipeline_context, dynamic_schema, bucketize_dynamic
     );
+
+    // TODO aseaton do column stats filtering only if `clauses_` includes a `FilterClause` preceded only by
+    // `FilterClause`, `DateRangeClause` and `RowRangeClause`. Otherwise column stats cannot be applied
+    // so there is no need to read the column stats key or do any of this work.
+    // Try to use column stats for segment pruning if there are filter clauses
+    if (!read_query.clauses_.empty()) {
+        auto column_stats_key = index_key_to_column_stats_key(version_info.key_);
+        std::optional<SegmentInMemory> column_stats_segment;
+        try {
+            column_stats_segment = store->read_sync(column_stats_key).second;
+        } catch (const storage::KeyNotFoundException&) {
+            // Column stats key doesn't exist - this is normal, they're optional
+            ARCTICDB_DEBUG(log::version(), "No column stats available for segment pruning");
+        }
+        if (column_stats_segment) {
+            auto column_stats_data = std::make_shared<ColumnStatsData>(std::move(*column_stats_segment));
+            if (!column_stats_data->empty()) {
+                ARCTICDB_DEBUG(
+                    log::version(),
+                    "Using column stats for segment pruning, {} columns have stats",
+                    column_stats_data->columns_with_stats().size()
+                );
+                queries.push_back(create_column_stats_filter(column_stats_data, read_query.clauses_));
+            }
+        }
+    }
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
