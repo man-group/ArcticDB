@@ -92,14 +92,35 @@ docs/claude/
 
 ## Documentation Maintenance
 
-This documentation is maintained by Claude. When Claude makes significant changes to ArcticDB, it will automatically update the relevant documentation:
+This documentation is maintained by Claude. Update docs **only when working in that area**.
 
-1. **Architecture changes** - [ARCHITECTURE.md](ARCHITECTURE.md)
-2. **Cache behavior changes** - [cpp/CACHING.md](cpp/CACHING.md)
-3. **Version chain changes** - [cpp/VERSIONING.md](cpp/VERSIONING.md)
-4. **Storage backend changes** - [cpp/STORAGE_BACKENDS.md](cpp/STORAGE_BACKENDS.md)
-5. **C++ module changes** - Relevant file in [cpp/](cpp/)
-6. **Python module changes** - Relevant file in [python/](python/)
+### When to Update
+
+- **DO** update the relevant doc when modifying code in that area
+- **DO NOT** proactively update docs for unrelated areas
+- **DO NOT** read all docs before starting work - only the relevant ones
+
+### Documentation Style
+
+Keep documentation **high-level and terse**:
+
+- **Reference code, don't copy it**: Use `file_path:ClassName:method_name` format
+- **Use tables and bullets** over code blocks
+- **Keep conceptual diagrams** (ASCII art showing data flow, architecture)
+- **Remove implementation details** that duplicate source code
+- **Avoid code snippets** unless showing user-facing API examples
+
+Example - prefer this:
+> `VersionMap` class in `cpp/arcticdb/version/version_map.hpp` provides `check_reload()`, `get_latest_version()`, and `write_version()` methods.
+
+Over this:
+> ```cpp
+> class VersionMap {
+>     void check_reload();
+>     VersionId get_latest_version(const StreamId& id);
+>     void write_version(const AtomKey& key);
+> };
+> ```
 
 ## Related Documentation
 
