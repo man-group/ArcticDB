@@ -15,6 +15,7 @@ QueryBuilder expressions, using pure AST parsing without requiring actual tables
 """
 
 import json
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -334,9 +335,7 @@ class TestExtractLimitFromAst:
 
     def test_limit_in_string_not_extracted(self):
         """Test that LIMIT in string literal is not incorrectly extracted."""
-        ast = json.loads(_json_serialize_sql(
-            "SELECT * FROM t WHERE name = 'LIMIT 999' LIMIT 5"
-        ))
+        ast = json.loads(_json_serialize_sql("SELECT * FROM t WHERE name = 'LIMIT 999' LIMIT 5"))
         result = _extract_limit_from_ast(ast)
         assert result == 5
 
@@ -444,26 +443,20 @@ class TestExtractPushdownFromSql:
 
     def test_returns_info_for_requested_tables(self):
         """Test that PushdownInfo is returned for each requested table."""
-        result = extract_pushdown_from_sql(
-            "SELECT * FROM test_table", ["test_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT * FROM test_table", ["test_table"])
         assert "test_table" in result
         assert isinstance(result["test_table"], PushdownInfo)
 
     def test_limit_extracted_from_query(self):
         """Test LIMIT is extracted from query."""
-        result = extract_pushdown_from_sql(
-            "SELECT x FROM test_table LIMIT 10", ["test_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT x FROM test_table LIMIT 10", ["test_table"])
         info = result["test_table"]
         assert info.limit == 10
         assert info.limit_pushed_down == 10
 
     def test_unknown_table_returns_default(self):
         """Test unknown table returns default PushdownInfo with LIMIT still applied."""
-        result = extract_pushdown_from_sql(
-            "SELECT * FROM test_table LIMIT 5", ["unknown_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT * FROM test_table LIMIT 5", ["unknown_table"])
         assert "unknown_table" in result
         info = result["unknown_table"]
         # LIMIT still applies to all requested tables
@@ -471,10 +464,7 @@ class TestExtractPushdownFromSql:
 
     def test_multiple_tables(self):
         """Test extracting pushdown for multiple tables."""
-        result = extract_pushdown_from_sql(
-            "SELECT * FROM test_table, other_table LIMIT 5",
-            ["test_table", "other_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT * FROM test_table, other_table LIMIT 5", ["test_table", "other_table"])
         assert "test_table" in result
         assert "other_table" in result
         # LIMIT applies to both
@@ -483,9 +473,7 @@ class TestExtractPushdownFromSql:
 
     def test_where_filter_pushdown(self):
         """Test WHERE clause filter is pushed down."""
-        result = extract_pushdown_from_sql(
-            "SELECT * FROM test_table WHERE x > 100", ["test_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT * FROM test_table WHERE x > 100", ["test_table"])
         info = result["test_table"]
         assert info.filter_pushed_down is True
         assert info.query_builder is not None
@@ -493,8 +481,7 @@ class TestExtractPushdownFromSql:
     def test_date_range_pushdown(self):
         """Test date range from index filter is pushed down."""
         result = extract_pushdown_from_sql(
-            "SELECT * FROM test_table WHERE index BETWEEN '2024-01-01' AND '2024-12-31'",
-            ["test_table"]
+            "SELECT * FROM test_table WHERE index BETWEEN '2024-01-01' AND '2024-12-31'", ["test_table"]
         )
         info = result["test_table"]
         assert info.date_range_pushed_down is True
@@ -504,18 +491,14 @@ class TestExtractPushdownFromSql:
 
     def test_column_projection_pushdown(self):
         """Test column projection is pushed down."""
-        result = extract_pushdown_from_sql(
-            "SELECT x, y FROM test_table", ["test_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT x, y FROM test_table", ["test_table"])
         info = result["test_table"]
         assert info.columns_pushed_down is not None
         assert set(info.columns_pushed_down) == {"x", "y"}
 
     def test_select_star_no_column_pushdown(self):
         """Test SELECT * doesn't push down column projection."""
-        result = extract_pushdown_from_sql(
-            "SELECT * FROM test_table", ["test_table"]
-        )
+        result = extract_pushdown_from_sql("SELECT * FROM test_table", ["test_table"])
         info = result["test_table"]
         # SELECT * means no specific column projection
         assert info.columns is None
@@ -523,8 +506,7 @@ class TestExtractPushdownFromSql:
     def test_join_query(self):
         """Test pushdown extraction for JOIN query."""
         result = extract_pushdown_from_sql(
-            "SELECT a.x, b.y FROM table_a a JOIN table_b b ON a.id = b.id LIMIT 10",
-            ["table_a", "table_b"]
+            "SELECT a.x, b.y FROM table_a a JOIN table_b b ON a.id = b.id LIMIT 10", ["table_a", "table_b"]
         )
         assert "table_a" in result
         assert "table_b" in result
@@ -558,3 +540,324 @@ class TestPushdownInfoDataclass:
         assert info.columns == ["x", "y"]
         assert info.limit == 10
         assert info.date_range[0] == pd.Timestamp("2024-01-01")
+
+
+# =============================================================================
+# Integration tests for SQL predicate pushdown with actual Library operations
+# =============================================================================
+
+
+class TestSQLPredicatePushdown:
+    """Tests for SQL predicate pushdown to ArcticDB."""
+
+    def test_column_projection_pushdown(self, lmdb_library):
+        """Test that SELECT columns are pushed down to ArcticDB."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "a": np.arange(100),
+            "b": np.arange(100, 200),
+            "c": np.arange(200, 300),
+            "d": np.arange(300, 400),
+        })
+        lib.write("test_symbol", df)
+
+        # Query only columns a and b - should only read those from storage
+        result = lib.sql("SELECT a, b FROM test_symbol")
+
+        assert len(result.data) == 100
+        assert list(result.data.columns) == ["a", "b"]
+        # Verify pushdown happened by checking metadata
+        assert "columns_pushed_down" in result.metadata
+        assert set(result.metadata["columns_pushed_down"]) == {"a", "b"}
+
+    def test_where_comparison_pushdown(self, lmdb_library):
+        """Test that simple WHERE comparisons are pushed down."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(1000), "y": np.arange(1000, 2000)})
+        lib.write("test_symbol", df)
+
+        # WHERE x > 900 should be pushed down
+        result = lib.sql("SELECT x, y FROM test_symbol WHERE x > 900")
+
+        assert len(result.data) == 99  # 901-999
+        assert result.data["x"].min() > 900
+        assert "filter_pushed_down" in result.metadata
+        assert result.metadata["filter_pushed_down"] is True
+
+    def test_where_multiple_conditions_pushdown(self, lmdb_library):
+        """Test that AND/OR conditions are pushed down."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "x": np.arange(100),
+            "y": np.arange(100, 200),
+        })
+        lib.write("test_symbol", df)
+
+        # Multiple conditions with AND
+        result = lib.sql("SELECT x, y FROM test_symbol WHERE x > 50 AND y < 180")
+
+        assert len(result.data) == 29  # x: 51-79, y: 151-179
+        assert result.data["x"].min() > 50
+        assert result.data["y"].max() < 180
+
+    def test_where_in_clause_pushdown(self, lmdb_library):
+        """Test that IN clause is pushed down."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "category": ["A", "B", "C", "D", "E"] * 20,
+            "value": np.arange(100),
+        })
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT category, value FROM test_symbol WHERE category IN ('A', 'C')")
+
+        assert len(result.data) == 40  # 20 A's + 20 C's
+        assert set(result.data["category"].unique()) == {"A", "C"}
+
+    def test_where_is_null_pushdown(self, lmdb_library):
+        """Test that IS NULL is pushed down."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "x": [1, 2, None, 4, None, 6, 7, None, 9, 10],
+            "y": np.arange(10),
+        })
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT x, y FROM test_symbol WHERE x IS NOT NULL")
+
+        assert len(result.data) == 7  # 10 - 3 nulls
+
+    def test_limit_pushdown(self, lmdb_library):
+        """Test that LIMIT is pushed down as head()."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(1000)})
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT x FROM test_symbol LIMIT 10")
+
+        assert len(result.data) == 10
+        assert "limit_pushed_down" in result.metadata
+        assert result.metadata["limit_pushed_down"] == 10
+
+    def test_date_range_pushdown_between(self, lmdb_library):
+        """Test that BETWEEN on timestamp index is pushed down as date_range."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365)}, index=dates)
+        lib.write("test_symbol", df)
+
+        # Query for January only using BETWEEN on index
+        result = lib.sql("""
+            SELECT value FROM test_symbol
+            WHERE index BETWEEN '2024-01-01' AND '2024-01-31'
+        """)
+
+        assert len(result.data) == 31
+        assert "date_range_pushed_down" in result.metadata
+
+    def test_combined_pushdown(self, lmdb_library):
+        """Test combining column projection, WHERE, and LIMIT pushdown."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "a": np.arange(1000),
+            "b": np.arange(1000, 2000),
+            "c": np.arange(2000, 3000),
+        })
+        lib.write("test_symbol", df)
+
+        result = lib.sql("SELECT a, b FROM test_symbol WHERE a > 500 LIMIT 50")
+
+        assert len(result.data) == 50
+        assert list(result.data.columns) == ["a", "b"]
+        assert result.data["a"].min() > 500
+
+    def test_pushdown_with_aggregation(self, lmdb_library):
+        """Test that filters are pushed down even with aggregation."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "category": ["A", "B", "C"] * 100,
+            "value": np.arange(300),
+        })
+        lib.write("test_symbol", df)
+
+        # Filter should be pushed to ArcticDB, aggregation done by DuckDB
+        result = lib.sql("""
+            SELECT category, SUM(value) as total
+            FROM test_symbol
+            WHERE value > 100
+            GROUP BY category
+        """)
+
+        assert len(result.data) == 3  # Still 3 categories
+
+    def test_pushdown_preserves_correctness(self, lmdb_library):
+        """Test that pushdown produces same results as non-pushdown."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "x": np.arange(500),
+            "y": np.random.randn(500),
+        })
+        lib.write("test_symbol", df)
+
+        # Get result with pushdown
+        result_pushdown = lib.sql("SELECT x, y FROM test_symbol WHERE x > 200 AND x < 300")
+
+        # Get result without pushdown (full read + DuckDB filter)
+        full_data = lib.read("test_symbol").data
+        expected = full_data[(full_data["x"] > 200) & (full_data["x"] < 300)][["x", "y"]]
+
+        pd.testing.assert_frame_equal(
+            result_pushdown.data.reset_index(drop=True),
+            expected.reset_index(drop=True),
+        )
+
+    def test_unsupported_predicate_not_pushed(self, lmdb_library):
+        """Test that unsupported predicates fall back to DuckDB filtering."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "name": ["alice", "bob", "charlie", "david"],
+            "value": [1, 2, 3, 4],
+        })
+        lib.write("test_symbol", df)
+
+        # LIKE is not directly supported by ArcticDB QueryBuilder
+        # Should still work via DuckDB
+        result = lib.sql("SELECT name, value FROM test_symbol WHERE name LIKE 'a%'")
+
+        assert len(result.data) == 1
+        assert result.data["name"].iloc[0] == "alice"
+
+    def test_date_range_pushdown_extreme_dates(self, lmdb_library):
+        """Test that date range pushdown works for dates across the full pandas range.
+
+        Pandas Timestamp supports dates from 1677 to 2262. This test verifies
+        pushdown works for historical and futuristic dates outside typical ranges.
+        """
+        lib = lmdb_library
+
+        # Test historical data (1850)
+        dates = pd.date_range("1850-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365)}, index=dates)
+        lib.write("historical", df)
+
+        result = lib.sql("""
+            SELECT value FROM historical
+            WHERE index BETWEEN '1850-01-01' AND '1850-01-31'
+        """)
+        assert len(result.data) == 31
+        assert "date_range_pushed_down" in result.metadata
+
+        # Test futuristic data (2150)
+        dates = pd.date_range("2150-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365)}, index=dates)
+        lib.write("futuristic", df)
+
+        result = lib.sql("""
+            SELECT value FROM futuristic
+            WHERE index BETWEEN '2150-01-01' AND '2150-01-31'
+        """)
+        assert len(result.data) == 31
+        assert "date_range_pushed_down" in result.metadata
+
+
+class TestSQLPushdownEdgeCases:
+    """Tests for edge cases and limitations of SQL pushdown."""
+
+    def test_unsigned_integer_types(self, lmdb_library):
+        """Test that unsigned integer columns work correctly with SQL queries."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "u8": np.array([1, 2, 3], dtype=np.uint8),
+            "u16": np.array([100, 200, 300], dtype=np.uint16),
+            "u32": np.array([1000, 2000, 3000], dtype=np.uint32),
+            "u64": np.array([10000, 20000, 30000], dtype=np.uint64),
+        })
+        lib.write("uint_test", df)
+
+        # Should not crash and return correct results
+        result = lib.sql("SELECT u8, u16, u32, u64 FROM uint_test WHERE u32 > 1500")
+        assert len(result.data) == 2
+        assert result.data["u32"].min() > 1500
+
+    def test_small_integer_types(self, lmdb_library):
+        """Test that small integer types (int8, int16) work correctly."""
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "i8": np.array([-50, 0, 50], dtype=np.int8),
+            "i16": np.array([-1000, 0, 1000], dtype=np.int16),
+        })
+        lib.write("small_int_test", df)
+
+        result = lib.sql("SELECT i8, i16 FROM small_int_test WHERE i8 > 0")
+        assert len(result.data) == 1
+        assert result.data["i8"].iloc[0] == 50
+
+    def test_filter_outside_pushdown_range_still_works(self, lmdb_library):
+        """Test that filters outside dummy data range still return correct results.
+
+        When filter values are outside the dummy data range used for plan analysis,
+        pushdown may not occur, but the query should still return correct results
+        via DuckDB filtering.
+        """
+        lib = lmdb_library
+        # Values far outside the typical dummy range
+        df = pd.DataFrame({"x": [5_000_000_000, 6_000_000_000, 7_000_000_000]})
+        lib.write("big_values", df)
+
+        result = lib.sql("SELECT x FROM big_values WHERE x > 5500000000")
+        assert len(result.data) == 2  # Correct result even if not pushed down
+
+    def test_or_predicate_works_via_duckdb(self, lmdb_library):
+        """Test that OR predicates work correctly (handled by DuckDB, not pushed)."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3, 4, 5]})
+        lib.write("or_test", df)
+
+        result = lib.sql("SELECT x FROM or_test WHERE x = 1 OR x = 5")
+        assert len(result.data) == 2
+        assert set(result.data["x"]) == {1, 5}
+        # OR predicates are not pushed down to ArcticDB
+        assert "filter_pushed_down" not in result.metadata
+
+    def test_like_predicate_works_via_duckdb(self, lmdb_library):
+        """Test that LIKE predicates work correctly (handled by DuckDB, not pushed)."""
+        lib = lmdb_library
+        df = pd.DataFrame({"name": ["apple", "banana", "apricot", "cherry"]})
+        lib.write("like_test", df)
+
+        result = lib.sql("SELECT name FROM like_test WHERE name LIKE 'ap%'")
+        assert len(result.data) == 2
+        assert set(result.data["name"]) == {"apple", "apricot"}
+
+    def test_function_in_predicate_works_via_duckdb(self, lmdb_library):
+        """Test that function predicates work correctly (handled by DuckDB, not pushed)."""
+        lib = lmdb_library
+        df = pd.DataFrame({"name": ["Apple", "Banana", "APPLE"]})
+        lib.write("func_test", df)
+
+        result = lib.sql("SELECT name FROM func_test WHERE UPPER(name) = 'APPLE'")
+        assert len(result.data) == 2
+        assert set(result.data["name"]) == {"Apple", "APPLE"}
+
+    def test_limit_in_string_literal_not_confused(self, lmdb_library):
+        """Test that LIMIT in a string literal doesn't confuse the LIMIT extraction.
+
+        Regex-based parsing would incorrectly extract 999 from the string literal.
+        Using DuckDB's AST parser ensures only the actual LIMIT clause is extracted.
+        """
+        lib = lmdb_library
+        df = pd.DataFrame({
+            "description": ["LIMIT 999 items", "Normal text", "Another row"] * 10,
+            "value": np.arange(30),
+        })
+        lib.write("limit_string_test", df)
+
+        result = lib.sql("""
+            SELECT description, value FROM limit_string_test
+            WHERE description LIKE '%LIMIT%'
+            LIMIT 5
+        """)
+
+        assert len(result.data) == 5
+        assert "limit_pushed_down" in result.metadata
+        assert result.metadata["limit_pushed_down"] == 5  # Not 999!
