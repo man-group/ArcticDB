@@ -8,7 +8,7 @@ be governed by the Apache License, version 2.0.
 """
 
 """
-Unit tests for sql_pushdown.py - SQL filter parsing and QueryBuilder generation.
+Unit tests for duckdb/pushdown.py - SQL filter parsing and QueryBuilder generation.
 
 These tests verify the correct transformation of SQL filter expressions to ArcticDB
 QueryBuilder expressions, using pure AST parsing without requiring actual tables.
@@ -20,7 +20,7 @@ import pytest
 
 duckdb = pytest.importorskip("duckdb")
 
-from arcticdb.version_store.sql_pushdown import (
+from arcticdb.version_store.duckdb.pushdown import (
     PushdownInfo,
     _ast_to_filters,
     _build_query_builder,

@@ -25,19 +25,7 @@ class ArcticRecordBatchReader:
     This class enables memory-efficient processing of large datasets by streaming
     record batches one at a time instead of materializing the entire dataset.
 
-    Examples
-    --------
-    >>> reader = lib.read_as_record_batch_reader("my_symbol")
-    >>> # Use with DuckDB
-    >>> import duckdb
-    >>> result = duckdb.from_arrow(reader).filter("col > 100").arrow()
-
-    >>> # Or iterate directly
-    >>> for batch in reader:
-    ...     process(batch)
-
-    >>> # Or materialize all data
-    >>> table = reader.read_all()
+    This is primarily used internally by Library.sql() and Library.duckdb().
     """
 
     def __init__(self, cpp_iterator: "RecordBatchIterator"):
@@ -164,12 +152,5 @@ class ArcticRecordBatchReader:
         -------
         pa.RecordBatchReader
             A PyArrow RecordBatchReader that streams batches from ArcticDB.
-
-        Examples
-        --------
-        >>> reader = lib.read_as_record_batch_reader("symbol")
-        >>> pa_reader = reader.to_pyarrow_reader()
-        >>> import duckdb
-        >>> result = duckdb.from_arrow(pa_reader).filter("col > 100").arrow()
         """
         return pa.RecordBatchReader.from_batches(self.schema, self)
