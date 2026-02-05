@@ -102,6 +102,41 @@ result = lib.sql("SELECT * FROM trades", as_of=0)
 !!! note
     When using `lib.sql()` with JOINs, the `as_of` parameter applies to **all** symbols in the query. For per-symbol version control, use the `duckdb()` context manager.
 
+### Schema Introspection
+
+Inspect the schema of your symbols using `DESCRIBE` or `SHOW`:
+
+```python
+# Get column names and types
+result = lib.sql("DESCRIBE trades")
+print(result.data)
+#   column_name column_type  null   key  default  extra
+# 0      ticker     VARCHAR  YES  None     None   None
+# 1       price      DOUBLE  YES  None     None   None
+# 2    quantity      BIGINT  YES  None     None   None
+```
+
+### Data Discovery
+
+Discover all symbols stored in a library:
+
+```python
+# List all symbols in the library
+result = lib.sql("SHOW TABLES")
+print(result.data)
+#       name
+# 0   trades
+# 1   prices
+# 2  positions
+
+# Get detailed information including column names
+result = lib.sql("SHOW ALL TABLES")
+print(result.data)
+#       name  column_names  column_types  temporary
+# 0   trades  [ticker, ...]  [VARCHAR, ...]  False
+# 1   prices  [ticker, ...]  [VARCHAR, ...]  False
+```
+
 ## Advanced: `lib.duckdb()` Context Manager
 
 For complex scenarios requiring fine-grained control, use the `duckdb()` context manager:
@@ -123,11 +158,33 @@ with lib.duckdb() as ddb:
 |----------|-------------|----------------|
 | Simple single-symbol queries | ✅ | |
 | Basic JOINs | ✅ | |
+| Schema introspection (DESCRIBE) | ✅ | |
+| Data discovery (SHOW TABLES) | ✅ | |
 | Different versions per symbol | | ✅ |
 | Same symbol with different filters | | ✅ |
 | Multiple queries on same data | | ✅ |
 | Custom table aliases | | ✅ |
 | Pre-filtering with QueryBuilder | | ✅ |
+
+### Register All Symbols
+
+For data discovery within the context manager, use `register_all_symbols()`:
+
+```python
+with lib.duckdb() as ddb:
+    # Register all symbols from the library at once
+    ddb.register_all_symbols()
+
+    # Now you can discover what's available
+    tables = ddb.query("SHOW TABLES")
+    print(tables)
+
+    # Or get detailed schema information
+    for table_name in tables["name"]:
+        schema = ddb.query(f"DESCRIBE {table_name}")
+        print(f"\n{table_name}:")
+        print(schema)
+```
 
 ### Different Versions Per Symbol
 
