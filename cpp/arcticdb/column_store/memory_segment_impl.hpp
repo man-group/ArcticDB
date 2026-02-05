@@ -357,7 +357,7 @@ class SegmentInMemoryImpl {
     void set_array(position_t pos, Tensor<T>& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
-        column_unchecked(pos).set_array(row_id_ + 1, val);
+        column_unchecked(pos).set_array<T, Tensor>(row_id_ + 1, val);
     }
 
     void set_string(position_t pos, std::string_view str);
