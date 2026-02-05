@@ -2206,7 +2206,7 @@ class Library:
         --------
         duckdb : Context manager for complex multi-symbol SQL queries.
         """
-        from arcticdb.version_store.duckdb.integration import _check_duckdb_available
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
         from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
 
         duckdb = _check_duckdb_available()
