@@ -701,15 +701,23 @@ def extract_pushdown_from_sql(
             is_select_star = True
             break
 
-    if not is_select_star:
-        # Extract specific columns
+    # For multi-table queries (JOINs), disable column pushdown since JOIN conditions
+    # may reference columns not in SELECT/WHERE. Extracting JOIN condition columns
+    # is complex and error-prone, so we conservatively read all columns.
+    is_multi_table = len(table_names) > 1
+
+    if not is_select_star and not is_multi_table:
+        # Extract specific columns only for single-table queries
         select_columns = _extract_columns_from_select_list(select_list, table_alias_map)
     else:
         select_columns = {}
 
-    # Extract columns and filters from WHERE clause
+    # Extract columns and filters from WHERE clause (only for single-table queries)
     where_clause = select_node.get("where_clause")
-    where_columns = _extract_columns_from_where(where_clause, table_alias_map) if where_clause else {}
+    if where_clause and not is_multi_table:
+        where_columns = _extract_columns_from_where(where_clause, table_alias_map)
+    else:
+        where_columns = {}
 
     # Parse filters from WHERE clause
     parsed_filters = _ast_to_filters(where_clause) if where_clause else []

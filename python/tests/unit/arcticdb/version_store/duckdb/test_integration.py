@@ -138,6 +138,66 @@ class TestDuckDBSimpleSQL:
 
         assert result.symbol == "test_symbol"
 
+    def test_join_two_symbols(self, lmdb_library):
+        """Test JOIN query across two symbols using lib.sql() directly."""
+        lib = lmdb_library
+
+        trades = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "AAPL"],
+            "quantity": [100, 200, 150]
+        })
+        prices = pd.DataFrame({
+            "ticker": ["AAPL", "GOOG", "MSFT"],
+            "price": [150.0, 2800.0, 300.0]
+        })
+
+        lib.write("trades", trades)
+        lib.write("prices", prices)
+
+        result = lib.sql("""
+            SELECT t.ticker, t.quantity, p.price, t.quantity * p.price as notional
+            FROM trades t
+            JOIN prices p ON t.ticker = p.ticker
+            ORDER BY t.ticker, t.quantity
+        """)
+
+        assert len(result.data) == 3  # AAPL (2 rows) + GOOG (1 row)
+        assert "notional" in result.data.columns
+        assert set(result.data["ticker"]) == {"AAPL", "GOOG"}
+        # Verify symbol field contains both symbols
+        assert "trades" in result.symbol
+        assert "prices" in result.symbol
+
+    def test_join_with_aggregation(self, lmdb_library):
+        """Test JOIN with GROUP BY using lib.sql() directly."""
+        lib = lmdb_library
+
+        orders = pd.DataFrame({
+            "product_id": [1, 1, 2, 2, 3],
+            "quantity": [10, 20, 5, 15, 8]
+        })
+        products = pd.DataFrame({
+            "product_id": [1, 2, 3],
+            "name": ["Widget", "Gadget", "Gizmo"],
+            "price": [10.0, 25.0, 15.0]
+        })
+
+        lib.write("orders", orders)
+        lib.write("products", products)
+
+        result = lib.sql("""
+            SELECT p.name, SUM(o.quantity) as total_qty, SUM(o.quantity * p.price) as revenue
+            FROM orders o
+            JOIN products p ON o.product_id = p.product_id
+            GROUP BY p.name
+            ORDER BY p.name
+        """)
+
+        assert len(result.data) == 3
+        assert list(result.data["name"]) == ["Gadget", "Gizmo", "Widget"]
+        assert list(result.data["total_qty"]) == [20, 8, 30]
+        assert list(result.data["revenue"]) == [500.0, 120.0, 300.0]
+
     def test_invalid_query_no_symbol(self, lmdb_library):
         """Test that query without FROM clause raises error."""
         lib = lmdb_library
