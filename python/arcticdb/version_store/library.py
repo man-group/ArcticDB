@@ -2257,27 +2257,39 @@ class Library:
             _check_duckdb_available,
             _extract_symbols_from_query,
         )
+        from arcticdb.version_store.sql_pushdown import extract_pushdown_from_sql
 
         duckdb = _check_duckdb_available()
 
         # Extract symbol names from query
         symbols = _extract_symbols_from_query(query)
 
-        # Create temporary DuckDB connection
+        # Extract pushdown info directly from SQL AST (no tables needed)
+        pushdown_by_table = extract_pushdown_from_sql(query, symbols)
+
+        # Create DuckDB connection and register data with pushdown applied
         conn = duckdb.connect(":memory:")
 
         try:
-            # Register each symbol as a table with streaming reader
             for symbol in symbols:
-                reader = self.read_as_record_batch_reader(symbol, as_of=as_of)
-                # Convert to native PyArrow RecordBatchReader for DuckDB compatibility
+                pushdown = pushdown_by_table.get(symbol)
+                if pushdown:
+                    reader = self.read_as_record_batch_reader(
+                        symbol,
+                        as_of=as_of,
+                        columns=pushdown.columns,
+                        date_range=pushdown.date_range,
+                        query_builder=pushdown.query_builder,
+                    )
+                else:
+                    reader = self.read_as_record_batch_reader(symbol, as_of=as_of)
+
                 conn.register(symbol, reader.to_pyarrow_reader())
 
             # Execute query and get Arrow result
             result_arrow = conn.execute(query).arrow()
 
             # Convert to requested format
-            # Normalize output_format to string for comparison
             if output_format is None:
                 output_fmt_str = OutputFormat.PANDAS.lower()
             elif isinstance(output_format, OutputFormat):
@@ -2295,12 +2307,38 @@ class Library:
                 # Default to pandas
                 data = result_arrow.to_pandas()
 
+            # Build metadata with pushdown info (aggregate across all tables)
+            metadata = {"query": query}
+            all_columns_pushed = []
+            any_filter_pushed = False
+            any_date_range_pushed = False
+            limit_pushed = None
+
+            for symbol, pushdown in pushdown_by_table.items():
+                if pushdown.columns_pushed_down:
+                    all_columns_pushed.extend(pushdown.columns_pushed_down)
+                if pushdown.filter_pushed_down:
+                    any_filter_pushed = True
+                if pushdown.date_range_pushed_down:
+                    any_date_range_pushed = True
+                if pushdown.limit_pushed_down:
+                    limit_pushed = pushdown.limit_pushed_down
+
+            if all_columns_pushed:
+                metadata["columns_pushed_down"] = list(set(all_columns_pushed))
+            if any_filter_pushed:
+                metadata["filter_pushed_down"] = True
+            if limit_pushed:
+                metadata["limit_pushed_down"] = limit_pushed
+            if any_date_range_pushed:
+                metadata["date_range_pushed_down"] = True
+
             return VersionedItem(
                 symbol=",".join(symbols),
                 library=self._nvs._library.library_path,
                 data=data,
                 version=None,
-                metadata={"query": query},
+                metadata=metadata,
                 host="",
             )
 
