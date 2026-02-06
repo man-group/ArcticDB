@@ -38,7 +38,7 @@ result = lib.sql("""
     ORDER BY total_qty DESC
 """)
 
-print(result.data)
+print(result)
 #   ticker  avg_price  total_qty
 # 0   AAPL      150.5        300
 # 1   MSFT      300.0         75
@@ -74,16 +74,13 @@ Results can be returned in different formats:
 from arcticdb.options import OutputFormat
 
 # Pandas DataFrame (default)
-result = lib.sql("SELECT * FROM trades")
-df = result.data  # pandas.DataFrame
+df = lib.sql("SELECT * FROM trades")  # pandas.DataFrame
 
 # PyArrow Table
-result = lib.sql("SELECT * FROM trades", output_format=OutputFormat.PYARROW)
-arrow_table = result.data  # pyarrow.Table
+arrow_table = lib.sql("SELECT * FROM trades", output_format=OutputFormat.PYARROW)
 
 # Polars DataFrame (requires polars package)
-result = lib.sql("SELECT * FROM trades", output_format=OutputFormat.POLARS)
-polars_df = result.data  # polars.DataFrame
+polars_df = lib.sql("SELECT * FROM trades", output_format=OutputFormat.POLARS)
 ```
 
 ### Version Selection
@@ -108,8 +105,8 @@ Inspect the schema of your symbols using `DESCRIBE` or `SHOW`:
 
 ```python
 # Get column names and types
-result = lib.sql("DESCRIBE trades")
-print(result.data)
+schema = lib.sql("DESCRIBE trades")
+print(schema)
 #   column_name column_type  null   key  default  extra
 # 0      ticker     VARCHAR  YES  None     None   None
 # 1       price      DOUBLE  YES  None     None   None
@@ -122,20 +119,79 @@ Discover all symbols stored in a library:
 
 ```python
 # List all symbols in the library
-result = lib.sql("SHOW TABLES")
-print(result.data)
+tables = lib.sql("SHOW TABLES")
+print(tables)
 #       name
 # 0   trades
 # 1   prices
 # 2  positions
 
 # Get detailed information including column names
-result = lib.sql("SHOW ALL TABLES")
-print(result.data)
+all_tables = lib.sql("SHOW ALL TABLES")
+print(all_tables)
 #       name  column_names  column_types  temporary
 # 0   trades  [ticker, ...]  [VARCHAR, ...]  False
 # 1   prices  [ticker, ...]  [VARCHAR, ...]  False
 ```
+
+### Pushdown Introspection
+
+Use `explain()` to see which optimizations would be pushed down to ArcticDB's storage layer:
+
+```python
+info = lib.explain("SELECT price FROM trades WHERE price > 100")
+print(info)
+# {'query': '...', 'symbols': ['trades'], 'columns_pushed_down': ['price'], 'filter_pushed_down': True}
+```
+
+`explain()` parses the query without executing it or reading any data.
+
+## Register with DuckDB: `lib.duckdb_register()`
+
+For a standard DuckDB workflow — register tables once, then query freely — use `duckdb_register()`:
+
+```python
+import duckdb
+
+conn = duckdb.connect()
+lib.duckdb_register(conn)
+
+# Now use standard DuckDB API
+conn.sql("SHOW TABLES").show()
+conn.sql("DESCRIBE trades").show()
+conn.sql("SELECT * FROM trades WHERE price > 100 LIMIT 10").show()
+
+# Data is materialized, so multiple queries work
+conn.sql("SELECT AVG(price) FROM trades").show()
+conn.sql("SELECT COUNT(*) FROM trades").show()
+```
+
+### Register Specific Symbols
+
+```python
+lib.duckdb_register(conn, symbols=["trades", "prices"])
+```
+
+### Register a Specific Version
+
+```python
+lib.duckdb_register(conn, as_of=0)  # version 0 of all symbols
+```
+
+### Cross-Library Registration
+
+Register symbols from multiple libraries using `arctic.duckdb_register()`:
+
+```python
+conn = duckdb.connect()
+arctic.duckdb_register(conn, libraries=["market_data", "reference_data"])
+
+# Table names are prefixed: library__symbol
+conn.sql("SELECT * FROM market_data__trades t JOIN reference_data__securities s ON t.ticker = s.ticker").df()
+```
+
+!!! note
+    `duckdb_register()` materializes data in memory. For large datasets, prefer `lib.sql()` (which streams data) or the `lib.duckdb()` context manager.
 
 ## Database Hierarchy
 
@@ -210,19 +266,22 @@ with lib.duckdb() as ddb:
 
 ### When to Use `duckdb()` vs `sql()`
 
-| Scenario | Use `lib.sql()` | Use `arctic.sql()` | Use `duckdb()` |
-|----------|-----------------|--------------------|--------------------|
-| Simple single-symbol queries | ✅ | | |
-| Basic JOINs | ✅ | | |
-| Schema introspection (DESCRIBE) | ✅ | | |
-| Data discovery (SHOW TABLES) | ✅ | | |
-| Database hierarchy (SHOW DATABASES) | | ✅ | |
-| Different versions per symbol | | | ✅ |
-| Same symbol with different filters | | | ✅ |
-| Multiple queries on same data | | | ✅ |
-| Custom table aliases | | | ✅ |
-| Pre-filtering with QueryBuilder | | | ✅ |
-| Cross-library/database queries | | | ✅ |
+| Scenario | `lib.sql()` | `duckdb_register()` | `arctic.sql()` | `duckdb()` |
+|----------|-------------|---------------------|----------------|------------|
+| Simple single-symbol queries | ✅ | ✅ | | |
+| Basic JOINs | ✅ | ✅ | | |
+| Schema introspection (DESCRIBE) | ✅ | ✅ | | |
+| Data discovery (SHOW TABLES) | ✅ | ✅ | | |
+| Multiple queries on same data | | ✅ | | ✅ |
+| Database hierarchy (SHOW DATABASES) | | | ✅ | |
+| Different versions per symbol | | | | ✅ |
+| Same symbol with different filters | | | | ✅ |
+| Custom table aliases | | | | ✅ |
+| Pre-filtering with QueryBuilder | | | | ✅ |
+| Streaming (memory-efficient) | ✅ | | | ✅ |
+| Pushdown optimization | ✅ | | | |
+| Cross-library/database queries | | ✅ | | ✅ |
+| Join with external data sources | | ✅ | | ✅ |
 
 ### Register All Symbols
 

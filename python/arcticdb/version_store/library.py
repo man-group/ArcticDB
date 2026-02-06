@@ -2144,7 +2144,7 @@ class Library:
         query: str,
         as_of: Optional[AsOf] = None,
         output_format: Optional[Union[OutputFormat, str]] = None,
-    ) -> VersionedItem:
+    ):
         """
         Execute SQL query on ArcticDB symbols using DuckDB.
 
@@ -2152,11 +2152,15 @@ class Library:
         registered as tables in DuckDB. Data is streamed segment-by-segment for
         memory efficiency.
 
+        Where possible, column selections, WHERE filters, date range filters, and
+        LIMIT clauses are pushed down to ArcticDB's storage engine so that only
+        the required data is read from storage.
+
         Parameters
         ----------
         query : str
             SQL query. Reference ArcticDB symbols as table names.
-            Example: "SELECT col1, SUM(col2) FROM my_symbol WHERE col1 > 100 GROUP BY col1"
+            Example: ``"SELECT col1, SUM(col2) FROM my_symbol WHERE col1 > 100 GROUP BY col1"``
         as_of : AsOf, default=None
             Version to query. Applies to all symbols referenced in the query.
             See `read()` for details on version specification.
@@ -2166,26 +2170,25 @@ class Library:
 
         Returns
         -------
-        VersionedItem
-            Query result with data in the requested format.
-            The symbol field contains a comma-separated list of queried symbols.
-            The version field is None (SQL results don't have a single version).
+        pandas.DataFrame, pyarrow.Table, or polars.DataFrame
+            Query result in the requested format.
 
         Examples
         --------
-        >>> # Simple filter and aggregation
-        >>> result = lib.sql('''
+        Simple filter and aggregation:
+
+        >>> df = lib.sql('''
         ...     SELECT ticker, AVG(price) as avg_price
         ...     FROM trades
         ...     WHERE date > '2024-01-01'
         ...     GROUP BY ticker
         ... ''')
-        >>> print(result.data)
 
-        >>> # Get result as Arrow table
-        >>> result = lib.sql(
+        Get result as Arrow table:
+
+        >>> table = lib.sql(
         ...     "SELECT * FROM prices WHERE price > 100",
-        ...     output_format=OutputFormat.PYARROW
+        ...     output_format="pyarrow"
         ... )
 
         Raises
@@ -2197,13 +2200,15 @@ class Library:
 
         Notes
         -----
-        - DuckDB is an optional dependency. Install with: pip install duckdb
+        - DuckDB is an optional dependency. Install with: ``pip install duckdb``
         - For complex queries with multiple symbols or custom table aliases,
           use `duckdb()` instead.
         - Data is processed using streaming Arrow record batches for memory efficiency.
 
         See Also
         --------
+        explain : Inspect which pushdown optimizations apply to a query.
+        duckdb_register : Register symbols into an external DuckDB connection.
         duckdb : Context manager for complex multi-symbol SQL queries.
         """
         from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
@@ -2260,44 +2265,83 @@ class Library:
                 # Default to pandas
                 data = result_arrow.to_pandas()
 
-            # Build metadata with pushdown info (aggregate across all tables)
-            metadata = {"query": query}
-            all_columns_pushed = []
-            any_filter_pushed = False
-            any_date_range_pushed = False
-            limit_pushed = None
-
-            for symbol, pushdown in pushdown_by_table.items():
-                if pushdown.columns_pushed_down:
-                    all_columns_pushed.extend(pushdown.columns_pushed_down)
-                if pushdown.filter_pushed_down:
-                    any_filter_pushed = True
-                if pushdown.date_range_pushed_down:
-                    any_date_range_pushed = True
-                if pushdown.limit_pushed_down:
-                    limit_pushed = pushdown.limit_pushed_down
-
-            if all_columns_pushed:
-                metadata["columns_pushed_down"] = list(set(all_columns_pushed))
-            if any_filter_pushed:
-                metadata["filter_pushed_down"] = True
-            if limit_pushed:
-                metadata["limit_pushed_down"] = limit_pushed
-            if any_date_range_pushed:
-                metadata["date_range_pushed_down"] = True
-
-            return VersionedItem(
-                symbol=",".join(symbols),
-                library=self._nvs._library.library_path,
-                data=data,
-                version=None,
-                metadata=metadata,
-                host="",
-            )
+            return data
 
         finally:
             if conn is not None:
                 conn.close()
+
+    def explain(self, query: str) -> dict:
+        """
+        Explain which pushdown optimizations would be applied to a SQL query.
+
+        Parses the SQL query and reports which operations can be pushed down
+        to ArcticDB's storage engine (column projection, filters, date ranges,
+        LIMIT). Does not execute the query or read any data.
+
+        Parameters
+        ----------
+        query : str
+            SQL query to analyze.
+
+        Returns
+        -------
+        dict
+            Dictionary describing the pushdown optimizations, with keys:
+
+            - ``query`` (str): The original query
+            - ``symbols`` (list[str]): Symbols referenced in the query
+            - ``columns_pushed_down`` (list[str]): Columns selected at storage level
+            - ``filter_pushed_down`` (bool): Whether WHERE filters are pushed down
+            - ``date_range_pushed_down`` (bool): Whether date range filtering is pushed down
+            - ``limit_pushed_down`` (int): LIMIT value pushed down to storage
+
+            Only keys with active pushdowns are included (except ``query`` and ``symbols``
+            which are always present).
+
+        Examples
+        --------
+        >>> info = lib.explain("SELECT price FROM trades WHERE price > 100")
+        >>> print(info)
+        {'query': '...', 'symbols': ['trades'], 'columns_pushed_down': ['price'], 'filter_pushed_down': True}
+
+        See Also
+        --------
+        sql : Execute the query and return results.
+        """
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
+        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
+
+        _check_duckdb_available()
+
+        pushdown_by_table, symbols = extract_pushdown_from_sql(query)
+
+        info = {"query": query, "symbols": list(symbols)}
+        all_columns_pushed = []
+        any_filter_pushed = False
+        any_date_range_pushed = False
+        limit_pushed = None
+
+        for symbol, pushdown in pushdown_by_table.items():
+            if pushdown.columns_pushed_down:
+                all_columns_pushed.extend(pushdown.columns_pushed_down)
+            if pushdown.filter_pushed_down:
+                any_filter_pushed = True
+            if pushdown.date_range_pushed_down:
+                any_date_range_pushed = True
+            if pushdown.limit_pushed_down:
+                limit_pushed = pushdown.limit_pushed_down
+
+        if all_columns_pushed:
+            info["columns_pushed_down"] = list(set(all_columns_pushed))
+        if any_filter_pushed:
+            info["filter_pushed_down"] = True
+        if limit_pushed:
+            info["limit_pushed_down"] = limit_pushed
+        if any_date_range_pushed:
+            info["date_range_pushed_down"] = True
+
+        return info
 
     def duckdb(self, connection: Any = None) -> "DuckDBContext":
         """
@@ -2385,6 +2429,80 @@ class Library:
         from arcticdb.version_store.duckdb import DuckDBContext
 
         return DuckDBContext(self, connection=connection)
+
+    def duckdb_register(
+        self,
+        conn,
+        symbols: Optional[List[str]] = None,
+        as_of: Optional[AsOf] = None,
+    ) -> List[str]:
+        """
+        Register ArcticDB symbols as tables in a DuckDB connection.
+
+        Each symbol is read as an Arrow table and registered into the connection,
+        making it queryable via standard DuckDB SQL. The data is materialized in
+        memory so that tables can be queried multiple times.
+
+        Parameters
+        ----------
+        conn : duckdb.DuckDBPyConnection
+            DuckDB connection to register tables into.
+        symbols : list of str, optional
+            Symbols to register. If None, registers all symbols from ``list_symbols()``.
+        as_of : AsOf, optional
+            Version to read for all symbols. See `read()` for details.
+
+        Returns
+        -------
+        list of str
+            Names of registered symbols.
+
+        Examples
+        --------
+        Register all symbols:
+
+        >>> import duckdb
+        >>> conn = duckdb.connect()
+        >>> lib.duckdb_register(conn)
+        ['trades', 'prices']
+        >>> conn.sql("SELECT * FROM trades WHERE price > 100").df()
+
+        Register specific symbols:
+
+        >>> lib.duckdb_register(conn, symbols=["trades", "prices"])
+        >>> conn.sql("SHOW TABLES").df()
+
+        Use with standard DuckDB features:
+
+        >>> lib.duckdb_register(conn)
+        >>> conn.sql("DESCRIBE trades").df()
+        >>> conn.sql("SELECT * FROM trades LIMIT 10").show()
+
+        See Also
+        --------
+        sql : One-shot SQL queries with automatic pushdown optimization.
+        duckdb : Context manager for streaming queries with fine-grained control.
+        """
+        import pyarrow as pa
+
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available, _BaseDuckDBContext
+
+        _check_duckdb_available()
+        _BaseDuckDBContext._validate_external_connection(conn)
+
+        if symbols is None:
+            symbols = self.list_symbols()
+
+        registered = []
+        for symbol in symbols:
+            arrow_table = self.read(symbol, as_of=as_of).data
+            if not isinstance(arrow_table, pa.Table):
+                # read() returns pandas by default, convert to Arrow
+                arrow_table = pa.Table.from_pandas(arrow_table)
+            conn.register(symbol, arrow_table)
+            registered.append(symbol)
+
+        return registered
 
     def read_batch(
         self,
