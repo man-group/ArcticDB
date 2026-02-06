@@ -540,6 +540,36 @@ class TestExtractPushdownFromSql:
         with pytest.raises(ValueError, match="Could not extract symbol names"):
             extract_pushdown_from_sql("SELECT 1 + 1")
 
+    def test_cte_extracts_real_tables_not_cte_names(self):
+        """Test that CTE aliases are excluded from extracted symbols."""
+        _, symbols = extract_pushdown_from_sql(
+            "WITH filtered AS (SELECT * FROM trades WHERE price > 100) " "SELECT ticker FROM filtered GROUP BY ticker"
+        )
+        assert "trades" in symbols
+        assert "filtered" not in symbols
+
+    def test_cte_with_multiple_real_tables(self):
+        """Test CTE referencing multiple real tables."""
+        _, symbols = extract_pushdown_from_sql(
+            "WITH t AS (SELECT * FROM trades), p AS (SELECT * FROM prices) "
+            "SELECT * FROM t JOIN p ON t.ticker = p.ticker"
+        )
+        assert "trades" in symbols
+        assert "prices" in symbols
+        assert "t" not in symbols
+        assert "p" not in symbols
+
+    def test_nested_cte(self):
+        """Test nested CTEs don't leak alias names as symbols."""
+        _, symbols = extract_pushdown_from_sql(
+            "WITH step1 AS (SELECT * FROM raw_data), "
+            "step2 AS (SELECT * FROM step1 WHERE x > 0) "
+            "SELECT * FROM step2"
+        )
+        assert "raw_data" in symbols
+        assert "step1" not in symbols
+        assert "step2" not in symbols
+
 
 class TestPushdownInfoDataclass:
     """Tests for PushdownInfo dataclass."""
@@ -931,3 +961,39 @@ class TestSQLPushdownEdgeCases:
         """)
         assert "limit_pushed_down" in info
         assert info["limit_pushed_down"] == 5  # Not 999!
+
+
+class TestReadOnlyValidation:
+    """Tests that non-SELECT statements are rejected via DuckDB's AST parser.
+
+    DuckDB's json_serialize_sql() only accepts SELECT-like statements. Non-SELECT
+    statements produce an error that _get_sql_ast_or_raise translates into a clear
+    ValueError. This is tested through extract_pushdown_from_sql which calls it.
+    """
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            # Data modification
+            "INSERT INTO t VALUES (1, 2)",
+            "UPDATE t SET x = 1",
+            "DELETE FROM t WHERE x = 1",
+            # DDL
+            "CREATE TABLE t (x INT)",
+            "DROP TABLE t",
+            "ALTER TABLE t ADD COLUMN y INT",
+            # Other non-SELECT
+            "COPY t TO 'file.csv'",
+            "BEGIN TRANSACTION",
+            "EXPLAIN SELECT * FROM t",
+        ],
+    )
+    def test_non_select_statements_rejected(self, query):
+        """Non-SELECT SQL statements should raise ValueError."""
+        with pytest.raises(ValueError, match="Unsupported SQL statement|read-only"):
+            extract_pushdown_from_sql(query)
+
+    def test_error_message_mentions_alternatives(self):
+        """Error message should mention lib.write() and lib.update() as alternatives."""
+        with pytest.raises(ValueError, match="lib.write\\(\\) or lib.update\\(\\)"):
+            extract_pushdown_from_sql("INSERT INTO t VALUES (1)")

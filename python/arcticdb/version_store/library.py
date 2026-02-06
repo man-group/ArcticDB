@@ -2225,24 +2225,40 @@ class Library:
             # Extract symbol names and pushdown info from SQL AST in a single parse
             pushdown_by_table, symbols = extract_pushdown_from_sql(query)
 
+        # Resolve SQL table names to actual ArcticDB symbol names (case-insensitive).
+        # SQL identifiers are conventionally case-insensitive, but ArcticDB symbols are
+        # case-sensitive. We build a lookup map to find the real symbol name regardless
+        # of the case used in SQL.
+        library_symbols = self.list_symbols()
+        symbol_lookup = {s.lower(): s for s in library_symbols}
+
         # Create DuckDB connection and register data with pushdown applied
         conn = None
         try:
             conn = duckdb.connect(":memory:")
-            for symbol in symbols:
-                pushdown = pushdown_by_table.get(symbol)
+            for sql_name in symbols:
+                # Resolve: exact match first, then case-insensitive
+                if sql_name in library_symbols:
+                    real_symbol = sql_name
+                elif sql_name.lower() in symbol_lookup:
+                    real_symbol = symbol_lookup[sql_name.lower()]
+                else:
+                    real_symbol = sql_name  # Let ArcticDB produce a clear "not found" error
+
+                pushdown = pushdown_by_table.get(sql_name)
                 if pushdown:
                     reader = self._read_as_record_batch_reader(
-                        symbol,
+                        real_symbol,
                         as_of=as_of,
                         columns=pushdown.columns,
                         date_range=pushdown.date_range,
                         query_builder=pushdown.query_builder,
                     )
                 else:
-                    reader = self._read_as_record_batch_reader(symbol, as_of=as_of)
+                    reader = self._read_as_record_batch_reader(real_symbol, as_of=as_of)
 
-                conn.register(symbol, reader.to_pyarrow_reader())
+                # Register under the SQL name so DuckDB can find it from the query
+                conn.register(sql_name, reader.to_pyarrow_reader())
 
             # Execute query and get Arrow result
             result_arrow = conn.execute(query).arrow()

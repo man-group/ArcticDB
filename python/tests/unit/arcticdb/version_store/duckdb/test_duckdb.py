@@ -186,12 +186,102 @@ class TestDuckDBSimpleSQL:
         assert list(result["total_qty"]) == [20, 8, 30]
         assert list(result["revenue"]) == [500.0, 120.0, 300.0]
 
+    def test_cte_query(self, lmdb_library):
+        """Test that WITH (CTE) queries work through lib.sql()."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3, 4, 5], "y": [10, 20, 30, 40, 50]})
+        lib.write("test_symbol", df)
+
+        result = lib.sql(
+            "WITH filtered AS (SELECT * FROM test_symbol WHERE x > 2) " "SELECT SUM(y) as total FROM filtered"
+        )
+        assert result["total"].iloc[0] == 120  # y values for x=3,4,5: 30+40+50
+
     def test_invalid_query_no_symbol(self, lmdb_library):
         """Test that query without FROM clause raises error."""
         lib = lmdb_library
 
         with pytest.raises(ValueError, match="Could not extract symbol names"):
             lib.sql("SELECT 1")
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "INSERT INTO my_symbol VALUES (1, 2)",
+            "UPDATE my_symbol SET x = 1",
+            "DELETE FROM my_symbol WHERE x = 1",
+            "CREATE TABLE my_symbol (x INT)",
+            "DROP TABLE my_symbol",
+            "ALTER TABLE my_symbol ADD COLUMN y INT",
+        ],
+    )
+    def test_rejects_mutating_sql(self, lmdb_library, query):
+        """Test that lib.sql() rejects INSERT, UPDATE, DELETE and DDL statements."""
+        lib = lmdb_library
+        lib.write("my_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="Unsupported SQL statement|read-only"):
+            lib.sql(query)
+
+
+class TestDuckDBCaseSensitivity:
+    """Tests for case-insensitive symbol resolution in Library.sql()."""
+
+    def test_lowercase_symbol_uppercase_sql(self, lmdb_library):
+        """SQL identifiers are case-insensitive — uppercase SQL should find lowercase symbol."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("trades", df)
+
+        result = lib.sql("SELECT * FROM TRADES")
+        assert len(result) == 3
+
+    def test_lowercase_symbol_mixed_case_sql(self, lmdb_library):
+        """Mixed case SQL identifier should find lowercase symbol."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("trades", df)
+
+        result = lib.sql("SELECT * FROM Trades")
+        assert len(result) == 3
+
+    def test_mixed_case_symbol_lowercase_sql(self, lmdb_library):
+        """Lowercase SQL identifier should find mixed-case symbol."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        lib.write("My_Symbol", df)
+
+        result = lib.sql("SELECT * FROM my_symbol")
+        assert len(result) == 3
+
+    def test_exact_case_match_preferred(self, lmdb_library):
+        """When both 'trades' and 'TRADES' exist, exact match takes priority."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"x": [1, 2, 3]}))
+        lib.write("TRADES", pd.DataFrame({"x": [10, 20, 30]}))
+
+        result_lower = lib.sql("SELECT * FROM trades")
+        result_upper = lib.sql("SELECT * FROM TRADES")
+
+        assert list(result_lower["x"]) == [1, 2, 3]
+        assert list(result_upper["x"]) == [10, 20, 30]
+
+    def test_case_insensitive_with_where(self, lmdb_library):
+        """Case-insensitive resolution works with WHERE pushdown."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10, 20)})
+        lib.write("prices", df)
+
+        result = lib.sql("SELECT x, y FROM PRICES WHERE x > 5")
+        assert len(result) == 4  # x values 6, 7, 8, 9
+
+    def test_case_insensitive_nonexistent_symbol(self, lmdb_library):
+        """Non-existent symbol (even case-insensitively) still raises error."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"x": [1]}))
+
+        with pytest.raises(Exception):
+            lib.sql("SELECT * FROM nonexistent")
 
 
 class TestDuckDBContext:
