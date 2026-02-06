@@ -8,15 +8,15 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/concepts.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <boost/iterator/iterator_facade.hpp>
-#include <arcticdb/column_store/concepts.hpp>
 
 namespace arcticdb {
 
