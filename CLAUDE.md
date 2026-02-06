@@ -6,6 +6,32 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
+## Claude-Maintained Documentation
+
+Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
+
+### When to Read/Update Documentation
+
+- **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
+- **Update** the doc only when making changes to that area
+- Do NOT proactively read or update docs for unrelated areas
+
+### Documentation Style
+
+Keep documentation **high-level and terse**:
+- Reference `file_path:ClassName:method_name` instead of copying code
+- Use tables and bullet points over code blocks
+- Keep conceptual diagrams; remove implementation details
+- Avoid duplicating what's already in source code
+
+### Documentation Index
+
+| Area | Document |
+|------|----------|
+| Architecture | [docs/claude/ARCHITECTURE.md](docs/claude/ARCHITECTURE.md) |
+| C++ modules | [docs/claude/cpp/](docs/claude/cpp/) (CACHING, VERSIONING, STORAGE_BACKENDS, ENTITY, CODEC, COLUMN_STORE, PIPELINE, PROCESSING, STREAM, ASYNC, PYTHON_BINDINGS) |
+| Python modules | [docs/claude/python/](docs/claude/python/) (ARCTIC_CLASS, LIBRARY_API, NATIVE_VERSION_STORE, QUERY_PROCESSING, NORMALIZATION, ADAPTERS, TOOLBOX) |
+
 ## User-Specific Settings
 
 Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
@@ -17,9 +43,43 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 ### Building the Python Wheel
 
 ```bash
-# Build with a specific CMake preset
-ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+# Build with a specific CMake preset (limit parallelism to avoid overloading the system)
+CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 ```
+
+Note: Limit `CMAKE_BUILD_PARALLEL_LEVEL` to min(16, nproc) to avoid memory pressure during compilation.
+
+### Building on Man Linux VMs
+
+The vcpkg-based build requires certain system packages that may not be installed by default:
+
+```bash
+# Required system packages for vcpkg build
+sudo apt install pkg-config flex bison libsasl2-dev -y
+```
+
+Use Pegasus for Python environment management:
+
+```bash
+# Create a Python 3.11 environment
+pegasus create -d 311-1 /turbo/<username>/pyenvs/arcticdb-dev
+source /turbo/<username>/pyenvs/arcticdb-dev/bin/activate
+
+# Initialize git submodules (required for vcpkg)
+git submodule update --init --recursive
+
+# Build with linux-debug preset (limit parallelism, use protobuf 4)
+ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+```
+
+### Building a Wheel
+
+```bash
+# Build wheel (use ARCTICDB_PROTOC_VERS=4 to skip protobuf 5 on Man VMs)
+ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip wheel . --no-deps -w dist/
+```
+
+The wheel will be created in `dist/arcticdb-<version>-cp311-cp311-linux_x86_64.whl`.
 
 ### CMake Presets
 
@@ -123,60 +183,6 @@ python -m asv run --python=$(which python) -v          # Use current env (faster
 
 See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
 
-## Storage Model
-
-ArcticDB stores data as **keys** in the underlying storage backend. Each key contains a segment with either data or references to other keys, forming a tree structure called the **version chain**.
-
-### Key Types (defined in `cpp/arcticdb/entity/key.hpp`)
-
-- **VERSION_REF**: Head of the version chain for a symbol, points to the latest VERSION key
-- **VERSION**: Contains a link to TABLE_INDEX for this version plus link to previous version (forming a linked list) 
-- **TABLE_INDEX**: Points to TABLE_DATA keys containing the actual data segments
-- **TABLE_DATA**: Leaf nodes containing compressed data for a row and columns slice from the original dataframe
-- **TOMBSTONE**: Marks a deleted version (exists only inside VERSION key segments, not standalone)
-- **TOMBSTONE_ALL**: Marks all versions before its version as deleted (exists only inside VERSION key segments, not standalone)
-- **SNAPSHOT_REF**: References multiple TABLE_INDEX keys for a snapshot
-- **SYMBOL_LIST**: Contains symbol list modifications (adds and removes) to form a concurrent data structure for fast `list_symbols()` operations
-
-### Version Chain Structure
-
-```
-VERSION_REF (symbol)
-    └── VERSION (latest, v3)
-            ├── TABLE_INDEX ──► TABLE_DATA (actual data)
-            └── VERSION (v2)
-                    ├── TABLE_INDEX ──► TABLE_DATA
-                    └── VERSION (v1)
-                            └── TABLE_INDEX ──► TABLE_DATA
-```
-
-## Code Architecture
-
-### Python Layer (`python/arcticdb/`)
-
-- `arctic.py` - `Arctic` class: top-level library management, URI parsing, library creation
-- `version_store/library.py` - `Library` class: main user-facing V2 API for read/write/update operations
-- `version_store/_store.py` - `NativeVersionStore`: V1 legacy API wrapping C++ bindings. It is called by the V2 API
-
-### C++ Layer (`cpp/arcticdb/`)
-
-- `*/python_bindings.cpp` - Python bindings for C++ methods
-- `version/` - Version management, symbol lists, snapshots
-  - `local_versioned_engine.cpp` - Core versioned storage engine
-  - `version_store_api.cpp` - Main C++ API exposed to Python
-- `storage/` - Storage backend implementations
-  - `s3/`, `lmdb/`, `azure/`, `mongo/`, `memory/` - Backend-specific code
-  - `library_manager.cpp` - Library configuration and management
-- `pipeline/` - Read/write pipeline for data processing
-  - `read_frame.cpp` / `write_frame.cpp` - Data serialization/deserialization
-- `processing/` - Query processing
-  - `clause.cpp` - Query clause execution (filter, project, aggregate)
-  - `expression_node.cpp` - Expression tree for query builder
-  - `read_and_schedule_processing()` - Entrypoint method for reading with processing
-- `codec/` - Compression and encoding (LZ4, ZSTD)
-- `column_store/` - Column-oriented data layout and memory management
-- `entity/` - Core data types (keys, data types, error codes)
-
 ## Key Development Guidelines
 
 ### Backwards Compatibility
@@ -192,3 +198,7 @@ Code style is enforced by `./build_tooling/format.py`. **Always run the formatte
 # Format all code
 python ./build_tooling/format.py --in-place --type all
 ```
+
+### Git Commits
+
+- Do not add "Generated with AI" or "Co-Authored-By" lines to commit messages
