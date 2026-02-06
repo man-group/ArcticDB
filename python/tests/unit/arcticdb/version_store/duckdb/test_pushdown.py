@@ -465,7 +465,9 @@ class TestExtractPushdownFromSql:
 
     def test_multiple_tables(self):
         """Test extracting pushdown for multiple tables."""
-        result, _ = extract_pushdown_from_sql("SELECT * FROM test_table, other_table LIMIT 5", ["test_table", "other_table"])
+        result, _ = extract_pushdown_from_sql(
+            "SELECT * FROM test_table, other_table LIMIT 5", ["test_table", "other_table"]
+        )
         assert "test_table" in result
         assert "other_table" in result
         # LIMIT applies to both
@@ -578,12 +580,14 @@ class TestSQLPredicatePushdown:
     def test_column_projection_pushdown(self, lmdb_library):
         """Test that SELECT columns are pushed down to ArcticDB."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "a": np.arange(100),
-            "b": np.arange(100, 200),
-            "c": np.arange(200, 300),
-            "d": np.arange(300, 400),
-        })
+        df = pd.DataFrame(
+            {
+                "a": np.arange(100),
+                "b": np.arange(100, 200),
+                "c": np.arange(200, 300),
+                "d": np.arange(300, 400),
+            }
+        )
         lib.write("test_symbol", df)
 
         # Query only columns a and b - should only read those from storage
@@ -612,10 +616,12 @@ class TestSQLPredicatePushdown:
     def test_where_multiple_conditions_pushdown(self, lmdb_library):
         """Test that AND/OR conditions are pushed down."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "x": np.arange(100),
-            "y": np.arange(100, 200),
-        })
+        df = pd.DataFrame(
+            {
+                "x": np.arange(100),
+                "y": np.arange(100, 200),
+            }
+        )
         lib.write("test_symbol", df)
 
         # Multiple conditions with AND
@@ -628,10 +634,12 @@ class TestSQLPredicatePushdown:
     def test_where_in_clause_pushdown(self, lmdb_library):
         """Test that IN clause is pushed down."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "category": ["A", "B", "C", "D", "E"] * 20,
-            "value": np.arange(100),
-        })
+        df = pd.DataFrame(
+            {
+                "category": ["A", "B", "C", "D", "E"] * 20,
+                "value": np.arange(100),
+            }
+        )
         lib.write("test_symbol", df)
 
         result = lib.sql("SELECT category, value FROM test_symbol WHERE category IN ('A', 'C')")
@@ -642,10 +650,12 @@ class TestSQLPredicatePushdown:
     def test_where_is_null_pushdown(self, lmdb_library):
         """Test that IS NULL is pushed down."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "x": [1, 2, None, 4, None, 6, 7, None, 9, 10],
-            "y": np.arange(10),
-        })
+        df = pd.DataFrame(
+            {
+                "x": [1, 2, None, 4, None, 6, 7, None, 9, 10],
+                "y": np.arange(10),
+            }
+        )
         lib.write("test_symbol", df)
 
         result = lib.sql("SELECT x, y FROM test_symbol WHERE x IS NOT NULL")
@@ -683,11 +693,13 @@ class TestSQLPredicatePushdown:
     def test_combined_pushdown(self, lmdb_library):
         """Test combining column projection, WHERE, and LIMIT pushdown."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "a": np.arange(1000),
-            "b": np.arange(1000, 2000),
-            "c": np.arange(2000, 3000),
-        })
+        df = pd.DataFrame(
+            {
+                "a": np.arange(1000),
+                "b": np.arange(1000, 2000),
+                "c": np.arange(2000, 3000),
+            }
+        )
         lib.write("test_symbol", df)
 
         result = lib.sql("SELECT a, b FROM test_symbol WHERE a > 500 LIMIT 50")
@@ -699,10 +711,12 @@ class TestSQLPredicatePushdown:
     def test_pushdown_with_aggregation(self, lmdb_library):
         """Test that filters are pushed down even with aggregation."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "category": ["A", "B", "C"] * 100,
-            "value": np.arange(300),
-        })
+        df = pd.DataFrame(
+            {
+                "category": ["A", "B", "C"] * 100,
+                "value": np.arange(300),
+            }
+        )
         lib.write("test_symbol", df)
 
         # Filter should be pushed to ArcticDB, aggregation done by DuckDB
@@ -718,10 +732,12 @@ class TestSQLPredicatePushdown:
     def test_pushdown_preserves_correctness(self, lmdb_library):
         """Test that pushdown produces same results as non-pushdown."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "x": np.arange(500),
-            "y": np.random.randn(500),
-        })
+        df = pd.DataFrame(
+            {
+                "x": np.arange(500),
+                "y": np.random.randn(500),
+            }
+        )
         lib.write("test_symbol", df)
 
         # Get result with pushdown
@@ -739,10 +755,12 @@ class TestSQLPredicatePushdown:
     def test_unsupported_predicate_not_pushed(self, lmdb_library):
         """Test that unsupported predicates fall back to DuckDB filtering."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "name": ["alice", "bob", "charlie", "david"],
-            "value": [1, 2, 3, 4],
-        })
+        df = pd.DataFrame(
+            {
+                "name": ["alice", "bob", "charlie", "david"],
+                "value": [1, 2, 3, 4],
+            }
+        )
         lib.write("test_symbol", df)
 
         # LIKE is not directly supported by ArcticDB QueryBuilder
@@ -791,12 +809,14 @@ class TestSQLPushdownEdgeCases:
     def test_unsigned_integer_types(self, lmdb_library):
         """Test that unsigned integer columns work correctly with SQL queries."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "u8": np.array([1, 2, 3], dtype=np.uint8),
-            "u16": np.array([100, 200, 300], dtype=np.uint16),
-            "u32": np.array([1000, 2000, 3000], dtype=np.uint32),
-            "u64": np.array([10000, 20000, 30000], dtype=np.uint64),
-        })
+        df = pd.DataFrame(
+            {
+                "u8": np.array([1, 2, 3], dtype=np.uint8),
+                "u16": np.array([100, 200, 300], dtype=np.uint16),
+                "u32": np.array([1000, 2000, 3000], dtype=np.uint32),
+                "u64": np.array([10000, 20000, 30000], dtype=np.uint64),
+            }
+        )
         lib.write("uint_test", df)
 
         # Should not crash and return correct results
@@ -807,10 +827,12 @@ class TestSQLPushdownEdgeCases:
     def test_small_integer_types(self, lmdb_library):
         """Test that small integer types (int8, int16) work correctly."""
         lib = lmdb_library
-        df = pd.DataFrame({
-            "i8": np.array([-50, 0, 50], dtype=np.int8),
-            "i16": np.array([-1000, 0, 1000], dtype=np.int16),
-        })
+        df = pd.DataFrame(
+            {
+                "i8": np.array([-50, 0, 50], dtype=np.int8),
+                "i16": np.array([-1000, 0, 1000], dtype=np.int16),
+            }
+        )
         lib.write("small_int_test", df)
 
         result = lib.sql("SELECT i8, i16 FROM small_int_test WHERE i8 > 0")
@@ -871,10 +893,12 @@ class TestSQLPushdownEdgeCases:
         Using DuckDB's AST parser ensures only the actual LIMIT clause is extracted.
         """
         lib = lmdb_library
-        df = pd.DataFrame({
-            "description": ["LIMIT 999 items", "Normal text", "Another row"] * 10,
-            "value": np.arange(30),
-        })
+        df = pd.DataFrame(
+            {
+                "description": ["LIMIT 999 items", "Normal text", "Another row"] * 10,
+                "value": np.arange(30),
+            }
+        )
         lib.write("limit_string_test", df)
 
         result = lib.sql("""

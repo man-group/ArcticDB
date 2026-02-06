@@ -6,25 +6,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
-## Claude-Maintained Documentation
+## Documentation
+
+### User-Facing Documentation (`docs/mkdocs/docs/`)
+
+**New features must include documentation:**
+
+- **Tutorials** (`tutorials/`): Step-by-step guides for features (e.g., `sql_queries.md`)
+- **API Reference** (`api/`): Auto-generated from docstrings via mkdocstrings
+- **Technical docs** (`technical/`): Architecture and implementation details
+
+When adding a new feature:
+
+1. **Add/update docstrings** in the Python code (NumPy format)
+2. **Create a tutorial** if the feature has multiple use cases or nuances
+3. **Update `mkdocs.yml`** nav section to include new pages
+4. **Build docs locally** to verify: `cd docs/mkdocs && mkdocs serve`
+
+Documentation checklist:
+- [ ] Public API has complete docstrings (Parameters, Returns, Raises, Examples)
+- [ ] Complex features have a tutorial with code examples
+- [ ] Edge cases and limitations are documented
+- [ ] When to use feature A vs feature B is explained (if applicable)
+
+### Claude-Maintained Technical Docs (`docs/claude/`)
 
 Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
-
-### When to Read/Update Documentation
 
 - **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
 - **Update** the doc only when making changes to that area
 - Do NOT proactively read or update docs for unrelated areas
 
-### Documentation Style
-
-Keep documentation **high-level and terse**:
-- Reference `file_path:ClassName:method_name` instead of copying code
-- Use tables and bullet points over code blocks
-- Keep conceptual diagrams; remove implementation details
-- Avoid duplicating what's already in source code
-
-### Documentation Index
+Keep documentation **high-level and terse**: reference `file_path:ClassName:method_name` instead of copying code; use tables and bullet points over code blocks; avoid duplicating what's already in source code.
 
 | Area | Document |
 |------|----------|
@@ -215,34 +228,13 @@ Wait for explicit confirmation like "commit and push" or "looks good, push it" b
 
 ### Code Style
 
-Code style is enforced by `./build_tooling/format.py`. **Always run the formatter after making code changes:**
+Code style is enforced by `./build_tooling/format.py`. **Always run the formatter after making code changes, but only on files changed on the branch:**
 
 ```bash
-# Format all code
-python ./build_tooling/format.py --in-place --type all
+# Format only files changed on the branch
+git diff --name-only origin/master..HEAD -- '*.py' | xargs -r -n1 python ./build_tooling/format.py --in-place --type python --file
+git diff --name-only origin/master..HEAD -- '*.cpp' '*.hpp' | xargs -r -n1 python ./build_tooling/format.py --in-place --type cpp --file
 ```
-
-
-### Documentation
-
-**New features must include documentation.** Documentation lives in `docs/mkdocs/docs/`:
-
-- **Tutorials** (`tutorials/`): Step-by-step guides for features (e.g., `sql_queries.md`)
-- **API Reference** (`api/`): Auto-generated from docstrings via mkdocstrings
-- **Technical docs** (`technical/`): Architecture and implementation details
-
-When adding a new feature:
-
-1. **Add/update docstrings** in the Python code (NumPy format)
-2. **Create a tutorial** if the feature has multiple use cases or nuances
-3. **Update `mkdocs.yml`** nav section to include new pages
-4. **Build docs locally** to verify: `cd docs/mkdocs && mkdocs serve`
-
-Documentation checklist:
-- [ ] Public API has complete docstrings (Parameters, Returns, Raises, Examples)
-- [ ] Complex features have a tutorial with code examples
-- [ ] Edge cases and limitations are documented
-- [ ] When to use feature A vs feature B is explained (if applicable)
 
 
 ## Code Review

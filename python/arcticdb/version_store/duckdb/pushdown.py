@@ -298,12 +298,14 @@ def _parse_comparison_node(node: Dict) -> List[Dict]:
     if value is None:
         return []
 
-    return [{
-        "column": column,
-        "op": op,
-        "value": value,
-        "type": "comparison",
-    }]
+    return [
+        {
+            "column": column,
+            "op": op,
+            "value": value,
+            "type": "comparison",
+        }
+    ]
 
 
 def _parse_null_check_node(node: Dict, is_not: bool) -> List[Dict]:
@@ -321,12 +323,14 @@ def _parse_null_check_node(node: Dict, is_not: bool) -> List[Dict]:
         return []
     column = column_names[-1]
 
-    return [{
-        "column": column,
-        "op": "IS NOT NULL" if is_not else "IS NULL",
-        "value": None,
-        "type": "null_check",
-    }]
+    return [
+        {
+            "column": column,
+            "op": "IS NOT NULL" if is_not else "IS NULL",
+            "value": None,
+            "type": "null_check",
+        }
+    ]
 
 
 def _parse_in_node(node: Dict, is_not: bool) -> List[Dict]:
@@ -356,12 +360,14 @@ def _parse_in_node(node: Dict, is_not: bool) -> List[Dict]:
     if not values:
         return []
 
-    return [{
-        "column": column,
-        "op": "NOT IN" if is_not else "IN",
-        "value": values,
-        "type": "membership",
-    }]
+    return [
+        {
+            "column": column,
+            "op": "NOT IN" if is_not else "IN",
+            "value": values,
+            "type": "membership",
+        }
+    ]
 
 
 def _parse_between_node(node: Dict) -> List[Dict]:
@@ -384,17 +390,20 @@ def _parse_between_node(node: Dict) -> List[Dict]:
     if lower is None or upper is None:
         return []
 
-    return [{
-        "column": column,
-        "op": "BETWEEN",
-        "value": (lower, upper),
-        "type": "range",
-    }]
+    return [
+        {
+            "column": column,
+            "op": "BETWEEN",
+            "value": (lower, upper),
+            "type": "range",
+        }
+    ]
 
 
 def _convert_to_timestamp(value: Any) -> Any:
     """Convert a value to pandas Timestamp, returning None on failure."""
     import pandas as pd
+
     try:
         return pd.Timestamp(value)
     except (ValueError, TypeError):
@@ -421,7 +430,9 @@ def _extract_constant_value(node: Dict) -> Any:
                 return None
 
             match cast_type:
-                case "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMP_NS" | "TIMESTAMP_MS" | "TIMESTAMP_S" | "DATE":
+                case (
+                    "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMP_NS" | "TIMESTAMP_MS" | "TIMESTAMP_S" | "DATE"
+                ):
                     return _convert_to_timestamp(child_value)
                 case "INTEGER" | "BIGINT" | "SMALLINT" | "TINYINT" | "UINTEGER" | "UBIGINT" | "USMALLINT" | "UTINYINT":
                     try:

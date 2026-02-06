@@ -71,7 +71,12 @@ from arcticdb.options import (
 )
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, InternalException, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticNativeException,
+    InternalException,
+    MissingKeysInStageResultsError,
+)
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer

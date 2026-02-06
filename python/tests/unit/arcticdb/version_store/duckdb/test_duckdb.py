@@ -154,14 +154,8 @@ class TestDuckDBSimpleSQL:
         """Test JOIN query across two symbols using lib.sql() directly."""
         lib = lmdb_library
 
-        trades = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "AAPL"],
-            "quantity": [100, 200, 150]
-        })
-        prices = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "MSFT"],
-            "price": [150.0, 2800.0, 300.0]
-        })
+        trades = pd.DataFrame({"ticker": ["AAPL", "GOOG", "AAPL"], "quantity": [100, 200, 150]})
+        prices = pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "price": [150.0, 2800.0, 300.0]})
 
         lib.write("trades", trades)
         lib.write("prices", prices)
@@ -184,15 +178,10 @@ class TestDuckDBSimpleSQL:
         """Test JOIN with GROUP BY using lib.sql() directly."""
         lib = lmdb_library
 
-        orders = pd.DataFrame({
-            "product_id": [1, 1, 2, 2, 3],
-            "quantity": [10, 20, 5, 15, 8]
-        })
-        products = pd.DataFrame({
-            "product_id": [1, 2, 3],
-            "name": ["Widget", "Gadget", "Gizmo"],
-            "price": [10.0, 25.0, 15.0]
-        })
+        orders = pd.DataFrame({"product_id": [1, 1, 2, 2, 3], "quantity": [10, 20, 5, 15, 8]})
+        products = pd.DataFrame(
+            {"product_id": [1, 2, 3], "name": ["Widget", "Gadget", "Gizmo"], "price": [10.0, 25.0, 15.0]}
+        )
 
         lib.write("orders", orders)
         lib.write("products", products)
@@ -248,13 +237,11 @@ class TestDuckDBContext:
             ddb.register_symbol("trades")
             ddb.register_symbol("prices")
 
-            result = ddb.query(
-                """
+            result = ddb.query("""
                 SELECT t.ticker, t.quantity, p.price, t.quantity * p.price as notional
                 FROM trades t
                 JOIN prices p ON t.ticker = p.ticker
-            """
-            )
+            """)
 
         assert len(result) == 3  # AAPL (2 rows) + GOOG (1 row)
         assert "notional" in result.columns
@@ -564,10 +551,7 @@ class TestExternalDuckDBConnection:
         lib = lmdb_library
 
         # Write ArcticDB data
-        trades = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "MSFT"],
-            "quantity": [100, 200, 150]
-        })
+        trades = pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "quantity": [100, 200, 150]})
         lib.write("trades", trades)
 
         # Create external connection with reference data
@@ -670,11 +654,13 @@ class TestDocumentationExamples:
         """Test the Quick Start example with GROUP BY aggregation."""
         lib = lmdb_library
 
-        trades = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "AAPL", "MSFT"],
-            "price": [150.0, 2800.0, 151.0, 300.0],
-            "quantity": [100, 50, 200, 75]
-        })
+        trades = pd.DataFrame(
+            {
+                "ticker": ["AAPL", "GOOG", "AAPL", "MSFT"],
+                "price": [150.0, 2800.0, 151.0, 300.0],
+                "quantity": [100, 50, 200, 75],
+            }
+        )
         lib.write("trades", trades)
 
         result = lib.sql("""
@@ -694,15 +680,14 @@ class TestDocumentationExamples:
         """Test JOIN example calculating market value."""
         lib = lmdb_library
 
-        trades = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "AAPL", "MSFT"],
-            "price": [150.0, 2800.0, 151.0, 300.0],
-            "quantity": [100, 50, 200, 75]
-        })
-        prices = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "MSFT"],
-            "current_price": [155.0, 2850.0, 310.0]
-        })
+        trades = pd.DataFrame(
+            {
+                "ticker": ["AAPL", "GOOG", "AAPL", "MSFT"],
+                "price": [150.0, 2800.0, 151.0, 300.0],
+                "quantity": [100, 50, 200, 75],
+            }
+        )
+        prices = pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "current_price": [155.0, 2850.0, 310.0]})
         lib.write("trades", trades)
         lib.write("prices", prices)
 
@@ -724,14 +709,15 @@ class TestDocumentationExamples:
         lib = lmdb_library
 
         # Create price data with dates
-        prices = pd.DataFrame({
-            "ticker": ["AAPL", "AAPL", "AAPL", "GOOG", "GOOG", "GOOG"],
-            "date": pd.to_datetime([
-                "2024-01-01", "2024-01-02", "2024-01-03",
-                "2024-01-01", "2024-01-02", "2024-01-03"
-            ]),
-            "close": [150.0, 152.0, 151.0, 2800.0, 2850.0, 2820.0]
-        })
+        prices = pd.DataFrame(
+            {
+                "ticker": ["AAPL", "AAPL", "AAPL", "GOOG", "GOOG", "GOOG"],
+                "date": pd.to_datetime(
+                    ["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-01", "2024-01-02", "2024-01-03"]
+                ),
+                "close": [150.0, 152.0, 151.0, 2800.0, 2850.0, 2820.0],
+            }
+        )
         lib.write("prices", prices)
 
         result = lib.sql("""
@@ -757,14 +743,8 @@ class TestDocumentationExamples:
         """Test Financial Analytics example: portfolio value with positions and prices."""
         lib = lmdb_library
 
-        positions = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "MSFT"],
-            "shares": [100, 50, 75]
-        })
-        prices = pd.DataFrame({
-            "ticker": ["AAPL", "GOOG", "MSFT"],
-            "price": [155.0, 2850.0, 310.0]
-        })
+        positions = pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "shares": [100, 50, 75]})
+        prices = pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "price": [155.0, 2850.0, 310.0]})
         lib.write("positions", positions)
         lib.write("prices", prices)
 
@@ -796,15 +776,24 @@ class TestDocumentationExamples:
         lib = lmdb_library
 
         # Create tick data with timestamps
-        ticks = pd.DataFrame({
-            "price": [100.0, 102.0, 99.0, 101.0, 105.0, 103.0, 102.0, 108.0],
-            "volume": [1000, 500, 800, 1200, 600, 900, 700, 1100]
-        }, index=pd.to_datetime([
-            "2024-01-01 09:30:00", "2024-01-01 10:00:00",
-            "2024-01-01 11:00:00", "2024-01-01 16:00:00",
-            "2024-01-02 09:30:00", "2024-01-02 10:00:00",
-            "2024-01-02 11:00:00", "2024-01-02 16:00:00",
-        ]))
+        ticks = pd.DataFrame(
+            {
+                "price": [100.0, 102.0, 99.0, 101.0, 105.0, 103.0, 102.0, 108.0],
+                "volume": [1000, 500, 800, 1200, 600, 900, 700, 1100],
+            },
+            index=pd.to_datetime(
+                [
+                    "2024-01-01 09:30:00",
+                    "2024-01-01 10:00:00",
+                    "2024-01-01 11:00:00",
+                    "2024-01-01 16:00:00",
+                    "2024-01-02 09:30:00",
+                    "2024-01-02 10:00:00",
+                    "2024-01-02 11:00:00",
+                    "2024-01-02 16:00:00",
+                ]
+            ),
+        )
         lib.write("ticks", ticks)
 
         result = lib.sql("""
@@ -843,11 +832,10 @@ class TestDocumentationExamples:
         lib = lmdb_library
 
         # Create data with a gap (missing Jan 3)
-        prices = pd.DataFrame({
-            "price": [100.0, 101.0, 103.0, 104.0]
-        }, index=pd.to_datetime([
-            "2024-01-01", "2024-01-02", "2024-01-04", "2024-01-05"  # Note: Jan 3 is missing
-        ]))
+        prices = pd.DataFrame(
+            {"price": [100.0, 101.0, 103.0, 104.0]},
+            index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-04", "2024-01-05"]),  # Note: Jan 3 is missing
+        )
         lib.write("prices", prices)
 
         # Use duckdb() context to avoid CTE name being treated as a symbol
@@ -907,12 +895,14 @@ class TestSchemaDDLQueries:
         """Test DESCRIBE query returns correct types for basic columns."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "int64_col": np.array([1, 2, 3], dtype=np.int64),
-            "float64_col": np.array([1.5, 2.5, 3.5], dtype=np.float64),
-            "string_col": ["a", "b", "c"],
-            "bool_col": [True, False, True],
-        })
+        df = pd.DataFrame(
+            {
+                "int64_col": np.array([1, 2, 3], dtype=np.int64),
+                "float64_col": np.array([1.5, 2.5, 3.5], dtype=np.float64),
+                "string_col": ["a", "b", "c"],
+                "bool_col": [True, False, True],
+            }
+        )
         lib.write("test_symbol", df)
 
         with lib.duckdb() as ddb:
@@ -935,16 +925,18 @@ class TestSchemaDDLQueries:
         """Test DESCRIBE returns correct types for various integer sizes."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "int8_col": np.array([1, 2, 3], dtype=np.int8),
-            "int16_col": np.array([1, 2, 3], dtype=np.int16),
-            "int32_col": np.array([1, 2, 3], dtype=np.int32),
-            "int64_col": np.array([1, 2, 3], dtype=np.int64),
-            "uint8_col": np.array([1, 2, 3], dtype=np.uint8),
-            "uint16_col": np.array([1, 2, 3], dtype=np.uint16),
-            "uint32_col": np.array([1, 2, 3], dtype=np.uint32),
-            "uint64_col": np.array([1, 2, 3], dtype=np.uint64),
-        })
+        df = pd.DataFrame(
+            {
+                "int8_col": np.array([1, 2, 3], dtype=np.int8),
+                "int16_col": np.array([1, 2, 3], dtype=np.int16),
+                "int32_col": np.array([1, 2, 3], dtype=np.int32),
+                "int64_col": np.array([1, 2, 3], dtype=np.int64),
+                "uint8_col": np.array([1, 2, 3], dtype=np.uint8),
+                "uint16_col": np.array([1, 2, 3], dtype=np.uint16),
+                "uint32_col": np.array([1, 2, 3], dtype=np.uint32),
+                "uint64_col": np.array([1, 2, 3], dtype=np.uint64),
+            }
+        )
         lib.write("test_symbol", df)
 
         with lib.duckdb() as ddb:
@@ -969,10 +961,12 @@ class TestSchemaDDLQueries:
         """Test DESCRIBE returns correct types for float columns."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "float32_col": np.array([1.5, 2.5, 3.5], dtype=np.float32),
-            "float64_col": np.array([1.5, 2.5, 3.5], dtype=np.float64),
-        })
+        df = pd.DataFrame(
+            {
+                "float32_col": np.array([1.5, 2.5, 3.5], dtype=np.float32),
+                "float64_col": np.array([1.5, 2.5, 3.5], dtype=np.float64),
+            }
+        )
         lib.write("test_symbol", df)
 
         with lib.duckdb() as ddb:
@@ -988,9 +982,7 @@ class TestSchemaDDLQueries:
         """Test DESCRIBE returns correct type for timestamp index."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "value": [1.0, 2.0, 3.0]
-        }, index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]))
+        df = pd.DataFrame({"value": [1.0, 2.0, 3.0]}, index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]))
         lib.write("test_symbol", df)
 
         with lib.duckdb() as ddb:
@@ -1007,10 +999,12 @@ class TestSchemaDDLQueries:
         """Test SHOW COLUMNS returns same info as DESCRIBE."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "x": [1, 2, 3],
-            "y": [1.0, 2.0, 3.0],
-        })
+        df = pd.DataFrame(
+            {
+                "x": [1, 2, 3],
+                "y": [1.0, 2.0, 3.0],
+            }
+        )
         lib.write("test_symbol", df)
 
         with lib.duckdb() as ddb:
@@ -1186,11 +1180,13 @@ class TestSchemaDDLQueries:
         """Test lib.sql() with DESCRIBE query returns correct types."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "int_col": np.array([1, 2, 3], dtype=np.int64),
-            "float_col": np.array([1.5, 2.5, 3.5], dtype=np.float64),
-            "str_col": ["a", "b", "c"],
-        })
+        df = pd.DataFrame(
+            {
+                "int_col": np.array([1, 2, 3], dtype=np.int64),
+                "float_col": np.array([1.5, 2.5, 3.5], dtype=np.float64),
+                "str_col": ["a", "b", "c"],
+            }
+        )
         lib.write("test_symbol", df)
 
         # Use lib.sql() directly with DESCRIBE
@@ -1205,16 +1201,18 @@ class TestSchemaDDLQueries:
         """Test lib.sql() DESCRIBE with various integer types."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "int8_col": np.array([1], dtype=np.int8),
-            "int16_col": np.array([1], dtype=np.int16),
-            "int32_col": np.array([1], dtype=np.int32),
-            "int64_col": np.array([1], dtype=np.int64),
-            "uint8_col": np.array([1], dtype=np.uint8),
-            "uint16_col": np.array([1], dtype=np.uint16),
-            "uint32_col": np.array([1], dtype=np.uint32),
-            "uint64_col": np.array([1], dtype=np.uint64),
-        })
+        df = pd.DataFrame(
+            {
+                "int8_col": np.array([1], dtype=np.int8),
+                "int16_col": np.array([1], dtype=np.int16),
+                "int32_col": np.array([1], dtype=np.int32),
+                "int64_col": np.array([1], dtype=np.int64),
+                "uint8_col": np.array([1], dtype=np.uint8),
+                "uint16_col": np.array([1], dtype=np.uint16),
+                "uint32_col": np.array([1], dtype=np.uint32),
+                "uint64_col": np.array([1], dtype=np.uint64),
+            }
+        )
         lib.write("test_symbol", df)
 
         result = lib.sql("DESCRIBE test_symbol")
@@ -1233,9 +1231,7 @@ class TestSchemaDDLQueries:
         """Test lib.sql() DESCRIBE with timestamp index."""
         lib = lmdb_library
 
-        df = pd.DataFrame({
-            "value": [1.0, 2.0, 3.0]
-        }, index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]))
+        df = pd.DataFrame({"value": [1.0, 2.0, 3.0]}, index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]))
         lib.write("test_symbol", df)
 
         result = lib.sql("DESCRIBE test_symbol")
@@ -1542,8 +1538,8 @@ class TestArcticDuckDBShowDatabases:
         with arctic.duckdb() as ddb:
             result = (
                 ddb.register_library("testuser.lib")
-                   .register_symbol("testuser.lib", "data")
-                   .query("SELECT SUM(x) as total FROM data")
+                .register_symbol("testuser.lib", "data")
+                .query("SELECT SUM(x) as total FROM data")
             )
 
         assert result["total"].iloc[0] == 6
