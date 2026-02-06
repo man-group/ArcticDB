@@ -25,6 +25,11 @@ enum class TaskType : size_t {
     S3_GetObjectAsync = 3,
     S3_DeleteObjects = 4,
     S3_HeadObject = 5,
+    Memory_ListObjects = 6,
+    Memory_PutObject = 7,
+    Memory_GetObject = 8,
+    Memory_DeleteObject = 9,
+    Memory_HeadObject = 10,
     END
 };
 
