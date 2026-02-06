@@ -264,12 +264,37 @@ lib.write("symbol", pd.DataFrame({"a": [1, 2]}))
 lib.write("symbol", pd.DataFrame({"b": [3, 4]}))
 ```
 
+## DuckDB SQL Integration
+
+```python
+# One-shot SQL query (pushdown optimization, streaming)
+df = lib.sql("SELECT ticker, AVG(price) FROM trades GROUP BY ticker")
+
+# Inspect pushdown optimizations (no data read)
+info = lib.explain("SELECT price FROM trades WHERE price > 100")
+
+# Register symbols into external DuckDB connection (materialized, reusable)
+import duckdb
+conn = duckdb.connect()
+lib.duckdb_register(conn, symbols=["trades", "prices"])
+conn.sql("SELECT * FROM trades LIMIT 10").show()
+
+# Context manager for advanced queries (streaming, per-symbol control)
+with lib.duckdb() as ddb:
+    ddb.register_symbol("trades", as_of=0)
+    ddb.register_symbol("prices")
+    result = ddb.query("SELECT t.ticker, p.price FROM trades t JOIN prices p ON t.ticker = p.ticker")
+```
+
+See [DUCKDB.md](DUCKDB.md) for full details.
+
 ## Key Files
 
 | File | Purpose |
 |------|---------|
 | `version_store/library.py` | Library class |
 | `version_store/_store.py` | NativeVersionStore (underlying implementation) |
+| `version_store/duckdb/` | DuckDB SQL integration module |
 | `options.py` | LibraryOptions |
 
 ## Related Documentation
@@ -277,4 +302,6 @@ lib.write("symbol", pd.DataFrame({"b": [3, 4]}))
 - [ARCTIC_CLASS.md](ARCTIC_CLASS.md) - Arctic class that creates libraries
 - [NATIVE_VERSION_STORE.md](NATIVE_VERSION_STORE.md) - Underlying V1 API
 - [QUERY_PROCESSING.md](QUERY_PROCESSING.md) - QueryBuilder details
+- [DUCKDB.md](DUCKDB.md) - DuckDB SQL integration details
 - [../cpp/VERSIONING.md](../cpp/VERSIONING.md) - Version chain internals
+- [../cpp/ARROW.md](../cpp/ARROW.md) - Arrow output frame (C++ layer)

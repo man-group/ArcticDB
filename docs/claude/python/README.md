@@ -15,6 +15,7 @@ This directory contains detailed documentation for the Python layer of ArcticDB.
 | **Normalization** | [NORMALIZATION.md](NORMALIZATION.md) | DataFrame normalization |
 | **Adapters** | [ADAPTERS.md](ADAPTERS.md) | Storage adapters |
 | **Toolbox** | [TOOLBOX.md](TOOLBOX.md) | Library inspection tools |
+| **DuckDB** | [DUCKDB.md](DUCKDB.md) | DuckDB SQL integration, pushdown, Arrow streaming |
 
 ## Python Code Location
 
@@ -33,6 +34,10 @@ python/arcticdb/
 │   ├── azure_library_adapter.py
 │   ├── lmdb_library_adapter.py
 │   └── ...
+├── version_store/duckdb/  # DuckDB SQL integration
+│   ├── duckdb.py          # Context managers
+│   ├── pushdown.py        # SQL pushdown optimization
+│   └── arrow_reader.py    # Arrow RecordBatchReader
 ├── options.py             # LibraryOptions
 ├── config.py              # Configuration
 ├── toolbox/               # Admin utilities
@@ -48,7 +53,10 @@ Arctic (arctic.py)
   ├── create_library(name) → Library
   ├── get_library(name) → Library
   ├── delete_library(name)
-  └── list_libraries() → List[str]
+  ├── list_libraries() → List[str]
+  ├── sql("SHOW DATABASES") → DataFrame
+  ├── duckdb() → ArcticDuckDBContext
+  └── duckdb_register(conn) → List[str]
         │
         ▼
 Library (version_store/library.py)
@@ -60,7 +68,11 @@ Library (version_store/library.py)
   ├── delete(symbol)
   ├── list_symbols() → List[str]
   ├── list_versions(symbol) → List[VersionInfo]
-  └── snapshot(name)
+  ├── snapshot(name)
+  ├── sql(query) → DataFrame
+  ├── explain(query) → dict
+  ├── duckdb() → DuckDBContext
+  └── duckdb_register(conn) → List[str]
         │
         ▼
 NativeVersionStore (version_store/_store.py)
