@@ -239,7 +239,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     register_version_store_common_bindings(version, BindingScope::GLOBAL);
 
-    py::class_<RecordBatchData>(version, "RecordBatchData")
+    py::class_<RecordBatchData, std::shared_ptr<RecordBatchData>>(version, "RecordBatchData")
             .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);

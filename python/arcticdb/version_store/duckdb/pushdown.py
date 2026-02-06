@@ -7,6 +7,16 @@ As of the Change Date specified in that file, in accordance with the Business So
 be governed by the Apache License, version 2.0.
 """
 
+# NOTE: SQL Parsing Policy
+# ========================
+# ALWAYS use DuckDB's json_serialize_sql() AST parser for SQL analysis. Never use regular
+# expressions or string matching to parse SQL structure (e.g. extracting table names, columns,
+# filters). SQL grammar is too complex for regex — edge cases with quoting, comments, subqueries,
+# CTEs, etc. will break string-based approaches.
+#
+# Read-only validation also uses the AST parser: json_serialize_sql() only accepts SELECT-like
+# statements, so non-SELECT queries (INSERT, UPDATE, etc.) are rejected by DuckDB itself.
+
 import json
 import logging
 from dataclasses import dataclass, field
@@ -146,12 +156,47 @@ def _extract_columns_from_where(where_clause: Dict, table_alias_map: Dict[str, s
     return columns_by_table
 
 
+def _extract_cte_names(ast: Dict) -> Set[str]:
+    """
+    Extract CTE (Common Table Expression) names from the AST.
+
+    CTE names (defined by WITH ... AS) are not real table references — they're
+    query-local aliases. They must be excluded from the symbol list so we don't
+    try to read them as ArcticDB symbols.
+    """
+    cte_names: Set[str] = set()
+
+    def collect_ctes(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        cte_map = node.get("cte_map", {})
+        for entry in cte_map.get("map", []):
+            key = entry.get("key", "")
+            if key:
+                cte_names.add(key.lower())
+            # Recurse into nested CTEs
+            inner_query = entry.get("value", {}).get("query", {}).get("node", {})
+            if inner_query:
+                collect_ctes(inner_query)
+
+    try:
+        statements = ast.get("statements", [])
+        if statements:
+            collect_ctes(statements[0].get("node", {}))
+    except (ValueError, KeyError, TypeError, IndexError) as e:
+        logger.debug("Failed to extract CTE names from AST: %s", e)
+
+    return cte_names
+
+
 def _extract_tables_from_ast(ast: Dict) -> Dict[str, str]:
     """
     Extract table references from AST, returning mapping of alias -> table_name.
 
     Handles FROM clause, JOINs, and DDL queries like DESCRIBE/SHOW.
+    CTE names are excluded so they aren't mistaken for ArcticDB symbols.
     """
+    cte_names = _extract_cte_names(ast)
     alias_map: Dict[str, str] = {}
 
     def extract_tables_recursive(node: Any) -> None:
@@ -164,7 +209,7 @@ def _extract_tables_from_ast(ast: Dict) -> Dict[str, str]:
         if node_type == "BASE_TABLE":
             table_name = node.get("table_name", "")
             alias = node.get("alias", "") or table_name
-            if table_name:
+            if table_name and table_name.lower() not in cte_names:
                 alias_map[alias.lower()] = table_name
                 alias_map[table_name.lower()] = table_name
 
@@ -612,6 +657,9 @@ def _extract_date_range(parsed_filters: List[Dict]) -> Tuple[Optional[Tuple[Any,
     return None, parsed_filters
 
 
+_ONLY_SELECT_ERROR = "Only SELECT statements can be serialized to json!"
+
+
 def _get_sql_ast(query: str) -> Optional[Dict]:
     """
     Parse SQL into AST using DuckDB's json_serialize_sql function.
@@ -637,13 +685,51 @@ def _get_sql_ast(query: str) -> Optional[Dict]:
                 if not ast.get("error"):
                     return ast
                 else:
-                    logger.debug("DuckDB returned error parsing SQL: %s", ast.get("error"))
+                    logger.debug("DuckDB returned error parsing SQL: %s", ast.get("error_message", ""))
         finally:
             conn.close()
     except Exception as e:
         logger.warning("Failed to parse SQL to AST: %s", e)
 
     return None
+
+
+def _get_sql_ast_or_raise(query: str) -> Dict:
+    """
+    Parse SQL into AST, raising ValueError if the query is not a supported SELECT-like statement.
+
+    DuckDB's json_serialize_sql() only accepts SELECT-like statements (SELECT, WITH, SHOW,
+    DESCRIBE). Non-SELECT statements (INSERT, UPDATE, DELETE, CREATE, DROP, etc.) produce
+    a specific error that we translate into a clear user-facing message.
+    """
+    import duckdb
+
+    try:
+        conn = duckdb.connect(":memory:")
+        try:
+            result = conn.execute("SELECT json_serialize_sql(?)", [query]).fetchone()
+            if result:
+                ast = json.loads(result[0])
+                if not ast.get("error"):
+                    return ast
+                error_message = ast.get("error_message", "")
+                if _ONLY_SELECT_ERROR in error_message:
+                    raise ValueError(
+                        "Unsupported SQL statement. "
+                        "ArcticDB's SQL interface is read-only. "
+                        "Only SELECT, SHOW, DESCRIBE, and WITH (CTE) queries are supported. "
+                        "To write data, use lib.write() or lib.update()."
+                    )
+                else:
+                    raise ValueError(f"Could not parse SQL query: {error_message}")
+        finally:
+            conn.close()
+    except ValueError:
+        raise
+    except Exception as e:
+        logger.warning("Failed to parse SQL to AST: %s", e)
+
+    raise ValueError("Could not parse SQL query. Ensure query is valid SQL.")
 
 
 def is_table_discovery_query(query: str) -> bool:
@@ -758,11 +844,9 @@ def extract_pushdown_from_sql(
     ValueError
         If no symbols could be extracted from the query.
     """
-    ast = _get_sql_ast(query)
-    if ast is None:
-        raise ValueError(
-            "Could not parse SQL query. " "Ensure query is valid SQL, or use duckdb() to register symbols explicitly."
-        )
+    # _get_sql_ast_or_raise handles both validation (rejects non-SELECT statements
+    # like INSERT/UPDATE/DELETE with a clear error) and parsing in a single DuckDB call.
+    ast = _get_sql_ast_or_raise(query)
 
     # Extract table alias mapping
     table_alias_map = _extract_tables_from_ast(ast)
@@ -816,20 +900,23 @@ def extract_pushdown_from_sql(
             is_select_star = True
             break
 
-    # For multi-table queries (JOINs), disable column pushdown since JOIN conditions
-    # may reference columns not in SELECT/WHERE. Extracting JOIN condition columns
-    # is complex and error-prone, so we conservatively read all columns.
+    # Disable column/filter pushdown for complex queries where the outer SELECT/WHERE
+    # doesn't reflect all columns needed:
+    # - Multi-table (JOINs): JOIN conditions may reference columns not in SELECT/WHERE
+    # - CTEs (WITH): the CTE body may reference columns not visible in the outer query
     is_multi_table = len(table_names) > 1
+    has_ctes = bool(_extract_cte_names(ast))
+    disable_pushdown = is_multi_table or has_ctes
 
-    if not is_select_star and not is_multi_table:
-        # Extract specific columns only for single-table queries
+    if not is_select_star and not disable_pushdown:
+        # Extract specific columns only for simple single-table queries
         select_columns = _extract_columns_from_select_list(select_list, table_alias_map)
     else:
         select_columns = {}
 
-    # Extract columns and filters from WHERE clause (only for single-table queries)
+    # Extract columns and filters from WHERE clause (only for simple single-table queries)
     where_clause = select_node.get("where_clause")
-    if where_clause and not is_multi_table:
+    if where_clause and not disable_pushdown:
         where_columns = _extract_columns_from_where(where_clause, table_alias_map)
     else:
         where_columns = {}

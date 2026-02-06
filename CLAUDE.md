@@ -159,14 +159,17 @@ cpp/out/<preset>-build/arcticdb/test_unit_arcticdb --gtest_filter="TestSuite.Tes
 ## Running Python Tests
 
 ```bash
-# Run all tests
-python -m pytest python/tests
+# Run all tests (use -n for parallel execution via pytest-xdist)
+python -m pytest -n 8 python/tests
 
 # Run a single test file
 python -m pytest python/tests/unit/arcticdb/test_arctic.py
 
 # Run a specific test
 python -m pytest python/tests/unit/arcticdb/test_arctic.py::test_function_name
+
+# Run tests in a subdirectory in parallel
+python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/
 ```
 
 ## Benchmarking
@@ -220,6 +223,10 @@ When fixing a bug or adding a feature:
 - Add to the commit message or PR description
 
 Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
+
+### Branch Work Logs
+
+When working on a feature branch, maintain a work log in `docs/claude/plans/<branch-name>/branch-work-log.md`. Update it at the end of each task with a few bullet points summarizing what was done. This provides continuity across sessions and helps with PR descriptions.
 
 ### Backwards Compatibility
 
