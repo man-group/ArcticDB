@@ -29,7 +29,8 @@ void register_version_store_common_bindings(py::module& version, BindingScope sc
 
     py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame", py::module_local(local_bindings))
             .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches)
-            .def("create_iterator", &ArrowOutputFrame::create_iterator,
+            .def("create_iterator",
+                 &ArrowOutputFrame::create_iterator,
                  "Create an iterator for streaming record batches one at a time.")
             .def("num_blocks", &ArrowOutputFrame::num_blocks);
 }

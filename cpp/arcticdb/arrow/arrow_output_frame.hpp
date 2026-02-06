@@ -62,9 +62,7 @@ struct RecordBatchData {
     }
 
     // Destructor - releases Arrow resources if not already transferred to Python
-    ~RecordBatchData() {
-        release_if_owned();
-    }
+    ~RecordBatchData() { release_if_owned(); }
 
     ArrowArray array_;
     ArrowSchema schema_;
@@ -73,7 +71,7 @@ struct RecordBatchData {
 
     uintptr_t schema() { return reinterpret_cast<uintptr_t>(&schema_); }
 
-private:
+  private:
     void release_if_owned() {
         // Arrow C Data Interface: release is set to nullptr after being called
         // If release is non-null, we still own the memory and must free it
@@ -101,7 +99,7 @@ struct ArrowOutputFrame {
 
     [[nodiscard]] size_t num_blocks() const;
 
-private:
+  private:
     // Guards against multiple consumption of data_ via extract_record_batches() or create_iterator().
     // Both methods destructively transfer ownership from the underlying sparrow::record_batch objects.
     bool data_consumed_ = false;
@@ -110,7 +108,7 @@ private:
 // Iterator for streaming record batches one at a time.
 // Used for memory-efficient integration with DuckDB and other Arrow consumers.
 class RecordBatchIterator {
-public:
+  public:
     RecordBatchIterator() = default;
 
     explicit RecordBatchIterator(std::shared_ptr<std::vector<sparrow::record_batch>> data);
@@ -127,7 +125,7 @@ public:
     // Returns the current position (0-indexed).
     [[nodiscard]] size_t current_index() const { return current_index_; }
 
-private:
+  private:
     std::shared_ptr<std::vector<sparrow::record_batch>> data_;
     size_t current_index_ = 0;
 };
