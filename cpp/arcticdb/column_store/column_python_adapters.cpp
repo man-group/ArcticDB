@@ -21,7 +21,7 @@ template<class T>
 requires std::integral<T> || std::floating_point<T>
 void segment_set_array(SegmentInMemory& seg, position_t pos, py::array_t<T>& val) {
     // Delegate to the generic template set_array method which accepts any Tensor-like type
-    seg.set_array<T, py::array_t>(pos, val);
+    seg.set_array(pos, val);
 }
 
 // Explicit template instantiations for common types
