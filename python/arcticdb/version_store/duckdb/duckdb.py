@@ -182,13 +182,13 @@ class _BaseDuckDBContext:
             If the output format is not recognized.
         """
         if output_format == "arrow":
-            return self._conn.execute(sql).arrow()
+            return self._conn.execute(sql).fetch_arrow_table()
         elif output_format == "pandas":
             return self._conn.execute(sql).df()
         elif output_format == "polars":
             import polars as pl
 
-            return pl.from_arrow(self._conn.execute(sql).arrow())
+            return pl.from_arrow(self._conn.execute(sql).fetch_arrow_table())
         else:
             raise ValueError(
                 f"Unknown output format: {output_format}. " f"Expected one of: 'pandas', 'arrow', 'polars'"

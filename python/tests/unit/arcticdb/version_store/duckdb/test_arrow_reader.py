@@ -239,7 +239,7 @@ class TestDuckDBIntegrationWithArrow:
         pa_reader = reader.to_pyarrow_reader()
 
         # DuckDB should be able to query the reader directly
-        result = duckdb.from_arrow(pa_reader).filter("x > 50").arrow()
+        result = duckdb.from_arrow(pa_reader).filter("x > 50").fetch_arrow_table()
 
         assert len(result) == 49
 
