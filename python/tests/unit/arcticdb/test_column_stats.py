@@ -633,6 +633,17 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             assert_column_stats_key_count()
             clear()
 
+    def test_prune_previous_kwarg_batch_methods():
+        nonlocal expected_count
+        for operation in ["batch_write", "batch_append", "batch_write_metadata"]:
+            lib.write(sym, df0)
+            create_stats()
+            assert_column_stats_key_count()
+            getattr(lib, operation)([sym], [df1], prune_previous_version=True)
+            expected_count = 0
+            assert_column_stats_key_count()
+            clear()
+
     def test_prune_previous_api():
         nonlocal expected_count
         lib.write(sym, df0)
@@ -660,51 +671,9 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
         test_add_to_snapshot,
         test_remove_from_snapshot,
         test_prune_previous_kwarg,
+        test_prune_previous_kwarg_batch_methods,
         test_prune_previous_api,
     ]:
-        test()
-        clear()
-
-
-@pytest.mark.xfail(
-    reason=(
-        "ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the"
-        " issue is resolved"
-    )
-)
-def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_store, any_output_format):
-    def clear():
-        nonlocal expected_count
-        lib.version_store.clear()
-        expected_count = 0
-
-    def create_stats():
-        nonlocal expected_count
-        lib.create_column_stats(sym, column_stats_dict)
-        expected_count += 1
-
-    def assert_column_stats_key_count():
-        assert lib_tool.count_keys(KeyType.COLUMN_STATS) == expected_count
-
-    def test_prune_previous_kwarg_batch_methods():
-        nonlocal expected_count
-        for operation in ["batch_write", "batch_append", "batch_write_metadata"]:
-            lib.write(sym, df0)
-            create_stats()
-            assert_column_stats_key_count()
-            getattr(lib, operation)([sym], [df1], prune_previous_version=True)
-            expected_count = 0
-            assert_column_stats_key_count()
-            clear()
-
-    lib = lmdb_version_store
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    lib_tool = lib.library_tool()
-    sym = "test_column_stats_object_deleted_with_index_key_batch_methods"
-    column_stats_dict = {"col_1": {"MINMAX"}}
-    expected_count = 0
-
-    for test in [test_prune_previous_kwarg_batch_methods]:
         test()
         clear()
 
@@ -712,11 +681,16 @@ def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_s
 # ==================== Column Stats Query Optimization Tests ====================
 # These tests verify that column stats are used to prune segments during queries
 
-# Simple test data with only 1 column to ensure 1 TABLE_DATA key per segment
-# (avoids multiple column slices with column_group_size=2)
-stats_df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
-stats_df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
-stats_df2 = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
+# Test data, each corresponding to a TABLE_DATA block
+stats_df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
+stats_df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
+stats_df2 = pd.DataFrame({"col_1": [6, 5]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.float64)
+stats_df3 = pd.DataFrame({"col_1": [-4, -6]}, index=pd.date_range("2000-01-07", periods=2), dtype=np.float64)
+stats_df4 = pd.DataFrame({"col_1": [0, np.inf]}, index=pd.date_range("2000-01-09", periods=2), dtype=np.float64)
+stats_df5 = pd.DataFrame({"col_1": [-np.inf, 0]}, index=pd.date_range("2000-01-11", periods=2), dtype=np.float64)
+
+
+all_frames = [stats_df0, stats_df1, stats_df2, stats_df3, stats_df4, stats_df5]
 
 
 def get_table_data_read_count(stats):
@@ -728,42 +702,47 @@ def get_table_data_read_count(stats):
     return 0
 
 
-def test_column_stats_filter_prunes_segments(s3_store_factory, clear_query_stats):
+# TODO aseaton filtering is broken now with np.inf in the dataframe being dropped from the result
+# TODO aseaton tests with row range and column filters
+# TODO aseaton tests across all data types
+# TODO aseaton tests across all the different comparison operators
+
+@pytest.mark.parametrize("greater_than_value,expected_reads", [
+    (-1, 5), (0, 4), (2, 3), (3, 3), (4, 2), (7, 1)
+])
+def test_column_stats_filter_prunes_segments_gt_float64(s3_store_factory, clear_query_stats, greater_than_value, expected_reads):
     """Filter on a column with stats should prune segments that cannot match."""
     lib = s3_store_factory(column_group_size=2, segment_row_size=2)
-    sym = "test_filter_with_stats"
+    sym = "sym"
 
     # Write 3 segments with col_1 values:
     # seg0: [1, 2], seg1: [3, 4], seg2: [5, 6]
     lib.write(sym, stats_df0)
-    lib.append(sym, stats_df1)
-    lib.append(sym, stats_df2)
+    for f in all_frames[1:]:
+        lib.append(sym, f)
 
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    with config_context("VersionMap.ReloadInterval", 0):
-        qs.enable()
-        qs.reset_stats()
+    qs.enable()
 
-        q = QueryBuilder()
-        q = q[q["col_1"] > 4]
-        result = lib.read(sym, query_builder=q).data
+    q = QueryBuilder()
+    q = q[q["col_1"] > greater_than_value]
+    result = lib.read(sym, query_builder=q).data
 
-        stats = qs.get_query_stats()
-        table_data_reads = get_table_data_read_count(stats)
+    stats = qs.get_query_stats()
+    table_data_reads = get_table_data_read_count(stats)
 
-        expected = pd.concat([stats_df0, stats_df1, stats_df2])
-        expected = expected[expected["col_1"] > 4]
-        assert_frame_equal(result, expected)
+    expected = pd.concat(all_frames)
+    expected = expected[expected["col_1"] > greater_than_value]
+    assert_frame_equal(result, expected)
 
-        # Should only read 1 TABLE_DATA segment (seg2), not all 3
-        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read but got {table_data_reads}"
 
 
 def test_column_stats_filter_without_stats_no_pruning(s3_store_factory, clear_query_stats):
     """Filter on a column without stats should return correct results without pruning."""
     lib = s3_store_factory(column_group_size=2, segment_row_size=2)
-    sym = "test_filter_without_stats"
+    sym = "sym"
 
     # Data with 2 columns - filter on col_2 which has no stats
     df0_2col = pd.DataFrame({"col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2))
@@ -777,31 +756,28 @@ def test_column_stats_filter_without_stats_no_pruning(s3_store_factory, clear_qu
     # Create column stats for col_1, but query col_2
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    with config_context("VersionMap.ReloadInterval", 0):
-        qs.enable()
-        qs.reset_stats()
+    qs.enable()
 
-        q = QueryBuilder()
-        q = q[q["col_2"] > 7]
-        result = lib.read(sym, query_builder=q).data
+    q = QueryBuilder()
+    q = q[q["col_2"] > 7]
+    result = lib.read(sym, query_builder=q).data
 
-        stats = qs.get_query_stats()
-        table_data_reads = get_table_data_read_count(stats)
+    stats = qs.get_query_stats()
+    table_data_reads = get_table_data_read_count(stats)
 
-        expected = pd.concat([df0_2col, df1_2col, df2_2col])
-        expected = expected[expected["col_2"] > 7]
-        assert_frame_equal(result, expected)
+    expected = pd.concat([df0_2col, df1_2col, df2_2col])
+    expected = expected[expected["col_2"] > 7]
+    assert_frame_equal(result, expected)
 
-        # Should read all 3 TABLE_DATA segments (no pruning possible)
-        assert table_data_reads == 3, f"Expected 3 TABLE_DATA reads but got {table_data_reads}"
+    # No pruning possible
+    assert table_data_reads == 3, f"Expected 3 TABLE_DATA reads but got {table_data_reads}"
 
 
 def test_column_stats_and_filter_one_column_with_stats(s3_store_factory, clear_query_stats):
     """AND filter with one column having stats should prune based on that column."""
     lib = s3_store_factory(column_group_size=2, segment_row_size=2)
-    sym = "test_and_filter"
+    sym = "sym"
 
-    # Data with 2 columns for AND filter
     df0_2col = pd.DataFrame({"col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2))
     df1_2col = pd.DataFrame({"col_1": [3, 4], "col_2": [8, 7]}, index=pd.date_range("2000-01-03", periods=2))
     df2_2col = pd.DataFrame({"col_1": [5, 6], "col_2": [10, 9]}, index=pd.date_range("2000-01-05", periods=2))
@@ -812,28 +788,26 @@ def test_column_stats_and_filter_one_column_with_stats(s3_store_factory, clear_q
 
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    with config_context("VersionMap.ReloadInterval", 0):
-        qs.enable()
-        qs.reset_stats()
+    qs.enable()
 
-        # col_1 > 4 AND col_2 > 7
-        q = QueryBuilder()
-        q = q[(q["col_1"] > 4) & (q["col_2"] > 7)]
-        result = lib.read(sym, query_builder=q).data
+    q = QueryBuilder()
+    q = q[(q["col_1"] > 4) & (q["col_2"] > 7)]
+    result = lib.read(sym, query_builder=q).data
 
-        stats = qs.get_query_stats()
-        table_data_reads = get_table_data_read_count(stats)
+    stats = qs.get_query_stats()
+    table_data_reads = get_table_data_read_count(stats)
 
-        expected = pd.concat([df0_2col, df1_2col, df2_2col])
-        expected = expected[(expected["col_1"] > 4) & (expected["col_2"] > 7)]
-        assert_frame_equal(result, expected)
+    expected = pd.concat([df0_2col, df1_2col, df2_2col])
+    expected = expected[(expected["col_1"] > 4) & (expected["col_2"] > 7)]
+    assert_frame_equal(result, expected)
 
-        # Should read 1 segment (only seg2 can match col_1 > 4)
-        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+    # Should read 1 segment (only seg2 can match col_1 > 4)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
 
 
 def test_column_stats_or_filter(s3_store_factory, clear_query_stats):
-    """OR filter should only prune segments ruled out by ALL conditions."""
+    """OR filter should only prune segments ruled out by ALL conditions.
+    """
     lib = s3_store_factory(column_group_size=2, segment_row_size=2)
     sym = "test_or_filter"
 
@@ -843,27 +817,62 @@ def test_column_stats_or_filter(s3_store_factory, clear_query_stats):
 
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    with config_context("VersionMap.ReloadInterval", 0):
-        qs.enable()
-        qs.reset_stats()
+    qs.enable()
 
-        # col_1 < 2 OR col_1 > 5
-        # seg0: [1,2] can match col_1 < 2
-        # seg1: [3,4] cannot match either
-        # seg2: [5,6] can match col_1 > 5
-        q = QueryBuilder()
-        q = q[(q["col_1"] < 2) | (q["col_1"] > 5)]
-        result = lib.read(sym, query_builder=q).data
+    # col_1 < 2 OR col_1 > 5
+    # seg0: [1,2] can match col_1 < 2
+    # seg1: [3,4] cannot match either
+    # seg2: [5,6] can match col_1 > 5
+    q = QueryBuilder()
+    q = q[(q["col_1"] < 2) | (q["col_1"] > 5)]
+    result = lib.read(sym, query_builder=q).data
 
-        stats = qs.get_query_stats()
-        table_data_reads = get_table_data_read_count(stats)
+    stats = qs.get_query_stats()
+    table_data_reads = get_table_data_read_count(stats)
 
-        expected = pd.concat([stats_df0, stats_df1, stats_df2])
-        expected = expected[(expected["col_1"] < 2) | (expected["col_1"] > 5)]
-        assert_frame_equal(result, expected)
+    expected = pd.concat([stats_df0, stats_df1, stats_df2])
+    expected = expected[(expected["col_1"] < 2) | (expected["col_1"] > 5)]
+    assert_frame_equal(result, expected)
 
-        # Should read 2 segments (seg0 and seg2), seg1 is pruned
-        assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads but got {table_data_reads}"
+    # Should read 2 segments (seg0 and seg2), seg1 is pruned
+    assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_negation(s3_store_factory, clear_query_stats):
+    """Negation needs careful handling because if a block's statistics satisfy a comparison, we
+    may still need to visit that block when the comparison is negated.
+
+    This currently isn't implemented and we conservatively include blocks that we could safely have ruled out."""
+    lib = s3_store_factory(column_group_size=2, segment_row_size=2)
+    sym = "test_or_filter"
+
+    df_0 = pd.DataFrame({"col_1": [1, 3]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
+    df_1 = pd.DataFrame({"col_1": [4, 6]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
+    df_2 = pd.DataFrame({"col_1": [6, 8]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.float64)
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    # col_1 < 2 OR col_1 > 5
+    # seg0: [1,2] can match col_1 < 2
+    # seg1: [3,4] cannot match either
+    # seg2: [5,6] can match col_1 > 5
+    q = QueryBuilder()
+    q = q[~(q["col_1"] > 5)]
+    result = lib.read(sym, query_builder=q).data
+
+    stats = qs.get_query_stats()
+    table_data_reads = get_table_data_read_count(stats)
+
+    expected = pd.concat([df_0, df_1, df_2])
+    expected = expected[~(expected["col_1"] > 5)]
+    assert_frame_equal(result, expected)
+
+    assert table_data_reads == 3 # TODO aseaton We currently skip pruning with negated filters
 
 
 def test_column_stats_all_segments_pruned_returns_empty(s3_store_factory, clear_query_stats):
@@ -1241,3 +1250,34 @@ def test_column_stats_comparison_operators(s3_store_factory, clear_query_stats):
             assert (
                 table_data_reads == expected_reads
             ), f"For {desc}: expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+
+
+@pytest.mark.xfail(reason="Creating column stats on multi-indexed symbols is not supported yet")
+def test_column_stats_multiindex_index_col(lmdb_version_store_tiny_segment, any_output_format):
+    """Test column stats creation and usage with a multi-index DataFrame, with column stats created
+    on part of the multi-index."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_multiindex"
+
+    # Create multi-index DataFrames
+    from datetime import datetime
+
+    index0 = pd.MultiIndex.from_tuples(
+        [(datetime(2000, 1, 1), "A"), (datetime(2000, 1, 1), "B")],
+        names=["date", "category"]
+    )
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=index0)
+
+    index1 = pd.MultiIndex.from_tuples(
+        [(datetime(2000, 1, 2), "C"), (datetime(2000, 1, 2), "D")],
+        names=["date", "category"]
+    )
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=index1)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    # Create column stats
+    column_stats_dict = {"category": {"MINMAX"}}
+    lib.create_column_stats(sym, column_stats_dict)

@@ -1359,6 +1359,7 @@ static void read_indexed_keys_to_pipeline(
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
     const bool dynamic_schema = opt_false(read_options.dynamic_schema());
+    // TODO aseaton this stuff is really complicated and could be rewritten
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
             read_query, pipeline_context, dynamic_schema, bucketize_dynamic
     );

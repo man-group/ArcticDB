@@ -14,13 +14,6 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 
 ## Build Commands
 
-### Building the Python Wheel
-
-```bash
-# Build with a specific CMake preset
-ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
-```
-
 ### CMake Presets
 
 Key presets in `cpp/CMakePresets.json`:

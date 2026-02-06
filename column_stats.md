@@ -80,6 +80,29 @@ The column stats segment contains one row per row-slice (data segment) in the sy
 
 The segment uses a `ROWCOUNT` index type and is sorted by `start_index`.
 
+### Example of a column stats key
+
+```
+In [175]: lt.find_keys(KeyType.COLUMN_STATS)
+Out[175]: [Key(type=S, id='tst', version_id=2, content_hash=0xfbd2fd80a88a2bb6, creation_ts=1770305640432028599, start_index=0, end_index=0)]
+
+In [176]: cs = lt.find_keys(KeyType.COLUMN_STATS)[0]
+
+In [177]: lt.read_to_dataframe(cs)
+Out[177]:
+                                end_index  v1.0_MIN(a)  v1.0_MAX(a)
+start_index
+1970-01-01  1970-01-01 00:00:00.000000004          1.0          3.0
+
+In [178]: lib.read("tst").data
+Out[178]:
+     a
+0  1.0
+1  2.0
+2  3.0
+3  NaN
+```
+
 ### Column Naming Convention
 
 The stat columns follow a versioned naming scheme: `vX.Y_OPERATION(column_name)`

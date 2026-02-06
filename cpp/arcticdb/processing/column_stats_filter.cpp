@@ -26,6 +26,7 @@ struct ParsedColumnStatName {
     bool is_min;  // true for MIN, false for MAX
 };
 
+// TODO aseaton there are already APIs in `column_stats.hpp` for this
 // Parse column stat name without regex for performance
 // Format: vX.Y_MIN(col_name) or vX.Y_MAX(col_name)
 std::optional<ParsedColumnStatName> parse_column_stat_name(std::string_view name) {
@@ -141,6 +142,7 @@ bool compare_value_with_stats(
             // differs significantly, we don't prune.
             RawType minval, maxval;
 
+            // TODO aseaton the type handling here looks mega wrong
             auto extract_as = [](const Value& v, DataType expected_type, RawType& out) -> bool {
                 return details::visit_type(v.data_type(), [&v, expected_type, &out](auto val_tag) {
                     using ValTagType = decltype(val_tag);
@@ -236,6 +238,7 @@ bool evaluate_expression_node_against_stats(
     const ExpressionNode& node,
     const ColumnStatsRow& stats
 ) {
+    // TODO aseaton check if we can do something more similar to the FilterClause evaluation
     OperationType op = node.operation_type_;
 
     // Handle boolean operations (AND, OR, NOT)
@@ -378,7 +381,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
         stats_row.end_index = *end_val;
 
         // Extract MIN/MAX values for each column with stats
-        for (size_t col_idx = 0; col_idx < static_cast<size_t>(fields.size()); ++col_idx) {
+        for (size_t col_idx = 0; col_idx < fields.size(); ++col_idx) {
             const auto& field = fields[col_idx];
             std::string_view name = field.name();
 
@@ -432,6 +435,7 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
     std::shared_ptr<ColumnStatsData> column_stats_data,
     const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
+    util::check(!column_stats_data->empty(), "Should only be called with non-empty column stats");
     // Collect expression contexts from leading FilterClauses
     std::vector<std::pair<std::shared_ptr<ExpressionContext>, ExpressionName>> filter_expressions;
 
@@ -453,35 +457,17 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
         );
     }
 
-    if (filter_expressions.empty()) {
-        // No filter clauses to optimize, return a no-op filter
-        return [](const pipelines::index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) {
-            if (input) {
-                return std::move(input);
-            }
-            auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
-            res->set_range(0, isr.size());
-            return res;
-        };
-    }
+    util::check(!filter_expressions.empty(), "Should only create the filter if there was at least one FilterClause");
 
     return [column_stats_data = std::move(column_stats_data),
             filter_expressions = std::move(filter_expressions)](
         const pipelines::index::IndexSegmentReader& isr,
         std::unique_ptr<util::BitSet>&& input
     ) mutable {
+        util::check(static_cast<bool>(input), "Expected non-null input bitset for column stats filtering");
         using namespace pipelines::index;
 
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
-
-        if (column_stats_data->empty()) {
-            // No column stats, keep all segments
-            if (input) {
-                return std::move(input);
-            }
-            res->set_range(0, isr.size());
-            return res;
-        }
 
         auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
         auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
@@ -489,9 +475,14 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
         size_t pruned_count = 0;
         size_t total_count = 0;
 
+        // TODO aseaton a single (start_idx, end_idx) may be shared across many rows in the index segment. Therefore the calculation
+        // of keep below is duplicating work. We should get the column stats key, apply any DateRange filtering to it, and then calculate
+        // a stats bitset against the stats object, so we have a precomputed map (start_idx, end_idx) -> keep, which we apply cheaply
+        // as we pass through the index segment.
+        // TODO aseaton are there any other APIs to iterate over the index segment that I should be using instead?
         for (size_t row = 0; row < isr.size(); ++row) {
-            // Check if this row is already filtered out by a previous filter
-            if (input && !input->get_bit(row)) {
+            // Skip if this row is already filtered out by a previous filter
+            if (!input->get_bit(row)) {
                 continue;
             }
 
@@ -500,14 +491,9 @@ pipelines::FilterQuery<pipelines::index::IndexSegmentReader> create_column_stats
             timestamp start_idx = *(start_index_col + row);
             timestamp end_idx = *(end_index_col + row);
 
-            // Find the column stats for this row
             const ColumnStatsRow* stats = column_stats_data->find_stats(start_idx, end_idx);
-
-            if (!stats) {
-                // No stats for this row, keep it
-                res->set_bit(row, true);
-                continue;
-            }
+            util::check(stats, "Should have column stats for every row in the index segment but start_idx[{}]-end_idx[{}] were missing",
+                start_idx, end_idx);
 
             // Evaluate all filter expressions against the stats
             bool keep = true;
