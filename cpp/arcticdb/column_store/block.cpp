@@ -41,6 +41,14 @@ uint8_t* IMemBlock::ptr(size_t pos) { return data() + pos; }
 
 uint8_t* IMemBlock::end() const { return const_cast<uint8_t*>(ptr(physical_bytes())); }
 
+void IMemBlock::resize(size_t bytes) {
+    util::raise_rte("Can't resize a memory block which does not support `resize`. Bytes: {}", bytes);
+}
+
+uint8_t* IMemBlock::release() { util::raise_rte("Can't release a memory block which does not support `release`"); }
+
+void IMemBlock::abandon() { util::raise_rte("Can't abandon a memory block which does not support `abandon`"); }
+
 // DynamicMemBlock implementation
 DynamicMemBlock::DynamicMemBlock(size_t capacity, size_t offset, entity::timestamp ts) :
     bytes_(0),
@@ -74,10 +82,6 @@ void DynamicMemBlock::resize(size_t size) {
     );
     bytes_ = size;
 }
-
-uint8_t* DynamicMemBlock::release() { util::raise_rte("Can't release a dynamic block"); }
-
-void DynamicMemBlock::abandon() { util::raise_rte("Can't abandon a dynamic block"); }
 
 // ExternalMemBlock implementation
 ExternalMemBlock::ExternalMemBlock(
@@ -129,8 +133,6 @@ entity::timestamp ExternalMemBlock::timestamp() const { return timestamp_; }
 const uint8_t* ExternalMemBlock::data() const { return external_data_; }
 
 uint8_t* ExternalMemBlock::data() { return external_data_; }
-
-void ExternalMemBlock::resize(size_t bytes) { util::raise_rte("Can't resize a non dynamic block. Bytes: {}", bytes); }
 
 // ExternalPackedMemBlock implementation
 ExternalPackedMemBlock::ExternalPackedMemBlock(

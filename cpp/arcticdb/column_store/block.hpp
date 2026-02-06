@@ -33,13 +33,13 @@ class IMemBlock {
 
     virtual ~IMemBlock() = default;
 
-    // The below methods make sense only for specific memory block types. Decided to put them in the interface for
-    // performance reasons (i.e. calling them would be a single vtable lookup vs using `get_type` + `dynamic_cast`).
+    // The below methods make sense only for specific memory block types.
+    // Default implementations raise errors - override in subclasses that support these operations.
     // Dynamic block specific methods
-    virtual void resize(size_t bytes) = 0;
+    virtual void resize(size_t bytes);
     // External block specific methods
-    [[nodiscard]] virtual uint8_t* release() = 0;
-    virtual void abandon() = 0;
+    [[nodiscard]] virtual uint8_t* release();
+    virtual void abandon();
 
     // Implemented methods
     [[nodiscard]] bool empty() const;
@@ -79,8 +79,6 @@ class DynamicMemBlock : public IMemBlock {
     [[nodiscard]] const uint8_t* data() const final;
     [[nodiscard]] uint8_t* data() final;
     void resize(size_t size) final;
-    [[nodiscard]] uint8_t* release() final;
-    void abandon() final;
 
     size_t bytes_ = 0UL;
     size_t capacity_ = 0UL;
@@ -119,7 +117,6 @@ class ExternalMemBlock : public IMemBlock {
     [[nodiscard]] entity::timestamp timestamp() const override;
     [[nodiscard]] const uint8_t* data() const override;
     [[nodiscard]] uint8_t* data() override;
-    void resize(size_t bytes) override;
 
   private:
     size_t bytes_ = 0UL;
