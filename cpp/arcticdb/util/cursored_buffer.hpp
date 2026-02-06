@@ -83,8 +83,8 @@ struct CursoredBuffer {
 
         CursoredBuffer tmp{buffer_.bytes(), entity::AllocationType::DYNAMIC};
         for (const auto& block : buffer_.blocks()) {
-            tmp.ensure_bytes(block->bytes());
-            memcpy(tmp.cursor(), block->data(), block->bytes());
+            tmp.ensure_bytes(block->physical_bytes());
+            memcpy(tmp.cursor(), block->data(), block->physical_bytes());
             tmp.commit();
         }
         util::check(cursor_ == tmp.cursor_, "Cursor mismatch on compact_blocks, {} != {}", cursor_, tmp.cursor_);

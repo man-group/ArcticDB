@@ -9,137 +9,169 @@
 #pragma once
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/magic_num.hpp>
+#include <entity/types.hpp>
 
 #include <cstdint>
 
 namespace arcticdb {
 
-struct MemBlock {
+enum class MemBlockType { DYNAMIC, EXTERNAL_WITH_EXTRA_BYTES, EXTERNAL_PACKED };
+
+bool is_external(MemBlockType type);
+
+class IMemBlock {
+  public:
+    // Abstract methods
+    [[nodiscard]] virtual MemBlockType get_type() const = 0;
+    [[nodiscard]] virtual size_t physical_bytes() const = 0;
+    [[nodiscard]] virtual size_t logical_size() const = 0;
+    [[nodiscard]] virtual size_t capacity() const = 0;
+    [[nodiscard]] virtual size_t offset() const = 0;
+    [[nodiscard]] virtual entity::timestamp timestamp() const = 0;
+    [[nodiscard]] virtual const uint8_t* data() const = 0;
+    [[nodiscard]] virtual uint8_t* data() = 0;
+
+    virtual ~IMemBlock() = default;
+
+    // The below methods make sense only for specific memory block types.
+    // Default implementations raise errors - override in subclasses that support these operations.
+    // Dynamic block specific methods
+    virtual void resize(size_t bytes);
+    // External block specific methods
+    [[nodiscard]] virtual uint8_t* release();
+    virtual void abandon();
+
+    // Implemented methods
+    [[nodiscard]] bool empty() const;
+    [[nodiscard]] size_t free_space() const;
+    void add_bytes(size_t bytes);
+    void copy_to(uint8_t* target) const;
+    void copy_from(const uint8_t* src, size_t bytes, size_t pos);
+    // virtual to allow ExternalPackedBuffer to override to throw
+    [[nodiscard]] virtual const uint8_t* ptr(size_t pos) const;
+    [[nodiscard]] virtual uint8_t* ptr(size_t pos);
+    [[nodiscard]] uint8_t* end() const;
+};
+
+// DynamicMemBlock stores inline memory of a certain capacity. It allows resizing within the predefined capacity.
+class DynamicMemBlock : public IMemBlock {
+  public:
     static const size_t Align = 128;
     static const size_t MinSize = 64;
-    using magic_t = arcticdb::util::MagicNum<'M', 'e', 'm', 'b'>;
-    magic_t magic_;
 
     template<size_t DefaultBlockSize>
     friend class ChunkedBufferImpl;
 
-    explicit MemBlock(size_t capacity, size_t offset, entity::timestamp ts) :
-        bytes_(0),
-        capacity_(capacity),
-        external_data_(nullptr),
-        offset_(offset),
-        timestamp_(ts) {
-#ifdef DEBUG_BUILD
-        memset(data_, 'c', capacity_); // For identifying unwritten-to block portions
-#endif
-    }
+    explicit DynamicMemBlock(size_t capacity, size_t offset, entity::timestamp ts);
+    ~DynamicMemBlock() = default;
 
-    MemBlock(const uint8_t* data, size_t size, size_t offset, entity::timestamp ts, bool owning) :
-        bytes_(size),
-        capacity_(size),
-        external_data_(const_cast<uint8_t*>(data)),
-        offset_(offset),
-        timestamp_(ts),
-        owns_external_data_(owning) {}
-
-    MemBlock(uint8_t* data, size_t size, size_t offset, entity::timestamp ts, bool owning) :
-        bytes_(size),
-        capacity_(size),
-        external_data_(data),
-        offset_(offset),
-        timestamp_(ts),
-        owns_external_data_(owning) {}
-
-    [[nodiscard]] bool is_external() const {
-        // external_data_ can be nullptr when owns_external_data_ is true
-        return external_data_ != nullptr || owns_external_data_;
-    }
-
-    ~MemBlock() {
-        magic_.check(true);
-        if (owns_external_data_) {
-            // Previously warn level, but would then show up in a read_batch when some of the returned values are
-            // DataError objects if the read is racing with a delete
-            log::version().debug("Unexpected release of detachable block memory");
-            free_detachable_memory(external_data_, bytes_);
-        }
-    }
+    MemBlockType get_type() const final;
 
     static constexpr size_t alloc_size(size_t requested_size) noexcept { return HeaderSize + requested_size; }
 
     static constexpr size_t raw_size(size_t total_size) noexcept { return total_size - HeaderSize; }
 
-    void resize(size_t size) {
-        arcticdb::util::check_arg(
-                size <= capacity_, "Buffer overflow, size {} is greater than capacity {}", size, capacity_
-        );
-        bytes_ = size;
-    }
-
-    [[nodiscard]] size_t bytes() const { return bytes_; }
-
-    [[nodiscard]] size_t capacity() const { return capacity_; }
-
-    [[nodiscard]] const uint8_t& operator[](size_t pos) const { return data()[pos]; }
-
-    [[nodiscard]] const uint8_t* internal_ptr(size_t pos) const { return &data_[pos]; }
-
-    void copy_to(uint8_t* target) const { memcpy(target, data(), bytes_); }
-
-    void copy_from(const uint8_t* src, size_t bytes, size_t pos) {
-        arcticdb::util::check_arg(
-                pos + bytes <= capacity_, "Copying more bytes: {} is greater than capacity {}", bytes, capacity_
-        );
-        memcpy(data() + pos, src, bytes);
-    }
-
-    uint8_t& operator[](size_t pos) { return const_cast<uint8_t*>(data())[pos]; }
-
-    [[nodiscard]] bool empty() const { return bytes_ == 0; }
-
-    [[nodiscard]] const uint8_t* data() const { return is_external() ? external_data_ : data_; }
-
-    [[nodiscard]] uint8_t* data() { return is_external() ? external_data_ : data_; }
-
-    [[nodiscard]] uint8_t* release() {
-        util::check(is_external(), "Cannot release inlined or external data pointer");
-        auto* tmp = external_data_;
-        external_data_ = nullptr;
-        owns_external_data_ = false;
-        return tmp;
-    }
-
-    void abandon() {
-        util::check(is_external(), "Cannot abandon inlined or external data pointer");
-        free_detachable_memory(external_data_, bytes_);
-        external_data_ = nullptr;
-        owns_external_data_ = false;
-    }
-
-    [[nodiscard]] uint8_t* end() const { return const_cast<uint8_t*>(&data()[bytes_]); }
-
-    [[nodiscard]] size_t free_space() const {
-        arcticdb::util::check(bytes_ <= capacity_, "Block overflow: {} > {}", bytes_, capacity_);
-        return capacity_ - bytes_;
-    }
+    [[nodiscard]] size_t physical_bytes() const final;
+    [[nodiscard]] size_t logical_size() const final;
+    [[nodiscard]] size_t capacity() const final;
+    [[nodiscard]] size_t offset() const final;
+    [[nodiscard]] entity::timestamp timestamp() const final;
+    [[nodiscard]] const uint8_t* data() const final;
+    [[nodiscard]] uint8_t* data() final;
+    void resize(size_t size) final;
 
     size_t bytes_ = 0UL;
     size_t capacity_ = 0UL;
-    uint8_t* external_data_ = nullptr;
     size_t offset_ = 0UL;
     entity::timestamp timestamp_ = 0L;
-    bool owns_external_data_ = false;
 
-    static const size_t HeaderDataSize = sizeof(magic_) +    // 8 bytes
+    static const size_t HeaderDataSize = sizeof(void*) +     // 8 bytes for vptr
                                          sizeof(bytes_) +    // 8 bytes
                                          sizeof(capacity_) + // 8 bytes
-                                         sizeof(external_data_) + sizeof(offset_) + sizeof(timestamp_) +
-                                         sizeof(owns_external_data_);
+                                         sizeof(offset_) + sizeof(timestamp_);
 
     uint8_t pad[Align - HeaderDataSize];
     static const size_t HeaderSize = HeaderDataSize + sizeof(pad);
     static_assert(HeaderSize == Align);
     uint8_t data_[MinSize];
 };
+static_assert(sizeof(DynamicMemBlock) == DynamicMemBlock::Align + DynamicMemBlock::MinSize);
+
+// ExternalMemBlock stores external memory of predefined size. It does not allow resizing.
+// It allows storing `extra_bytes` for arrow string types.
+class ExternalMemBlock : public IMemBlock {
+  public:
+    ExternalMemBlock(
+            const uint8_t* data, size_t logical_size, size_t offset, entity::timestamp ts, bool owning,
+            size_t extra_bytes = 0
+    );
+    ~ExternalMemBlock();
+
+    MemBlockType get_type() const override;
+    [[nodiscard]] uint8_t* release() override;
+    void abandon() override;
+    [[nodiscard]] size_t physical_bytes() const override;
+    [[nodiscard]] size_t logical_size() const override;
+    [[nodiscard]] size_t capacity() const override;
+    [[nodiscard]] size_t offset() const override;
+    [[nodiscard]] entity::timestamp timestamp() const override;
+    [[nodiscard]] const uint8_t* data() const override;
+    [[nodiscard]] uint8_t* data() override;
+
+  private:
+    size_t bytes_ = 0UL;
+    size_t offset_ = 0UL;
+    entity::timestamp timestamp_ = 0UL;
+    uint8_t* external_data_ = nullptr;
+    bool owns_external_data_ = false;
+    size_t extra_bytes_ = 0UL;
+};
+
+// ExternalMemBlock stores external memory of predefined size. It does not allow resizing.
+// It stores packed bits and does not allow any slicing. It is used for arrow packed bool types.
+class ExternalPackedMemBlock : public ExternalMemBlock {
+  public:
+    ExternalPackedMemBlock(
+            const uint8_t* data, size_t logical_size, size_t shift, size_t offset, entity::timestamp ts, bool owning
+    );
+
+    MemBlockType get_type() const final;
+    [[nodiscard]] size_t logical_size() const final;
+    [[nodiscard]] const uint8_t* ptr(size_t pos) const final;
+    [[nodiscard]] uint8_t* ptr(size_t pos) final;
+    [[nodiscard]] size_t shift() const;
+
+  private:
+    size_t logical_size_ = 0UL;
+    // shift_ refers to the bit shift to the first bit in memory.
+    // Arrow spec allows having a packed bit buffer which does not start at a byte boundary. E.g. We could have 10 bits
+    // stored in 2 bytes with a shift_=2. So the 2 bytes would look like:
+    // xx012345 6789xxxx
+    // where a number i represents the i-th bit in the buffer and x marks unused bits.
+    size_t shift_ = 0UL;
+};
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::MemBlockType> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(arcticdb::MemBlockType t, FormatContext& ctx) const {
+        switch (t) {
+        case arcticdb::MemBlockType::DYNAMIC:
+            return fmt::format_to(ctx.out(), "DYNAMIC");
+        case arcticdb::MemBlockType::EXTERNAL_WITH_EXTRA_BYTES:
+            return fmt::format_to(ctx.out(), "EXTERNAL_WITH_EXTRA_BYTES");
+        case arcticdb::MemBlockType::EXTERNAL_PACKED:
+            return fmt::format_to(ctx.out(), "EXTERNAL_PACKED");
+        default:
+            arcticdb::util::raise_rte("Unrecognized to load {}", static_cast<int8_t>(t));
+        }
+    }
+};
+} // namespace fmt

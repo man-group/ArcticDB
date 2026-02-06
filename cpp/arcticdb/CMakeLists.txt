@@ -447,6 +447,7 @@ set(arcticdb_srcs
         codec/protobuf_mappings.cpp
         codec/segment.cpp
         codec/segment_header.cpp
+        column_store/block.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
@@ -1196,6 +1197,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
+            column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_binary.cpp

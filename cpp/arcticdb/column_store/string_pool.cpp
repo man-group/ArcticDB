@@ -148,7 +148,7 @@ const Buffer& StringPool::shapes() const {
     shapes_.ensure_bytes(blocks.size() * sizeof(shape_t));
     auto ptr = shapes_.buffer().ptr_cast<shape_t>(0, sizeof(shape_t));
     for (auto& block : blocks) {
-        *ptr++ = static_cast<shape_t>(block->bytes());
+        *ptr++ = static_cast<shape_t>(block->physical_bytes());
     }
     ARCTICDB_TRACE(log::inmem(), "String pool shapes array has {} blocks", blocks.size());
     return shapes_.buffer();
