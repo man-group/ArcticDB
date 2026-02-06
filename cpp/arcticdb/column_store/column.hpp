@@ -9,9 +9,10 @@
 #pragma once
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
+#include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/column_store/concepts.hpp>
+#include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -332,9 +333,9 @@ class Column {
 
     Buffer&& release_shapes();
 
-    template<class T, template<class> class Tensor>
-    requires std::is_integral_v<T> || std::is_floating_point_v<T>
-    void set_array(ssize_t row_offset, Tensor<T>& val) {
+    template<util::arithmetic_tensor TensorType>
+    void set_array(ssize_t row_offset, TensorType& val) {
+        using value_type = typename TensorType::value_type;
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
         util::check_arg(
@@ -347,9 +348,9 @@ class Column {
         shapes_.ensure<shape_t>(val.ndim());
         memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
-        util::FlattenHelper<T, Tensor> flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
-        flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
+        util::FlattenHelper flatten(val);
+        auto data_ptr = reinterpret_cast<value_type*>(data_.cursor());
+        flatten.flatten(data_ptr, reinterpret_cast<const value_type*>(info.ptr));
         update_offsets(val.nbytes());
         data_.commit();
         shapes_.commit();
@@ -561,8 +562,7 @@ class Column {
         );
         auto column_data = data();
         return details::visit_type(
-                type().data_type(),
-                [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
+                type().data_type(), [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
                     using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
                     auto accessor = random_accessor<typename type_info::TDT>(&column_data);
                     if constexpr (std::is_same_v<T, typename type_info::RawType>) {
