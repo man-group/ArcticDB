@@ -137,6 +137,62 @@ print(result.data)
 # 1   prices  [ticker, ...]  [VARCHAR, ...]  False
 ```
 
+## Database Hierarchy
+
+ArcticDB organizes data in a `database.library` hierarchy:
+
+- **Database**: Permissioning unit, typically one per user (e.g., `jblackburn`)
+- **Library**: Collection of symbols within a database (e.g., `jblackburn.market_data`)
+- **Symbol**: Individual table/dataset within a library
+
+Top-level libraries without a database prefix are grouped under `__default__`.
+
+### Discovering Databases
+
+Use `arctic.sql()` to explore the database hierarchy:
+
+```python
+import arcticdb as adb
+
+# Setup with database.library naming
+arctic = adb.Arctic("lmdb://my_data")
+arctic.create_library("jblackburn.market_data")
+arctic.create_library("jblackburn.reference_data")
+arctic.create_library("shared.global_config")
+arctic.create_library("legacy_data")  # Top-level, no database prefix
+
+# List all databases with library counts
+result = arctic.sql("SHOW DATABASES")
+print(result)
+#    database_name  library_count
+# 0     jblackburn              2
+# 1         shared              1
+# 2     __default__              1
+```
+
+### Cross-Database Queries
+
+Query data across multiple databases using `arctic.duckdb()`:
+
+```python
+# Write data to different databases
+lib_market = arctic["jblackburn.market_data"]
+lib_ref = arctic["shared.global_config"]
+
+lib_market.write("prices", prices_df)
+lib_ref.write("sectors", sectors_df)
+
+# Join across databases
+with arctic.duckdb() as ddb:
+    ddb.register_symbol("jblackburn.market_data", "prices")
+    ddb.register_symbol("shared.global_config", "sectors")
+    result = ddb.query("""
+        SELECT p.ticker, p.price, s.sector
+        FROM prices p
+        JOIN sectors s ON p.ticker = s.ticker
+    """)
+```
+
 ## Advanced: `lib.duckdb()` Context Manager
 
 For complex scenarios requiring fine-grained control, use the `duckdb()` context manager:
@@ -154,17 +210,19 @@ with lib.duckdb() as ddb:
 
 ### When to Use `duckdb()` vs `sql()`
 
-| Scenario | Use `sql()` | Use `duckdb()` |
-|----------|-------------|----------------|
-| Simple single-symbol queries | ✅ | |
-| Basic JOINs | ✅ | |
-| Schema introspection (DESCRIBE) | ✅ | |
-| Data discovery (SHOW TABLES) | ✅ | |
-| Different versions per symbol | | ✅ |
-| Same symbol with different filters | | ✅ |
-| Multiple queries on same data | | ✅ |
-| Custom table aliases | | ✅ |
-| Pre-filtering with QueryBuilder | | ✅ |
+| Scenario | Use `lib.sql()` | Use `arctic.sql()` | Use `duckdb()` |
+|----------|-----------------|--------------------|--------------------|
+| Simple single-symbol queries | ✅ | | |
+| Basic JOINs | ✅ | | |
+| Schema introspection (DESCRIBE) | ✅ | | |
+| Data discovery (SHOW TABLES) | ✅ | | |
+| Database hierarchy (SHOW DATABASES) | | ✅ | |
+| Different versions per symbol | | | ✅ |
+| Same symbol with different filters | | | ✅ |
+| Multiple queries on same data | | | ✅ |
+| Custom table aliases | | | ✅ |
+| Pre-filtering with QueryBuilder | | | ✅ |
+| Cross-library/database queries | | | ✅ |
 
 ### Register All Symbols
 

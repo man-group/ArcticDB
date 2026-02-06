@@ -55,7 +55,7 @@ def _extract_limit_from_ast(ast: Dict) -> Optional[int]:
                         return int(value)
 
         return None
-    except Exception as e:
+    except (ValueError, KeyError, TypeError, IndexError) as e:
         logger.debug("Failed to extract LIMIT from AST: %s", e)
         return None
 
@@ -197,7 +197,7 @@ def _extract_tables_from_ast(ast: Dict) -> Dict[str, str]:
         node = statements[0].get("node", {})
         extract_tables_recursive(node)
 
-    except Exception as e:
+    except (ValueError, KeyError, TypeError, IndexError) as e:
         logger.debug("Failed to extract tables from AST: %s", e)
 
     return alias_map
@@ -448,7 +448,18 @@ def _extract_constant_value(node: Dict) -> Any:
                 return None
 
             match type_id:
-                case "INTEGER" | "BIGINT" | "SMALLINT" | "TINYINT" | "UINTEGER" | "UBIGINT" | "USMALLINT" | "UTINYINT" | "HUGEINT" | "UHUGEINT":
+                case (
+                    "INTEGER"
+                    | "BIGINT"
+                    | "SMALLINT"
+                    | "TINYINT"
+                    | "UINTEGER"
+                    | "UBIGINT"
+                    | "USMALLINT"
+                    | "UTINYINT"
+                    | "HUGEINT"
+                    | "UHUGEINT"
+                ):
                     return int(raw_value)
                 case "FLOAT" | "DOUBLE" | "REAL":
                     return float(raw_value)
@@ -456,12 +467,14 @@ def _extract_constant_value(node: Dict) -> Any:
                     # DECIMAL stores value as integer, need to apply scale
                     type_info = value_info.get("type", {}).get("type_info", {})
                     scale = type_info.get("scale", 0)
-                    return float(raw_value) / (10 ** scale)
+                    return float(raw_value) / (10**scale)
                 case "BOOLEAN":
                     return bool(raw_value)
                 case "VARCHAR":
                     return raw_value
-                case "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMP_NS" | "TIMESTAMP_MS" | "TIMESTAMP_S" | "DATE":
+                case (
+                    "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMP_NS" | "TIMESTAMP_MS" | "TIMESTAMP_S" | "DATE"
+                ):
                     return _convert_to_timestamp(raw_value)
                 case _:
                     return raw_value
@@ -529,9 +542,9 @@ def _build_query_builder(parsed_filters: List[Dict]) -> Optional[QueryBuilder]:
             else:
                 filter_expr = filter_expr & expr
 
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             # Skip filters that can't be converted to QueryBuilder
-            logger.debug("Skipping filter that couldn't be converted to QueryBuilder: %s (error: %s)", f, e)
+            logger.warning("Skipping filter that couldn't be converted to QueryBuilder: %s (error: %s)", f, e)
             continue
 
     if filter_expr is not None:
@@ -605,7 +618,6 @@ def _get_sql_ast(query: str) -> Optional[Dict]:
     import duckdb
 
     try:
-        # Use a connection to call json_serialize_sql as a SQL function
         conn = duckdb.connect(":memory:")
         try:
             result = conn.execute("SELECT json_serialize_sql(?)", [query]).fetchone()
@@ -618,7 +630,7 @@ def _get_sql_ast(query: str) -> Optional[Dict]:
         finally:
             conn.close()
     except Exception as e:
-        logger.debug("Failed to parse SQL to AST: %s", e)
+        logger.warning("Failed to parse SQL to AST: %s", e)
 
     return None
 
@@ -660,8 +672,49 @@ def is_table_discovery_query(query: str) -> bool:
                 return True
 
         return False
-    except Exception as e:
+    except (ValueError, KeyError, TypeError, IndexError) as e:
         logger.debug("Failed to check if query is table discovery: %s", e)
+        return False
+
+
+def is_database_discovery_query(query: str) -> bool:
+    """
+    Check if a SQL query is a database discovery query (SHOW DATABASES).
+
+    Uses DuckDB's AST parser to detect this query rather than string matching.
+
+    Parameters
+    ----------
+    query : str
+        SQL query to check.
+
+    Returns
+    -------
+    bool
+        True if the query is SHOW DATABASES, False otherwise.
+    """
+    ast = _get_sql_ast(query)
+    if ast is None:
+        return False
+
+    try:
+        statements = ast.get("statements", [])
+        if not statements:
+            return False
+
+        node = statements[0].get("node", {})
+        from_table = node.get("from_table", {})
+
+        # SHOW DATABASES is parsed as SELECT with SHOW_REF from_table
+        if from_table.get("type") == "SHOW_REF":
+            table_name = from_table.get("table_name", "")
+            # SHOW DATABASES -> table_name = '"databases"'
+            if table_name == '"databases"':
+                return True
+
+        return False
+    except (ValueError, KeyError, TypeError, IndexError) as e:
+        logger.debug("Failed to check if query is database discovery: %s", e)
         return False
 
 
@@ -697,8 +750,7 @@ def extract_pushdown_from_sql(
     ast = _get_sql_ast(query)
     if ast is None:
         raise ValueError(
-            "Could not parse SQL query. "
-            "Ensure query is valid SQL, or use duckdb() to register symbols explicitly."
+            "Could not parse SQL query. " "Ensure query is valid SQL, or use duckdb() to register symbols explicitly."
         )
 
     # Extract table alias mapping

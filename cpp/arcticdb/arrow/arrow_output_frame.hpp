@@ -7,6 +7,7 @@
  */
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -28,8 +29,8 @@ class RecordBatchIterator;
 // Follows Rule of Five: move-only semantics to prevent double-free of Arrow structures.
 struct RecordBatchData {
     RecordBatchData() {
-        array_.release = nullptr;
-        schema_.release = nullptr;
+        std::memset(&array_, 0, sizeof(array_));
+        std::memset(&schema_, 0, sizeof(schema_));
     }
 
     RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
@@ -95,9 +96,15 @@ struct ArrowOutputFrame {
     std::vector<RecordBatchData> extract_record_batches();
 
     // Create an iterator for streaming record batches one at a time.
-    [[nodiscard]] std::shared_ptr<RecordBatchIterator> create_iterator() const;
+    // Note: This method consumes the data destructively and can only be called once.
+    [[nodiscard]] std::shared_ptr<RecordBatchIterator> create_iterator();
 
     [[nodiscard]] size_t num_blocks() const;
+
+private:
+    // Guards against multiple consumption of data_ via extract_record_batches() or create_iterator().
+    // Both methods destructively transfer ownership from the underlying sparrow::record_batch objects.
+    bool data_consumed_ = false;
 };
 
 // Iterator for streaming record batches one at a time.

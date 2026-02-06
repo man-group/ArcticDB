@@ -2221,9 +2221,9 @@ class Library:
             pushdown_by_table, symbols = extract_pushdown_from_sql(query)
 
         # Create DuckDB connection and register data with pushdown applied
-        conn = duckdb.connect(":memory:")
-
+        conn = None
         try:
+            conn = duckdb.connect(":memory:")
             for symbol in symbols:
                 pushdown = pushdown_by_table.get(symbol)
                 if pushdown:
@@ -2296,7 +2296,8 @@ class Library:
             )
 
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
     def duckdb(self, connection: Any = None) -> "DuckDBContext":
         """

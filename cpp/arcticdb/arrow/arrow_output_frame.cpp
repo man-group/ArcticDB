@@ -26,11 +26,17 @@ size_t ArrowOutputFrame::num_blocks() const {
     return data_->size();
 }
 
-std::shared_ptr<RecordBatchIterator> ArrowOutputFrame::create_iterator() const {
+std::shared_ptr<RecordBatchIterator> ArrowOutputFrame::create_iterator() {
+    util::check(!data_consumed_, "Cannot create iterator: data has already been consumed by extract_record_batches() or create_iterator()");
+    data_consumed_ = true;
+
     return std::make_shared<RecordBatchIterator>(data_);
 }
 
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
+    util::check(!data_consumed_, "Cannot extract record batches: data has already been consumed by extract_record_batches() or create_iterator()");
+    data_consumed_ = true;
+
     std::vector<RecordBatchData> output;
     if (!data_) {
         return output;
