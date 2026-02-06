@@ -2261,7 +2261,7 @@ class Library:
                 conn.register(sql_name, reader.to_pyarrow_reader())
 
             # Execute query and get Arrow result
-            result_arrow = conn.execute(query).arrow()
+            result_arrow = conn.execute(query).fetch_arrow_table()
 
             # Convert to requested format
             if output_format is None:
