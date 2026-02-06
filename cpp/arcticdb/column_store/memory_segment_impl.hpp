@@ -33,7 +33,8 @@ class SegmentInMemoryImpl {
         template<class Callable>
         auto visit(Callable&& c) const {
             return entity::visit_field(
-                    parent_->descriptor().field(column_id_), [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+                    parent_->descriptor().field(column_id_),
+                    [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                         using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
                         return c(parent_->scalar_at<RawType>(row_id_, column_id_));
                     }
@@ -68,7 +69,8 @@ class SegmentInMemoryImpl {
         template<class Callable>
         auto visit(Callable&& c) {
             return entity::visit_field(
-                    parent_->descriptor().field(column_id_), [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+                    parent_->descriptor().field(column_id_),
+                    [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                         using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
                         return c(parent_->reference_at<RawType>(row_id_, column_id_));
                     }

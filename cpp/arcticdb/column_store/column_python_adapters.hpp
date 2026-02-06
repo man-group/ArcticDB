@@ -20,7 +20,7 @@ namespace arcticdb::python_util {
 /**
  * Python/NumPy adapter functions for core column_store types.
  * These functions provide the bridge between Python and C++ for column operations.
- * 
+ *
  * These are free functions that accept pybind11 types, allowing the core Column and
  * SegmentInMemory classes to remain free of Python dependencies.
  */
@@ -30,7 +30,7 @@ template<class T>
 requires std::is_integral_v<T> || std::is_floating_point_v<T>
 void column_set_array(Column& col, ssize_t row_offset, py::array_t<T>& val);
 
-// SegmentInMemory Python adapters  
+// SegmentInMemory Python adapters
 template<class T>
 requires std::integral<T> || std::floating_point<T>
 void segment_set_array(SegmentInMemory& seg, position_t pos, py::array_t<T>& val);
