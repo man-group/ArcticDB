@@ -5,7 +5,7 @@
 ArcticDB provides a Query Statistics API that allows you to collect and analyze performance metrics for operations performed on your data stores.
 This can be useful for debugging code issues and optimizing performance in applications.
 
-Currently only S3 backend is supported. Support for other storage backend is pending.
+Currently only the S3 and in-memory backends are supported.
 
 ## Basic Usage
 

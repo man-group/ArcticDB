@@ -12,6 +12,8 @@
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
+#include <arcticdb/toolbox/query_stats.hpp>
+
 namespace arcticdb::storage::memory {
 
 void add_serialization_fields(KeySegmentPair& kv) {
@@ -28,6 +30,9 @@ std::string MemoryStorage::name() const { return "memory_storage-0"; }
 
 void MemoryStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(MemoryStorageWrite, 0)
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(
+            query_stats::TaskType::Memory_PutObject, variant_key_type(key_seg.variant_key())
+    );
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
 
@@ -48,10 +53,19 @@ void MemoryStorage::do_write(KeySegmentPair& key_seg) {
                 key_vec.try_emplace(key, key_seg.segment().clone());
             }
     );
+    query_stats::add(
+            query_stats::TaskType::Memory_PutObject,
+            variant_key_type(key_seg.variant_key()),
+            query_stats::StatType::SIZE_BYTES,
+            key_seg.segment().size()
+    );
 }
 
 void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     ARCTICDB_SAMPLE(MemoryStorageUpdate, 0)
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(
+            query_stats::TaskType::Memory_PutObject, variant_key_type(key_seg.variant_key())
+    );
 
     auto& key_vec = data_[variant_key_type(key_seg.variant_key())];
     auto it = key_vec.find(key_seg.variant_key());
@@ -68,6 +82,12 @@ void MemoryStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 
     add_serialization_fields(key_seg);
     key_vec.insert(std::make_pair(key_seg.variant_key(), key_seg.segment().clone()));
+    query_stats::add(
+            query_stats::TaskType::Memory_PutObject,
+            variant_key_type(key_seg.variant_key()),
+            query_stats::StatType::SIZE_BYTES,
+            key_seg.segment().size()
+    );
 }
 
 void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor, ReadKeyOpts) {
@@ -77,12 +97,23 @@ void MemoryStorage::do_read(VariantKey&& variant_key, const ReadVisitor& visitor
 
 KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     ARCTICDB_SAMPLE(MemoryStorageRead, 0)
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(
+            query_stats::TaskType::Memory_GetObject, variant_key_type(variant_key)
+    );
     auto& key_vec = data_[variant_key_type(variant_key)];
     auto it = key_vec.find(variant_key);
 
     if (it != key_vec.end()) {
         ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key));
-        return {std::move(variant_key), it->second.clone()};
+        auto seg = it->second.clone();
+        query_stats::add(
+                query_stats::TaskType::Memory_GetObject,
+                variant_key_type(variant_key),
+                query_stats::StatType::SIZE_BYTES,
+                seg.size()
+        );
+
+        return {std::move(variant_key), std::move(seg)};
     } else {
         throw KeyNotFoundException(variant_key);
     }
@@ -90,6 +121,8 @@ KeySegmentPair MemoryStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
 
 bool MemoryStorage::do_key_exists(const VariantKey& key) {
     ARCTICDB_SAMPLE(MemoryStorageKeyExists, 0)
+    auto query_stat_operation_time =
+            query_stats::add_task_count_and_time(query_stats::TaskType::Memory_HeadObject, variant_key_type(key));
     const auto& key_vec = data_[variant_key_type(key)];
     auto it = key_vec.find(key);
     return it != key_vec.end();
@@ -97,6 +130,9 @@ bool MemoryStorage::do_key_exists(const VariantKey& key) {
 
 void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     ARCTICDB_SAMPLE(MemoryStorageRemove, 0)
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(
+            query_stats::TaskType::Memory_DeleteObject, variant_key_type(variant_key)
+    );
     auto& key_vec = data_[variant_key_type(variant_key)];
 
     auto it = key_vec.find(variant_key);
@@ -104,6 +140,12 @@ void MemoryStorage::do_remove(VariantKey&& variant_key, RemoveOpts opts) {
     if (it != key_vec.end()) {
         ARCTICDB_DEBUG(
                 log::storage(), "Removed key {}: {}", variant_key_type(variant_key), variant_key_view(variant_key)
+        );
+        query_stats::add(
+                query_stats::TaskType::Memory_DeleteObject,
+                variant_key_type(variant_key),
+                query_stats::StatType::SIZE_BYTES,
+                it->second.size()
         );
         key_vec.erase(it);
     } else if (!opts.ignores_missing_key_) {
@@ -126,6 +168,8 @@ bool MemoryStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {
     ARCTICDB_SAMPLE(MemoryStorageItType, 0)
+    auto query_stat_operation_time =
+            query_stats::add_task_count_and_time(query_stats::TaskType::Memory_ListObjects, key_type);
     auto& key_vec = data_[key_type];
     auto prefix_matcher = stream_id_prefix_matcher(prefix);
 
