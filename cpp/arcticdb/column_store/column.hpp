@@ -562,7 +562,8 @@ class Column {
         );
         auto column_data = data();
         return details::visit_type(
-                type().data_type(), [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
+                type().data_type(),
+                [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
                     using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
                     auto accessor = random_accessor<typename type_info::TDT>(&column_data);
                     if constexpr (std::is_same_v<T, typename type_info::RawType>) {
