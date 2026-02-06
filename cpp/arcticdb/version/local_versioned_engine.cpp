@@ -392,6 +392,10 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
             [&stream_id, &version_query, this](const TimestampVersionQuery& timestamp) {
                 return get_version_at_time(stream_id, timestamp.timestamp_, version_query);
             },
+            [](ARCTICDB_UNUSED const std::shared_ptr<SchemaItem>& schema_item) {
+                util::raise_rte("get_version_to_read shouldn't be called with SchemaItem input");
+                return std::optional<VersionedItem>();
+            },
             [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); }
     );
 }
@@ -404,7 +408,7 @@ IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, cons
     return index::get_index_segment_range(version->key_, store());
 }
 
-std::variant<VersionedItem, StreamId> get_version_identifier(
+VersionIdentifier get_version_identifier(
         const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options,
         const std::optional<VersionedItem>& version
 ) {
@@ -428,8 +432,14 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         const ReadOptions& read_options, std::any& handler_data
 ) {
     py::gil_scoped_release release_gil;
-    auto version = get_version_to_read(stream_id, version_query);
-    const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
+    const auto identifier = util::variant_match(
+            version_query.content_,
+            [&](const std::shared_ptr<SchemaItem>& schema_item) -> VersionIdentifier { return {schema_item}; },
+            [&](const auto&) -> VersionIdentifier {
+                auto version = get_version_to_read(stream_id, version_query);
+                return get_version_identifier(stream_id, version_query, read_options, version);
+            }
+    );
 
     auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
     auto& keys = root_result.frame_and_descriptor_.keys_;
@@ -452,6 +462,50 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         );
         return {std::move(root_result), std::move(node_results)};
     }
+}
+
+folly::Future<SchemaItem> LocalVersionedEngine::get_index(AtomKey&& k, const ReadQuery& read_query) {
+    const auto key = std::move(k);
+    return store()->read(key).thenValue([&read_query](auto&& key_seg_pair) -> SchemaItem {
+        auto key = to_atom(std::move(key_seg_pair.first));
+        auto seg = std::move(key_seg_pair.second);
+        const auto& tsd = seg.index_descriptor();
+        OutputSchema schema{tsd.as_stream_descriptor().clone(), tsd.normalization()};
+        for (const auto& clause : read_query.clauses_) {
+            schema = clause->modify_schema(std::move(schema));
+        }
+        if (read_query.columns.has_value()) {
+            ankerl::unordered_dense::set<std::string_view> cols(
+                    read_query.columns->cbegin(), read_query.columns->cend()
+            );
+            StreamDescriptor filtered_desc;
+            for (const auto& field : schema.stream_descriptor().fields()) {
+                if (cols.contains(field.name())) {
+                    filtered_desc.add_field(field);
+                }
+            }
+            return SchemaItem{std::move(key), std::move(seg), std::move(filtered_desc)};
+        } else {
+            return SchemaItem{std::move(key), std::move(seg), std::move(std::get<0>(schema.release()))};
+        }
+    });
+}
+
+SchemaItem LocalVersionedEngine::read_schema_internal(
+        const StreamId& stream_id, const VersionQuery& version_query, ARCTICDB_UNUSED const ReadOptions& read_options,
+        const std::shared_ptr<ReadQuery>& read_query
+) {
+    py::gil_scoped_release release_gil;
+    ARCTICDB_SAMPLE(ReadSchema, 0)
+    auto version = get_version_to_read(stream_id, version_query);
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+            version.has_value(), "Unable to retrieve schema data. {}@{}: version not found", stream_id, version_query
+    );
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+            version->key_.type() != KeyType::MULTI_KEY,
+            "collect_schema() not supported with recursively normalized data"
+    );
+    return get_index(std::move(version->key_), *read_query).get();
 }
 
 VersionedItem LocalVersionedEngine::read_modify_write_internal(
@@ -491,9 +545,9 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     return versioned_item;
 }
 
-folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, bool include_index_segment = false) {
     const auto key = std::move(k);
-    return store()->read(key).thenValue([](auto&& key_seg_pair) -> DescriptorItem {
+    return store()->read(key).thenValue([include_index_segment](auto&& key_seg_pair) -> DescriptorItem {
         auto key = to_atom(std::move(key_seg_pair.first));
         auto seg = std::move(key_seg_pair.second);
         std::optional<TimeseriesDescriptor> timeseries_descriptor;
@@ -527,7 +581,10 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) 
                     }
             );
         }
-        return DescriptorItem{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
+        DescriptorItem res{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
+        if (include_index_segment) {
+            res.index_segment_ = std::move(seg);
+        }
     });
 }
 
@@ -549,7 +606,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
 }
 
 DescriptorItem LocalVersionedEngine::read_descriptor_internal(
-        const StreamId& stream_id, const VersionQuery& version_query
+        const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
 ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
     auto version = get_version_to_read(stream_id, version_query);
@@ -559,7 +616,7 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
             stream_id,
             version_query
     );
-    return get_descriptor(std::move(version->key_)).get();
+    return get_descriptor(std::move(version->key_), include_index_segment).get();
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(

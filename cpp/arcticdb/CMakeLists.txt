@@ -250,6 +250,7 @@ set(arcticdb_srcs
         entity/field_collection.hpp
         entity/field_collection_proto.hpp
         entity/python_bindings_common.hpp
+        entity/schema_item.hpp
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp

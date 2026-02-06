@@ -15,10 +15,18 @@ from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
-from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
+import polars as pl
 
-from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat, ArrowOutputStringFormat
+from arcticdb.options import (
+    LibraryOptions,
+    EnterpriseLibraryOptions,
+    OutputFormat,
+    ArrowOutputStringFormat,
+    arrow_output_string_format_to_internal,
+)
+from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -33,7 +41,14 @@ from arcticdb.version_store._store import (
     MergeAction,
 )
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
+from arcticdb_ext.version_store import (
+    DataError,
+    StageResult,
+    KeyNotFoundInStageResultInfo,
+    InternalArrowOutputStringFormat,
+    SchemaItem,
+    PreloadedIndexQuery,
+)
 
 import pandas as pd
 import numpy as np
@@ -45,7 +60,7 @@ import arcticdb_ext as _ae
 logger = logging.getLogger(__name__)
 
 
-AsOf = Union[int, str, datetime.datetime]
+AsOf = Union[int, str, datetime.datetime, PreloadedIndexQuery]
 
 
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
@@ -468,6 +483,7 @@ class LazyDataFrame(QueryBuilder):
             self._optimisation = read_request.query_builder._optimisation
         self.lib = lib
         self.read_request = read_request._replace(query_builder=None)
+        self._preloaded_index = None
 
     def _to_read_request(self) -> ReadRequest:
         """
@@ -501,7 +517,24 @@ class LazyDataFrame(QueryBuilder):
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self._to_read_request()._asdict())
+        if self._preloaded_index is None:
+            return self.lib.read(**self._to_read_request()._asdict())
+        else:
+            read_request = self._to_read_request()._replace(as_of=self._preloaded_index)
+            return self.lib.read(**read_request._asdict())
+
+    # TODO: Add return type
+    def collect_schema(self):
+        if self._preloaded_index is None:
+            dit = self.lib._nvs.get_info(
+                self.read_request.symbol,
+                self.read_request.as_of,
+                iterate_snapshots_if_tombstoned=False,
+                include_index_segment=True,
+            )
+            self._preloaded_index = PreloadedIndexQuery(dit.key, dit.index_segment)
+        # TODO: Process schema here
+        return None
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()

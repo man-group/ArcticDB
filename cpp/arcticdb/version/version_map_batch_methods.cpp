@@ -42,6 +42,10 @@ void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery& snapshot
     snapshots_.push_back(snapshot_query.name_);
 }
 
+void StreamVersionData::do_react(ARCTICDB_UNUSED const std::shared_ptr<SchemaItem>& schema_item) {
+    util::raise_rte("collect_schema() note yet supported with batch methods");
+}
+
 std::optional<AtomKey> get_specific_version_from_entry(
         const std::shared_ptr<VersionMapEntry>& version_map_entry,
         const pipelines::SpecificVersionQuery& specific_version, bool include_deleted = false

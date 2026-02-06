@@ -17,6 +17,8 @@
 
 namespace arcticdb {
 
+using VersionIdentifier = std::variant<VersionedItem, StreamId, std::shared_ptr<SchemaItem>>;
+
 struct UpdateMetadataTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const version_store::UpdateInfo update_info_;
@@ -139,13 +141,13 @@ struct CheckReloadTask : async::BaseTask {
 
 struct SetupPipelineContextTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
-    const std::variant<VersionedItem, StreamId> version_info_;
+    const VersionIdentifier version_info_;
     const std::shared_ptr<ReadQuery> read_query_;
     const ReadOptions read_options_;
 
     SetupPipelineContextTask(
-            std::shared_ptr<Store> store, std::variant<VersionedItem, StreamId> version_info,
-            std::shared_ptr<ReadQuery> read_query, ReadOptions read_options
+            std::shared_ptr<Store> store, VersionIdentifier version_info, std::shared_ptr<ReadQuery> read_query,
+            ReadOptions read_options
     ) :
         store_(std::move(store)),
         version_info_(std::move(version_info)),

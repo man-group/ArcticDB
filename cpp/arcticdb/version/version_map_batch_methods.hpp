@@ -336,6 +336,7 @@ struct StreamVersionData {
     void do_react(const pipelines::SpecificVersionQuery& specific_version);
     void do_react(const pipelines::TimestampVersionQuery& timestamp_query);
     void do_react(const pipelines::SnapshotVersionQuery& snapshot_query);
+    void do_react(const std::shared_ptr<SchemaItem>& schema_item);
 };
 
 std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(

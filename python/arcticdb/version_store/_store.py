@@ -32,7 +32,7 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult, SchemaItem
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -60,7 +60,7 @@ from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _Python
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
-from arcticdb_ext.version_store import sorted_value_name
+from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction
 from arcticdb.options import (
     RuntimeOptions,
@@ -260,7 +260,7 @@ def _env_config_from_lib_config(lib_cfg, env):
     return cfg
 
 
-VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
+VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None, PreloadedIndexQuery]
 
 
 def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
@@ -2045,6 +2045,8 @@ class NativeVersionStore:
             version_query.set_version(as_of, iterate_snapshots_if_tombstoned)
         elif isinstance(as_of, (datetime, Timestamp)):
             version_query.set_timestamp(Timestamp(as_of).value, iterate_snapshots_if_tombstoned)
+        elif isinstance(as_of, PreloadedIndexQuery):
+            version_query.set_preloaded_index(as_of)
         elif as_of is not None:
             raise ArcticNativeException("Unexpected combination of read parameters")
 
@@ -3666,8 +3668,9 @@ class NativeVersionStore:
             - sorted, `str`
         """
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
+        include_index_segment = kwargs.get("include_index_segment", False)
         version_query = self._get_version_query(version, **kwargs)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self.version_store.read_descriptor(symbol, version_query, include_index_segment)
         return self._process_info(dit, date_range_ns_precision)
 
     def batch_get_info(

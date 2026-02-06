@@ -11,6 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -186,11 +187,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }))
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
+    py::class_<PreloadedIndexQuery>(version, "PreloadedIndexQuery").def(py::init<AtomKey, SegmentInMemory>());
+
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
             .def("set_snap_name", &VersionQuery::set_snap_name)
             .def("set_timestamp", &VersionQuery::set_timestamp)
-            .def("set_version", &VersionQuery::set_version);
+            .def("set_version", &VersionQuery::set_version)
+            .def("set_schema_item", &VersionQuery::set_schema_item);
 
     py::enum_<OutputFormat>(version, "InternalOutputFormat")
             .value("PANDAS", OutputFormat::PANDAS)
@@ -322,7 +326,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("start_index", &DescriptorItem::start_index)
             .def_property_readonly("end_index", &DescriptorItem::end_index)
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
-            .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+            .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
+            .def_property_readonly("key", &DescriptorItem::key)
+            .def_property_readonly("index_segment", &DescriptorItem::index_segment);
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
