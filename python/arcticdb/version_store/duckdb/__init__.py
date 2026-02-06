@@ -8,6 +8,6 @@ be governed by the Apache License, version 2.0.
 """
 
 from arcticdb.version_store.duckdb.arrow_reader import ArcticRecordBatchReader
-from arcticdb.version_store.duckdb.duckdb import DuckDBContext
+from arcticdb.version_store.duckdb.duckdb import ArcticDuckDBContext, DuckDBContext
 
-__all__ = ["DuckDBContext"]
+__all__ = ["ArcticDuckDBContext", "DuckDBContext"]

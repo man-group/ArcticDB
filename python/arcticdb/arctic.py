@@ -8,7 +8,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import logging
 from re import L
-from typing import List, Optional, Any, Union
+from typing import TYPE_CHECKING, List, Optional, Any, Union
+
+if TYPE_CHECKING:
+    from arcticdb.version_store.duckdb import ArcticDuckDBContext
 
 from arcticdb.options import (
     DEFAULT_ENCODING_VERSION,
@@ -418,3 +421,162 @@ class Arctic:
         )
 
         logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")
+
+    def sql(
+        self,
+        query: str,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ):
+        """
+        Execute a SQL database discovery query on this Arctic instance.
+
+        ArcticDB uses ``database.library`` naming convention where database is
+        the permissioning unit (typically one per user). Top-level libraries
+        without a database prefix are grouped under ``__default__``.
+
+        Parameters
+        ----------
+        query : str
+            SQL query to execute. Currently only ``SHOW DATABASES`` is supported,
+            which returns databases with library counts.
+
+        output_format : OutputFormat or str, optional
+            Output format for the result:
+            - ``"pandas"`` (default): Returns a pandas DataFrame
+            - ``"pyarrow"``: Returns a PyArrow Table
+            - ``"polars"``: Returns a Polars DataFrame
+
+        Returns
+        -------
+        pandas.DataFrame, pyarrow.Table, or polars.DataFrame
+            Query result in the requested format.
+
+        Raises
+        ------
+        ValueError
+            If the query is not a supported database discovery query.
+
+        Examples
+        --------
+        List all databases with library counts:
+
+        >>> arctic = adb.Arctic('lmdb://mydata')
+        >>> arctic.create_library('jblackburn.market_data')
+        >>> arctic.create_library('jblackburn.reference_data')
+        >>> arctic.create_library('global_config')
+        >>> result = arctic.sql("SHOW DATABASES")
+        >>> print(result)
+           database_name  library_count
+        0     jblackburn              2
+        1     __default__              1
+
+        See Also
+        --------
+        duckdb : Context manager for complex cross-library queries.
+        Library.sql : SQL queries on individual libraries.
+        """
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available, _parse_library_name
+        from arcticdb.version_store.duckdb.pushdown import is_database_discovery_query
+
+        _check_duckdb_available()
+
+        # Check for SHOW DATABASES
+        if not is_database_discovery_query(query):
+            raise ValueError(
+                "Arctic.sql() only supports SHOW DATABASES. "
+                "For data queries, use library.sql() or arctic.duckdb() context manager."
+            )
+
+        # Get list of libraries and group by database
+        libraries = self.list_libraries()
+
+        from collections import defaultdict
+
+        database_counts = defaultdict(int)
+        for lib_name in libraries:
+            database, _ = _parse_library_name(lib_name)
+            database_counts[database] += 1
+
+        # Build result table
+        import pyarrow as pa
+
+        arrow_table = pa.table(
+            {
+                "database_name": list(database_counts.keys()),
+                "library_count": list(database_counts.values()),
+            }
+        )
+
+        return self._format_query_result(arrow_table, output_format)
+
+    def _format_query_result(
+        self,
+        arrow_table,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ):
+        """Convert Arrow table to requested output format."""
+        if output_format is None:
+            output_fmt_str = OutputFormat.PANDAS.lower()
+        elif isinstance(output_format, OutputFormat):
+            output_fmt_str = output_format.lower()
+        else:
+            output_fmt_str = str(output_format).lower()
+
+        if output_fmt_str == OutputFormat.PYARROW.lower():
+            return arrow_table
+        elif output_fmt_str == OutputFormat.POLARS.lower():
+            import polars as pl
+
+            return pl.from_arrow(arrow_table)
+        else:
+            # Default to pandas
+            return arrow_table.to_pandas()
+
+    def duckdb(self, connection: Any = None) -> "ArcticDuckDBContext":
+        """
+        Create a DuckDB context for cross-library SQL queries.
+
+        The context manager allows explicit library and symbol registration,
+        enabling data discovery queries like SHOW DATABASES and queries
+        that span multiple libraries.
+
+        Parameters
+        ----------
+        connection : duckdb.DuckDBPyConnection, optional
+            External DuckDB connection to use. If provided, ArcticDB will register
+            symbols into this connection but will NOT close it when the context exits.
+            This allows joining ArcticDB data with data from other sources.
+            If not provided, a new in-memory connection is created and closed on exit.
+
+        Returns
+        -------
+        ArcticDuckDBContext
+            Context manager for DuckDB queries.
+
+        Examples
+        --------
+        Basic SHOW DATABASES:
+
+        >>> with arctic.duckdb() as ddb:
+        ...     ddb.register_all_libraries()
+        ...     databases = ddb.query("SHOW DATABASES")
+
+        Cross-library queries:
+
+        >>> with arctic.duckdb() as ddb:
+        ...     ddb.register_symbol("market_data", "prices")
+        ...     ddb.register_symbol("reference_data", "securities", alias="ref")
+        ...     result = ddb.query('''
+        ...         SELECT p.ticker, r.name, p.price
+        ...         FROM prices p
+        ...         JOIN ref r ON p.ticker = r.ticker
+        ...     ''')
+
+        See Also
+        --------
+        sql : Simple SQL queries for database discovery.
+        Library.duckdb : Context manager for single-library queries.
+        """
+        from arcticdb.version_store.duckdb import ArcticDuckDBContext
+
+        return ArcticDuckDBContext(self, connection=connection)

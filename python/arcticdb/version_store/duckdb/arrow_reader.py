@@ -151,6 +151,11 @@ class ArcticRecordBatchReader:
                 "Cannot iterate over exhausted reader. "
                 "ArcticRecordBatchReader is single-use - create a new reader to iterate again."
             )
+        if self._iteration_started:
+            raise RuntimeError(
+                "Cannot create multiple iterators from the same reader. " "ArcticRecordBatchReader is single-use."
+            )
+        self._iteration_started = True
         return self
 
     def __next__(self) -> pa.RecordBatch:

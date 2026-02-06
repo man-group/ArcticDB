@@ -335,14 +335,14 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
     frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
 }
 
-void record_batches_to_frame(const std::vector<RecordBatchData>& record_batches, InputFrame& frame) {
+void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, InputFrame& frame) {
     util::check(
             frame.norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data"
     );
     const auto& arrow_norm_metadata = frame.norm_meta.experimental_arrow();
     std::vector<sparrow::record_batch> sparrow_record_batches(record_batches.size(), sparrow::record_batch{});
-    std::ranges::transform(record_batches, sparrow_record_batches.begin(), [](const RecordBatchData& record_batch) {
-        return sparrow::record_batch{&record_batch.array_, &record_batch.schema_};
+    std::ranges::transform(record_batches, sparrow_record_batches.begin(), [](const std::shared_ptr<RecordBatchData>& record_batch) {
+        return sparrow::record_batch{&record_batch->array_, &record_batch->schema_};
     });
     auto [seg, index_column_position] = arrow_data_to_segment(
             sparrow_record_batches,
@@ -368,7 +368,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     if (std::holds_alternative<py::tuple>(item)) {
         tensors_to_frame(std::get<py::tuple>(item), empty_types, *res);
     } else {
-        record_batches_to_frame(std::get<std::vector<RecordBatchData>>(item), *res);
+        record_batches_to_frame(std::get<std::vector<std::shared_ptr<RecordBatchData>>>(item), *res);
     }
     res->set_index_range();
     res->desc().set_id(stream_name);
