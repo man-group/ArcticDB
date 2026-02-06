@@ -78,9 +78,9 @@ class TestDuckDBSimpleSQL:
 
         result = lib.sql("SELECT x, y FROM test_symbol WHERE x > 50")
 
-        assert len(result.data) == 49  # x values 51-99
-        assert list(result.data.columns) == ["x", "y"]
-        assert result.data["x"].min() > 50
+        assert len(result) == 49  # x values 51-99
+        assert list(result.columns) == ["x", "y"]
+        assert result["x"].min() > 50
 
     def test_aggregation(self, lmdb_library):
         """Test aggregation query."""
@@ -90,9 +90,9 @@ class TestDuckDBSimpleSQL:
 
         result = lib.sql("SELECT category, SUM(value) as total FROM test_symbol GROUP BY category ORDER BY category")
 
-        assert len(result.data) == 2
-        assert list(result.data["category"]) == ["A", "B"]
-        assert list(result.data["total"]) == [90, 60]
+        assert len(result) == 2
+        assert list(result["category"]) == ["A", "B"]
+        assert list(result["total"]) == [90, 60]
 
     def test_output_format_arrow(self, lmdb_library):
         """Test SQL with Arrow output format."""
@@ -104,7 +104,7 @@ class TestDuckDBSimpleSQL:
 
         result = lib.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PYARROW)
 
-        assert isinstance(result.data, pa.Table)
+        assert isinstance(result, pa.Table)
 
     def test_output_format_polars(self, lmdb_library):
         """Test SQL with Polars output format."""
@@ -116,7 +116,7 @@ class TestDuckDBSimpleSQL:
 
         result = lib.sql("SELECT * FROM test_symbol", output_format=OutputFormat.POLARS)
 
-        assert isinstance(result.data, pl.DataFrame)
+        assert isinstance(result, pl.DataFrame)
 
     def test_output_format_pandas(self, lmdb_library):
         """Test SQL with explicit Pandas output format."""
@@ -126,8 +126,8 @@ class TestDuckDBSimpleSQL:
 
         result = lib.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PANDAS)
 
-        assert isinstance(result.data, pd.DataFrame)
-        assert list(result.data["x"]) == [1, 2, 3]
+        assert isinstance(result, pd.DataFrame)
+        assert list(result["x"]) == [1, 2, 3]
 
     def test_metadata_contains_query(self, lmdb_library):
         """Test that result metadata contains the query."""
@@ -136,19 +136,9 @@ class TestDuckDBSimpleSQL:
         lib.write("test_symbol", df)
 
         query = "SELECT * FROM test_symbol"
-        result = lib.sql(query)
+        info = lib.explain(query)
 
-        assert result.metadata["query"] == query
-
-    def test_symbol_field_contains_queried_symbols(self, lmdb_library):
-        """Test that result symbol field contains queried symbols."""
-        lib = lmdb_library
-        df = pd.DataFrame({"x": [1, 2, 3]})
-        lib.write("test_symbol", df)
-
-        result = lib.sql("SELECT * FROM test_symbol")
-
-        assert result.symbol == "test_symbol"
+        assert info["query"] == query
 
     def test_join_two_symbols(self, lmdb_library):
         """Test JOIN query across two symbols using lib.sql() directly."""
@@ -167,12 +157,9 @@ class TestDuckDBSimpleSQL:
             ORDER BY t.ticker, t.quantity
         """)
 
-        assert len(result.data) == 3  # AAPL (2 rows) + GOOG (1 row)
-        assert "notional" in result.data.columns
-        assert set(result.data["ticker"]) == {"AAPL", "GOOG"}
-        # Verify symbol field contains both symbols
-        assert "trades" in result.symbol
-        assert "prices" in result.symbol
+        assert len(result) == 3  # AAPL (2 rows) + GOOG (1 row)
+        assert "notional" in result.columns
+        assert set(result["ticker"]) == {"AAPL", "GOOG"}
 
     def test_join_with_aggregation(self, lmdb_library):
         """Test JOIN with GROUP BY using lib.sql() directly."""
@@ -194,10 +181,10 @@ class TestDuckDBSimpleSQL:
             ORDER BY p.name
         """)
 
-        assert len(result.data) == 3
-        assert list(result.data["name"]) == ["Gadget", "Gizmo", "Widget"]
-        assert list(result.data["total_qty"]) == [20, 8, 30]
-        assert list(result.data["revenue"]) == [500.0, 120.0, 300.0]
+        assert len(result) == 3
+        assert list(result["name"]) == ["Gadget", "Gizmo", "Widget"]
+        assert list(result["total_qty"]) == [20, 8, 30]
+        assert list(result["revenue"]) == [500.0, 120.0, 300.0]
 
     def test_invalid_query_no_symbol(self, lmdb_library):
         """Test that query without FROM clause raises error."""
@@ -426,7 +413,7 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT * FROM empty_symbol")
 
-        assert len(result.data) == 0
+        assert len(result) == 0
 
     def test_dataframe_with_nulls(self, lmdb_library):
         """Test SQL on DataFrame with null values."""
@@ -436,7 +423,7 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT * FROM test_symbol WHERE x IS NOT NULL")
 
-        assert len(result.data) == 2  # Two non-null x values
+        assert len(result) == 2  # Two non-null x values
 
     def test_special_characters_in_values(self, lmdb_library):
         """Test SQL on DataFrame with special characters in string values."""
@@ -446,8 +433,8 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT * FROM test_symbol")
 
-        assert len(result.data) == 4
-        assert "world's" in list(result.data["text"])
+        assert len(result) == 4
+        assert "world's" in list(result["text"])
 
     def test_large_string_values(self, lmdb_library):
         """Test SQL on DataFrame with large string values."""
@@ -458,7 +445,7 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT LENGTH(text) as len FROM test_symbol")
 
-        assert result.data["len"].max() == 10000
+        assert result["len"].max() == 10000
 
     def test_float_special_values(self, lmdb_library):
         """Test SQL on DataFrame with special float values."""
@@ -468,7 +455,7 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT * FROM test_symbol WHERE x = 1.0")
 
-        assert len(result.data) == 1
+        assert len(result) == 1
 
     def test_mixed_numeric_types(self, lmdb_library):
         """Test SQL on DataFrame with mixed numeric types."""
@@ -485,7 +472,7 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT int8 + int64 + float32 + float64 as total FROM test_symbol")
 
-        assert len(result.data) == 3
+        assert len(result) == 3
 
     def test_boolean_columns(self, lmdb_library):
         """Test SQL on DataFrame with boolean columns."""
@@ -495,7 +482,7 @@ class TestDuckDBEdgeCases:
 
         result = lib.sql("SELECT SUM(value) as total FROM test_symbol WHERE flag")
 
-        assert result.data["total"].iloc[0] == 4  # 1 + 3
+        assert result["total"].iloc[0] == 4  # 1 + 3
 
 
 class TestExternalDuckDBConnection:
@@ -670,11 +657,11 @@ class TestDocumentationExamples:
             ORDER BY total_qty DESC
         """)
 
-        assert len(result.data) == 3
+        assert len(result) == 3
         # AAPL has total_qty 300, should be first
-        assert result.data.iloc[0]["ticker"] == "AAPL"
-        assert result.data.iloc[0]["total_qty"] == 300
-        assert result.data.iloc[0]["avg_price"] == pytest.approx(150.5)
+        assert result.iloc[0]["ticker"] == "AAPL"
+        assert result.iloc[0]["total_qty"] == 300
+        assert result.iloc[0]["avg_price"] == pytest.approx(150.5)
 
     def test_join_with_market_value(self, lmdb_library):
         """Test JOIN example calculating market value."""
@@ -698,10 +685,10 @@ class TestDocumentationExamples:
             JOIN prices p ON t.ticker = p.ticker
         """)
 
-        assert len(result.data) == 4  # All trades have matching prices
-        assert "market_value" in result.data.columns
+        assert len(result) == 4  # All trades have matching prices
+        assert "market_value" in result.columns
         # Check one calculation: AAPL 100 * 155 = 15500
-        aapl_rows = result.data[result.data["ticker"] == "AAPL"]
+        aapl_rows = result[result["ticker"] == "AAPL"]
         assert 15500.0 in list(aapl_rows["market_value"])
 
     def test_window_function_lag_daily_returns(self, lmdb_library):
@@ -731,10 +718,10 @@ class TestDocumentationExamples:
             ORDER BY ticker, date
         """)
 
-        assert len(result.data) == 6
-        assert "daily_return" in result.data.columns
+        assert len(result) == 6
+        assert "daily_return" in result.columns
         # First day of each ticker should have NULL return
-        aapl_returns = result.data[result.data["ticker"] == "AAPL"]["daily_return"].tolist()
+        aapl_returns = result[result["ticker"] == "AAPL"]["daily_return"].tolist()
         assert pd.isna(aapl_returns[0])  # First day has no previous
         # Second day: (152 - 150) / 150 = 0.0133...
         assert aapl_returns[1] == pytest.approx(2.0 / 150.0)
@@ -809,9 +796,9 @@ class TestDocumentationExamples:
             ORDER BY date
         """)
 
-        assert len(result.data) == 2  # Two days
-        day1 = result.data.iloc[0]
-        day2 = result.data.iloc[1]
+        assert len(result) == 2  # Two days
+        day1 = result.iloc[0]
+        day2 = result.iloc[1]
 
         # Day 1: open=100, high=102, low=99, close=101, volume=3500
         assert day1["open"] == pytest.approx(100.0)
@@ -881,11 +868,11 @@ class TestDocumentationExamples:
 
         # Query version 0
         result_v0 = lib.sql("SELECT * FROM trades", as_of=0)
-        assert len(result_v0.data) == 1
+        assert len(result_v0) == 1
 
         # Query latest (version 1)
         result_v1 = lib.sql("SELECT * FROM trades")
-        assert len(result_v1.data) == 2
+        assert len(result_v1) == 2
 
 
 class TestSchemaDDLQueries:
@@ -1192,7 +1179,7 @@ class TestSchemaDDLQueries:
         # Use lib.sql() directly with DESCRIBE
         result = lib.sql("DESCRIBE test_symbol")
 
-        type_map = dict(zip(result.data["column_name"], result.data["column_type"]))
+        type_map = dict(zip(result["column_name"], result["column_type"]))
         assert type_map["int_col"] == "BIGINT"
         assert type_map["float_col"] == "DOUBLE"
         assert type_map["str_col"] == "VARCHAR"
@@ -1216,7 +1203,7 @@ class TestSchemaDDLQueries:
         lib.write("test_symbol", df)
 
         result = lib.sql("DESCRIBE test_symbol")
-        type_map = dict(zip(result.data["column_name"], result.data["column_type"]))
+        type_map = dict(zip(result["column_name"], result["column_type"]))
 
         assert type_map["int8_col"] == "TINYINT"
         assert type_map["int16_col"] == "SMALLINT"
@@ -1235,7 +1222,7 @@ class TestSchemaDDLQueries:
         lib.write("test_symbol", df)
 
         result = lib.sql("DESCRIBE test_symbol")
-        type_map = dict(zip(result.data["column_name"], result.data["column_type"]))
+        type_map = dict(zip(result["column_name"], result["column_type"]))
 
         assert "index" in type_map
         assert "TIMESTAMP" in type_map["index"]
@@ -1250,8 +1237,8 @@ class TestSchemaDDLQueries:
         describe_result = lib.sql("DESCRIBE test_symbol")
         show_result = lib.sql("SHOW test_symbol")
 
-        assert list(describe_result.data["column_name"]) == list(show_result.data["column_name"])
-        assert list(describe_result.data["column_type"]) == list(show_result.data["column_type"])
+        assert list(describe_result["column_name"]) == list(show_result["column_name"])
+        assert list(describe_result["column_type"]) == list(show_result["column_type"])
 
     def test_sql_show_all_tables_discovers_library(self, lmdb_library):
         """Test lib.sql() with SHOW ALL TABLES discovers all symbols in library."""
@@ -1265,7 +1252,7 @@ class TestSchemaDDLQueries:
         # SHOW ALL TABLES should discover all library symbols
         result = lib.sql("SHOW ALL TABLES")
 
-        table_names = set(result.data["name"])
+        table_names = set(result["name"])
         assert "prices" in table_names
         assert "trades" in table_names
         assert "positions" in table_names
@@ -1280,7 +1267,7 @@ class TestSchemaDDLQueries:
 
         result = lib.sql("SHOW TABLES")
 
-        table_names = set(result.data["name"])
+        table_names = set(result["name"])
         assert "symbol_a" in table_names
         assert "symbol_b" in table_names
 
@@ -1684,3 +1671,210 @@ class TestDatabaseLibraryNamespace:
         assert "prices" in symbols
         assert symbols["prices"]["library"] == "jblackburn.market_data"
         assert symbols["prices"]["symbol"] == "prices"
+
+
+class TestLibraryRegister:
+    """Tests for lib.duckdb_register() method that materializes symbols as DuckDB tables."""
+
+    def test_register_all_symbols(self, lmdb_library):
+        """Test registering all symbols in a library."""
+        lib = lmdb_library
+
+        # Write multiple symbols
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]}))
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL"], "quantity": [100]}))
+        lib.write("positions", pd.DataFrame({"ticker": ["GOOG"], "shares": [50]}))
+
+        # Create external DuckDB connection
+        conn = duckdb.connect(":memory:")
+
+        # Register all symbols
+        symbols = lib.duckdb_register(conn)
+
+        # Verify SHOW TABLES lists all symbols
+        tables_result = conn.execute("SHOW TABLES").fetchall()
+        table_names = [row[0] for row in tables_result]
+        assert "prices" in table_names
+        assert "trades" in table_names
+        assert "positions" in table_names
+
+        # Verify data can be queried
+        result = conn.execute("SELECT * FROM prices ORDER BY ticker").fetchdf()
+        assert len(result) == 2
+        assert list(result["ticker"]) == ["AAPL", "GOOG"]
+
+        # Verify return value
+        assert set(symbols) == {"prices", "trades", "positions"}
+
+        conn.close()
+
+    def test_register_specific_symbols(self, lmdb_library):
+        """Test registering only specific symbols."""
+        lib = lmdb_library
+
+        lib.write("sym1", pd.DataFrame({"a": [1, 2]}))
+        lib.write("sym2", pd.DataFrame({"b": [3, 4]}))
+        lib.write("sym3", pd.DataFrame({"c": [5, 6]}))
+
+        conn = duckdb.connect(":memory:")
+
+        # Register only 2 of 3 symbols
+        symbols = lib.duckdb_register(conn, symbols=["sym1", "sym3"])
+
+        tables_result = conn.execute("SHOW TABLES").fetchall()
+        table_names = [row[0] for row in tables_result]
+        assert "sym1" in table_names
+        assert "sym3" in table_names
+        assert "sym2" not in table_names
+
+        assert set(symbols) == {"sym1", "sym3"}
+
+        conn.close()
+
+    def test_register_multiple_queries(self, lmdb_library):
+        """Test that registered data can be queried multiple times (materialized, not streaming)."""
+        lib = lmdb_library
+
+        lib.write("data", pd.DataFrame({"x": [1, 2, 3, 4, 5]}))
+
+        conn = duckdb.connect(":memory:")
+        lib.duckdb_register(conn)
+
+        # Query multiple times - should work if data is materialized
+        result1 = conn.execute("SELECT SUM(x) as total FROM data").fetchone()[0]
+        result2 = conn.execute("SELECT COUNT(*) as cnt FROM data").fetchone()[0]
+        result3 = conn.execute("SELECT AVG(x) as avg FROM data").fetchone()[0]
+
+        assert result1 == 15
+        assert result2 == 5
+        assert result3 == pytest.approx(3.0)
+
+        conn.close()
+
+    def test_register_returns_symbol_list(self, lmdb_library):
+        """Test that duckdb_register() returns list of registered symbols."""
+        lib = lmdb_library
+
+        lib.write("sym_a", pd.DataFrame({"x": [1]}))
+        lib.write("sym_b", pd.DataFrame({"y": [2]}))
+
+        conn = duckdb.connect(":memory:")
+        symbols = lib.duckdb_register(conn)
+
+        assert isinstance(symbols, list)
+        assert set(symbols) == {"sym_a", "sym_b"}
+
+        conn.close()
+
+    def test_register_with_as_of(self, lmdb_library):
+        """Test registering a specific version using as_of parameter."""
+        lib = lmdb_library
+
+        # Write multiple versions
+        lib.write("data", pd.DataFrame({"x": [1, 2, 3]}))  # version 0
+        lib.write("data", pd.DataFrame({"x": [10, 20, 30]}))  # version 1
+
+        conn = duckdb.connect(":memory:")
+
+        # Register version 0
+        lib.duckdb_register(conn, as_of=0)
+
+        result = conn.execute("SELECT SUM(x) as total FROM data").fetchone()[0]
+        assert result == 6  # 1 + 2 + 3 from version 0
+
+        conn.close()
+
+    def test_register_invalid_connection(self, lmdb_library):
+        """Test that passing invalid connection raises error."""
+        lib = lmdb_library
+
+        lib.write("data", pd.DataFrame({"x": [1, 2, 3]}))
+
+        # Pass None
+        with pytest.raises((TypeError, AttributeError)):
+            lib.duckdb_register(None)
+
+        # Pass invalid object
+        with pytest.raises((TypeError, AttributeError)):
+            lib.duckdb_register("not a connection")
+
+
+class TestArcticRegister:
+    """Tests for arctic.duckdb_register() method that registers symbols from multiple libraries."""
+
+    def test_register_all_libraries(self, lmdb_storage):
+        """Test registering symbols from all libraries with library__symbol prefix."""
+        arctic = lmdb_storage.create_arctic()
+
+        # Create multiple libraries with symbols
+        lib1 = arctic.create_library("lib1")
+        lib2 = arctic.create_library("lib2")
+
+        lib1.write("prices", pd.DataFrame({"ticker": ["AAPL"], "price": [150.0]}))
+        lib1.write("trades", pd.DataFrame({"ticker": ["AAPL"], "qty": [100]}))
+        lib2.write("positions", pd.DataFrame({"ticker": ["GOOG"], "shares": [50]}))
+
+        conn = duckdb.connect(":memory:")
+
+        # Register all libraries
+        tables = arctic.duckdb_register(conn)
+
+        # Verify table names have library__symbol prefix
+        tables_result = conn.execute("SHOW TABLES").fetchall()
+        table_names = [row[0] for row in tables_result]
+        assert "lib1__prices" in table_names
+        assert "lib1__trades" in table_names
+        assert "lib2__positions" in table_names
+
+        # Verify data can be queried
+        result = conn.execute("SELECT * FROM lib1__prices").fetchdf()
+        assert len(result) == 1
+        assert result["ticker"].iloc[0] == "AAPL"
+
+        # Verify return value
+        assert set(tables) == {"lib1__prices", "lib1__trades", "lib2__positions"}
+
+        conn.close()
+
+    def test_register_specific_libraries(self, lmdb_storage):
+        """Test registering symbols from only specific libraries."""
+        arctic = lmdb_storage.create_arctic()
+
+        lib1 = arctic.create_library("lib1")
+        lib2 = arctic.create_library("lib2")
+        lib3 = arctic.create_library("lib3")
+
+        lib1.write("data1", pd.DataFrame({"a": [1]}))
+        lib2.write("data2", pd.DataFrame({"b": [2]}))
+        lib3.write("data3", pd.DataFrame({"c": [3]}))
+
+        conn = duckdb.connect(":memory:")
+
+        # Register only lib1 and lib3
+        tables = arctic.duckdb_register(conn, libraries=["lib1", "lib3"])
+
+        tables_result = conn.execute("SHOW TABLES").fetchall()
+        table_names = [row[0] for row in tables_result]
+        assert "lib1__data1" in table_names
+        assert "lib3__data3" in table_names
+        assert "lib2__data2" not in table_names
+
+        assert set(tables) == {"lib1__data1", "lib3__data3"}
+
+        conn.close()
+
+    def test_register_returns_table_names(self, lmdb_storage):
+        """Test that duckdb_register() returns list of table names with library prefix."""
+        arctic = lmdb_storage.create_arctic()
+
+        lib1 = arctic.create_library("testlib")
+        lib1.write("sym1", pd.DataFrame({"x": [1]}))
+        lib1.write("sym2", pd.DataFrame({"y": [2]}))
+
+        conn = duckdb.connect(":memory:")
+        tables = arctic.duckdb_register(conn)
+
+        assert isinstance(tables, list)
+        assert set(tables) == {"testlib__sym1", "testlib__sym2"}
+
+        conn.close()
