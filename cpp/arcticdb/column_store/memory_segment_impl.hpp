@@ -16,8 +16,7 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <boost/iterator/iterator_facade.hpp>
-
-namespace py = pybind11;
+#include <arcticdb/column_store/concepts.hpp>
 
 namespace arcticdb {
 
@@ -34,8 +33,7 @@ class SegmentInMemoryImpl {
         template<class Callable>
         auto visit(Callable&& c) const {
             return entity::visit_field(
-                    parent_->descriptor().field(column_id_),
-                    [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+                    parent_->descriptor().field(column_id_), [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                         using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
                         return c(parent_->scalar_at<RawType>(row_id_, column_id_));
                     }
@@ -70,8 +68,7 @@ class SegmentInMemoryImpl {
         template<class Callable>
         auto visit(Callable&& c) {
             return entity::visit_field(
-                    parent_->descriptor().field(column_id_),
-                    [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
+                    parent_->descriptor().field(column_id_), [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
                         using RawType = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag::raw_type;
                         return c(parent_->reference_at<RawType>(row_id_, column_id_));
                     }
@@ -353,11 +350,11 @@ class SegmentInMemoryImpl {
         set_string(idx, val);
     }
 
-    template<arithmetic_tensor TensorType>
-    void set_array(position_t pos, Tensor<T>& val) {
+    template<util::arithmetic_tensor TensorType>
+    void set_array(position_t pos, TensorType& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
-        column_unchecked(pos).set_array<T, Tensor>(row_id_ + 1, val);
+        column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
     void set_string(position_t pos, std::string_view str);
