@@ -11,12 +11,12 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/column_store/concepts.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
+#include <arcticdb/util/concepts.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>

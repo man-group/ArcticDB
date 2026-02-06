@@ -218,7 +218,6 @@ set(arcticdb_srcs
         column_store/column_utils.hpp
         column_store/column_utils_python.hpp
         column_store/column_python_adapters.hpp
-        column_store/concepts.hpp
         column_store/buffer_protocol_python_adapters.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
@@ -375,6 +374,7 @@ set(arcticdb_srcs
         util/buffer.hpp
         util/buffer_pool.hpp
         util/clock.hpp
+        util/concepts.hpp
         util/configs_map.hpp
         util/constants.hpp
         util/constructors.hpp
