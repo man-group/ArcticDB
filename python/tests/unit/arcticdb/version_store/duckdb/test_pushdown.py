@@ -149,6 +149,32 @@ class TestAstToFilters:
         assert isinstance(result[0]["value"], pd.Timestamp)
         assert result[0]["value"] == pd.Timestamp("2024-01-01")
 
+    def test_iso_date_string_auto_converts_to_timestamp(self):
+        """Test that ISO date strings are automatically converted to Timestamp.
+
+        Users expect `WHERE ts < '2024-01-03'` to work the same as
+        `WHERE ts < TIMESTAMP '2024-01-03'`. The pushdown code should
+        detect ISO date patterns (YYYY-MM-DD) and auto-convert.
+        """
+        result = _parse_where_clause("ts < '2024-01-03'")
+        assert len(result) == 1
+        assert isinstance(result[0]["value"], pd.Timestamp)
+        assert result[0]["value"] == pd.Timestamp("2024-01-03")
+
+    def test_iso_datetime_string_auto_converts_to_timestamp(self):
+        """Test that ISO datetime strings with time component auto-convert."""
+        result = _parse_where_clause("ts >= '2024-01-02 09:30:00'")
+        assert len(result) == 1
+        assert isinstance(result[0]["value"], pd.Timestamp)
+        assert result[0]["value"] == pd.Timestamp("2024-01-02 09:30:00")
+
+    def test_non_date_string_stays_as_string(self):
+        """Test that regular string values are NOT auto-converted."""
+        result = _parse_where_clause("type = 'call'")
+        assert len(result) == 1
+        assert isinstance(result[0]["value"], str)
+        assert result[0]["value"] == "call"
+
     def test_float_value(self):
         """Test float value parsing."""
         result = _parse_where_clause("price > 99.99")

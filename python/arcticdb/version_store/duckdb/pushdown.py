@@ -19,12 +19,19 @@ be governed by the Apache License, version 2.0.
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from arcticdb.version_store.processing import QueryBuilder
 
 logger = logging.getLogger(__name__)
+
+# ISO date pattern: YYYY-MM-DD with optional time component.
+# Used to auto-convert VARCHAR literals to timestamps when they look like dates,
+# so that `WHERE ts < '2024-01-03'` works the same as `WHERE ts < TIMESTAMP '2024-01-03'`.
+# This matches standard SQL behavior where string-to-timestamp casts are implicit.
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 
 
 @dataclass
@@ -268,44 +275,34 @@ def _ast_to_filters(node: Dict) -> List[Dict]:
     node_class = node.get("class", "")
     node_type = node.get("type", "")
 
-    match (node_class, node_type):
-        case ("CONJUNCTION", "CONJUNCTION_AND"):
-            # Flatten AND conjunctions into list of filters
-            filters = []
-            for child in node.get("children", []):
-                child_filters = _ast_to_filters(child)
-                if child_filters:
-                    filters.extend(child_filters)
-            return filters
-
-        case ("CONJUNCTION", "CONJUNCTION_OR"):
-            # OR conjunctions cannot be pushed to ArcticDB
-            return []
-
-        case ("COMPARISON", _):
-            return _parse_comparison_node(node)
-
-        case ("OPERATOR", "OPERATOR_IS_NULL"):
-            return _parse_null_check_node(node, is_not=False)
-
-        case ("OPERATOR", "OPERATOR_IS_NOT_NULL"):
-            return _parse_null_check_node(node, is_not=True)
-
-        case ("OPERATOR", "COMPARE_IN"):
-            return _parse_in_node(node, is_not=False)
-
-        case ("OPERATOR", "COMPARE_NOT_IN"):
-            return _parse_in_node(node, is_not=True)
-
-        case ("BETWEEN", "COMPARE_BETWEEN"):
-            return _parse_between_node(node)
-
-        case ("FUNCTION", _):
-            # Functions (like LIKE, UPPER, etc.) cannot be pushed down
-            return []
-
-        case _:
-            return []
+    if node_class == "CONJUNCTION" and node_type == "CONJUNCTION_AND":
+        # Flatten AND conjunctions into list of filters
+        filters = []
+        for child in node.get("children", []):
+            child_filters = _ast_to_filters(child)
+            if child_filters:
+                filters.extend(child_filters)
+        return filters
+    elif node_class == "CONJUNCTION" and node_type == "CONJUNCTION_OR":
+        # OR conjunctions cannot be pushed to ArcticDB
+        return []
+    elif node_class == "COMPARISON":
+        return _parse_comparison_node(node)
+    elif node_class == "OPERATOR" and node_type == "OPERATOR_IS_NULL":
+        return _parse_null_check_node(node, is_not=False)
+    elif node_class == "OPERATOR" and node_type == "OPERATOR_IS_NOT_NULL":
+        return _parse_null_check_node(node, is_not=True)
+    elif node_class == "OPERATOR" and node_type == "COMPARE_IN":
+        return _parse_in_node(node, is_not=False)
+    elif node_class == "OPERATOR" and node_type == "COMPARE_NOT_IN":
+        return _parse_in_node(node, is_not=True)
+    elif node_class == "BETWEEN" and node_type == "COMPARE_BETWEEN":
+        return _parse_between_node(node)
+    elif node_class == "FUNCTION":
+        # Functions (like LIKE, UPPER, etc.) cannot be pushed down
+        return []
+    else:
+        return []
 
 
 def _parse_comparison_node(node: Dict) -> List[Dict]:
@@ -464,79 +461,73 @@ def _extract_constant_value(node: Dict) -> Any:
     node_class = node.get("class", "")
     node_type = node.get("type", "")
 
+    _TIMESTAMP_TYPES = {"TIMESTAMP", "TIMESTAMP WITH TIME ZONE", "TIMESTAMP_NS", "TIMESTAMP_MS", "TIMESTAMP_S", "DATE"}
+    _INTEGER_TYPES = {"INTEGER", "BIGINT", "SMALLINT", "TINYINT", "UINTEGER", "UBIGINT", "USMALLINT", "UTINYINT"}
+    _FLOAT_TYPES = {"FLOAT", "DOUBLE", "REAL"}
+
     # Handle CAST nodes (e.g., '2024-01-01'::TIMESTAMP_NS)
-    match (node_class, node_type):
-        case ("CAST", "OPERATOR_CAST"):
-            child = node.get("child", {})
-            cast_type = node.get("cast_type", {}).get("id", "")
+    if node_class == "CAST" and node_type == "OPERATOR_CAST":
+        child = node.get("child", {})
+        cast_type = node.get("cast_type", {}).get("id", "")
 
-            child_value = _extract_constant_value(child)
-            if child_value is None:
-                return None
-
-            match cast_type:
-                case (
-                    "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMP_NS" | "TIMESTAMP_MS" | "TIMESTAMP_S" | "DATE"
-                ):
-                    return _convert_to_timestamp(child_value)
-                case "INTEGER" | "BIGINT" | "SMALLINT" | "TINYINT" | "UINTEGER" | "UBIGINT" | "USMALLINT" | "UTINYINT":
-                    try:
-                        return int(child_value)
-                    except (ValueError, TypeError):
-                        return None
-                case "FLOAT" | "DOUBLE" | "REAL":
-                    try:
-                        return float(child_value)
-                    except (ValueError, TypeError):
-                        return None
-                case _:
-                    return child_value
-
-        case ("CONSTANT", "VALUE_CONSTANT"):
-            value_info = node.get("value", {})
-            if value_info.get("is_null"):
-                return None
-
-            type_id = value_info.get("type", {}).get("id", "")
-            raw_value = value_info.get("value")
-
-            if raw_value is None:
-                return None
-
-            match type_id:
-                case (
-                    "INTEGER"
-                    | "BIGINT"
-                    | "SMALLINT"
-                    | "TINYINT"
-                    | "UINTEGER"
-                    | "UBIGINT"
-                    | "USMALLINT"
-                    | "UTINYINT"
-                    | "HUGEINT"
-                    | "UHUGEINT"
-                ):
-                    return int(raw_value)
-                case "FLOAT" | "DOUBLE" | "REAL":
-                    return float(raw_value)
-                case "DECIMAL":
-                    # DECIMAL stores value as integer, need to apply scale
-                    type_info = value_info.get("type", {}).get("type_info", {})
-                    scale = type_info.get("scale", 0)
-                    return float(raw_value) / (10**scale)
-                case "BOOLEAN":
-                    return bool(raw_value)
-                case "VARCHAR":
-                    return raw_value
-                case (
-                    "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMP_NS" | "TIMESTAMP_MS" | "TIMESTAMP_S" | "DATE"
-                ):
-                    return _convert_to_timestamp(raw_value)
-                case _:
-                    return raw_value
-
-        case _:
+        child_value = _extract_constant_value(child)
+        if child_value is None:
             return None
+
+        if cast_type in _TIMESTAMP_TYPES:
+            return _convert_to_timestamp(child_value)
+        elif cast_type in _INTEGER_TYPES:
+            try:
+                return int(child_value)
+            except (ValueError, TypeError):
+                return None
+        elif cast_type in _FLOAT_TYPES:
+            try:
+                return float(child_value)
+            except (ValueError, TypeError):
+                return None
+        else:
+            return child_value
+
+    elif node_class == "CONSTANT" and node_type == "VALUE_CONSTANT":
+        value_info = node.get("value", {})
+        if value_info.get("is_null"):
+            return None
+
+        type_id = value_info.get("type", {}).get("id", "")
+        raw_value = value_info.get("value")
+
+        if raw_value is None:
+            return None
+
+        _ALL_INTEGER_TYPES = _INTEGER_TYPES | {"HUGEINT", "UHUGEINT"}
+
+        if type_id in _ALL_INTEGER_TYPES:
+            return int(raw_value)
+        elif type_id in _FLOAT_TYPES:
+            return float(raw_value)
+        elif type_id == "DECIMAL":
+            # DECIMAL stores value as integer, need to apply scale
+            type_info = value_info.get("type", {}).get("type_info", {})
+            scale = type_info.get("scale", 0)
+            return float(raw_value) / (10**scale)
+        elif type_id == "BOOLEAN":
+            return bool(raw_value)
+        elif type_id == "VARCHAR":
+            # Auto-convert ISO date strings to timestamps so that
+            # WHERE ts < '2024-01-03' works without explicit TIMESTAMP keyword.
+            if isinstance(raw_value, str) and _ISO_DATE_RE.match(raw_value):
+                ts = _convert_to_timestamp(raw_value)
+                if ts is not None:
+                    return ts
+            return raw_value
+        elif type_id in _TIMESTAMP_TYPES:
+            return _convert_to_timestamp(raw_value)
+        else:
+            return raw_value
+
+    else:
+        return None
 
 
 def _build_query_builder(parsed_filters: List[Dict]) -> Optional[QueryBuilder]:
@@ -566,32 +557,31 @@ def _build_query_builder(parsed_filters: List[Dict]) -> Optional[QueryBuilder]:
         ftype = f["type"]
 
         try:
-            match (ftype, op):
-                case ("comparison", "="):
-                    expr = q[col] == value
-                case ("comparison", "!="):
-                    expr = q[col] != value
-                case ("comparison", "<"):
-                    expr = q[col] < value
-                case ("comparison", ">"):
-                    expr = q[col] > value
-                case ("comparison", "<="):
-                    expr = q[col] <= value
-                case ("comparison", ">="):
-                    expr = q[col] >= value
-                case ("membership", "IN"):
-                    expr = q[col].isin(*value)
-                case ("membership", "NOT IN"):
-                    expr = q[col].isnotin(*value)
-                case ("null_check", "IS NULL"):
-                    expr = q[col].isnull()
-                case ("null_check", "IS NOT NULL"):
-                    expr = q[col].notnull()
-                case ("range", _):
-                    low, high = value
-                    expr = (q[col] >= low) & (q[col] <= high)
-                case _:
-                    continue
+            if ftype == "comparison" and op == "=":
+                expr = q[col] == value
+            elif ftype == "comparison" and op == "!=":
+                expr = q[col] != value
+            elif ftype == "comparison" and op == "<":
+                expr = q[col] < value
+            elif ftype == "comparison" and op == ">":
+                expr = q[col] > value
+            elif ftype == "comparison" and op == "<=":
+                expr = q[col] <= value
+            elif ftype == "comparison" and op == ">=":
+                expr = q[col] >= value
+            elif ftype == "membership" and op == "IN":
+                expr = q[col].isin(*value)
+            elif ftype == "membership" and op == "NOT IN":
+                expr = q[col].isnotin(*value)
+            elif ftype == "null_check" and op == "IS NULL":
+                expr = q[col].isnull()
+            elif ftype == "null_check" and op == "IS NOT NULL":
+                expr = q[col].notnull()
+            elif ftype == "range":
+                low, high = value
+                expr = (q[col] >= low) & (q[col] <= high)
+            else:
+                continue
 
             if filter_expr is None:
                 filter_expr = expr

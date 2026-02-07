@@ -146,6 +146,31 @@ Chronological summary of work done on the `duckdb` branch.
 - Context manager (`DuckDBContext`) doesn't need this — user passes exact symbol name to `register_symbol()`, and DuckDB's `conn.register()` is already case-insensitive for queries
 - Tests: `TestDuckDBCaseSensitivity` — 6 tests covering uppercase/mixed/lowercase SQL vs symbol case, exact match priority, pushdown with case mismatch, nonexistent symbol
 
+## 23. Implicit String-to-Timestamp Conversion in Pushdown
+
+- **Bug**: `WHERE ts < '2024-01-03'` fails with `E_INVALID_USER_ARGUMENT Invalid comparison timestamp ... < ... STRING` because the VARCHAR literal is pushed down as a raw string to ArcticDB's C++ engine
+- Standard SQL behaviour: all SQL engines implicitly cast ISO date strings to timestamps in comparisons
+- DuckDB's AST parser represents `'2024-01-03'` as VARCHAR; only `TIMESTAMP '2024-01-03'` or `CAST(... AS TIMESTAMP)` produce CAST nodes
+- **Fix**: In `_extract_constant_value()` VARCHAR case, detect ISO date patterns (`^\d{4}-\d{2}-\d{2}`) and auto-convert via `pd.Timestamp()`. Non-date strings (e.g. `'call'`, `'AAPL'`) are unaffected
+- Added `_ISO_DATE_RE` compiled regex at module level in `pushdown.py`
+- Tests: 3 unit tests in `TestParseWhereClause` (ISO date, ISO datetime, non-date string preserved), 4 integration tests in `TestDuckDBTimestampFilters` (string date, string datetime, explicit TIMESTAMP keyword, regular string filter)
+
+## 24. SQL Demo Notebook
+
+- Created `docs/mkdocs/docs/notebooks/ArcticDB_demo_sql.ipynb` — comprehensive SQL demo notebook
+- ArcticDB logo banner matching other demo notebooks, `!pip install arcticdb duckdb` cell
+- 9 sections: Setup, SQL Basics, Aggregation, OHLC Bars, VWAP, Options Greeks, Window Functions, CTEs, JOINs
+- Uses real AAPL options CSV data from `data/` + synthetic tick/trade data
+- All code cells execute successfully with outputs stored for GitHub rendering
+
+## 25. Notebook Streamlining — Remove QB Comparison, Add JOIN+Resample
+
+- Removed QueryBuilder vs SQL comparison section (5 cells: header + filter/groupby/resample/vwap) and 2 inline QB cells (ohlc-qb, vwap-qb)
+- Added `join-resample` cell: CTE query joining hourly OHLC bars (from `ticks`) with AAPL trade flow (from `trades`) via `TIME_BUCKET` + `JOIN`
+- Demonstrates CTEs, resample via `TIME_BUCKET`, multi-symbol `JOIN`, and `CASE WHEN` in a single realistic query
+- Updated summary table to SQL-only format
+- 35 cells (11 markdown, 24 code), all execute successfully with outputs stored
+
 ---
 
 ## Open Items
