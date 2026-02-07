@@ -2112,6 +2112,414 @@ class Library:
                 iterate_snapshots_if_tombstoned=False,
             )
 
+    def _read_as_record_batch_reader(
+        self,
+        symbol: str,
+        as_of: Optional[AsOf] = None,
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional[QueryBuilder] = None,
+    ) -> "ArcticRecordBatchReader":
+        """
+        Read data and return a lazy Arrow RecordBatchReader that streams data segment-by-segment.
+
+        This is an internal method used by sql() and duckdb() for memory-efficient streaming.
+        """
+        from arcticdb.version_store.duckdb import ArcticRecordBatchReader
+
+        cpp_iterator = self._nvs.read_as_record_batch_iterator(
+            symbol=symbol,
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+        )
+
+        return ArcticRecordBatchReader(cpp_iterator)
+
+    def sql(
+        self,
+        query: str,
+        as_of: Optional[AsOf] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ):
+        """
+        Execute SQL query on ArcticDB symbols using DuckDB.
+
+        Symbols referenced in the query (via FROM or JOIN clauses) are automatically
+        registered as tables in DuckDB. Data is streamed segment-by-segment for
+        memory efficiency.
+
+        Where possible, column selections, WHERE filters, date range filters, and
+        LIMIT clauses are pushed down to ArcticDB's storage engine so that only
+        the required data is read from storage.
+
+        Parameters
+        ----------
+        query : str
+            SQL query. Reference ArcticDB symbols as table names.
+            Example: ``"SELECT col1, SUM(col2) FROM my_symbol WHERE col1 > 100 GROUP BY col1"``
+        as_of : AsOf, default=None
+            Version to query. Applies to all symbols referenced in the query.
+            See `read()` for details on version specification.
+        output_format : OutputFormat, default=None
+            Format for the result. Defaults to PANDAS.
+            Options: OutputFormat.PANDAS, OutputFormat.PYARROW, OutputFormat.POLARS
+
+        Returns
+        -------
+        pandas.DataFrame, pyarrow.Table, or polars.DataFrame
+            Query result in the requested format.
+
+        Examples
+        --------
+        Simple filter and aggregation:
+
+        >>> df = lib.sql('''
+        ...     SELECT ticker, AVG(price) as avg_price
+        ...     FROM trades
+        ...     WHERE date > '2024-01-01'
+        ...     GROUP BY ticker
+        ... ''')
+
+        Get result as Arrow table:
+
+        >>> table = lib.sql(
+        ...     "SELECT * FROM prices WHERE price > 100",
+        ...     output_format="pyarrow"
+        ... )
+
+        Raises
+        ------
+        ImportError
+            If duckdb package is not installed.
+        ValueError
+            If no symbols could be extracted from the query.
+
+        Notes
+        -----
+        - DuckDB is an optional dependency. Install with: ``pip install duckdb``
+        - For complex queries with multiple symbols or custom table aliases,
+          use `duckdb()` instead.
+        - Data is processed using streaming Arrow record batches for memory efficiency.
+
+        See Also
+        --------
+        explain : Inspect which pushdown optimizations apply to a query.
+        duckdb_register : Register symbols into an external DuckDB connection.
+        duckdb : Context manager for complex multi-symbol SQL queries.
+        """
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
+        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql, is_table_discovery_query
+
+        duckdb = _check_duckdb_available()
+
+        # Check if this is a table discovery query (SHOW TABLES, SHOW ALL TABLES)
+        if is_table_discovery_query(query):
+            # For table discovery queries, register all symbols from the library
+            symbols = self.list_symbols()
+            pushdown_by_table = {}
+        else:
+            # Extract symbol names and pushdown info from SQL AST in a single parse
+            pushdown_by_table, symbols = extract_pushdown_from_sql(query)
+
+        # Resolve SQL table names to actual ArcticDB symbol names (case-insensitive).
+        # SQL identifiers are conventionally case-insensitive, but ArcticDB symbols are
+        # case-sensitive. We build a lookup map to find the real symbol name regardless
+        # of the case used in SQL.
+        library_symbols = self.list_symbols()
+        symbol_lookup = {s.lower(): s for s in library_symbols}
+
+        # Create DuckDB connection and register data with pushdown applied
+        conn = None
+        try:
+            conn = duckdb.connect(":memory:")
+            for sql_name in symbols:
+                # Resolve: exact match first, then case-insensitive
+                if sql_name in library_symbols:
+                    real_symbol = sql_name
+                elif sql_name.lower() in symbol_lookup:
+                    real_symbol = symbol_lookup[sql_name.lower()]
+                else:
+                    real_symbol = sql_name  # Let ArcticDB produce a clear "not found" error
+
+                pushdown = pushdown_by_table.get(sql_name)
+                if pushdown:
+                    reader = self._read_as_record_batch_reader(
+                        real_symbol,
+                        as_of=as_of,
+                        columns=pushdown.columns,
+                        date_range=pushdown.date_range,
+                        query_builder=pushdown.query_builder,
+                    )
+                else:
+                    reader = self._read_as_record_batch_reader(real_symbol, as_of=as_of)
+
+                # Register under the SQL name so DuckDB can find it from the query
+                conn.register(sql_name, reader.to_pyarrow_reader())
+
+            # Execute query and get Arrow result
+            result_arrow = conn.execute(query).fetch_arrow_table()
+
+            # Convert to requested format
+            if output_format is None:
+                output_fmt_str = OutputFormat.PANDAS.lower()
+            elif isinstance(output_format, OutputFormat):
+                output_fmt_str = output_format.lower()
+            else:
+                output_fmt_str = str(output_format).lower()
+
+            if output_fmt_str == OutputFormat.PYARROW.lower():
+                data = result_arrow
+            elif output_fmt_str == OutputFormat.POLARS.lower():
+                import polars as pl
+
+                data = pl.from_arrow(result_arrow)
+            else:
+                # Default to pandas
+                data = result_arrow.to_pandas()
+
+            return data
+
+        finally:
+            if conn is not None:
+                conn.close()
+
+    def explain(self, query: str) -> dict:
+        """
+        Explain which pushdown optimizations would be applied to a SQL query.
+
+        Parses the SQL query and reports which operations can be pushed down
+        to ArcticDB's storage engine (column projection, filters, date ranges,
+        LIMIT). Does not execute the query or read any data.
+
+        Parameters
+        ----------
+        query : str
+            SQL query to analyze.
+
+        Returns
+        -------
+        dict
+            Dictionary describing the pushdown optimizations, with keys:
+
+            - ``query`` (str): The original query
+            - ``symbols`` (list[str]): Symbols referenced in the query
+            - ``columns_pushed_down`` (list[str]): Columns selected at storage level
+            - ``filter_pushed_down`` (bool): Whether WHERE filters are pushed down
+            - ``date_range_pushed_down`` (bool): Whether date range filtering is pushed down
+            - ``limit_pushed_down`` (int): LIMIT value pushed down to storage
+
+            Only keys with active pushdowns are included (except ``query`` and ``symbols``
+            which are always present).
+
+        Examples
+        --------
+        >>> info = lib.explain("SELECT price FROM trades WHERE price > 100")
+        >>> print(info)
+        {'query': '...', 'symbols': ['trades'], 'columns_pushed_down': ['price'], 'filter_pushed_down': True}
+
+        See Also
+        --------
+        sql : Execute the query and return results.
+        """
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
+        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
+
+        _check_duckdb_available()
+
+        pushdown_by_table, symbols = extract_pushdown_from_sql(query)
+
+        info = {"query": query, "symbols": list(symbols)}
+        all_columns_pushed = []
+        any_filter_pushed = False
+        any_date_range_pushed = False
+        limit_pushed = None
+
+        for symbol, pushdown in pushdown_by_table.items():
+            if pushdown.columns_pushed_down:
+                all_columns_pushed.extend(pushdown.columns_pushed_down)
+            if pushdown.filter_pushed_down:
+                any_filter_pushed = True
+            if pushdown.date_range_pushed_down:
+                any_date_range_pushed = True
+            if pushdown.limit_pushed_down:
+                limit_pushed = pushdown.limit_pushed_down
+
+        if all_columns_pushed:
+            info["columns_pushed_down"] = list(set(all_columns_pushed))
+        if any_filter_pushed:
+            info["filter_pushed_down"] = True
+        if limit_pushed:
+            info["limit_pushed_down"] = limit_pushed
+        if any_date_range_pushed:
+            info["date_range_pushed_down"] = True
+
+        return info
+
+    def duckdb(self, connection: Any = None) -> "DuckDBContext":
+        """
+        Create a DuckDB context for complex multi-symbol SQL queries.
+
+        The context manager allows explicit symbol registration with custom
+        aliases, filters, and versions. Use this for JOINs across multiple
+        symbols or when you need fine-grained control over the query.
+
+        Parameters
+        ----------
+        connection : duckdb.DuckDBPyConnection, optional
+            External DuckDB connection to use. If provided, ArcticDB will register
+            symbols into this connection but will NOT close it when the context exits.
+            This allows joining ArcticDB data with data from other sources (Parquet
+            files, CSV, other databases) that are already registered in the connection.
+            If not provided, a new in-memory connection is created and closed on exit.
+
+        Returns
+        -------
+        DuckDBContext
+            Context manager for SQL queries.
+
+        Examples
+        --------
+        Basic usage with ArcticDB symbols only:
+
+        >>> with lib.duckdb() as ddb:
+        ...     # Register symbols with different versions/filters
+        ...     ddb.register_symbol("trades", date_range=(start, end))
+        ...     ddb.register_symbol("prices", as_of=-1, alias="latest_prices")
+        ...
+        ...     # Execute JOIN query
+        ...     result = ddb.query('''
+        ...         SELECT t.ticker, t.quantity * p.price as notional
+        ...         FROM trades t
+        ...         JOIN latest_prices p ON t.ticker = p.ticker
+        ...         WHERE t.quantity > 1000
+        ...     ''')
+
+        Join ArcticDB data with external data sources:
+
+        >>> import duckdb
+        >>> # Create connection with external data
+        >>> conn = duckdb.connect()
+        >>> conn.execute("CREATE TABLE benchmarks AS SELECT * FROM 'benchmarks.parquet'")
+        >>>
+        >>> # Join ArcticDB data with external tables
+        >>> with lib.duckdb(connection=conn) as ddb:
+        ...     ddb.register_symbol("portfolio_returns")
+        ...     result = ddb.query('''
+        ...         SELECT r.date, r.ticker, r.return - b.return as alpha
+        ...         FROM portfolio_returns r
+        ...         JOIN benchmarks b ON r.date = b.date
+        ...     ''')
+        >>>
+        >>> # Connection is still open - ArcticDB did not close it
+        >>> conn.execute("SELECT COUNT(*) FROM benchmarks")
+
+        >>> # Method chaining
+        >>> with lib.duckdb() as ddb:
+        ...     result = (ddb
+        ...         .register_symbol("trades")
+        ...         .register_symbol("prices")
+        ...         .query("SELECT * FROM trades JOIN prices USING (ticker)"))
+
+        Raises
+        ------
+        ImportError
+            If duckdb package is not installed.
+
+        Notes
+        -----
+        - DuckDB is an optional dependency. Install with: pip install duckdb
+        - Data is streamed lazily; symbols are not fully loaded until queried.
+        - When no connection is provided, a new in-memory connection is created
+          and automatically closed when exiting the context.
+        - When an external connection is provided, ArcticDB will NOT close it,
+          allowing continued use after the context exits.
+
+        See Also
+        --------
+        sql : Simple SQL queries on single symbols.
+        """
+        from arcticdb.version_store.duckdb import DuckDBContext
+
+        return DuckDBContext(self, connection=connection)
+
+    def duckdb_register(
+        self,
+        conn,
+        symbols: Optional[List[str]] = None,
+        as_of: Optional[AsOf] = None,
+    ) -> List[str]:
+        """
+        Register ArcticDB symbols as tables in a DuckDB connection.
+
+        Each symbol is read as an Arrow table and registered into the connection,
+        making it queryable via standard DuckDB SQL. The data is materialized in
+        memory so that tables can be queried multiple times.
+
+        Parameters
+        ----------
+        conn : duckdb.DuckDBPyConnection
+            DuckDB connection to register tables into.
+        symbols : list of str, optional
+            Symbols to register. If None, registers all symbols from ``list_symbols()``.
+        as_of : AsOf, optional
+            Version to read for all symbols. See `read()` for details.
+
+        Returns
+        -------
+        list of str
+            Names of registered symbols.
+
+        Examples
+        --------
+        Register all symbols:
+
+        >>> import duckdb
+        >>> conn = duckdb.connect()
+        >>> lib.duckdb_register(conn)
+        ['trades', 'prices']
+        >>> conn.sql("SELECT * FROM trades WHERE price > 100").df()
+
+        Register specific symbols:
+
+        >>> lib.duckdb_register(conn, symbols=["trades", "prices"])
+        >>> conn.sql("SHOW TABLES").df()
+
+        Use with standard DuckDB features:
+
+        >>> lib.duckdb_register(conn)
+        >>> conn.sql("DESCRIBE trades").df()
+        >>> conn.sql("SELECT * FROM trades LIMIT 10").show()
+
+        See Also
+        --------
+        sql : One-shot SQL queries with automatic pushdown optimization.
+        duckdb : Context manager for streaming queries with fine-grained control.
+        """
+        import pyarrow as pa
+
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available, _BaseDuckDBContext
+
+        _check_duckdb_available()
+        _BaseDuckDBContext._validate_external_connection(conn)
+
+        if symbols is None:
+            symbols = self.list_symbols()
+
+        registered = []
+        for symbol in symbols:
+            arrow_table = self.read(symbol, as_of=as_of).data
+            if not isinstance(arrow_table, pa.Table):
+                # read() returns pandas by default, convert to Arrow
+                arrow_table = pa.Table.from_pandas(arrow_table)
+            conn.register(symbol, arrow_table)
+            registered.append(symbol)
+
+        return registered
+
     def read_batch(
         self,
         symbols: List[Union[str, ReadRequest]],
