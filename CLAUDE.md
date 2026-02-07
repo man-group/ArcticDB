@@ -190,12 +190,28 @@ Benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`.
 
 ASV benchmarks live in `python/benchmarks/`. Requires `asv` and `virtualenv` installed.
 
+**First-time setup** — register the machine (one-off):
 ```bash
-cd python
-python -m asv run -v --show-stderr HEAD^!              # Benchmark current commit
-python -m asv run -v --show-stderr --bench <regex>     # Run subset matching regex
-python -m asv run --python=$(which python) -v          # Use current env (faster)
+asv machine --yes
 ```
+
+**Run from the repo root** (not `python/`):
+```bash
+# Run a specific benchmark suite against the current environment (fastest — no rebuild)
+asv run --python=$(which python) -v --show-stderr --bench BasicFunctions
+
+# Run all benchmarks
+asv run --python=$(which python) -v --show-stderr
+
+# Run benchmarks matching a regex
+asv run --python=$(which python) -v --show-stderr --bench "QueryBuilder|Resample"
+```
+
+Note: `--python=$(which python)` uses the active virtualenv directly, avoiding a full wheel build. Do **not** combine this with a commit range (`HEAD^!`) — they are mutually exclusive.
+
+**Available benchmark suites**: `BasicFunctions`, `Arrow`, `QueryBuilder`, `Resample`, `ModificationFunctions`, `ListSymbols`, `ListVersions`, `ListSnapshots`, `VersionChain`, `RecursiveNormalizer`, `FinalizeStagedData`.
+
+By default only LMDB storage is tested. Set `ARCTICDB_STORAGE_AWS_S3=1` with appropriate credentials to include S3. Set `ARCTICDB_SLOW_TESTS=1` for additional slow benchmarks.
 
 See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
 
