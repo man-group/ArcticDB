@@ -284,6 +284,49 @@ class TestDuckDBCaseSensitivity:
             lib.sql("SELECT * FROM nonexistent")
 
 
+class TestDuckDBTimestampFilters:
+    """Tests for implicit string-to-timestamp conversion in WHERE filters."""
+
+    def test_string_date_literal_in_where(self, lmdb_library):
+        """WHERE ts < '2024-01-04' should work without explicit TIMESTAMP keyword."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=10, freq="D", name="ts")
+        df = pd.DataFrame({"value": range(10)}, index=dates)
+        lib.write("ts_data", df)
+
+        result = lib.sql("SELECT * FROM ts_data WHERE ts < '2024-01-04'")
+        assert len(result) == 3  # Jan 1, 2, 3
+
+    def test_string_datetime_literal_in_where(self, lmdb_library):
+        """WHERE ts >= '2024-01-05 00:00:00' should auto-convert to timestamp."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=10, freq="D", name="ts")
+        df = pd.DataFrame({"value": range(10)}, index=dates)
+        lib.write("ts_data", df)
+
+        result = lib.sql("SELECT * FROM ts_data WHERE ts >= '2024-01-05 00:00:00'")
+        assert len(result) == 6  # Jan 5 through Jan 10
+
+    def test_explicit_timestamp_keyword_still_works(self, lmdb_library):
+        """Explicit TIMESTAMP '...' syntax should still work."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=10, freq="D", name="ts")
+        df = pd.DataFrame({"value": range(10)}, index=dates)
+        lib.write("ts_data", df)
+
+        result = lib.sql("SELECT * FROM ts_data WHERE ts < TIMESTAMP '2024-01-04'")
+        assert len(result) == 3
+
+    def test_string_filter_not_affected(self, lmdb_library):
+        """Regular string filters should not be affected by timestamp auto-conversion."""
+        lib = lmdb_library
+        df = pd.DataFrame({"category": ["call", "put", "call"], "value": [1, 2, 3]})
+        lib.write("opts", df)
+
+        result = lib.sql("SELECT * FROM opts WHERE category = 'call'")
+        assert len(result) == 2
+
+
 class TestDuckDBContext:
     """Tests for the DuckDBContext class."""
 
