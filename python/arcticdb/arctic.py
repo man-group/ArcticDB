@@ -458,7 +458,7 @@ class Arctic:
 
         Examples
         --------
-        List all databases with library counts:
+        List all libraries grouped by database:
 
         >>> arctic = adb.Arctic('lmdb://mydata')
         >>> arctic.create_library('jblackburn.market_data')
@@ -466,9 +466,10 @@ class Arctic:
         >>> arctic.create_library('global_config')
         >>> result = arctic.sql("SHOW DATABASES")
         >>> print(result)
-           database_name  library_count
-        0     jblackburn              2
-        1     __default__              1
+          database_name   library_name
+        0    jblackburn    market_data
+        1    jblackburn  reference_data
+        2   __default__  global_config
 
         See Also
         --------
@@ -487,50 +488,28 @@ class Arctic:
                 "For data queries, use library.sql() or arctic.duckdb() context manager."
             )
 
-        # Get list of libraries and group by database
+        # Get list of libraries and split into database/library columns
         libraries = self.list_libraries()
 
-        from collections import defaultdict
-
-        database_counts = defaultdict(int)
+        database_names = []
+        library_names = []
         for lib_name in libraries:
-            database, _ = _parse_library_name(lib_name)
-            database_counts[database] += 1
+            database, library = _parse_library_name(lib_name)
+            database_names.append(database)
+            library_names.append(library)
 
         # Build result table
         import pyarrow as pa
+        from arcticdb.version_store.duckdb.duckdb import _BaseDuckDBContext
 
         arrow_table = pa.table(
             {
-                "database_name": list(database_counts.keys()),
-                "library_count": list(database_counts.values()),
+                "database_name": database_names,
+                "library_name": library_names,
             }
         )
 
-        return self._format_query_result(arrow_table, output_format)
-
-    def _format_query_result(
-        self,
-        arrow_table,
-        output_format: Optional[Union[OutputFormat, str]] = None,
-    ):
-        """Convert Arrow table to requested output format."""
-        if output_format is None:
-            output_fmt_str = OutputFormat.PANDAS.lower()
-        elif isinstance(output_format, OutputFormat):
-            output_fmt_str = output_format.lower()
-        else:
-            output_fmt_str = str(output_format).lower()
-
-        if output_fmt_str == OutputFormat.PYARROW.lower():
-            return arrow_table
-        elif output_fmt_str == OutputFormat.POLARS.lower():
-            import polars as pl
-
-            return pl.from_arrow(arrow_table)
-        else:
-            # Default to pandas
-            return arrow_table.to_pandas()
+        return _BaseDuckDBContext._convert_arrow_table(arrow_table, output_format)
 
     def duckdb(self, connection: Any = None) -> "ArcticDuckDBContext":
         """

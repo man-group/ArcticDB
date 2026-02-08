@@ -193,13 +193,14 @@ arctic.create_library("jblackburn.reference_data")
 arctic.create_library("shared.global_config")
 arctic.create_library("legacy_data")  # Top-level, no database prefix
 
-# List all databases with library counts
+# List all libraries grouped by database
 result = arctic.sql("SHOW DATABASES")
 print(result)
-#    database_name  library_count
-# 0     jblackburn              2
-# 1         shared              1
-# 2     __default__              1
+#   database_name   library_name
+# 0    jblackburn    market_data
+# 1    jblackburn  reference_data
+# 2        shared  global_config
+# 3   __default__    legacy_data
 ```
 
 ### Cross-Database Queries

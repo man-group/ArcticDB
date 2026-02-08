@@ -1679,10 +1679,10 @@ class TestArcticDuckDBShowDatabases:
         result = arctic.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
-        assert "library_count" in result.columns
+        assert "library_name" in result.columns
         assert len(result) == 1
-        assert "testuser" in list(result["database_name"])
-        assert result["library_count"].iloc[0] == 1
+        assert result["database_name"].iloc[0] == "testuser"
+        assert result["library_name"].iloc[0] == "market_data"
 
     def test_arctic_sql_show_databases_multiple_libraries(self, lmdb_storage):
         """Test arctic.sql('SHOW DATABASES') with multiple libraries in different databases."""
@@ -1694,11 +1694,12 @@ class TestArcticDuckDBShowDatabases:
         result = arctic.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
-        assert "library_count" in result.columns
-        assert len(result) == 2  # Two databases: testuser, otheruser
-        db_counts = dict(zip(result["database_name"], result["library_count"]))
-        assert db_counts["testuser"] == 2
-        assert db_counts["otheruser"] == 1
+        assert "library_name" in result.columns
+        assert len(result) == 3  # Three libraries total
+        testuser_libs = sorted(result[result["database_name"] == "testuser"]["library_name"].tolist())
+        assert testuser_libs == ["market_data", "reference_data"]
+        otheruser_libs = result[result["database_name"] == "otheruser"]["library_name"].tolist()
+        assert otheruser_libs == ["portfolios"]
 
     def test_arctic_sql_show_databases_output_format_arrow(self, lmdb_storage):
         """Test arctic.sql('SHOW DATABASES') with Arrow output format."""
@@ -1711,7 +1712,7 @@ class TestArcticDuckDBShowDatabases:
 
         assert isinstance(result, pa.Table)
         assert "database_name" in result.column_names
-        assert "library_count" in result.column_names
+        assert "library_name" in result.column_names
         assert result.num_rows == 1
 
     def test_arctic_sql_show_databases_invalid_query_raises(self, lmdb_storage):
@@ -1735,9 +1736,9 @@ class TestArcticDuckDBShowDatabases:
             result = ddb.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
-        assert "library_count" in result.columns
-        db_counts = dict(zip(result["database_name"], result["library_count"]))
-        assert db_counts["testuser"] == 2
+        assert "library_name" in result.columns
+        testuser_libs = sorted(result[result["database_name"] == "testuser"]["library_name"].tolist())
+        assert testuser_libs == ["lib_a", "lib_b"]
 
     def test_arctic_duckdb_context_register_library(self, lmdb_storage):
         """Test arctic.duckdb() with explicit register_library()."""
@@ -1752,9 +1753,11 @@ class TestArcticDuckDBShowDatabases:
             ddb.register_library("user2.lib_c")
             result = ddb.sql("SHOW DATABASES")
 
-        db_counts = dict(zip(result["database_name"], result["library_count"]))
-        assert db_counts["user1"] == 1  # Only lib_a registered, not lib_b
-        assert db_counts["user2"] == 1
+        assert len(result) == 2  # Only lib_a and lib_c registered, not lib_b
+        user1_libs = result[result["database_name"] == "user1"]["library_name"].tolist()
+        assert user1_libs == ["lib_a"]
+        user2_libs = result[result["database_name"] == "user2"]["library_name"].tolist()
+        assert user2_libs == ["lib_c"]
 
     def test_arctic_duckdb_context_register_nonexistent_library_raises(self, lmdb_storage):
         """Test arctic.duckdb() register_library() raises for non-existent library."""
@@ -1813,6 +1816,7 @@ class TestArcticDuckDBShowDatabases:
 
         # Library's database should be in SHOW DATABASES even without explicit registration
         assert "testuser" in list(result["database_name"])
+        assert "implicit_lib" in list(result["library_name"])
 
     def test_arctic_duckdb_context_registered_libraries_property(self, lmdb_storage):
         """Test registered_libraries property on ArcticDuckDBContext."""
@@ -1957,7 +1961,7 @@ class TestDatabaseLibraryNamespace:
     # Tests for SHOW DATABASES with database hierarchy
 
     def test_show_databases_groups_by_database(self, lmdb_storage):
-        """Test SHOW DATABASES returns database_name and library_count columns."""
+        """Test SHOW DATABASES returns database_name and library_name columns."""
         arctic = lmdb_storage.create_arctic()
         # Create libraries with database.library format
         arctic.create_library("jblackburn.lib1")
@@ -1967,12 +1971,13 @@ class TestDatabaseLibraryNamespace:
         result = arctic.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
-        assert "library_count" in result.columns
+        assert "library_name" in result.columns
+        assert len(result) == 3
 
-        # Convert to dict for easier assertions
-        db_counts = dict(zip(result["database_name"], result["library_count"]))
-        assert db_counts["jblackburn"] == 2
-        assert db_counts["other_user"] == 1
+        jb_libs = sorted(result[result["database_name"] == "jblackburn"]["library_name"].tolist())
+        assert jb_libs == ["lib1", "lib2"]
+        other_libs = result[result["database_name"] == "other_user"]["library_name"].tolist()
+        assert other_libs == ["lib1"]
 
     def test_show_databases_default_namespace(self, lmdb_storage):
         """Test top-level libraries grouped under __default__."""
@@ -1984,9 +1989,11 @@ class TestDatabaseLibraryNamespace:
 
         result = arctic.sql("SHOW DATABASES")
 
-        db_counts = dict(zip(result["database_name"], result["library_count"]))
-        assert db_counts["jblackburn"] == 1
-        assert db_counts["__default__"] == 2
+        assert len(result) == 3
+        jb_libs = result[result["database_name"] == "jblackburn"]["library_name"].tolist()
+        assert jb_libs == ["lib1"]
+        default_libs = sorted(result[result["database_name"] == "__default__"]["library_name"].tolist())
+        assert default_libs == ["global_config", "shared_data"]
 
     def test_show_databases_empty(self, lmdb_storage):
         """Test SHOW DATABASES with no libraries returns empty result."""
@@ -1995,7 +2002,7 @@ class TestDatabaseLibraryNamespace:
         result = arctic.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
-        assert "library_count" in result.columns
+        assert "library_name" in result.columns
         assert len(result) == 0
 
     # Tests for ArcticDuckDBContext with database hierarchy
@@ -2012,11 +2019,13 @@ class TestDatabaseLibraryNamespace:
             result = ddb.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
-        assert "library_count" in result.columns
+        assert "library_name" in result.columns
+        assert len(result) == 3
 
-        db_counts = dict(zip(result["database_name"], result["library_count"]))
-        assert db_counts["jblackburn"] == 2
-        assert db_counts["shared"] == 1
+        jb_libs = sorted(result[result["database_name"] == "jblackburn"]["library_name"].tolist())
+        assert jb_libs == ["market_data", "reference_data"]
+        shared_libs = result[result["database_name"] == "shared"]["library_name"].tolist()
+        assert shared_libs == ["global_config"]
 
     # Tests for cross-library queries with database.library naming
 

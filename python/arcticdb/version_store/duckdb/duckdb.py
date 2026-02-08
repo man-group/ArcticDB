@@ -755,21 +755,20 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
         return self._execute_sql(query, output_format)
 
     def _execute_show_databases(self, output_format: Optional[Union[OutputFormat, str]] = None) -> Any:
-        """Execute SHOW DATABASES and return registered libraries grouped by database."""
+        """Execute SHOW DATABASES and return registered libraries with their database grouping."""
         import pyarrow as pa
-        from collections import defaultdict
 
-        # Group registered libraries by database
-        database_counts = defaultdict(int)
+        database_names = []
+        library_names = []
         for lib_name in self._registered_libraries.keys():
-            database, _ = _parse_library_name(lib_name)
-            database_counts[database] += 1
+            database, library = _parse_library_name(lib_name)
+            database_names.append(database)
+            library_names.append(library)
 
-        # Create result table with database hierarchy info
         arrow_table = pa.table(
             {
-                "database_name": list(database_counts.keys()),
-                "library_count": list(database_counts.values()),
+                "database_name": database_names,
+                "library_name": library_names,
             }
         )
 
