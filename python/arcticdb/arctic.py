@@ -438,7 +438,7 @@ class Arctic:
         ----------
         query : str
             SQL query to execute. Currently only ``SHOW DATABASES`` is supported,
-            which returns databases with library counts.
+            which returns all libraries grouped by their database prefix.
 
         output_format : OutputFormat or str, optional
             Output format for the result:

@@ -228,16 +228,30 @@ with arctic.duckdb() as ddb:
 
 ## Advanced: `lib.duckdb()` Context Manager
 
-For complex scenarios requiring fine-grained control, use the `duckdb()` context manager:
+For complex scenarios requiring fine-grained control, use the `duckdb()` context manager.
+Symbols referenced in queries are auto-registered from the library, so simple queries
+work without explicit registration:
 
 ```python
 with lib.duckdb() as ddb:
-    ddb.register_symbol("trades")
-    ddb.register_symbol("prices")
     result = ddb.sql("""
         SELECT t.ticker, t.quantity * p.current_price as value
         FROM trades t
         JOIN prices p ON t.ticker = p.ticker
+    """)
+```
+
+Use `register_symbol()` when you need custom versions, date ranges, aliases, or
+QueryBuilder pre-filters:
+
+```python
+with lib.duckdb() as ddb:
+    ddb.register_symbol("trades", date_range=(start, end))
+    ddb.register_symbol("prices", as_of=0, alias="historical_prices")
+    result = ddb.sql("""
+        SELECT t.ticker, t.quantity * p.current_price as value
+        FROM trades t
+        JOIN historical_prices p ON t.ticker = p.ticker
     """)
 ```
 

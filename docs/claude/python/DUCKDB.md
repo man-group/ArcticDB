@@ -7,9 +7,9 @@ SQL query engine for ArcticDB using DuckDB, with pushdown optimization and Arrow
 ```
 python/arcticdb/version_store/duckdb/
 ├── __init__.py        # Public exports: DuckDBContext, ArcticDuckDBContext, ArcticRecordBatchReader
-├── duckdb.py          # Context managers and connection management (721 lines)
-├── pushdown.py        # SQL AST parsing and pushdown extraction (877 lines)
-└── arrow_reader.py    # Arrow RecordBatchReader wrapper (194 lines)
+├── duckdb.py          # Context managers and connection management
+├── pushdown.py        # SQL AST parsing and pushdown extraction
+└── arrow_reader.py    # Arrow RecordBatchReader wrapper
 ```
 
 Entry points on `Library` (`version_store/library.py`):
@@ -58,23 +58,25 @@ lib.sql(query) ─────────────────────�
 ### Class Hierarchy
 
 ```
-_BaseDuckDBContext (line 95)
+_BaseDuckDBContext
 ├── Connection lifecycle (__enter__/__exit__)
 ├── _validate_external_connection() (static)
-├── _format_query_result(sql, output_format)
+├── _convert_arrow_table(arrow_table, output_format) (static)
+├── _execute_sql(query, output_format)
 ├── execute(sql) → self
 ├── Properties: connection, registered_symbols
 │
-├── DuckDBContext (line 233) — single library
+├── DuckDBContext — single library
 │   ├── register_symbol(symbol, alias, as_of, date_range, row_range, columns, query_builder)
 │   ├── register_all_symbols(as_of)
-│   └── query(sql, output_format)
+│   ├── _auto_register(query) — resolves unregistered symbols from library
+│   └── sql(query, output_format)
 │
-└── ArcticDuckDBContext (line 447) — cross-library
+└── ArcticDuckDBContext — cross-library
     ├── register_library(library_name)
     ├── register_all_libraries()
     ├── register_symbol(library_name, symbol, ...)
-    ├── query(sql, output_format) — handles SHOW DATABASES
+    ├── sql(query, output_format) — handles SHOW DATABASES
     └── _execute_show_databases(output_format)
 ```
 
@@ -89,6 +91,7 @@ _BaseDuckDBContext (line 95)
 - `_check_duckdb_available()` — import guard, raises `ImportError` with install instructions
 - `_parse_library_name(name)` — splits `"db.lib"` → `("db", "lib")`, top-level → `("__default__", name)`
 - `_extract_symbols_from_query(query)` — delegates to `extract_pushdown_from_sql()`
+- `_resolve_symbol(sql_name, library)` — O(1) exact match via `has_symbol()`, case-insensitive fallback via `list_symbols()`
 
 ## Module: pushdown.py
 
