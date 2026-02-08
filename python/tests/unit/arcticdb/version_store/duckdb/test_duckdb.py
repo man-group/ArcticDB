@@ -2067,3 +2067,220 @@ class TestDatabaseLibraryNamespace:
         assert "prices" in symbols
         assert symbols["prices"]["library"] == "jblackburn.market_data"
         assert symbols["prices"]["symbol"] == "prices"
+
+
+class TestQueryBuilderParameter:
+    """Tests for the query_builder parameter on register_symbol()."""
+
+    def test_query_builder_filters_before_sql(self, lmdb_library):
+        """Test that query_builder pre-filters data before DuckDB sees it."""
+        from arcticdb import QueryBuilder
+
+        lib = lmdb_library
+        df = pd.DataFrame({"category": ["A", "B", "A", "B"], "value": [10, 20, 30, 40]})
+        lib.write("data", df)
+
+        q = QueryBuilder()
+        q = q[q["category"] == "A"]
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("data", query_builder=q)
+            result = ddb.sql("SELECT SUM(value) as total FROM data")
+
+        assert result["total"].iloc[0] == 40  # 10 + 30 (only category A)
+
+    def test_query_builder_with_columns(self, lmdb_library):
+        """Test query_builder combined with columns parameter."""
+        from arcticdb import QueryBuilder
+
+        lib = lmdb_library
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "c": [7, 8, 9]})
+        lib.write("data", df)
+
+        q = QueryBuilder()
+        q = q[q["a"] > 1]
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("data", columns=["a", "b"], query_builder=q)
+            result = ddb.sql("SELECT * FROM data ORDER BY a")
+
+        assert list(result.columns) == ["a", "b"]
+        assert list(result["a"]) == [2, 3]
+
+
+class TestRegisterSymbolErrors:
+    """Tests for error handling in register_symbol()."""
+
+    def test_register_nonexistent_symbol_raises(self, lmdb_library):
+        """Test that registering a non-existent symbol raises a clear error."""
+        lib = lmdb_library
+
+        with lib.duckdb() as ddb:
+            with pytest.raises(Exception):
+                ddb.register_symbol("does_not_exist")
+
+    def test_auto_register_nonexistent_symbol_raises(self, lmdb_library):
+        """Test that auto-registration of a non-existent symbol raises."""
+        lib = lmdb_library
+
+        with lib.duckdb() as ddb:
+            with pytest.raises(Exception):
+                ddb.sql("SELECT * FROM does_not_exist")
+
+
+class TestContextManagerCleanup:
+    """Tests for context manager cleanup and error handling."""
+
+    def test_cleanup_on_exception(self, lmdb_library):
+        """Test that symbols are unregistered even when user code throws."""
+        import duckdb as duckdb_mod
+
+        lib = lmdb_library
+        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        conn = duckdb_mod.connect(":memory:")
+        try:
+            with lib.duckdb(connection=conn) as ddb:
+                ddb.register_symbol("test_symbol")
+                # Verify it's registered
+                assert conn.execute("SELECT COUNT(*) FROM test_symbol").fetchone()[0] == 3
+                raise ValueError("simulated error")
+        except ValueError:
+            pass
+
+        # After context exit, the symbol should be unregistered from the shared connection
+        with pytest.raises(duckdb_mod.CatalogException):
+            conn.execute("SELECT * FROM test_symbol")
+        conn.close()
+
+    def test_cleanup_on_exception_internal_conn(self, lmdb_library):
+        """Test that internal connections are closed even when user code throws."""
+        lib = lmdb_library
+        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        ctx = lib.duckdb()
+        try:
+            with ctx as ddb:
+                ddb.register_symbol("test_symbol")
+                raise RuntimeError("simulated error")
+        except RuntimeError:
+            pass
+
+        # Connection should be cleaned up - accessing it should fail
+        assert ctx._conn is None
+
+
+class TestOutputFormatErrors:
+    """Tests for invalid output_format handling."""
+
+    def test_invalid_output_format_raises(self, lmdb_library):
+        """Test that an invalid output_format string raises ValueError."""
+        lib = lmdb_library
+        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with pytest.raises(ValueError, match="Unknown OutputFormat"):
+            lib.sql("SELECT * FROM test_symbol", output_format="xml")
+
+    def test_invalid_output_format_context_manager(self, lmdb_library):
+        """Test invalid output_format in context manager sql()."""
+        lib = lmdb_library
+        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("test_symbol")
+            with pytest.raises(ValueError, match="Unknown OutputFormat"):
+                ddb.sql("SELECT * FROM test_symbol", output_format="csv")
+
+    def test_output_format_case_insensitive(self, lmdb_library):
+        """Test that output_format strings are case-insensitive."""
+        import pyarrow as pa
+
+        lib = lmdb_library
+        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
+
+        result = lib.sql("SELECT * FROM test_symbol", output_format="PyArrow")
+        assert isinstance(result, pa.Table)
+
+        result = lib.sql("SELECT * FROM test_symbol", output_format="PANDAS")
+        assert isinstance(result, pd.DataFrame)
+
+
+class TestExplain:
+    """Tests for lib.explain() pushdown introspection."""
+
+    def test_explain_returns_query_and_symbols(self, lmdb_library):
+        """Test explain() always returns query and symbols keys."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"price": [1.0, 2.0]}))
+
+        info = lib.explain("SELECT * FROM trades")
+
+        assert info["query"] == "SELECT * FROM trades"
+        assert info["symbols"] == ["trades"]
+
+    def test_explain_column_pushdown(self, lmdb_library):
+        """Test explain() detects column projection pushdown."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"price": [1.0], "volume": [100]}))
+
+        info = lib.explain("SELECT price FROM trades")
+
+        assert "columns_pushed_down" in info
+        assert "price" in info["columns_pushed_down"]
+
+    def test_explain_filter_pushdown(self, lmdb_library):
+        """Test explain() detects WHERE filter pushdown."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"price": [1.0, 2.0]}))
+
+        info = lib.explain("SELECT * FROM trades WHERE price > 1.0")
+
+        assert info.get("filter_pushed_down") is True
+
+    def test_explain_limit_pushdown(self, lmdb_library):
+        """Test explain() detects LIMIT pushdown."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"price": [1.0, 2.0, 3.0]}))
+
+        info = lib.explain("SELECT * FROM trades LIMIT 10")
+
+        assert info.get("limit_pushed_down") == 10
+
+    def test_explain_no_pushdown(self, lmdb_library):
+        """Test explain() for a query with no pushdowns (SELECT *)."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"price": [1.0]}))
+
+        info = lib.explain("SELECT * FROM trades")
+
+        assert "query" in info
+        assert "symbols" in info
+        # SELECT * means all columns, no column pushdown
+        assert "columns_pushed_down" not in info
+
+    def test_explain_multi_symbol(self, lmdb_library):
+        """Test explain() with a multi-symbol JOIN query."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"ticker": ["A"], "qty": [100]}))
+        lib.write("prices", pd.DataFrame({"ticker": ["A"], "price": [50.0]}))
+
+        info = lib.explain("SELECT t.ticker, p.price FROM trades t JOIN prices p ON t.ticker = p.ticker")
+
+        assert set(info["symbols"]) == {"trades", "prices"}
+
+    def test_explain_does_not_read_data(self, lmdb_library):
+        """Test explain() works even when the symbol has no data (just schema)."""
+        lib = lmdb_library
+        lib.write("empty", pd.DataFrame({"x": pd.Series([], dtype="float64")}))
+
+        # Should not raise - explain doesn't read data
+        info = lib.explain("SELECT x FROM empty WHERE x > 0 LIMIT 5")
+
+        assert info["symbols"] == ["empty"]
+
+    def test_explain_invalid_sql_raises(self, lmdb_library):
+        """Test explain() raises for invalid SQL."""
+        lib = lmdb_library
+
+        with pytest.raises(ValueError):
+            lib.explain("INSERT INTO trades VALUES (1, 2)")

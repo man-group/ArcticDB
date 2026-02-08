@@ -2224,17 +2224,24 @@ class Library:
         duckdb : Context manager for complex multi-symbol SQL queries.
         """
         from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
-        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql, is_table_discovery_query
+        from arcticdb.version_store.duckdb.pushdown import (
+            _get_sql_ast,
+            extract_pushdown_from_sql,
+            is_table_discovery_query,
+        )
 
         duckdb = _check_duckdb_available()
 
+        # Parse once, reuse for classification and pushdown extraction
+        ast = _get_sql_ast(query)
+
         # Check if this is a table discovery query (SHOW TABLES, SHOW ALL TABLES)
-        if is_table_discovery_query(query):
+        if is_table_discovery_query(query, _ast=ast):
             # For table discovery queries, register all symbols from the library
             symbols = self.list_symbols()
             pushdown_by_table = {}
         else:
-            # Extract symbol names and pushdown info from SQL AST in a single parse
+            # Extract symbol names and pushdown info from the AST
             pushdown_by_table, symbols = extract_pushdown_from_sql(query)
 
         # Resolve SQL table names to actual ArcticDB symbol names (case-insensitive).
@@ -2362,9 +2369,9 @@ class Library:
         """
         Create a DuckDB context for complex multi-symbol SQL queries.
 
-        The context manager allows explicit symbol registration with custom
-        aliases, filters, and versions. Use this for JOINs across multiple
-        symbols or when you need fine-grained control over the query.
+        Symbols referenced in queries are auto-registered from this library.
+        Use ``register_symbol()`` when you need custom versions, date ranges,
+        aliases, or query builder pre-filters.
 
         Parameters
         ----------

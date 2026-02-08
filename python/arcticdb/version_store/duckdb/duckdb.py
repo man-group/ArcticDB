@@ -276,15 +276,21 @@ class DuckDBContext(_BaseDuckDBContext):
     """
     Context manager for executing SQL queries across multiple ArcticDB symbols.
 
-    Provides fine-grained control over symbol registration and query execution,
-    enabling complex queries including JOINs across multiple symbols.
+    Symbols can be registered explicitly via ``register_symbol()`` with custom
+    versions, filters, and aliases, or will be **auto-registered** from the
+    library when referenced in a query passed to ``sql()``.
 
     Can optionally use an external DuckDB connection, allowing joins between
     ArcticDB data and other DuckDB data sources (Parquet files, CSV, other databases, etc.).
 
     Examples
     --------
-    Basic usage:
+    Auto-registration (symbols resolved automatically from the library):
+
+    >>> with lib.duckdb() as ddb:
+    ...     result = ddb.sql("SELECT ticker, SUM(quantity) FROM trades GROUP BY ticker")
+
+    Explicit registration for fine-grained control:
 
     >>> with lib.duckdb() as ddb:
     ...     ddb.register_symbol("trades", date_range=(start, end))

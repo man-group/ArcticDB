@@ -722,7 +722,7 @@ def _get_sql_ast_or_raise(query: str) -> Dict:
     raise ValueError("Could not parse SQL query. Ensure query is valid SQL.")
 
 
-def is_table_discovery_query(query: str) -> bool:
+def is_table_discovery_query(query: str, _ast: Optional[Dict] = None) -> bool:
     """
     Check if a SQL query is a table discovery query (SHOW TABLES, SHOW ALL TABLES).
 
@@ -732,13 +732,15 @@ def is_table_discovery_query(query: str) -> bool:
     ----------
     query : str
         SQL query to check.
+    _ast : dict, optional
+        Pre-parsed AST to avoid re-parsing.  Internal use only.
 
     Returns
     -------
     bool
         True if the query is SHOW TABLES or SHOW ALL TABLES, False otherwise.
     """
-    ast = _get_sql_ast(query)
+    ast = _ast if _ast is not None else _get_sql_ast(query)
     if ast is None:
         return False
 
