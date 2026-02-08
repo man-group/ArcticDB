@@ -481,6 +481,76 @@ This is useful for:
 - **Persistent connections**: Reuse a connection across multiple ArcticDB context managers
 - **DuckDB extensions**: Configure DuckDB extensions (httpfs, postgres, etc.) before using with ArcticDB
 
+### Cross-Library Joins
+
+Join data across multiple ArcticDB libraries by sharing a DuckDB connection:
+
+```python
+import duckdb
+
+# Two libraries — e.g. different teams or data domains
+lib_trades = arctic.get_library("trading.fills")
+lib_ref = arctic.get_library("reference.instruments")
+
+# Register symbols from both libraries into the same connection
+conn = duckdb.connect(":memory:")
+lib_trades.duckdb_register(conn, symbols=["fills"])
+lib_ref.duckdb_register(conn, symbols=["sectors"])
+
+# Query across libraries
+result = conn.execute("""
+    SELECT f.ticker, f.qty, f.price, s.sector
+    FROM fills f
+    JOIN sectors s ON f.ticker = s.ticker
+""").fetch_arrow_table().to_pandas()
+```
+
+The same works with nested context managers — the external connection survives each context exit:
+
+```python
+conn = duckdb.connect(":memory:")
+
+with lib_trades.duckdb(connection=conn) as ddb:
+    ddb.register_symbol("fills")
+    # data registered; connection stays open because it's external
+
+with lib_ref.duckdb(connection=conn) as ddb:
+    ddb.register_symbol("sectors")
+    result = ddb.query("""
+        SELECT f.ticker, f.qty, s.sector
+        FROM fills f JOIN sectors s ON f.ticker = s.ticker
+    """)
+```
+
+Or use `arctic.duckdb()` to register from any library in a single context:
+
+```python
+with arctic.duckdb() as ddb:
+    ddb.register_symbol("trading.fills", "fills")
+    ddb.register_symbol("reference.instruments", "sectors")
+    result = ddb.query("SELECT * FROM fills JOIN sectors USING (ticker)")
+```
+
+This also works across **completely separate ArcticDB instances** (different storage backends):
+
+```python
+arctic_prod = Arctic("lmdb:///data/prod")
+arctic_research = Arctic("lmdb:///data/research")
+
+lib_prod = arctic_prod.get_library("trading")
+lib_research = arctic_research.get_library("signals")
+
+conn = duckdb.connect(":memory:")
+lib_prod.duckdb_register(conn, symbols=["trades"])
+lib_research.duckdb_register(conn, symbols=["alpha_scores"])
+
+result = conn.execute("""
+    SELECT t.ticker, t.notional, a.score
+    FROM trades t
+    JOIN alpha_scores a ON t.ticker = a.ticker
+""").fetch_arrow_table().to_pandas()
+```
+
 ## Performance Considerations
 
 ### Automatic Pushdown Optimization

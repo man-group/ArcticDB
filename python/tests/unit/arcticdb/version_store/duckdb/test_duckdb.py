@@ -767,6 +767,163 @@ class TestExternalDuckDBConnection:
         conn.close()
 
 
+class TestCrossLibraryJoins:
+    """Tests for joining data across multiple ArcticDB library instances via a shared DuckDB connection."""
+
+    def test_join_across_two_libraries(self, lmdb_storage):
+        """Two Library instances register symbols into the same DuckDB connection, then JOIN."""
+        import duckdb
+
+        arctic = lmdb_storage.create_arctic()
+        lib_trades = arctic.create_library("trading.trades")
+        lib_ref = arctic.create_library("reference.instruments")
+
+        lib_trades.write(
+            "fills",
+            pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "qty": [100, 200, 150], "price": [150.0, 2800.0, 300.0]}),
+        )
+        lib_ref.write(
+            "sectors",
+            pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT", "AMZN"], "sector": ["Tech", "Tech", "Tech", "Retail"]}),
+        )
+
+        conn = duckdb.connect(":memory:")
+        lib_trades.duckdb_register(conn, symbols=["fills"])
+        lib_ref.duckdb_register(conn, symbols=["sectors"])
+
+        result = conn.execute("""
+            SELECT f.ticker, f.qty, f.price, s.sector
+            FROM fills f
+            JOIN sectors s ON f.ticker = s.ticker
+            ORDER BY f.ticker
+        """).fetch_arrow_table().to_pandas()
+
+        assert len(result) == 3
+        assert list(result["ticker"]) == ["AAPL", "GOOG", "MSFT"]
+        assert all(result["sector"] == "Tech")
+        conn.close()
+
+    def test_join_across_libraries_with_context_manager(self, lmdb_storage):
+        """Nested Library.duckdb() context managers sharing a connection for cross-library JOIN."""
+        import duckdb
+
+        arctic = lmdb_storage.create_arctic()
+        lib_a = arctic.create_library("team_a.positions")
+        lib_b = arctic.create_library("team_b.prices")
+
+        lib_a.write("portfolio", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "shares": [1000, 500]}))
+        lib_b.write("marks", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "mark": [195.0, 175.0]}))
+
+        conn = duckdb.connect(":memory:")
+
+        with lib_a.duckdb(connection=conn) as ddb_a:
+            ddb_a.register_symbol("portfolio")
+
+        # Connection stays open — lib_a's context manager doesn't close external connections
+        with lib_b.duckdb(connection=conn) as ddb_b:
+            ddb_b.register_symbol("marks")
+            result = ddb_b.query("""
+                SELECT p.ticker, p.shares, m.mark, p.shares * m.mark AS market_value
+                FROM portfolio p
+                JOIN marks m ON p.ticker = m.ticker
+                ORDER BY market_value DESC
+            """)
+
+        assert len(result) == 2
+        assert result.iloc[0]["ticker"] == "AAPL"
+        assert result.iloc[0]["market_value"] == pytest.approx(195000.0)
+        assert result.iloc[1]["ticker"] == "GOOG"
+        assert result.iloc[1]["market_value"] == pytest.approx(87500.0)
+        conn.close()
+
+    def test_join_across_separate_lmdb_instances(self, tmp_path):
+        """Two completely separate LMDB Arctic instances share a DuckDB connection for a JOIN."""
+        import duckdb
+        from arcticdb import Arctic
+
+        arctic_a = Arctic(f"lmdb://{tmp_path}/instance_a")
+        arctic_b = Arctic(f"lmdb://{tmp_path}/instance_b")
+
+        lib_a = arctic_a.create_library("positions")
+        lib_b = arctic_b.create_library("risk")
+
+        lib_a.write("holdings", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "shares": [1000, 500]}))
+        lib_b.write("var_limits", pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "daily_var": [50000.0, 80000.0, 30000.0]}))
+
+        conn = duckdb.connect(":memory:")
+        lib_a.duckdb_register(conn, symbols=["holdings"])
+        lib_b.duckdb_register(conn, symbols=["var_limits"])
+
+        result = conn.execute("""
+            SELECT h.ticker, h.shares, v.daily_var
+            FROM holdings h
+            JOIN var_limits v ON h.ticker = v.ticker
+            ORDER BY h.ticker
+        """).fetch_arrow_table().to_pandas()
+
+        assert len(result) == 2
+        assert list(result["ticker"]) == ["AAPL", "GOOG"]
+        assert list(result["daily_var"]) == [50000.0, 80000.0]
+        conn.close()
+
+    def test_join_across_separate_lmdb_instances_with_context_manager(self, tmp_path):
+        """Nested context managers from two separate LMDB instances sharing a connection."""
+        import duckdb
+        from arcticdb import Arctic
+
+        arctic_a = Arctic(f"lmdb://{tmp_path}/db_alpha")
+        arctic_b = Arctic(f"lmdb://{tmp_path}/db_beta")
+
+        lib_a = arctic_a.create_library("data")
+        lib_b = arctic_b.create_library("data")
+
+        lib_a.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "notional": [15000.0, 140000.0]}))
+        lib_b.write("fx_rates", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "fx_rate": [0.79, 0.79]}))
+
+        conn = duckdb.connect(":memory:")
+
+        with lib_a.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("trades")
+
+        with lib_b.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("fx_rates")
+            result = ddb.query("""
+                SELECT t.ticker, t.notional, f.fx_rate,
+                       ROUND(t.notional * f.fx_rate, 2) AS notional_gbp
+                FROM trades t
+                JOIN fx_rates f ON t.ticker = f.ticker
+                ORDER BY t.ticker
+            """)
+
+        assert len(result) == 2
+        assert result.iloc[0]["notional_gbp"] == pytest.approx(11850.0)
+        assert result.iloc[1]["notional_gbp"] == pytest.approx(110600.0)
+        conn.close()
+
+    def test_join_across_libraries_via_arctic_duckdb(self, lmdb_storage):
+        """Arctic.duckdb() context manager registers symbols from different libraries."""
+        arctic = lmdb_storage.create_arctic()
+        lib_a = arctic.create_library("fund.nav")
+        lib_b = arctic.create_library("fund.benchmarks")
+
+        lib_a.write("daily_nav", pd.DataFrame({"date": ["2025-01-01", "2025-01-02"], "nav": [100.0, 102.5]}))
+        lib_b.write("index_level", pd.DataFrame({"date": ["2025-01-01", "2025-01-02"], "level": [5000.0, 5050.0]}))
+
+        with arctic.duckdb() as ddb:
+            ddb.register_symbol("fund.nav", "daily_nav")
+            ddb.register_symbol("fund.benchmarks", "index_level")
+            result = ddb.query("""
+                SELECT n.date, n.nav, i.level,
+                       ROUND(n.nav / i.level * 100, 4) AS nav_pct_of_index
+                FROM daily_nav n
+                JOIN index_level i ON n.date = i.date
+                ORDER BY n.date
+            """)
+
+        assert len(result) == 2
+        assert result.iloc[0]["nav_pct_of_index"] == pytest.approx(2.0, abs=0.01)
+
+
 class TestDocumentationExamples:
     """Tests for examples from the SQL queries documentation (docs/mkdocs/docs/tutorials/sql_queries.md)."""
 
