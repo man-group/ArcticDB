@@ -542,12 +542,16 @@ Data is streamed to DuckDB using Arrow record batches, avoiding full materializa
 The following Arrow/Parquet types are not yet supported:
 
 - DECIMAL types (use FLOAT64 as workaround)
-- Timestamp precisions other than nanoseconds
-- DATE, TIME, DURATION types
+- TIME, DURATION types
 - BINARY/BLOB types
 - Nested types (LIST, STRUCT, MAP)
 
 Queries involving these types will raise an error.
+
+!!! note "Timestamp Precisions"
+    Non-nanosecond timestamp precisions (microseconds, milliseconds, seconds) **are** supported.
+    ArcticDB automatically converts them to nanosecond precision on write. After reading,
+    DuckDB sees the data as `TIMESTAMP_NS` and all SQL timestamp operations work as expected.
 
 ### Read-Only
 

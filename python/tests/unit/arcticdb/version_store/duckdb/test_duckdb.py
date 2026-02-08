@@ -2284,3 +2284,81 @@ class TestExplain:
 
         with pytest.raises(ValueError):
             lib.explain("INSERT INTO trades VALUES (1, 2)")
+
+
+class TestTimestampPrecisions:
+    """Tests for non-nanosecond timestamp data with DuckDB queries."""
+
+    def test_microsecond_timestamps_queryable(self, lmdb_library):
+        """Test that data written with microsecond timestamps can be queried via SQL."""
+        lib = lmdb_library
+
+        # Write data with microsecond precision timestamps
+        index_us = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]).astype("datetime64[us]")
+        df = pd.DataFrame({"value": [1.0, 2.0, 3.0]}, index=index_us)
+        lib.write("us_data", df)
+
+        # ArcticDB converts to ns on write; verify SQL queries work
+        result = lib.sql("SELECT * FROM us_data WHERE value > 1.0 ORDER BY index")
+
+        assert len(result) == 2
+        assert list(result["value"]) == [2.0, 3.0]
+
+    def test_millisecond_timestamps_queryable(self, lmdb_library):
+        """Test that data written with millisecond timestamps can be queried via SQL."""
+        lib = lmdb_library
+
+        # Write data with millisecond precision timestamps
+        index_ms = pd.to_datetime(["2024-06-01", "2024-06-02", "2024-06-03"]).astype("datetime64[ms]")
+        df = pd.DataFrame({"price": [10, 20, 30]}, index=index_ms)
+        lib.write("ms_data", df)
+
+        result = lib.sql("SELECT SUM(price) as total FROM ms_data")
+
+        assert result["total"].iloc[0] == 60
+
+    def test_mixed_precision_join(self, lmdb_library):
+        """Test joining symbols originally written with different timestamp precisions."""
+        lib = lmdb_library
+
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+
+        # Write one symbol with microsecond timestamps
+        df_us = pd.DataFrame({"price": [100.0, 200.0]}, index=dates.astype("datetime64[us]"))
+        lib.write("prices_us", df_us)
+
+        # Write another with millisecond timestamps
+        df_ms = pd.DataFrame({"volume": [1000, 2000]}, index=dates.astype("datetime64[ms]"))
+        lib.write("volumes_ms", df_ms)
+
+        # Both are stored as ns, so JOIN on index should work
+        result = lib.sql("""
+            SELECT p.price, v.volume, p.price * v.volume as notional
+            FROM prices_us p
+            JOIN volumes_ms v ON p.index = v.index
+            ORDER BY p.index
+        """)
+
+        assert len(result) == 2
+        assert result["notional"].iloc[0] == pytest.approx(100000.0)
+        assert result["notional"].iloc[1] == pytest.approx(400000.0)
+
+    def test_timestamp_date_range_filter(self, lmdb_library):
+        """Test date range filtering on data originally written with non-ns timestamps."""
+        lib = lmdb_library
+
+        index_us = pd.to_datetime(["2024-01-01", "2024-01-15", "2024-02-01", "2024-02-15", "2024-03-01"]).astype(
+            "datetime64[us]"
+        )
+        df = pd.DataFrame({"value": [1, 2, 3, 4, 5]}, index=index_us)
+        lib.write("ts_data", df)
+
+        # Date range filter using SQL WHERE on index
+        result = lib.sql("""
+            SELECT value FROM ts_data
+            WHERE index >= '2024-02-01' AND index < '2024-03-01'
+            ORDER BY index
+        """)
+
+        assert len(result) == 2
+        assert list(result["value"]) == [3, 4]
