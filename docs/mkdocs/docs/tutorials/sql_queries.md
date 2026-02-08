@@ -96,8 +96,31 @@ lib.write("trades", trades_v2)  # version 1
 result = lib.sql("SELECT * FROM trades", as_of=0)
 ```
 
-!!! note
-    When using `lib.sql()` with JOINs, the `as_of` parameter applies to **all** symbols in the query. For per-symbol version control, use the `duckdb()` context manager.
+#### Per-Symbol Versioning
+
+When joining multiple symbols, you can pin each to a different version by passing a dict:
+
+```python
+# Read trades at version 0, prices at version 3
+result = lib.sql(
+    "SELECT t.ticker, p.close FROM trades t JOIN prices p ON t.ticker = p.ticker",
+    as_of={"trades": 0, "prices": 3}
+)
+```
+
+Symbols not present in the dict default to the latest version. You can also use
+timestamps or snapshot names as values:
+
+```python
+result = lib.sql(
+    "SELECT * FROM trades t JOIN prices p ON t.ticker = p.ticker",
+    as_of={"trades": pd.Timestamp("2024-06-01"), "prices": "my_snapshot"}
+)
+```
+
+!!! tip
+    For even more control (e.g., per-symbol date ranges or column filters),
+    use the `duckdb()` context manager with `register_symbol()`.
 
 ### Schema Introspection
 

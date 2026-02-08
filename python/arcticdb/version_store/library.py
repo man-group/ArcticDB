@@ -2142,7 +2142,7 @@ class Library:
     def sql(
         self,
         query: str,
-        as_of: Optional[AsOf] = None,
+        as_of: Optional[Union[AsOf, Dict[str, AsOf]]] = None,
         output_format: Optional[Union[OutputFormat, str]] = None,
     ):
         """
@@ -2161,8 +2161,14 @@ class Library:
         query : str
             SQL query. Reference ArcticDB symbols as table names.
             Example: ``"SELECT col1, SUM(col2) FROM my_symbol WHERE col1 > 100 GROUP BY col1"``
-        as_of : AsOf, default=None
-            Version to query. Applies to all symbols referenced in the query.
+        as_of : AsOf or Dict[str, AsOf], default=None
+            Version to query. Can be:
+
+            - A single value (int, str, or datetime) applied to **all** symbols in the query.
+            - A dict mapping symbol names to individual versions, allowing different symbols
+              to be read at different points in time. Symbols not present in the dict use
+              the latest version.
+
             See `read()` for details on version specification.
         output_format : OutputFormat, default=None
             Format for the result. Defaults to PANDAS.
@@ -2183,6 +2189,13 @@ class Library:
         ...     WHERE date > '2024-01-01'
         ...     GROUP BY ticker
         ... ''')
+
+        Query specific versions per symbol:
+
+        >>> df = lib.sql(
+        ...     "SELECT t.ticker, p.close FROM trades t JOIN prices p ON t.ticker = p.ticker",
+        ...     as_of={"trades": 3, "prices": 0}
+        ... )
 
         Get result as Arrow table:
 
@@ -2236,6 +2249,9 @@ class Library:
         conn = None
         try:
             conn = duckdb.connect(":memory:")
+            # Resolve as_of: if dict, look up per-symbol; if scalar, apply globally
+            as_of_is_dict = isinstance(as_of, dict)
+
             for sql_name in symbols:
                 # Resolve: exact match first, then case-insensitive
                 if sql_name in library_symbols:
@@ -2245,17 +2261,28 @@ class Library:
                 else:
                     real_symbol = sql_name  # Let ArcticDB produce a clear "not found" error
 
+                # Resolve per-symbol as_of from dict, falling back to None (latest)
+                if as_of_is_dict:
+                    if real_symbol in as_of:
+                        symbol_as_of = as_of[real_symbol]
+                    elif sql_name in as_of:
+                        symbol_as_of = as_of[sql_name]
+                    else:
+                        symbol_as_of = None
+                else:
+                    symbol_as_of = as_of
+
                 pushdown = pushdown_by_table.get(sql_name)
                 if pushdown:
                     reader = self._read_as_record_batch_reader(
                         real_symbol,
-                        as_of=as_of,
+                        as_of=symbol_as_of,
                         columns=pushdown.columns,
                         date_range=pushdown.date_range,
                         query_builder=pushdown.query_builder,
                     )
                 else:
-                    reader = self._read_as_record_batch_reader(real_symbol, as_of=as_of)
+                    reader = self._read_as_record_batch_reader(real_symbol, as_of=symbol_as_of)
 
                 # Register under the SQL name so DuckDB can find it from the query
                 conn.register(sql_name, reader.to_pyarrow_reader())

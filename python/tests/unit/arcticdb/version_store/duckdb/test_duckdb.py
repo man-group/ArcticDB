@@ -848,7 +848,9 @@ class TestCrossLibraryJoins:
         lib_b = arctic_b.create_library("risk")
 
         lib_a.write("holdings", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "shares": [1000, 500]}))
-        lib_b.write("var_limits", pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "daily_var": [50000.0, 80000.0, 30000.0]}))
+        lib_b.write(
+            "var_limits", pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "daily_var": [50000.0, 80000.0, 30000.0]})
+        )
 
         conn = duckdb.connect(":memory:")
         lib_a.duckdb_register(conn, symbols=["holdings"])
@@ -1163,6 +1165,84 @@ class TestDocumentationExamples:
         # Query latest (version 1)
         result_v1 = lib.sql("SELECT * FROM trades")
         assert len(result_v1) == 2
+
+    def test_dict_as_of_per_symbol_versions(self, lmdb_library):
+        """Test dict-based as_of to read different versions of different symbols."""
+        lib = lmdb_library
+
+        # Write two versions of trades
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL"], "price": [100.0]}))  # v0
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]}))  # v1
+
+        # Write two versions of prices
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL"], "close": [99.0]}))  # v0
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "close": [149.0, 2799.0]}))  # v1
+
+        # trades@v0 has 1 row, prices@v1 has 2 rows
+        result = lib.sql(
+            "SELECT t.ticker, t.price, p.close FROM trades t JOIN prices p ON t.ticker = p.ticker",
+            as_of={"trades": 0, "prices": 1},
+        )
+        # Only AAPL in trades v0, so join produces 1 row
+        assert len(result) == 1
+        assert result["price"].iloc[0] == 100.0  # trades v0 price
+        assert result["close"].iloc[0] == 149.0  # prices v1 close
+
+    def test_dict_as_of_missing_symbol_uses_latest(self, lmdb_library):
+        """Test that symbols not in the as_of dict default to latest version."""
+        lib = lmdb_library
+
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL"], "price": [100.0]}))  # v0
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]}))  # v1
+
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL"], "close": [99.0]}))  # v0
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "close": [149.0, 2799.0]}))  # v1
+
+        # Only pin trades to v0; prices should use latest (v1)
+        result = lib.sql(
+            "SELECT t.ticker, t.price, p.close FROM trades t JOIN prices p ON t.ticker = p.ticker",
+            as_of={"trades": 0},
+        )
+        assert len(result) == 1  # Only AAPL in trades v0
+        assert result["price"].iloc[0] == 100.0  # trades v0
+        assert result["close"].iloc[0] == 149.0  # prices latest (v1)
+
+    def test_dict_as_of_single_symbol(self, lmdb_library):
+        """Test dict-based as_of with a single symbol query."""
+        lib = lmdb_library
+
+        lib.write("trades", pd.DataFrame({"value": [1]}))  # v0
+        lib.write("trades", pd.DataFrame({"value": [2]}))  # v1
+        lib.write("trades", pd.DataFrame({"value": [3]}))  # v2
+
+        result = lib.sql("SELECT * FROM trades", as_of={"trades": 1})
+        assert result["value"].iloc[0] == 2
+
+    def test_dict_as_of_with_timestamp(self, lmdb_library):
+        """Test dict-based as_of using datetime values."""
+        lib = lmdb_library
+        import time
+
+        lib.write("trades", pd.DataFrame({"value": [1]}))  # v0
+        time.sleep(0.1)
+        t_between = pd.Timestamp.now()
+        time.sleep(0.1)
+        lib.write("trades", pd.DataFrame({"value": [2]}))  # v1
+
+        # Query as of the timestamp between the two writes
+        result = lib.sql("SELECT * FROM trades", as_of={"trades": t_between})
+        assert result["value"].iloc[0] == 1
+
+    def test_dict_as_of_case_insensitive_lookup(self, lmdb_library):
+        """Test that dict keys match case-insensitively against SQL names."""
+        lib = lmdb_library
+
+        lib.write("Trades", pd.DataFrame({"value": [1]}))  # v0
+        lib.write("Trades", pd.DataFrame({"value": [2]}))  # v1
+
+        # SQL uses lowercase 'trades', dict uses actual symbol name 'Trades'
+        result = lib.sql("SELECT * FROM trades", as_of={"Trades": 0})
+        assert result["value"].iloc[0] == 1
 
 
 class TestSchemaDDLQueries:
