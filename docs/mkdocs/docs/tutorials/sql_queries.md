@@ -218,7 +218,7 @@ lib_ref.write("sectors", sectors_df)
 with arctic.duckdb() as ddb:
     ddb.register_symbol("jblackburn.market_data", "prices")
     ddb.register_symbol("shared.global_config", "sectors")
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT p.ticker, p.price, s.sector
         FROM prices p
         JOIN sectors s ON p.ticker = s.ticker
@@ -233,7 +233,7 @@ For complex scenarios requiring fine-grained control, use the `duckdb()` context
 with lib.duckdb() as ddb:
     ddb.register_symbol("trades")
     ddb.register_symbol("prices")
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT t.ticker, t.quantity * p.current_price as value
         FROM trades t
         JOIN prices p ON t.ticker = p.ticker
@@ -269,12 +269,12 @@ with lib.duckdb() as ddb:
     ddb.register_all_symbols()
 
     # Now you can discover what's available
-    tables = ddb.query("SHOW TABLES")
+    tables = ddb.sql("SHOW TABLES")
     print(tables)
 
     # Or get detailed schema information
     for table_name in tables["name"]:
-        schema = ddb.query(f"DESCRIBE {table_name}")
+        schema = ddb.sql(f"DESCRIBE {table_name}")
         print(f"\n{table_name}:")
         print(schema)
 ```
@@ -290,7 +290,7 @@ with lib.duckdb() as ddb:
     # Latest prices
     ddb.register_symbol("prices", as_of=-1)
 
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT t.ticker, t.quantity, p.current_price
         FROM trades t
         JOIN prices p ON t.ticker = p.ticker
@@ -318,7 +318,7 @@ with lib.duckdb() as ddb:
         date_range=(pd.Timestamp("2024-02-01"), pd.Timestamp("2024-02-29"))
     )
 
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT
             j.ticker,
             j.price as jan_price,
@@ -338,14 +338,14 @@ with lib.duckdb() as ddb:
     ddb.register_symbol("large_dataset")
 
     # First query - data is read once
-    summary = ddb.query("""
+    summary = ddb.sql("""
         SELECT category, COUNT(*) as cnt, AVG(value) as avg_val
         FROM large_dataset
         GROUP BY category
     """)
 
     # Second query - reuses already-registered data
-    top_records = ddb.query("""
+    top_records = ddb.sql("""
         SELECT * FROM large_dataset
         WHERE value > 1000
         ORDER BY value DESC
@@ -368,7 +368,7 @@ with lib.duckdb() as ddb:
     # Data is filtered at storage level before reaching DuckDB
     ddb.register_symbol("orders", query_builder=qb)
 
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT product, SUM(amount) as total
         FROM orders
         GROUP BY product
@@ -383,7 +383,7 @@ Read only specific rows:
 with lib.duckdb() as ddb:
     # Read rows 1000-2000 only
     ddb.register_symbol("large_table", row_range=(1000, 2000))
-    result = ddb.query("SELECT * FROM large_table")
+    result = ddb.sql("SELECT * FROM large_table")
 ```
 
 ### Column Subset
@@ -394,7 +394,7 @@ Read only specific columns (reduces I/O):
 with lib.duckdb() as ddb:
     # Only read ticker and price columns
     ddb.register_symbol("trades", columns=["ticker", "price"])
-    result = ddb.query("SELECT ticker, AVG(price) FROM trades GROUP BY ticker")
+    result = ddb.sql("SELECT ticker, AVG(price) FROM trades GROUP BY ticker")
 ```
 
 ### Access to DuckDB Connection
@@ -409,7 +409,7 @@ with lib.duckdb() as ddb:
     ddb.execute("CREATE VIEW active_trades AS SELECT * FROM trades WHERE quantity > 0")
 
     # Use DuckDB-specific features
-    result = ddb.query("SELECT * FROM active_trades")
+    result = ddb.sql("SELECT * FROM active_trades")
 
     # Direct connection access for advanced usage
     conn = ddb.connection
@@ -431,7 +431,7 @@ conn.execute("CREATE TABLE sectors AS SELECT * FROM 's3://bucket/sectors.csv'")
 # Use it with ArcticDB - join ArcticDB data with external tables
 with lib.duckdb(connection=conn) as ddb:
     ddb.register_symbol("portfolio_returns")
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT
             r.date,
             r.ticker,
@@ -465,7 +465,7 @@ Use `arctic.duckdb()` to register symbols from any library in a single context:
 with arctic.duckdb() as ddb:
     ddb.register_symbol("trading.fills", "fills")
     ddb.register_symbol("reference.instruments", "sectors")
-    result = ddb.query("SELECT * FROM fills JOIN sectors USING (ticker)")
+    result = ddb.sql("SELECT * FROM fills JOIN sectors USING (ticker)")
 ```
 
 For libraries from **different ArcticDB instances**, use nested context managers.
@@ -483,7 +483,7 @@ with lib_prod.duckdb() as ddb_prod:
 
     with lib_research.duckdb(connection=ddb_prod.connection) as ddb_research:
         ddb_research.register_symbol("alpha_scores")
-        result = ddb_research.query("""
+        result = ddb_research.sql("""
             SELECT t.ticker, t.notional, a.score
             FROM trades t
             JOIN alpha_scores a ON t.ticker = a.ticker
@@ -560,7 +560,7 @@ with lib.duckdb() as ddb:
     ddb.register_symbol("positions")
     ddb.register_symbol("prices", as_of=-1)  # Latest prices
 
-    result = ddb.query("""
+    result = ddb.sql("""
         SELECT
             pos.ticker,
             pos.shares,

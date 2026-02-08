@@ -197,7 +197,7 @@ result = arctic.sql("SHOW DATABASES")
 with arctic.duckdb() as ddb:
     ddb.register_symbol("market_data", "trades")
     ddb.register_symbol("reference_data", "securities")
-    result = ddb.query("SELECT ... FROM trades JOIN securities ...")
+    result = ddb.sql("SELECT ... FROM trades JOIN securities ...")
 ```
 
 See [DUCKDB.md](DUCKDB.md) for full details.

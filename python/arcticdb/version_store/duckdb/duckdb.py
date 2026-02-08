@@ -9,6 +9,8 @@ be governed by the Apache License, version 2.0.
 
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
+from arcticdb.options import OutputFormat
+
 if TYPE_CHECKING:
     from arcticdb.arctic import Arctic
     from arcticdb.version_store.library import Library
@@ -92,6 +94,35 @@ def _extract_symbols_from_query(query: str) -> List[str]:
     return symbols
 
 
+def _resolve_symbol(sql_name: str, library: "Library") -> str:
+    """Resolve a SQL table name to the actual ArcticDB symbol name.
+
+    SQL identifiers are case-insensitive, but ArcticDB symbols are case-sensitive.
+    Uses ``has_symbol()`` for an O(1) exact-match check first; only falls back to
+    ``list_symbols()`` when a case-insensitive search is needed.
+
+    Parameters
+    ----------
+    sql_name : str
+        Table name as it appears in the SQL query.
+    library : Library
+        ArcticDB library to resolve against.
+
+    Returns
+    -------
+    str
+        The real ArcticDB symbol name.
+    """
+    # Fast path: exact match
+    if library.has_symbol(sql_name):
+        return sql_name
+    # Slow path: case-insensitive fallback
+    symbol_lookup = {s.lower(): s for s in library.list_symbols()}
+    if sql_name.lower() in symbol_lookup:
+        return symbol_lookup[sql_name.lower()]
+    return sql_name  # Let ArcticDB produce a clear "not found" error
+
+
 class _BaseDuckDBContext:
     """
     Base class for DuckDB context managers with shared connection and query logic.
@@ -160,7 +191,7 @@ class _BaseDuckDBContext:
                 outer.register_symbol("trades")
                 with lib_b.duckdb(connection=outer.connection) as inner:
                     inner.register_symbol("prices")
-                    result = inner.query("SELECT * FROM trades JOIN prices ...")
+                    result = inner.sql("SELECT * FROM trades JOIN prices ...")
         """
         self._check_in_context()
         return self._conn
@@ -184,39 +215,36 @@ class _BaseDuckDBContext:
         if self._conn is None:
             raise RuntimeError(f"{self._context_name} must be used within a 'with' block")
 
-    def _format_query_result(self, sql: str, output_format: str) -> Any:
-        """
-        Execute SQL and return result in requested format.
+    @staticmethod
+    def _convert_arrow_table(arrow_table, output_format: Optional[Union[OutputFormat, str]] = None) -> Any:
+        """Convert an Arrow table to the requested output format.
+
+        Uses the same ``OutputFormat`` enum / case-insensitive string convention
+        as the rest of the ArcticDB API.  Defaults to pandas when *None*.
 
         Parameters
         ----------
-        sql : str
-            SQL query to execute.
-        output_format : str
-            Output format: "pandas", "arrow", or "polars".
-
-        Returns
-        -------
-        pandas.DataFrame, pyarrow.Table, or polars.DataFrame
-            Query result in the requested format.
-
-        Raises
-        ------
-        ValueError
-            If the output format is not recognized.
+        arrow_table : pyarrow.Table
+            The Arrow table to convert.
+        output_format : OutputFormat or str, optional
+            Target format.  Defaults to pandas.
         """
-        if output_format == "arrow":
-            return self._conn.execute(sql).fetch_arrow_table()
-        elif output_format == "pandas":
-            return self._conn.execute(sql).df()
-        elif output_format == "polars":
+        fmt = output_format.lower() if output_format is not None else OutputFormat.PANDAS.lower()
+        if fmt == OutputFormat.PYARROW.lower():
+            return arrow_table
+        elif fmt == OutputFormat.POLARS.lower():
             import polars as pl
 
-            return pl.from_arrow(self._conn.execute(sql).fetch_arrow_table())
+            return pl.from_arrow(arrow_table)
+        elif fmt == OutputFormat.PANDAS.lower():
+            return arrow_table.to_pandas()
         else:
-            raise ValueError(
-                f"Unknown output format: {output_format}. " f"Expected one of: 'pandas', 'arrow', 'polars'"
-            )
+            raise ValueError(f"Unknown OutputFormat: {output_format}")
+
+    def _execute_sql(self, query: str, output_format: Optional[Union[OutputFormat, str]] = None) -> Any:
+        """Execute SQL and return result in requested format."""
+        arrow_table = self._conn.execute(query).fetch_arrow_table()
+        return self._convert_arrow_table(arrow_table, output_format)
 
     def execute(self, sql: str):
         """
@@ -243,16 +271,6 @@ class _BaseDuckDBContext:
         """Return information about registered symbols."""
         return self._registered_symbols.copy()
 
-    @property
-    def connection(self):
-        """
-        Return the underlying DuckDB connection for advanced usage.
-
-        Warning: Direct connection manipulation may interfere with
-        the context manager's resource management.
-        """
-        return self._conn
-
 
 class DuckDBContext(_BaseDuckDBContext):
     """
@@ -271,7 +289,7 @@ class DuckDBContext(_BaseDuckDBContext):
     >>> with lib.duckdb() as ddb:
     ...     ddb.register_symbol("trades", date_range=(start, end))
     ...     ddb.register_symbol("prices", as_of=-1, alias="latest_prices")
-    ...     result = ddb.query('''
+    ...     result = ddb.sql('''
     ...         SELECT t.ticker, t.quantity * p.price as notional
     ...         FROM trades t
     ...         JOIN latest_prices p ON t.ticker = p.ticker
@@ -285,7 +303,7 @@ class DuckDBContext(_BaseDuckDBContext):
     >>> conn.execute("CREATE TABLE benchmarks AS SELECT * FROM 'benchmarks.parquet'")
     >>> with lib.duckdb(connection=conn) as ddb:
     ...     ddb.register_symbol("returns")
-    ...     result = ddb.query('''
+    ...     result = ddb.sql('''
     ...         SELECT r.date, r.return - b.return as alpha
     ...         FROM returns r
     ...         JOIN benchmarks b ON r.date = b.date
@@ -295,7 +313,7 @@ class DuckDBContext(_BaseDuckDBContext):
 
     See Also
     --------
-    Library.sql : Simple SQL queries on single symbols.
+    Library.sql : Simple SQL queries with automatic symbol extraction.
     """
 
     _context_name = "DuckDBContext"
@@ -390,20 +408,56 @@ class DuckDBContext(_BaseDuckDBContext):
 
         return self
 
-    def query(
+    def _auto_register(self, query: str) -> None:
+        """Auto-register any symbols referenced in *query* that aren't already registered.
+
+        Uses the same SQL AST extraction and case-insensitive symbol resolution
+        as ``Library.sql()``.  Silently returns for queries that don't reference
+        any tables (e.g. SHOW TABLES, DESCRIBE).
+        """
+        from arcticdb.version_store.duckdb.pushdown import extract_pushdown_from_sql
+
+        try:
+            _, sql_names = extract_pushdown_from_sql(query)
+        except ValueError:
+            return  # No table references (e.g. SHOW TABLES, DESCRIBE)
+
+        # Tables already known to DuckDB (registered symbols + views/temp tables)
+        known_tables = set(self._registered_symbols)
+        try:
+            known_tables.update(
+                row[0] for row in self._conn.execute("SELECT table_name FROM information_schema.tables").fetchall()
+            )
+        except Exception:
+            pass
+
+        for sql_name in sql_names:
+            if sql_name in known_tables or sql_name.lower() in {t.lower() for t in known_tables}:
+                continue
+
+            real_symbol = _resolve_symbol(sql_name, self._library)
+            self.register_symbol(real_symbol, alias=sql_name if real_symbol != sql_name else None)
+
+    def sql(
         self,
-        sql: str,
-        output_format: str = "pandas",
+        query: str,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Any:
         """
         Execute SQL query and return results.
 
+        Symbols referenced in the query that have not been explicitly registered
+        via ``register_symbol()`` are automatically resolved from the library
+        (using case-insensitive matching) and registered before execution.
+
         Parameters
         ----------
-        sql : str
-            SQL query to execute. Can reference any registered symbols as tables.
-        output_format : str, default="pandas"
-            Output format: "pandas", "arrow", or "polars".
+        query : str
+            SQL query to execute. Can reference any registered symbols as tables,
+            or unregistered symbols that exist in the library.
+        output_format : OutputFormat or str, optional
+            Format for the result. Defaults to PANDAS.
+            Options: OutputFormat.PANDAS, OutputFormat.PYARROW, OutputFormat.POLARS
 
         Returns
         -------
@@ -413,26 +467,22 @@ class DuckDBContext(_BaseDuckDBContext):
         Raises
         ------
         RuntimeError
-            If called outside of a 'with' block or if no symbols have been registered.
+            If called outside of a 'with' block.
 
         Examples
         --------
-        >>> result = ddb.query('''
-        ...     SELECT ticker, SUM(quantity) as total_qty
-        ...     FROM trades
-        ...     GROUP BY ticker
-        ...     ORDER BY total_qty DESC
-        ... ''')
+        >>> with lib.duckdb() as ddb:
+        ...     # No register_symbol() needed for simple queries
+        ...     result = ddb.sql('''
+        ...         SELECT ticker, SUM(quantity) as total_qty
+        ...         FROM trades
+        ...         GROUP BY ticker
+        ...     ''')
         """
         self._check_in_context()
+        self._auto_register(query)
 
-        if not self._registered_symbols:
-            raise RuntimeError(
-                "No symbols have been registered. "
-                "Use register_symbol() to register ArcticDB symbols as tables before querying."
-            )
-
-        return self._format_query_result(sql, output_format)
+        return self._execute_sql(query, output_format)
 
     def register_all_symbols(self, as_of: Optional[AsOf] = None) -> "DuckDBContext":
         """
@@ -456,7 +506,7 @@ class DuckDBContext(_BaseDuckDBContext):
         --------
         >>> with lib.duckdb() as ddb:
         ...     ddb.register_all_symbols()
-        ...     tables = ddb.query("SHOW TABLES")
+        ...     tables = ddb.sql("SHOW TABLES")
         ...     print(tables)  # Lists all symbols in the library
         """
         self._check_in_context()
@@ -482,21 +532,21 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
     >>> with arctic.duckdb() as ddb:
     ...     ddb.register_library("market_data")
     ...     ddb.register_library("reference_data")
-    ...     databases = ddb.query("SHOW DATABASES")
+    ...     databases = ddb.sql("SHOW DATABASES")
     ...     print(databases)  # Lists registered libraries
 
     Register all libraries for discovery:
 
     >>> with arctic.duckdb() as ddb:
     ...     ddb.register_all_libraries()
-    ...     databases = ddb.query("SHOW DATABASES")
+    ...     databases = ddb.sql("SHOW DATABASES")
 
     Cross-library queries with table prefixes:
 
     >>> with arctic.duckdb() as ddb:
     ...     ddb.register_symbol("market_data", "prices")
     ...     ddb.register_symbol("reference_data", "securities", alias="ref_securities")
-    ...     result = ddb.query('''
+    ...     result = ddb.sql('''
     ...         SELECT p.ticker, r.name, p.price
     ...         FROM prices p
     ...         JOIN ref_securities r ON p.ticker = r.ticker
@@ -553,7 +603,7 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
         >>> with arctic.duckdb() as ddb:
         ...     ddb.register_library("market_data")
         ...     ddb.register_library("reference_data")
-        ...     databases = ddb.query("SHOW DATABASES")
+        ...     databases = ddb.sql("SHOW DATABASES")
         """
         self._check_in_context()
 
@@ -578,7 +628,7 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
         --------
         >>> with arctic.duckdb() as ddb:
         ...     ddb.register_all_libraries()
-        ...     databases = ddb.query("SHOW DATABASES")
+        ...     databases = ddb.sql("SHOW DATABASES")
         ...     print(databases)  # Lists all libraries
         """
         self._check_in_context()
@@ -631,7 +681,7 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
         >>> with arctic.duckdb() as ddb:
         ...     ddb.register_symbol("market_data", "prices")
         ...     ddb.register_symbol("reference_data", "securities", alias="ref")
-        ...     result = ddb.query("SELECT * FROM prices JOIN ref ON ...")
+        ...     result = ddb.sql("SELECT * FROM prices JOIN ref ON ...")
         """
         self._check_in_context()
 
@@ -661,21 +711,22 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
 
         return self
 
-    def query(
+    def sql(
         self,
-        sql: str,
-        output_format: str = "pandas",
+        query: str,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Any:
         """
         Execute SQL query and return results.
 
         Parameters
         ----------
-        sql : str
+        query : str
             SQL query to execute. Supports ``SHOW DATABASES`` for listing
             registered libraries grouped by database.
-        output_format : str, default="pandas"
-            Output format: "pandas", "arrow", or "polars".
+        output_format : OutputFormat or str, optional
+            Format for the result. Defaults to PANDAS.
+            Options: OutputFormat.PANDAS, OutputFormat.PYARROW, OutputFormat.POLARS
 
         Returns
         -------
@@ -684,15 +735,15 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
 
         Examples
         --------
-        >>> result = ddb.query("SHOW DATABASES")
-        >>> result = ddb.query("SELECT * FROM prices WHERE price > 100")
+        >>> result = ddb.sql("SHOW DATABASES")
+        >>> result = ddb.sql("SELECT * FROM prices WHERE price > 100")
         """
         self._check_in_context()
 
         from arcticdb.version_store.duckdb.pushdown import is_database_discovery_query
 
         # Handle SHOW DATABASES - return registered libraries grouped by database
-        if is_database_discovery_query(sql):
+        if is_database_discovery_query(query):
             return self._execute_show_databases(output_format)
 
         if not self._registered_symbols:
@@ -701,9 +752,9 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
                 "Use register_symbol() to register ArcticDB symbols as tables before querying."
             )
 
-        return self._format_query_result(sql, output_format)
+        return self._execute_sql(query, output_format)
 
-    def _execute_show_databases(self, output_format: str) -> Any:
+    def _execute_show_databases(self, output_format: Optional[Union[OutputFormat, str]] = None) -> Any:
         """Execute SHOW DATABASES and return registered libraries grouped by database."""
         import pyarrow as pa
         from collections import defaultdict
@@ -722,22 +773,7 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
             }
         )
 
-        return self._format_output(arrow_table, output_format)
-
-    def _format_output(self, arrow_table, output_format: str) -> Any:
-        """Convert Arrow table to requested output format."""
-        if output_format == "arrow":
-            return arrow_table
-        elif output_format == "pandas":
-            return arrow_table.to_pandas()
-        elif output_format == "polars":
-            import polars as pl
-
-            return pl.from_arrow(arrow_table)
-        else:
-            raise ValueError(
-                f"Unknown output format: {output_format}. " f"Expected one of: 'pandas', 'arrow', 'polars'"
-            )
+        return self._convert_arrow_table(arrow_table, output_format)
 
     @property
     def registered_libraries(self) -> Dict[str, Dict[str, Any]]:

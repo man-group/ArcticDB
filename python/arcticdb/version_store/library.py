@@ -2238,11 +2238,7 @@ class Library:
             pushdown_by_table, symbols = extract_pushdown_from_sql(query)
 
         # Resolve SQL table names to actual ArcticDB symbol names (case-insensitive).
-        # SQL identifiers are conventionally case-insensitive, but ArcticDB symbols are
-        # case-sensitive. We build a lookup map to find the real symbol name regardless
-        # of the case used in SQL.
-        library_symbols = self.list_symbols()
-        symbol_lookup = {s.lower(): s for s in library_symbols}
+        from arcticdb.version_store.duckdb.duckdb import _resolve_symbol
 
         # Create DuckDB connection and register data with pushdown applied
         conn = None
@@ -2252,13 +2248,7 @@ class Library:
             as_of_is_dict = isinstance(as_of, dict)
 
             for sql_name in symbols:
-                # Resolve: exact match first, then case-insensitive
-                if sql_name in library_symbols:
-                    real_symbol = sql_name
-                elif sql_name.lower() in symbol_lookup:
-                    real_symbol = symbol_lookup[sql_name.lower()]
-                else:
-                    real_symbol = sql_name  # Let ArcticDB produce a clear "not found" error
+                real_symbol = _resolve_symbol(sql_name, self)
 
                 # Resolve per-symbol as_of from dict, falling back to None (latest)
                 if as_of_is_dict:
@@ -2286,28 +2276,11 @@ class Library:
                 # Register under the SQL name so DuckDB can find it from the query
                 conn.register(sql_name, reader.to_pyarrow_reader())
 
-            # Execute query and get Arrow result
+            # Execute query and convert to requested format
+            from arcticdb.version_store.duckdb.duckdb import _BaseDuckDBContext
+
             result_arrow = conn.execute(query).fetch_arrow_table()
-
-            # Convert to requested format
-            if output_format is None:
-                output_fmt_str = OutputFormat.PANDAS.lower()
-            elif isinstance(output_format, OutputFormat):
-                output_fmt_str = output_format.lower()
-            else:
-                output_fmt_str = str(output_format).lower()
-
-            if output_fmt_str == OutputFormat.PYARROW.lower():
-                data = result_arrow
-            elif output_fmt_str == OutputFormat.POLARS.lower():
-                import polars as pl
-
-                data = pl.from_arrow(result_arrow)
-            else:
-                # Default to pandas
-                data = result_arrow.to_pandas()
-
-            return data
+            return _BaseDuckDBContext._convert_arrow_table(result_arrow, output_format)
 
         finally:
             if conn is not None:
@@ -2417,7 +2390,7 @@ class Library:
         ...     ddb.register_symbol("prices", as_of=-1, alias="latest_prices")
         ...
         ...     # Execute JOIN query
-        ...     result = ddb.query('''
+        ...     result = ddb.sql('''
         ...         SELECT t.ticker, t.quantity * p.price as notional
         ...         FROM trades t
         ...         JOIN latest_prices p ON t.ticker = p.ticker
@@ -2434,7 +2407,7 @@ class Library:
         >>> # Join ArcticDB data with external tables
         >>> with lib.duckdb(connection=conn) as ddb:
         ...     ddb.register_symbol("portfolio_returns")
-        ...     result = ddb.query('''
+        ...     result = ddb.sql('''
         ...         SELECT r.date, r.ticker, r.return - b.return as alpha
         ...         FROM portfolio_returns r
         ...         JOIN benchmarks b ON r.date = b.date
@@ -2448,7 +2421,7 @@ class Library:
         ...     result = (ddb
         ...         .register_symbol("trades")
         ...         .register_symbol("prices")
-        ...         .query("SELECT * FROM trades JOIN prices USING (ticker)"))
+        ...         .sql("SELECT * FROM trades JOIN prices USING (ticker)"))
 
         Raises
         ------

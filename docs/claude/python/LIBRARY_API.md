@@ -280,7 +280,7 @@ info = lib.explain("SELECT price FROM trades WHERE price > 100")
 with lib.duckdb() as ddb:
     ddb.register_symbol("trades", as_of=0)
     ddb.register_symbol("prices")
-    result = ddb.query("SELECT t.ticker, p.price FROM trades t JOIN prices p ON t.ticker = p.ticker")
+    result = ddb.sql("SELECT t.ticker, p.price FROM trades t JOIN prices p ON t.ticker = p.ticker")
 ```
 
 See [DUCKDB.md](DUCKDB.md) for full details.

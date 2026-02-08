@@ -338,9 +338,79 @@ class TestDuckDBContext:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("SELECT * FROM test_symbol")
+            result = ddb.sql("SELECT * FROM test_symbol")
 
         assert len(result) == 3
+
+    def test_auto_register_single_symbol(self, lmdb_library):
+        """Test that sql() auto-registers symbols without explicit register_symbol()."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]}))
+
+        with lib.duckdb() as ddb:
+            result = ddb.sql("SELECT * FROM trades WHERE price > 200")
+
+        assert len(result) == 1
+        assert result.iloc[0]["ticker"] == "GOOG"
+
+    def test_auto_register_join(self, lmdb_library):
+        """Test that sql() auto-registers multiple symbols for a JOIN."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "quantity": [100, 200]}))
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]}))
+
+        with lib.duckdb() as ddb:
+            result = ddb.sql("""
+                SELECT t.ticker, t.quantity * p.price as notional
+                FROM trades t JOIN prices p ON t.ticker = p.ticker
+                ORDER BY notional DESC
+            """)
+
+        assert len(result) == 2
+        assert result.iloc[0]["notional"] == pytest.approx(560000.0)
+
+    def test_auto_register_case_insensitive(self, lmdb_library):
+        """Test that auto-registration resolves case-insensitive symbol names."""
+        lib = lmdb_library
+        lib.write("MyData", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with lib.duckdb() as ddb:
+            # SQL uses lowercase, symbol is mixed-case
+            result = ddb.sql("SELECT SUM(x) as total FROM mydata")
+
+        assert result.iloc[0]["total"] == 6
+
+    def test_auto_register_skips_already_registered(self, lmdb_library):
+        """Test that auto-registration skips symbols that were explicitly registered."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with lib.duckdb() as ddb:
+            # Explicitly register with a filter
+            ddb.register_symbol("trades", columns=["x"])
+            # sql() should use the already-registered version, not re-register
+            result = ddb.sql("SELECT SUM(x) as total FROM trades")
+
+        assert result.iloc[0]["total"] == 6
+
+    def test_auto_register_mixed(self, lmdb_library):
+        """Test mix of explicitly registered and auto-registered symbols."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "quantity": [100, 200]}))
+        lib.write("prices", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "price": [150.0, 2800.0]}))
+
+        with lib.duckdb() as ddb:
+            # Only register one symbol explicitly
+            ddb.register_symbol("trades")
+            # prices should be auto-registered
+            result = ddb.sql("""
+                SELECT t.ticker, p.price
+                FROM trades t JOIN prices p ON t.ticker = p.ticker
+                ORDER BY t.ticker
+            """)
+
+        assert len(result) == 2
+        assert result.iloc[0]["ticker"] == "AAPL"
 
     def test_join_two_symbols(self, lmdb_library):
         """Test JOIN query across two symbols."""
@@ -357,7 +427,7 @@ class TestDuckDBContext:
             ddb.register_symbol("trades")
             ddb.register_symbol("prices")
 
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT t.ticker, t.quantity, p.price, t.quantity * p.price as notional
                 FROM trades t
                 JOIN prices p ON t.ticker = p.ticker
@@ -374,7 +444,7 @@ class TestDuckDBContext:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol", alias="my_table")
-            result = ddb.query("SELECT * FROM my_table")
+            result = ddb.sql("SELECT * FROM my_table")
 
         assert len(result) == 3
 
@@ -397,8 +467,8 @@ class TestDuckDBContext:
                 date_range=(pd.Timestamp("2024-02-01"), pd.Timestamp("2024-02-29")),
             )
 
-            jan_count = ddb.query("SELECT COUNT(*) as cnt FROM jan_data")["cnt"].iloc[0]
-            feb_count = ddb.query("SELECT COUNT(*) as cnt FROM feb_data")["cnt"].iloc[0]
+            jan_count = ddb.sql("SELECT COUNT(*) as cnt FROM jan_data")["cnt"].iloc[0]
+            feb_count = ddb.sql("SELECT COUNT(*) as cnt FROM feb_data")["cnt"].iloc[0]
 
         assert jan_count == 31
         assert feb_count == 29
@@ -413,7 +483,7 @@ class TestDuckDBContext:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("SELECT * FROM test_symbol", output_format="arrow")
+            result = ddb.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PYARROW)
 
         assert isinstance(result, pa.Table)
 
@@ -427,7 +497,7 @@ class TestDuckDBContext:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("SELECT * FROM test_symbol", output_format="polars")
+            result = ddb.sql("SELECT * FROM test_symbol", output_format=OutputFormat.POLARS)
 
         assert isinstance(result, pl.DataFrame)
 
@@ -439,7 +509,7 @@ class TestDuckDBContext:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("SELECT * FROM test_symbol", output_format="pandas")
+            result = ddb.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PANDAS)
 
         assert isinstance(result, pd.DataFrame)
         assert list(result["x"]) == [1, 2, 3]
@@ -451,7 +521,7 @@ class TestDuckDBContext:
         lib.write("sym2", pd.DataFrame({"y": [3, 4]}))
 
         with lib.duckdb() as ddb:
-            result = ddb.register_symbol("sym1").register_symbol("sym2").query("SELECT * FROM sym1, sym2")
+            result = ddb.register_symbol("sym1").register_symbol("sym2").sql("SELECT * FROM sym1, sym2")
 
         # Cross join should give 4 rows
         assert len(result) == 4
@@ -466,7 +536,7 @@ class TestDuckDBContext:
             ddb.register_symbol("test_symbol")
             # Create a view using execute
             ddb.execute("CREATE VIEW filtered AS SELECT * FROM test_symbol WHERE x > 1")
-            result = ddb.query("SELECT * FROM filtered")
+            result = ddb.sql("SELECT * FROM filtered")
 
         assert len(result) == 2
 
@@ -496,14 +566,16 @@ class TestDuckDBContext:
         with pytest.raises(RuntimeError, match="must be used within"):
             ddb.register_symbol("test")
 
-    def test_query_without_registration_raises(self, lmdb_library):
-        """Test that querying without registering symbols raises helpful error."""
+    def test_query_without_registration_auto_registers(self, lmdb_library):
+        """Test that querying without explicit registration auto-registers from the library."""
         lib = lmdb_library
         lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
 
         with lib.duckdb() as ddb:
-            with pytest.raises(RuntimeError, match="No symbols have been registered"):
-                ddb.query("SELECT * FROM test_symbol")
+            result = ddb.sql("SELECT * FROM test_symbol")
+
+        assert len(result) == 3
+        assert list(result["x"]) == [1, 2, 3]
 
     def test_with_as_of_version(self, lmdb_library):
         """Test register_symbol with as_of parameter."""
@@ -517,7 +589,7 @@ class TestDuckDBContext:
         with lib.duckdb() as ddb:
             # Read version 0
             ddb.register_symbol("test_symbol", alias="v0", as_of=0)
-            result = ddb.query("SELECT SUM(x) as total FROM v0")
+            result = ddb.sql("SELECT SUM(x) as total FROM v0")
 
         assert result["total"].iloc[0] == 6  # 1 + 2 + 3
 
@@ -530,7 +602,7 @@ class TestDuckDBContext:
         with lib.duckdb() as ddb:
             # Read only rows 10-20
             ddb.register_symbol("test_symbol", row_range=(10, 20))
-            result = ddb.query("SELECT COUNT(*) as cnt FROM test_symbol")
+            result = ddb.sql("SELECT COUNT(*) as cnt FROM test_symbol")
 
         assert result["cnt"].iloc[0] == 10
 
@@ -636,7 +708,7 @@ class TestExternalDuckDBConnection:
         # Use with ArcticDB
         with lib.duckdb(connection=conn) as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("SELECT * FROM test_symbol")
+            result = ddb.sql("SELECT * FROM test_symbol")
             assert len(result) == 3
 
         # Connection should still be usable after context exits
@@ -689,7 +761,7 @@ class TestExternalDuckDBConnection:
         # Join ArcticDB data with external table
         with lib.duckdb(connection=conn) as ddb:
             ddb.register_symbol("trades")
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT t.ticker, t.quantity, s.sector
                 FROM trades t
                 JOIN sectors s ON t.ticker = s.ticker
@@ -726,7 +798,7 @@ class TestExternalDuckDBConnection:
         with lib.duckdb(connection=conn) as ddb:
             ddb.register_symbol("trades")
             ddb.register_symbol("prices")
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT t.ticker, t.qty * p.price * m.mult as adjusted_value
                 FROM trades t
                 JOIN prices p ON t.ticker = p.ticker
@@ -758,7 +830,7 @@ class TestExternalDuckDBConnection:
         with lib.duckdb(connection=conn) as ddb:
             ddb.register_symbol("arcticdb_data")
             # Query should work on ArcticDB data
-            result = ddb.query("SELECT * FROM arcticdb_data")
+            result = ddb.sql("SELECT * FROM arcticdb_data")
             assert len(result) == 3
 
         # Existing tables should still be intact
@@ -784,7 +856,7 @@ class TestCrossLibraryJoins:
 
             with lib_b.duckdb(connection=ddb_a.connection) as ddb_b:
                 ddb_b.register_symbol("marks")
-                result = ddb_b.query("""
+                result = ddb_b.sql("""
                     SELECT p.ticker, p.shares, m.mark, p.shares * m.mark AS market_value
                     FROM portfolio p
                     JOIN marks m ON p.ticker = m.ticker
@@ -815,7 +887,7 @@ class TestCrossLibraryJoins:
 
             with lib_b.duckdb(connection=ddb_a.connection) as ddb_b:
                 ddb_b.register_symbol("fx_rates")
-                result = ddb_b.query("""
+                result = ddb_b.sql("""
                     SELECT t.ticker, t.notional, f.fx_rate,
                            ROUND(t.notional * f.fx_rate, 2) AS notional_gbp
                     FROM trades t
@@ -859,7 +931,7 @@ class TestCrossLibraryJoins:
         with arctic.duckdb() as ddb:
             ddb.register_symbol("fund.nav", "daily_nav")
             ddb.register_symbol("fund.benchmarks", "index_level")
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT n.date, n.nav, i.level,
                        ROUND(n.nav / i.level * 100, 4) AS nav_pct_of_index
                 FROM daily_nav n
@@ -976,7 +1048,7 @@ class TestDocumentationExamples:
             ddb.register_symbol("positions")
             ddb.register_symbol("prices")
 
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT
                     pos.ticker,
                     pos.shares,
@@ -1065,7 +1137,7 @@ class TestDocumentationExamples:
         # Use duckdb() context to avoid CTE name being treated as a symbol
         with lib.duckdb() as ddb:
             ddb.register_symbol("prices")
-            result = ddb.query("""
+            result = ddb.sql("""
                 WITH date_series AS (
                     SELECT DISTINCT DATE_TRUNC('day', index) as date FROM prices
                 )
@@ -1209,7 +1281,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("DESCRIBE test_symbol")
+            result = ddb.sql("DESCRIBE test_symbol")
 
         # Check we get the expected columns in the DESCRIBE output
         assert "column_name" in result.columns
@@ -1243,7 +1315,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("DESCRIBE test_symbol")
+            result = ddb.sql("DESCRIBE test_symbol")
 
         type_map = dict(zip(result["column_name"], result["column_type"]))
 
@@ -1273,7 +1345,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("DESCRIBE test_symbol")
+            result = ddb.sql("DESCRIBE test_symbol")
 
         type_map = dict(zip(result["column_name"], result["column_type"]))
 
@@ -1289,7 +1361,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            result = ddb.query("DESCRIBE test_symbol")
+            result = ddb.sql("DESCRIBE test_symbol")
 
         type_map = dict(zip(result["column_name"], result["column_type"]))
 
@@ -1311,9 +1383,9 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("test_symbol")
-            describe_result = ddb.query("DESCRIBE test_symbol")
+            describe_result = ddb.sql("DESCRIBE test_symbol")
             # SHOW is an alias for DESCRIBE in DuckDB
-            show_result = ddb.query("SHOW test_symbol")
+            show_result = ddb.sql("SHOW test_symbol")
 
         # Both should return the same column information
         assert list(describe_result["column_name"]) == list(show_result["column_name"])
@@ -1332,8 +1404,8 @@ class TestSchemaDDLQueries:
             ddb.register_symbol("symbol1")
             ddb.register_symbol("symbol2")
 
-            result1 = ddb.query("DESCRIBE symbol1")
-            result2 = ddb.query("DESCRIBE symbol2")
+            result1 = ddb.sql("DESCRIBE symbol1")
+            result2 = ddb.sql("DESCRIBE symbol2")
 
         type_map1 = dict(zip(result1["column_name"], result1["column_type"]))
         type_map2 = dict(zip(result2["column_name"], result2["column_type"]))
@@ -1352,7 +1424,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("original_name", alias="aliased_name")
-            result = ddb.query("DESCRIBE aliased_name")
+            result = ddb.sql("DESCRIBE aliased_name")
 
         assert "x" in list(result["column_name"])
 
@@ -1371,7 +1443,7 @@ class TestSchemaDDLQueries:
             ddb.register_symbol("positions")
 
             # SHOW TABLES should list all registered symbols
-            result = ddb.query("SHOW TABLES")
+            result = ddb.sql("SHOW TABLES")
 
         table_names = set(result["name"])
         assert "prices" in table_names
@@ -1390,7 +1462,7 @@ class TestSchemaDDLQueries:
             ddb.register_symbol("symbol1")
             ddb.register_symbol("symbol2")
 
-            result = ddb.query("SHOW ALL TABLES")
+            result = ddb.sql("SHOW ALL TABLES")
 
         # Should have both tables
         table_names = set(result["name"])
@@ -1419,7 +1491,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_symbol("original_symbol", alias="my_alias")
-            result = ddb.query("SHOW TABLES")
+            result = ddb.sql("SHOW TABLES")
 
         table_names = set(result["name"])
         # Should see the alias, not the original name
@@ -1439,7 +1511,7 @@ class TestSchemaDDLQueries:
         # Use register_all_symbols() to auto-discover
         with lib.duckdb() as ddb:
             ddb.register_all_symbols()
-            result = ddb.query("SHOW TABLES")
+            result = ddb.sql("SHOW TABLES")
 
         table_names = set(result["name"])
 
@@ -1459,7 +1531,7 @@ class TestSchemaDDLQueries:
 
         with lib.duckdb() as ddb:
             ddb.register_all_symbols()
-            result = ddb.query("SHOW ALL TABLES")
+            result = ddb.sql("SHOW ALL TABLES")
 
         # Check all symbols are discovered
         table_names = set(result["name"])
@@ -1660,7 +1732,7 @@ class TestArcticDuckDBShowDatabases:
 
         with arctic.duckdb() as ddb:
             ddb.register_all_libraries()
-            result = ddb.query("SHOW DATABASES")
+            result = ddb.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
         assert "library_count" in result.columns
@@ -1678,7 +1750,7 @@ class TestArcticDuckDBShowDatabases:
             # Only register two of three libraries (from different databases)
             ddb.register_library("user1.lib_a")
             ddb.register_library("user2.lib_c")
-            result = ddb.query("SHOW DATABASES")
+            result = ddb.sql("SHOW DATABASES")
 
         db_counts = dict(zip(result["database_name"], result["library_count"]))
         assert db_counts["user1"] == 1  # Only lib_a registered, not lib_b
@@ -1704,7 +1776,7 @@ class TestArcticDuckDBShowDatabases:
         with arctic.duckdb() as ddb:
             ddb.register_symbol("user1.lib_a", "prices")
             ddb.register_symbol("user1.lib_b", "info")
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT p.ticker, p.price, i.name
                 FROM prices p
                 JOIN info i ON p.ticker = i.ticker
@@ -1723,7 +1795,7 @@ class TestArcticDuckDBShowDatabases:
 
         with arctic.duckdb() as ddb:
             ddb.register_symbol("testuser.mylib", "original_name", alias="aliased")
-            result = ddb.query("SELECT * FROM aliased")
+            result = ddb.sql("SELECT * FROM aliased")
 
         assert len(result) == 3
         assert list(result["x"]) == [1, 2, 3]
@@ -1737,7 +1809,7 @@ class TestArcticDuckDBShowDatabases:
         with arctic.duckdb() as ddb:
             # Just register a symbol (don't call register_library explicitly)
             ddb.register_symbol("testuser.implicit_lib", "symbol")
-            result = ddb.query("SHOW DATABASES")
+            result = ddb.sql("SHOW DATABASES")
 
         # Library's database should be in SHOW DATABASES even without explicit registration
         assert "testuser" in list(result["database_name"])
@@ -1783,11 +1855,11 @@ class TestArcticDuckDBShowDatabases:
         with arctic.duckdb() as ddb:
             ddb.register_library("testuser.lib")
             # SHOW DATABASES should work without symbol registration
-            ddb.query("SHOW DATABASES")
+            ddb.sql("SHOW DATABASES")
 
             # But a data query should fail
             with pytest.raises(RuntimeError, match="No symbols have been registered"):
-                ddb.query("SELECT * FROM some_table")
+                ddb.sql("SELECT * FROM some_table")
 
     def test_arctic_duckdb_context_arrow_output_format(self, lmdb_storage):
         """Test arctic.duckdb() with arrow output format."""
@@ -1799,7 +1871,7 @@ class TestArcticDuckDBShowDatabases:
 
         with arctic.duckdb() as ddb:
             ddb.register_symbol("testuser.lib", "data")
-            result = ddb.query("SELECT * FROM data", output_format="arrow")
+            result = ddb.sql("SELECT * FROM data", output_format=OutputFormat.PYARROW)
 
         assert isinstance(result, pa.Table)
         assert result.num_rows == 3
@@ -1816,7 +1888,7 @@ class TestArcticDuckDBShowDatabases:
 
         with arctic.duckdb(connection=conn) as ddb:
             ddb.register_symbol("testuser.lib", "arctic_data")
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT a.key, a.value, e.extra
                 FROM arctic_data a
                 JOIN external_data e ON a.key = e.key
@@ -1841,7 +1913,7 @@ class TestArcticDuckDBShowDatabases:
             result = (
                 ddb.register_library("testuser.lib")
                 .register_symbol("testuser.lib", "data")
-                .query("SELECT SUM(x) as total FROM data")
+                .sql("SELECT SUM(x) as total FROM data")
             )
 
         assert result["total"].iloc[0] == 6
@@ -1937,7 +2009,7 @@ class TestDatabaseLibraryNamespace:
 
         with arctic.duckdb() as ddb:
             ddb.register_all_libraries()
-            result = ddb.query("SHOW DATABASES")
+            result = ddb.sql("SHOW DATABASES")
 
         assert "database_name" in result.columns
         assert "library_count" in result.columns
@@ -1962,7 +2034,7 @@ class TestDatabaseLibraryNamespace:
         with arctic.duckdb() as ddb:
             ddb.register_symbol("user1.market_data", "prices")
             ddb.register_symbol("user2.reference_data", "info")
-            result = ddb.query("""
+            result = ddb.sql("""
                 SELECT p.ticker, p.price, i.name
                 FROM prices p
                 JOIN info i ON p.ticker = i.ticker

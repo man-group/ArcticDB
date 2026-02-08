@@ -559,14 +559,14 @@ class Arctic:
 
         >>> with arctic.duckdb() as ddb:
         ...     ddb.register_all_libraries()
-        ...     databases = ddb.query("SHOW DATABASES")
+        ...     databases = ddb.sql("SHOW DATABASES")
 
         Cross-library queries:
 
         >>> with arctic.duckdb() as ddb:
         ...     ddb.register_symbol("market_data", "prices")
         ...     ddb.register_symbol("reference_data", "securities", alias="ref")
-        ...     result = ddb.query('''
+        ...     result = ddb.sql('''
         ...         SELECT p.ticker, r.name, p.price
         ...         FROM prices p
         ...         JOIN ref r ON p.ticker = r.ticker
