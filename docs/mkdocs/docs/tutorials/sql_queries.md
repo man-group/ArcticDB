@@ -459,30 +459,7 @@ This is useful for:
 
 ### Cross-Library Joins
 
-Join data across multiple ArcticDB libraries by sharing a DuckDB connection.
-Use nested context managers — the external connection survives each context exit:
-
-```python
-import duckdb
-
-lib_trades = arctic.get_library("trading.fills")
-lib_ref = arctic.get_library("reference.instruments")
-
-conn = duckdb.connect(":memory:")
-
-with lib_trades.duckdb(connection=conn) as ddb:
-    ddb.register_symbol("fills")
-    # data registered; connection stays open because it's external
-
-with lib_ref.duckdb(connection=conn) as ddb:
-    ddb.register_symbol("sectors")
-    result = ddb.query("""
-        SELECT f.ticker, f.qty, s.sector
-        FROM fills f JOIN sectors s ON f.ticker = s.ticker
-    """)
-```
-
-Or use `arctic.duckdb()` to register from any library in a single context:
+Use `arctic.duckdb()` to register symbols from any library in a single context:
 
 ```python
 with arctic.duckdb() as ddb:
@@ -491,7 +468,8 @@ with arctic.duckdb() as ddb:
     result = ddb.query("SELECT * FROM fills JOIN sectors USING (ticker)")
 ```
 
-This also works across **completely separate ArcticDB instances** (different storage backends):
+For libraries from **different ArcticDB instances**, use nested context managers.
+The outer context owns the connection; inner contexts borrow it via `connection`:
 
 ```python
 arctic_prod = Arctic("lmdb:///data/prod")
@@ -500,19 +478,21 @@ arctic_research = Arctic("lmdb:///data/research")
 lib_prod = arctic_prod.get_library("trading")
 lib_research = arctic_research.get_library("signals")
 
-conn = duckdb.connect(":memory:")
+with lib_prod.duckdb() as ddb_prod:
+    ddb_prod.register_symbol("trades")
 
-with lib_prod.duckdb(connection=conn) as ddb:
-    ddb.register_symbol("trades")
-
-with lib_research.duckdb(connection=conn) as ddb:
-    ddb.register_symbol("alpha_scores")
-    result = ddb.query("""
-        SELECT t.ticker, t.notional, a.score
-        FROM trades t
-        JOIN alpha_scores a ON t.ticker = a.ticker
-    """)
+    with lib_research.duckdb(connection=ddb_prod.connection) as ddb_research:
+        ddb_research.register_symbol("alpha_scores")
+        result = ddb_research.query("""
+            SELECT t.ticker, t.notional, a.score
+            FROM trades t
+            JOIN alpha_scores a ON t.ticker = a.ticker
+        """)
 ```
+
+!!! note
+    Each context manager cleans up the symbols it registered on exit.
+    The query must run while all contexts are active (i.e., inside the innermost `with` block).
 
 ## Performance Considerations
 

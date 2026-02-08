@@ -149,9 +149,33 @@ class _BaseDuckDBContext:
             self._owns_connection = True
         return self
 
+    @property
+    def connection(self):
+        """The underlying DuckDB connection.
+
+        Use this to pass the connection to a nested context manager for
+        cross-library or cross-instance JOINs::
+
+            with lib_a.duckdb() as outer:
+                outer.register_symbol("trades")
+                with lib_b.duckdb(connection=outer.connection) as inner:
+                    inner.register_symbol("prices")
+                    result = inner.query("SELECT * FROM trades JOIN prices ...")
+        """
+        self._check_in_context()
+        return self._conn
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._conn and self._owns_connection:
-            self._conn.close()
+        # Unregister symbols this context registered
+        if self._conn:
+            for table_name in self._registered_symbols:
+                try:
+                    self._conn.unregister(table_name)
+                except Exception:
+                    pass  # Connection may already be closed or table already removed
+            self._registered_symbols.clear()
+            if self._owns_connection:
+                self._conn.close()
         self._conn = None
         return False
 

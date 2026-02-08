@@ -768,12 +768,10 @@ class TestExternalDuckDBConnection:
 
 
 class TestCrossLibraryJoins:
-    """Tests for joining data across multiple ArcticDB library instances via a shared DuckDB connection."""
+    """Tests for joining data across multiple ArcticDB library instances via nested context managers."""
 
-    def test_join_across_libraries_with_context_manager(self, lmdb_storage):
-        """Nested Library.duckdb() context managers sharing a connection for cross-library JOIN."""
-        import duckdb
-
+    def test_join_across_libraries_nested(self, lmdb_storage):
+        """Nested Library.duckdb() context managers for cross-library JOIN."""
         arctic = lmdb_storage.create_arctic()
         lib_a = arctic.create_library("team_a.positions")
         lib_b = arctic.create_library("team_b.prices")
@@ -781,31 +779,26 @@ class TestCrossLibraryJoins:
         lib_a.write("portfolio", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "shares": [1000, 500]}))
         lib_b.write("marks", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "mark": [195.0, 175.0]}))
 
-        conn = duckdb.connect(":memory:")
-
-        with lib_a.duckdb(connection=conn) as ddb_a:
+        with lib_a.duckdb() as ddb_a:
             ddb_a.register_symbol("portfolio")
 
-        # Connection stays open — lib_a's context manager doesn't close external connections
-        with lib_b.duckdb(connection=conn) as ddb_b:
-            ddb_b.register_symbol("marks")
-            result = ddb_b.query("""
-                SELECT p.ticker, p.shares, m.mark, p.shares * m.mark AS market_value
-                FROM portfolio p
-                JOIN marks m ON p.ticker = m.ticker
-                ORDER BY market_value DESC
-            """)
+            with lib_b.duckdb(connection=ddb_a.connection) as ddb_b:
+                ddb_b.register_symbol("marks")
+                result = ddb_b.query("""
+                    SELECT p.ticker, p.shares, m.mark, p.shares * m.mark AS market_value
+                    FROM portfolio p
+                    JOIN marks m ON p.ticker = m.ticker
+                    ORDER BY market_value DESC
+                """)
 
         assert len(result) == 2
         assert result.iloc[0]["ticker"] == "AAPL"
         assert result.iloc[0]["market_value"] == pytest.approx(195000.0)
         assert result.iloc[1]["ticker"] == "GOOG"
         assert result.iloc[1]["market_value"] == pytest.approx(87500.0)
-        conn.close()
 
-    def test_join_across_separate_lmdb_instances_with_context_manager(self, tmp_path):
-        """Nested context managers from two separate LMDB instances sharing a connection."""
-        import duckdb
+    def test_join_across_separate_lmdb_instances_nested(self, tmp_path):
+        """Nested context managers from two separate LMDB Arctic instances."""
         from arcticdb import Arctic
 
         arctic_a = Arctic(f"lmdb://{tmp_path}/db_alpha")
@@ -817,24 +810,41 @@ class TestCrossLibraryJoins:
         lib_a.write("trades", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "notional": [15000.0, 140000.0]}))
         lib_b.write("fx_rates", pd.DataFrame({"ticker": ["AAPL", "GOOG"], "fx_rate": [0.79, 0.79]}))
 
-        conn = duckdb.connect(":memory:")
+        with lib_a.duckdb() as ddb_a:
+            ddb_a.register_symbol("trades")
 
-        with lib_a.duckdb(connection=conn) as ddb:
-            ddb.register_symbol("trades")
-
-        with lib_b.duckdb(connection=conn) as ddb:
-            ddb.register_symbol("fx_rates")
-            result = ddb.query("""
-                SELECT t.ticker, t.notional, f.fx_rate,
-                       ROUND(t.notional * f.fx_rate, 2) AS notional_gbp
-                FROM trades t
-                JOIN fx_rates f ON t.ticker = f.ticker
-                ORDER BY t.ticker
-            """)
+            with lib_b.duckdb(connection=ddb_a.connection) as ddb_b:
+                ddb_b.register_symbol("fx_rates")
+                result = ddb_b.query("""
+                    SELECT t.ticker, t.notional, f.fx_rate,
+                           ROUND(t.notional * f.fx_rate, 2) AS notional_gbp
+                    FROM trades t
+                    JOIN fx_rates f ON t.ticker = f.ticker
+                    ORDER BY t.ticker
+                """)
 
         assert len(result) == 2
         assert result.iloc[0]["notional_gbp"] == pytest.approx(11850.0)
         assert result.iloc[1]["notional_gbp"] == pytest.approx(110600.0)
+
+    def test_cleanup_on_exit(self, lmdb_storage):
+        """Verify that registered symbols are unregistered when the context exits."""
+        arctic = lmdb_storage.create_arctic()
+        lib = arctic.create_library("test_lib")
+        lib.write("data", pd.DataFrame({"x": [1, 2, 3]}))
+
+        import duckdb
+
+        conn = duckdb.connect(":memory:")
+
+        with lib.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("data")
+            # Table is visible inside context
+            assert conn.execute("SELECT COUNT(*) FROM data").fetchone()[0] == 3
+
+        # After exit, the table should be gone
+        tables = [row[0] for row in conn.execute("SHOW TABLES").fetchall()]
+        assert "data" not in tables
         conn.close()
 
     def test_join_across_libraries_via_arctic_duckdb(self, lmdb_storage):

@@ -85,6 +85,11 @@ git submodule update --init --recursive
 ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 ```
 
+To install packages which aren't available internally, use the following custom index:
+```bash
+pip install -i https://repo.prod.m/artifactory/api/pypi/external-pypi/simple/ hypothesis==6.72.4
+```
+
 ### Building a Wheel
 
 ```bash
