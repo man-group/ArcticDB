@@ -16,12 +16,10 @@ Entry points on `Library` (`version_store/library.py`):
 - `sql()` — one-shot query, auto-discovers symbols, pushdown optimization
 - `explain()` — pushdown introspection without executing query
 - `duckdb()` — context manager for advanced multi-symbol queries
-- `duckdb_register()` — register symbols into external DuckDB connection
 
 Entry points on `Arctic` (`arctic.py`):
 - `sql()` — database discovery (`SHOW DATABASES`)
 - `duckdb()` — cross-library context manager
-- `duckdb_register()` — cross-library registration with `library__symbol` naming
 
 ## Architecture
 
@@ -54,8 +52,6 @@ lib.sql(query) ─────────────────────�
 | `lib.sql(query)` | DataFrame | Yes | Yes | No | Simple queries, CLI |
 | `lib.explain(query)` | dict | N/A | No I/O | N/A | Inspect optimizations |
 | `lib.duckdb()` | Context manager | Per-symbol | Yes | Yes | Advanced: JOINs, aliases, versions |
-| `lib.duckdb_register(conn)` | list[str] | No | No (materialized) | Yes | Standard DuckDB workflow |
-| `arctic.duckdb_register(conn)` | list[str] | No | No (materialized) | Yes | Cross-library queries |
 
 ## Module: duckdb.py
 
@@ -154,7 +150,6 @@ Pushdown failures are non-fatal — logged as warnings, query falls through to D
 
 Arrow RecordBatchReaders are **single-use**. After iteration, data is consumed. This is why:
 - `lib.sql()` creates a fresh reader per query
-- `lib.duckdb_register()` materializes to Arrow tables (reusable)
 - C++ side enforces with `data_consumed_` flag in `ArrowOutputFrame`
 
 ## C++ Layer
@@ -205,12 +200,12 @@ python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_arrow_read
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_pushdown.py` | AST parsing, filter conversion, QueryBuilder generation, end-to-end pushdown | Column, filter, date range, limit pushdown; edge cases for types, OR, LIKE, functions |
-| `test_duckdb.py` | Context managers, sql(), duckdb_register(), external connections, schema DDL, SHOW DATABASES | Simple queries, JOINs, output formats, edge cases, cross-library |
+| `test_duckdb.py` | Context managers, sql(), external connections, schema DDL, SHOW DATABASES | Simple queries, JOINs, output formats, edge cases, cross-library |
 | `test_arrow_reader.py` | RecordBatchReader iteration, exhaustion, DuckDB integration | Streaming, single-use enforcement, schema |
 
 ## Related Documentation
 
-- [LIBRARY_API.md](LIBRARY_API.md) — Library class (sql, explain, duckdb, duckdb_register methods)
-- [ARCTIC_CLASS.md](ARCTIC_CLASS.md) — Arctic class (sql, duckdb, duckdb_register methods)
+- [LIBRARY_API.md](LIBRARY_API.md) — Library class (sql, explain, duckdb methods)
+- [ARCTIC_CLASS.md](ARCTIC_CLASS.md) — Arctic class (sql, duckdb methods)
 - [QUERY_PROCESSING.md](QUERY_PROCESSING.md) — QueryBuilder used by pushdown
 - [../cpp/PYTHON_BINDINGS.md](../cpp/PYTHON_BINDINGS.md) — C++ bindings for RecordBatchIterator

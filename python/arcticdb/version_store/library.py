@@ -2221,7 +2221,6 @@ class Library:
         See Also
         --------
         explain : Inspect which pushdown optimizations apply to a query.
-        duckdb_register : Register symbols into an external DuckDB connection.
         duckdb : Context manager for complex multi-symbol SQL queries.
         """
         from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available
@@ -2472,80 +2471,6 @@ class Library:
         from arcticdb.version_store.duckdb import DuckDBContext
 
         return DuckDBContext(self, connection=connection)
-
-    def duckdb_register(
-        self,
-        conn,
-        symbols: Optional[List[str]] = None,
-        as_of: Optional[AsOf] = None,
-    ) -> List[str]:
-        """
-        Register ArcticDB symbols as tables in a DuckDB connection.
-
-        Each symbol is read as an Arrow table and registered into the connection,
-        making it queryable via standard DuckDB SQL. The data is materialized in
-        memory so that tables can be queried multiple times.
-
-        Parameters
-        ----------
-        conn : duckdb.DuckDBPyConnection
-            DuckDB connection to register tables into.
-        symbols : list of str, optional
-            Symbols to register. If None, registers all symbols from ``list_symbols()``.
-        as_of : AsOf, optional
-            Version to read for all symbols. See `read()` for details.
-
-        Returns
-        -------
-        list of str
-            Names of registered symbols.
-
-        Examples
-        --------
-        Register all symbols:
-
-        >>> import duckdb
-        >>> conn = duckdb.connect()
-        >>> lib.duckdb_register(conn)
-        ['trades', 'prices']
-        >>> conn.sql("SELECT * FROM trades WHERE price > 100").df()
-
-        Register specific symbols:
-
-        >>> lib.duckdb_register(conn, symbols=["trades", "prices"])
-        >>> conn.sql("SHOW TABLES").df()
-
-        Use with standard DuckDB features:
-
-        >>> lib.duckdb_register(conn)
-        >>> conn.sql("DESCRIBE trades").df()
-        >>> conn.sql("SELECT * FROM trades LIMIT 10").show()
-
-        See Also
-        --------
-        sql : One-shot SQL queries with automatic pushdown optimization.
-        duckdb : Context manager for streaming queries with fine-grained control.
-        """
-        import pyarrow as pa
-
-        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available, _BaseDuckDBContext
-
-        _check_duckdb_available()
-        _BaseDuckDBContext._validate_external_connection(conn)
-
-        if symbols is None:
-            symbols = self.list_symbols()
-
-        registered = []
-        for symbol in symbols:
-            arrow_table = self.read(symbol, as_of=as_of).data
-            if not isinstance(arrow_table, pa.Table):
-                # read() returns pandas by default, convert to Arrow
-                arrow_table = pa.Table.from_pandas(arrow_table)
-            conn.register(symbol, arrow_table)
-            registered.append(symbol)
-
-        return registered
 
     def read_batch(
         self,

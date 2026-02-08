@@ -193,12 +193,6 @@ The `Arctic` class uses lazy initialization for the adapter (created on first ac
 # Database discovery
 result = arctic.sql("SHOW DATABASES")
 
-# Cross-library registration into external DuckDB connection
-import duckdb
-conn = duckdb.connect()
-arctic.duckdb_register(conn, libraries=["market_data", "reference_data"])
-conn.sql("SELECT * FROM market_data__trades").df()  # library__symbol naming
-
 # Cross-library context manager
 with arctic.duckdb() as ddb:
     ddb.register_symbol("market_data", "trades")

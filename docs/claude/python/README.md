@@ -55,8 +55,7 @@ Arctic (arctic.py)
   ├── delete_library(name)
   ├── list_libraries() → List[str]
   ├── sql("SHOW DATABASES") → DataFrame
-  ├── duckdb() → ArcticDuckDBContext
-  └── duckdb_register(conn) → List[str]
+  └── duckdb() → ArcticDuckDBContext
         │
         ▼
 Library (version_store/library.py)
@@ -71,8 +70,7 @@ Library (version_store/library.py)
   ├── snapshot(name)
   ├── sql(query) → DataFrame
   ├── explain(query) → dict
-  ├── duckdb() → DuckDBContext
-  └── duckdb_register(conn) → List[str]
+  └── duckdb() → DuckDBContext
         │
         ▼
 NativeVersionStore (version_store/_store.py)

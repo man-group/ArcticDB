@@ -270,14 +270,11 @@ lib.write("symbol", pd.DataFrame({"b": [3, 4]}))
 # One-shot SQL query (pushdown optimization, streaming)
 df = lib.sql("SELECT ticker, AVG(price) FROM trades GROUP BY ticker")
 
+# Per-symbol versioning via dict
+df = lib.sql("SELECT * FROM trades t JOIN prices p ON t.ticker = p.ticker", as_of={"trades": 0, "prices": 1})
+
 # Inspect pushdown optimizations (no data read)
 info = lib.explain("SELECT price FROM trades WHERE price > 100")
-
-# Register symbols into external DuckDB connection (materialized, reusable)
-import duckdb
-conn = duckdb.connect()
-lib.duckdb_register(conn, symbols=["trades", "prices"])
-conn.sql("SELECT * FROM trades LIMIT 10").show()
 
 # Context manager for advanced queries (streaming, per-symbol control)
 with lib.duckdb() as ddb:

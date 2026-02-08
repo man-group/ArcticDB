@@ -169,53 +169,6 @@ print(info)
 
 `explain()` parses the query without executing it or reading any data.
 
-## Register with DuckDB: `lib.duckdb_register()`
-
-For a standard DuckDB workflow — register tables once, then query freely — use `duckdb_register()`:
-
-```python
-import duckdb
-
-conn = duckdb.connect()
-lib.duckdb_register(conn)
-
-# Now use standard DuckDB API
-conn.sql("SHOW TABLES").show()
-conn.sql("DESCRIBE trades").show()
-conn.sql("SELECT * FROM trades WHERE price > 100 LIMIT 10").show()
-
-# Data is materialized, so multiple queries work
-conn.sql("SELECT AVG(price) FROM trades").show()
-conn.sql("SELECT COUNT(*) FROM trades").show()
-```
-
-### Register Specific Symbols
-
-```python
-lib.duckdb_register(conn, symbols=["trades", "prices"])
-```
-
-### Register a Specific Version
-
-```python
-lib.duckdb_register(conn, as_of=0)  # version 0 of all symbols
-```
-
-### Cross-Library Registration
-
-Register symbols from multiple libraries using `arctic.duckdb_register()`:
-
-```python
-conn = duckdb.connect()
-arctic.duckdb_register(conn, libraries=["market_data", "reference_data"])
-
-# Table names are prefixed: library__symbol
-conn.sql("SELECT * FROM market_data__trades t JOIN reference_data__securities s ON t.ticker = s.ticker").df()
-```
-
-!!! note
-    `duckdb_register()` materializes data in memory. For large datasets, prefer `lib.sql()` (which streams data) or the `lib.duckdb()` context manager.
-
 ## Database Hierarchy
 
 ArcticDB organizes data in a `database.library` hierarchy:
@@ -289,22 +242,22 @@ with lib.duckdb() as ddb:
 
 ### When to Use `duckdb()` vs `sql()`
 
-| Scenario | `lib.sql()` | `duckdb_register()` | `arctic.sql()` | `duckdb()` |
-|----------|-------------|---------------------|----------------|------------|
-| Simple single-symbol queries | ✅ | ✅ | | |
-| Basic JOINs | ✅ | ✅ | | |
-| Schema introspection (DESCRIBE) | ✅ | ✅ | | |
-| Data discovery (SHOW TABLES) | ✅ | ✅ | | |
-| Multiple queries on same data | | ✅ | | ✅ |
-| Database hierarchy (SHOW DATABASES) | | | ✅ | |
-| Different versions per symbol | | | | ✅ |
-| Same symbol with different filters | | | | ✅ |
-| Custom table aliases | | | | ✅ |
-| Pre-filtering with QueryBuilder | | | | ✅ |
-| Streaming (memory-efficient) | ✅ | | | ✅ |
-| Pushdown optimization | ✅ | | | |
-| Cross-library/database queries | | ✅ | | ✅ |
-| Join with external data sources | | ✅ | | ✅ |
+| Scenario | `lib.sql()` | `arctic.sql()` | `duckdb()` |
+|----------|-------------|----------------|------------|
+| Simple single-symbol queries | ✅ | | |
+| Basic JOINs | ✅ | | |
+| Schema introspection (DESCRIBE) | ✅ | | |
+| Data discovery (SHOW TABLES) | ✅ | | |
+| Database hierarchy (SHOW DATABASES) | | ✅ | |
+| Different versions per symbol | ✅ (dict) | | ✅ |
+| Multiple queries on same data | | | ✅ |
+| Same symbol with different filters | | | ✅ |
+| Custom table aliases | | | ✅ |
+| Pre-filtering with QueryBuilder | | | ✅ |
+| Streaming (memory-efficient) | ✅ | | ✅ |
+| Pushdown optimization | ✅ | | |
+| Cross-library/instance queries | | | ✅ |
+| Join with external data sources | | | ✅ |
 
 ### Register All Symbols
 
@@ -506,31 +459,15 @@ This is useful for:
 
 ### Cross-Library Joins
 
-Join data across multiple ArcticDB libraries by sharing a DuckDB connection:
+Join data across multiple ArcticDB libraries by sharing a DuckDB connection.
+Use nested context managers — the external connection survives each context exit:
 
 ```python
 import duckdb
 
-# Two libraries — e.g. different teams or data domains
 lib_trades = arctic.get_library("trading.fills")
 lib_ref = arctic.get_library("reference.instruments")
 
-# Register symbols from both libraries into the same connection
-conn = duckdb.connect(":memory:")
-lib_trades.duckdb_register(conn, symbols=["fills"])
-lib_ref.duckdb_register(conn, symbols=["sectors"])
-
-# Query across libraries
-result = conn.execute("""
-    SELECT f.ticker, f.qty, f.price, s.sector
-    FROM fills f
-    JOIN sectors s ON f.ticker = s.ticker
-""").fetch_arrow_table().to_pandas()
-```
-
-The same works with nested context managers — the external connection survives each context exit:
-
-```python
 conn = duckdb.connect(":memory:")
 
 with lib_trades.duckdb(connection=conn) as ddb:
@@ -564,14 +501,17 @@ lib_prod = arctic_prod.get_library("trading")
 lib_research = arctic_research.get_library("signals")
 
 conn = duckdb.connect(":memory:")
-lib_prod.duckdb_register(conn, symbols=["trades"])
-lib_research.duckdb_register(conn, symbols=["alpha_scores"])
 
-result = conn.execute("""
-    SELECT t.ticker, t.notional, a.score
-    FROM trades t
-    JOIN alpha_scores a ON t.ticker = a.ticker
-""").fetch_arrow_table().to_pandas()
+with lib_prod.duckdb(connection=conn) as ddb:
+    ddb.register_symbol("trades")
+
+with lib_research.duckdb(connection=conn) as ddb:
+    ddb.register_symbol("alpha_scores")
+    result = ddb.query("""
+        SELECT t.ticker, t.notional, a.score
+        FROM trades t
+        JOIN alpha_scores a ON t.ticker = a.ticker
+    """)
 ```
 
 ## Performance Considerations
