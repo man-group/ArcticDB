@@ -171,6 +171,24 @@ Chronological summary of work done on the `duckdb` branch.
 - Updated summary table to SQL-only format
 - 35 cells (11 markdown, 24 code), all execute successfully with outputs stored
 
+## 26. ASV Performance Benchmarks for SQL
+
+- Created `python/benchmarks/sql.py` with 4 benchmark classes:
+  - **`SQLQueries`**: Core SQL throughput — SELECT *, column projection, WHERE filter, GROUP BY (low/high cardinality), JOIN, filter+groupby, LIMIT, Arrow output. Params: [1M, 10M] rows
+  - **`SQLStreamingMemory`**: Peak memory comparison — streaming SQL vs full materialization via `lib.read()`. Params: [aggregation, filtered_1pct, full_scan] at 10M rows
+  - **`SQLLargeGroupBy`**: GROUP BY on large data with result fitting in memory. Params: [id1, id6] × [sum, mean, count] at 10M rows
+  - **`SQLFilteringMemory`**: Selectivity scaling — varying filter thresholds (0.1%, 1%, 10%, 50%) to verify memory scales with result, not source. 10M rows
+- All benchmarks validated: import, setup_cache, execution, teardown
+
+## 27. Fix LIMIT Pushdown — Actually Push to Storage
+
+- **Bug**: `lib.sql("SELECT * FROM t LIMIT 100")` took 2.8s on 1M rows because LIMIT was extracted by `extract_pushdown_from_sql()` into `PushdownInfo.limit` but never converted to `row_range` in `Library.sql()`
+- **Fix**: In `library.py`, convert `pushdown.limit` to `row_range=(0, limit)` when calling `_read_as_record_batch_reader()`
+- **Safety guards** in `pushdown.py`: LIMIT only pushed to storage (`can_push_limit`) for simple scans. Disabled when: ORDER BY (sort needs all rows), GROUP BY (LIMIT on aggregated result), DISTINCT (LIMIT on deduplicated result), multi-table/CTEs (LIMIT on joined result), WHERE clause (filter may discard rows, making first-N-rows ≠ first-N-results)
+- Added `_has_order_by()` helper to detect ORDER BY modifier in DuckDB AST
+- **Result**: `SELECT * FROM t LIMIT 100` on 1M rows: 2.8s → 0.36s (7.8x faster)
+- **Tests**: 3 new unit tests (ORDER BY, GROUP BY, DISTINCT prevent LIMIT pushdown), 2 new integration tests (ORDER BY, GROUP BY correctness with unpushed LIMIT), updated 3 existing tests for corrected semantics
+
 ---
 
 ## Open Items

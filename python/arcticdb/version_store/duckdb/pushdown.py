@@ -77,6 +77,21 @@ def _extract_limit_from_ast(ast: Dict) -> Optional[int]:
         return None
 
 
+def _has_order_by(ast: Dict) -> bool:
+    """Check whether the query has an ORDER BY clause.
+
+    LIMIT cannot safely be pushed down as a storage-level row_range when the
+    query also contains ORDER BY, because the sort order in storage may differ
+    from the requested sort.  DuckDB needs *all* rows to perform the sort
+    before applying the LIMIT.
+    """
+    try:
+        modifiers = ast["statements"][0]["node"].get("modifiers", [])
+        return any(mod.get("type") == "ORDER_MODIFIER" for mod in modifiers)
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
 def _extract_column_refs_from_node(
     node: Dict,
     table_alias_map: Dict[str, str],
@@ -900,6 +915,22 @@ def extract_pushdown_from_sql(
     has_ctes = bool(_extract_cte_names(ast))
     disable_pushdown = is_multi_table or has_ctes
 
+    # Determine whether LIMIT can safely be pushed to storage as row_range.
+    # This is only safe for simple scans where the first N storage rows are the
+    # first N result rows.  It is NOT safe when:
+    #   - ORDER BY: DuckDB needs all rows to sort before applying LIMIT
+    #   - GROUP BY / DISTINCT: LIMIT applies to aggregated/deduplicated result
+    #   - Multi-table / CTEs: LIMIT applies to joined/composed result
+    #   - WHERE clause: value filters may discard rows, so the first N storage
+    #     rows may yield fewer than N result rows (date_range is fine — it
+    #     restricts the scan window but doesn't reduce count within it)
+    has_group_by = bool(select_node.get("group_expressions"))
+    has_distinct = any(m.get("type") == "DISTINCT_MODIFIER" for m in select_node.get("modifiers", []))
+    has_where = select_node.get("where_clause") is not None
+    can_push_limit = limit is not None and not (
+        disable_pushdown or _has_order_by(ast) or has_group_by or has_distinct or has_where
+    )
+
     if not is_select_star and not disable_pushdown:
         # Extract specific columns only for simple single-table queries
         select_columns = _extract_columns_from_select_list(select_list, table_alias_map)
@@ -946,8 +977,8 @@ def extract_pushdown_from_sql(
             pushdown.query_builder = query_builder
             pushdown.filter_pushed_down = True
 
-        # Apply LIMIT
-        if limit is not None:
+        # Apply LIMIT — only push to storage when safe (see can_push_limit above)
+        if can_push_limit:
             pushdown.limit = limit
             pushdown.limit_pushed_down = limit
 

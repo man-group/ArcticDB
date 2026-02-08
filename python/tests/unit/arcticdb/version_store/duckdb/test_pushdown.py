@@ -481,6 +481,24 @@ class TestExtractPushdownFromSql:
         assert info.limit == 10
         assert info.limit_pushed_down == 10
 
+    def test_limit_not_pushed_with_order_by(self):
+        """LIMIT + ORDER BY: DuckDB needs all rows to sort, so LIMIT cannot be pushed to storage."""
+        result, _ = extract_pushdown_from_sql("SELECT x FROM test_table ORDER BY x LIMIT 10", ["test_table"])
+        assert result["test_table"].limit is None
+        assert result["test_table"].limit_pushed_down is None
+
+    def test_limit_not_pushed_with_group_by(self):
+        """LIMIT + GROUP BY: LIMIT applies to aggregated result, not source rows."""
+        result, _ = extract_pushdown_from_sql("SELECT x, COUNT(*) FROM test_table GROUP BY x LIMIT 10", ["test_table"])
+        assert result["test_table"].limit is None
+        assert result["test_table"].limit_pushed_down is None
+
+    def test_limit_not_pushed_with_distinct(self):
+        """LIMIT + DISTINCT: LIMIT applies to deduplicated result, not source rows."""
+        result, _ = extract_pushdown_from_sql("SELECT DISTINCT x FROM test_table LIMIT 10", ["test_table"])
+        assert result["test_table"].limit is None
+        assert result["test_table"].limit_pushed_down is None
+
     def test_unknown_table_returns_default(self):
         """Test unknown table returns default PushdownInfo with LIMIT still applied."""
         result, _ = extract_pushdown_from_sql("SELECT * FROM test_table LIMIT 5", ["unknown_table"])
@@ -496,9 +514,10 @@ class TestExtractPushdownFromSql:
         )
         assert "test_table" in result
         assert "other_table" in result
-        # LIMIT applies to both
-        assert result["test_table"].limit == 5
-        assert result["other_table"].limit == 5
+        # LIMIT is NOT pushed down for multi-table queries — it applies to
+        # the joined result, not individual tables
+        assert result["test_table"].limit is None
+        assert result["other_table"].limit is None
 
     def test_where_filter_pushdown(self):
         """Test WHERE clause filter is pushed down."""
@@ -539,8 +558,10 @@ class TestExtractPushdownFromSql:
         )
         assert "table_a" in result
         assert "table_b" in result
-        assert result["table_a"].limit == 10
-        assert result["table_b"].limit == 10
+        # LIMIT is NOT pushed down for multi-table (JOIN) queries — it applies
+        # to the joined result, not individual tables
+        assert result["table_a"].limit is None
+        assert result["table_b"].limit is None
         assert "table_a" in symbols
         assert "table_b" in symbols
 
@@ -729,9 +750,37 @@ class TestSQLPredicatePushdown:
         data = lib.sql("SELECT x FROM test_symbol LIMIT 10")
 
         assert len(data) == 10
+        # Verify first 10 rows returned (storage order preserved)
+        assert list(data["x"]) == list(range(10))
         info = lib.explain("SELECT x FROM test_symbol LIMIT 10")
         assert "limit_pushed_down" in info
         assert info["limit_pushed_down"] == 10
+
+    def test_limit_with_order_by_not_pushed(self, lmdb_library):
+        """LIMIT + ORDER BY: LIMIT is not pushed to storage but result is still correct."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(1000)})
+        lib.write("test_symbol", df)
+
+        data = lib.sql("SELECT x FROM test_symbol ORDER BY x DESC LIMIT 5")
+        assert len(data) == 5
+        assert list(data["x"]) == [999, 998, 997, 996, 995]
+
+        info = lib.explain("SELECT x FROM test_symbol ORDER BY x DESC LIMIT 5")
+        # LIMIT is NOT pushed when ORDER BY is present
+        assert info.get("limit_pushed_down") is None
+
+    def test_limit_with_group_by_not_pushed(self, lmdb_library):
+        """LIMIT + GROUP BY: LIMIT is not pushed to storage but result is still correct."""
+        lib = lmdb_library
+        df = pd.DataFrame({"category": ["A", "B", "C"] * 100, "value": np.arange(300)})
+        lib.write("test_symbol", df)
+
+        data = lib.sql("SELECT category, SUM(value) as total FROM test_symbol GROUP BY category LIMIT 2")
+        assert len(data) == 2
+
+        info = lib.explain("SELECT category, SUM(value) as total FROM test_symbol GROUP BY category LIMIT 2")
+        assert info.get("limit_pushed_down") is None
 
     def test_date_range_pushdown_between(self, lmdb_library):
         """Test that BETWEEN on timestamp index is pushed down as date_range."""
@@ -985,8 +1034,11 @@ class TestSQLPushdownEdgeCases:
             WHERE description LIKE '%LIMIT%'
             LIMIT 5
         """)
-        assert "limit_pushed_down" in info
-        assert info["limit_pushed_down"] == 5  # Not 999!
+        # LIMIT is not pushed when WHERE clause is present (WHERE may reduce
+        # rows below LIMIT, so storage can't know how many rows to read).
+        # The key test here is that the string literal "LIMIT 999" doesn't
+        # confuse the parser — the query still works correctly.
+        assert info.get("limit_pushed_down") is None
 
 
 class TestReadOnlyValidation:

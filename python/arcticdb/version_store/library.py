@@ -2270,11 +2270,13 @@ class Library:
 
                 pushdown = pushdown_by_table.get(sql_name)
                 if pushdown:
+                    row_range = (0, pushdown.limit) if pushdown.limit is not None else None
                     reader = self._read_as_record_batch_reader(
                         real_symbol,
                         as_of=symbol_as_of,
                         columns=pushdown.columns,
                         date_range=pushdown.date_range,
+                        row_range=row_range,
                         query_builder=pushdown.query_builder,
                     )
                 else:
