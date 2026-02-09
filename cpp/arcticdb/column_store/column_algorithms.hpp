@@ -22,23 +22,53 @@ static void for_each(const Column& input_column, functor&& f) {
     std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
 }
 
+// Thin wrapper around std::for_each that is marked flatten to force-inline callees.
+// Useful when running hot lambdas over large data.
+template<typename Iterator, typename functor>
+ARCTICDB_FLATTEN static void for_each_flattened(Iterator begin, Iterator end, functor&& f) {
+    std::for_each(begin, end, std::forward<functor>(f));
+}
+
 template<typename input_tdt, typename functor>
 requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
          std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
-static void for_each_enumerated(const Column& input_column, functor&& f) {
+static void for_each_enumerated(
+        const Column& input_column, functor&& f, std::optional<size_t> start_idx = std::nullopt,
+        std::optional<size_t> end_idx = std::nullopt
+) {
     auto input_data = input_column.data();
+    // When `start_idx` or `end_idx` are set we use `std::advance` to get the `begin` and `end` iterators to the correct
+    // locations. This is inefficient because `ColumnDataIterator` is not random access
+    // TODO: Prove a random access `ColumnData::iterator_at(position)`.
+    // Alternatively we could make `ColumnDataIterator` random access but this can be tricky because random access in a
+    // `ChunkedBuffer` is `O(log(n))`, but according to standard an iterator `+=` should be `O(1)` to be marked as
+    // random access. Otherwise something like `std::for_each` might turn out `O(n*log(n))` if implemented with `it+=1`
+    // instead of `it++`.
     if (input_column.is_sparse()) {
-        std::for_each(
-                input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(),
-                input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(),
-                std::forward<functor>(f)
-        );
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        if (start_idx.has_value()) {
+            // We need to get the `physical_offset` to know how many physical values to advance when column is sparse.
+            auto physical_offset = input_column.get_physical_offset(*start_idx);
+            std::advance(begin, physical_offset);
+        }
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        if (end_idx.has_value()) {
+            end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            auto physical_offset = input_column.get_physical_offset(*end_idx);
+            std::advance(end, physical_offset);
+        }
+        for_each_flattened(begin, end, std::forward<functor>(f));
     } else {
-        std::for_each(
-                input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
-                input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
-                std::forward<functor>(f)
-        );
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        if (start_idx.has_value()) {
+            std::advance(begin, *start_idx);
+        }
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        if (end_idx.has_value()) {
+            end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+            std::advance(end, *end_idx);
+        }
+        for_each_flattened(begin, end, std::forward<functor>(f));
     }
 }
 
