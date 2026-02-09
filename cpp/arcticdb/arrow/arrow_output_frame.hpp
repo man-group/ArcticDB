@@ -37,8 +37,7 @@ class StreamSource;
 
 struct ExpressionContext;
 
-// Forward declarations
-class RecordBatchIterator;
+// Forward declaration
 class LazyRecordBatchIterator;
 
 // FilterRange: same definition as pipelines::FilterRange from read_query.hpp,
@@ -113,41 +112,12 @@ struct ArrowOutputFrame {
 
     std::vector<RecordBatchData> extract_record_batches();
 
-    // Create an iterator for streaming record batches one at a time.
-    // Note: This method consumes the data destructively and can only be called once.
-    [[nodiscard]] std::shared_ptr<RecordBatchIterator> create_iterator();
-
     [[nodiscard]] size_t num_blocks() const;
 
   private:
-    // Guards against multiple consumption of data_ via extract_record_batches() or create_iterator().
-    // Both methods destructively transfer ownership from the underlying sparrow::record_batch objects.
+    // Guards against multiple consumption of data_ via extract_record_batches().
+    // The method destructively transfers ownership from the underlying sparrow::record_batch objects.
     bool data_consumed_ = false;
-};
-
-// Iterator for streaming record batches one at a time.
-// Used for memory-efficient integration with DuckDB and other Arrow consumers.
-class RecordBatchIterator {
-  public:
-    RecordBatchIterator() = default;
-
-    explicit RecordBatchIterator(std::shared_ptr<std::vector<sparrow::record_batch>> data);
-
-    // Returns the next record batch, or nullopt if exhausted.
-    std::optional<RecordBatchData> next();
-
-    // Returns true if there are more batches to iterate.
-    [[nodiscard]] bool has_next() const;
-
-    // Returns the total number of batches.
-    [[nodiscard]] size_t num_batches() const;
-
-    // Returns the current position (0-indexed).
-    [[nodiscard]] size_t current_index() const { return current_index_; }
-
-  private:
-    std::shared_ptr<std::vector<sparrow::record_batch>> data_;
-    size_t current_index_ = 0;
 };
 
 // Lazy iterator that reads and decodes segments on-demand from storage.

@@ -244,23 +244,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);
 
-    py::class_<RecordBatchIterator, std::shared_ptr<RecordBatchIterator>>(version, "RecordBatchIterator", R"pbdoc(
-        Iterator for streaming Arrow record batches one at a time.
-        Used for memory-efficient integration with DuckDB and other Arrow consumers.
-    )pbdoc")
-            .def("next", &RecordBatchIterator::next, R"pbdoc(
-        Returns the next record batch, or None if exhausted.
-    )pbdoc")
-            .def("has_next", &RecordBatchIterator::has_next, R"pbdoc(
-        Returns True if there are more batches to iterate.
-    )pbdoc")
-            .def("num_batches", &RecordBatchIterator::num_batches, R"pbdoc(
-        Returns the total number of batches.
-    )pbdoc")
-            .def("current_index", &RecordBatchIterator::current_index, R"pbdoc(
-        Returns the current position (0-indexed).
-    )pbdoc");
-
     py::class_<LazyRecordBatchIterator, std::shared_ptr<LazyRecordBatchIterator>>(
             version, "LazyRecordBatchIterator", R"pbdoc(
         Iterator that reads and decodes Arrow record batches lazily from storage.

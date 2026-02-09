@@ -98,7 +98,7 @@ class TestLazyRecordBatchIterator:
         assert cpp_iterator.num_batches() == 0
         # descriptor() should have the column schema even with no data segments
         desc = cpp_iterator.descriptor()
-        assert desc.field_count() > 0
+        assert len(desc.fields()) > 0
 
     def test_lazy_empty_symbol_sql(self, lmdb_library):
         """Empty symbol works through lib.sql() using schema from descriptor."""
@@ -230,93 +230,6 @@ class TestLazyRecordBatchIteratorDirect:
         # Cannot iterate again
         with pytest.raises(RuntimeError, match="exhausted"):
             list(reader)
-
-
-class TestLazyVsEagerConsistency:
-    """Tests that verify lazy and eager paths produce identical results."""
-
-    def test_consistency_simple(self, lmdb_library):
-        """Lazy and eager produce identical results for simple read."""
-        lib = lmdb_library
-        df = pd.DataFrame({"x": np.arange(100), "y": np.random.default_rng(42).standard_normal(100)})
-        lib.write("sym", df)
-
-        # Eager path
-        eager_iter = lib._nvs.read_as_record_batch_iterator("sym")
-        eager_reader = ArcticRecordBatchReader(eager_iter)
-        eager_table = eager_reader.read_all()
-
-        # Lazy path
-        lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym")
-        lazy_reader = ArcticRecordBatchReader(lazy_iter)
-        lazy_table = lazy_reader.read_all()
-
-        assert eager_table.equals(lazy_table)
-
-    def test_consistency_with_columns(self, lmdb_library):
-        """Lazy and eager produce identical results with column projection."""
-        lib = lmdb_library
-        df = pd.DataFrame({"a": np.arange(50), "b": np.arange(50, 100), "c": np.arange(100, 150)})
-        lib.write("sym", df)
-
-        eager_iter = lib._nvs.read_as_record_batch_iterator("sym", columns=["a", "c"])
-        eager_reader = ArcticRecordBatchReader(eager_iter)
-        eager_table = eager_reader.read_all()
-
-        lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym", columns=["a", "c"])
-        lazy_reader = ArcticRecordBatchReader(lazy_iter)
-        lazy_table = lazy_reader.read_all()
-
-        assert eager_table.equals(lazy_table)
-
-    def test_consistency_with_date_range(self, lmdb_library):
-        """Lazy date_range now does row-level truncation, matching the eager path exactly."""
-        lib = lmdb_library
-        idx = pd.date_range("2024-01-01", periods=100, freq="D")
-        df = pd.DataFrame({"value": np.arange(100)}, index=idx)
-        lib.write("sym", df)
-
-        date_range = (pd.Timestamp("2024-02-01"), pd.Timestamp("2024-03-01"))
-
-        # Eager path does row-level truncation within segments
-        eager_iter = lib._nvs.read_as_record_batch_iterator("sym", date_range=date_range)
-        eager_reader = ArcticRecordBatchReader(eager_iter)
-        eager_table = eager_reader.read_all()
-
-        # Lazy path now also does row-level truncation within boundary segments
-        lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym", date_range=date_range)
-        lazy_reader = ArcticRecordBatchReader(lazy_iter)
-        lazy_table = lazy_reader.read_all()
-
-        # Both should produce identical row counts and data
-        assert lazy_table.num_rows == eager_table.num_rows
-        eager_df = eager_table.to_pandas()
-        lazy_df = lazy_table.to_pandas()
-        pd.testing.assert_frame_equal(eager_df, lazy_df)
-
-    def test_consistency_large_data(self, lmdb_library):
-        """Lazy and eager produce identical results for larger multi-segment data."""
-        lib = lmdb_library
-        n_rows = 50_000
-        rng = np.random.default_rng(42)
-        df = pd.DataFrame(
-            {
-                "id": np.arange(n_rows),
-                "value": rng.standard_normal(n_rows),
-                "label": rng.choice(["X", "Y", "Z"], n_rows),
-            }
-        )
-        lib.write("sym", df)
-
-        eager_iter = lib._nvs.read_as_record_batch_iterator("sym")
-        eager_reader = ArcticRecordBatchReader(eager_iter)
-        eager_table = eager_reader.read_all()
-
-        lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym")
-        lazy_reader = ArcticRecordBatchReader(lazy_iter)
-        lazy_table = lazy_reader.read_all()
-
-        assert eager_table.equals(lazy_table)
 
 
 class TestLazyTruncationAndFilter:

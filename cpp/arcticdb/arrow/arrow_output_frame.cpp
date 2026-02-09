@@ -299,21 +299,9 @@ size_t ArrowOutputFrame::num_blocks() const {
     return data_->size();
 }
 
-std::shared_ptr<RecordBatchIterator> ArrowOutputFrame::create_iterator() {
-    util::check(
-            !data_consumed_,
-            "Cannot create iterator: data has already been consumed by extract_record_batches() or create_iterator()"
-    );
-    data_consumed_ = true;
-
-    return std::make_shared<RecordBatchIterator>(data_);
-}
-
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     util::check(
-            !data_consumed_,
-            "Cannot extract record batches: data has already been consumed by extract_record_batches() or "
-            "create_iterator()"
+            !data_consumed_, "Cannot extract record batches: data has already been consumed by extract_record_batches()"
     );
     data_consumed_ = true;
 
@@ -331,33 +319,6 @@ std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     }
 
     return output;
-}
-
-// RecordBatchIterator implementation
-
-RecordBatchIterator::RecordBatchIterator(std::shared_ptr<std::vector<sparrow::record_batch>> data) :
-    data_(std::move(data)),
-    current_index_(0) {}
-
-bool RecordBatchIterator::has_next() const { return data_ && current_index_ < data_->size(); }
-
-size_t RecordBatchIterator::num_batches() const {
-    if (!data_) {
-        return 0;
-    }
-    return data_->size();
-}
-
-std::optional<RecordBatchData> RecordBatchIterator::next() {
-    if (!has_next()) {
-        return std::nullopt;
-    }
-
-    auto& batch = (*data_)[current_index_++];
-    auto struct_array = sparrow::array{batch.extract_struct_array()};
-    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
-
-    return RecordBatchData{arr, schema};
 }
 
 // LazyRecordBatchIterator implementation

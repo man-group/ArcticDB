@@ -7,12 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 be governed by the Apache License, version 2.0.
 """
 
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional
 
 import pyarrow as pa
 
 if TYPE_CHECKING:
-    from arcticdb_ext.version_store import LazyRecordBatchIterator, RecordBatchIterator
+    from arcticdb_ext.version_store import LazyRecordBatchIterator
 
 
 def _descriptor_to_arrow_schema(descriptor) -> pa.Schema:
@@ -22,7 +22,7 @@ def _descriptor_to_arrow_schema(descriptor) -> pa.Schema:
     The descriptor is always available from the index-only read, even when there are
     no data segments.
     """
-    from arcticdb_ext.stream import DataType
+    from arcticdb_ext.types import DataType
 
     _DATATYPE_TO_ARROW = {
         DataType.UINT8: pa.uint8(),
@@ -96,15 +96,14 @@ class ArcticRecordBatchReader:
     Attempting to iterate over an exhausted reader will immediately raise StopIteration.
     """
 
-    def __init__(self, cpp_iterator: "Union[RecordBatchIterator, LazyRecordBatchIterator]"):
+    def __init__(self, cpp_iterator: "LazyRecordBatchIterator"):
         """
-        Initialize the reader with a C++ record batch iterator.
+        Initialize the reader with a C++ lazy record batch iterator.
 
         Parameters
         ----------
-        cpp_iterator : RecordBatchIterator or LazyRecordBatchIterator
-            The C++ iterator. RecordBatchIterator reads eagerly from memory;
-            LazyRecordBatchIterator reads segments on-demand from storage.
+        cpp_iterator : LazyRecordBatchIterator
+            The C++ iterator that reads segments on-demand from storage.
         """
         self._cpp_iterator = cpp_iterator
         self._schema: Optional[pa.Schema] = None
@@ -119,14 +118,9 @@ class ArcticRecordBatchReader:
             return
 
         if self._cpp_iterator.num_batches() == 0:
-            # No data segments.  Try to derive the schema from the C++
-            # StreamDescriptor (available on LazyRecordBatchIterator even for
-            # empty symbols).  Fall back to an empty schema for the legacy
-            # eager RecordBatchIterator which does not expose a descriptor.
-            if hasattr(self._cpp_iterator, "descriptor"):
-                self._schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
-            else:
-                self._schema = pa.schema([])
+            # No data segments — derive schema from the C++ StreamDescriptor
+            # which is available even for empty symbols.
+            self._schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
             return
 
         # Extract first batch and cache it
@@ -135,7 +129,8 @@ class ArcticRecordBatchReader:
             self._first_batch = pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
             self._schema = self._first_batch.schema
         else:
-            self._schema = pa.schema([])
+            # All segments were empty after filtering — use descriptor for schema
+            self._schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
 
     @property
     def schema(self) -> pa.Schema:
