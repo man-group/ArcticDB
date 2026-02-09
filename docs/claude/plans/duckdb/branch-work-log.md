@@ -264,6 +264,45 @@ Chronological summary of work done on the `duckdb` branch.
 - **Test class**: `TestIndexReconstruction` in `test_duckdb.py` — 9 tests covering all edge cases including JOIN reconstruction
 - **Full suite**: All 302 DuckDB tests pass (293 + 9 new)
 
+## 33. Simplify to Always-Lazy Iterator (remove `lazy=False` fallback)
+
+- **Problem**: `Library._read_as_record_batch_reader()` had a `lazy` parameter with `lazy=False` fallback for empty symbols (lazy iterator couldn't discover schema without data)
+- **Solution**: Expose `LazyRecordBatchIterator::descriptor()` to Python — this already holds the full `StreamDescriptor` from `setup_pipeline_context()` (index-only read), providing schema even for empty symbols
+- **Changes**:
+  - `cpp/arcticdb/version/python_bindings.cpp`: Added `descriptor()` binding on `LazyRecordBatchIterator`
+  - `python/arcticdb/version_store/duckdb/arrow_reader.py`: Added `_descriptor_to_arrow_schema()` mapping ArcticDB DataType → PyArrow types; updated `_ensure_schema()` to use descriptor for empty symbols
+  - `python/arcticdb/version_store/library.py`: Removed `lazy` parameter, always uses `read_as_lazy_record_batch_iterator()`; removed `if len(reader.schema) == 0` fallback
+  - `python/arcticdb/version_store/duckdb/duckdb.py`: Removed `lazy=True` from `register_symbol()` calls
+  - `python/tests/unit/arcticdb/version_store/duckdb/test_lazy_streaming.py`: Updated empty symbol test; added `test_lazy_empty_symbol_sql`
+- **Status**: Code complete, needs C++ rebuild to test `descriptor()` binding
+
+## 34. Arrow String Conversion Performance Investigation
+
+- **Trigger**: ASV SQL benchmarks showed `lib.sql()` 5-7x slower than QueryBuilder for same data
+- **Root cause**: `prepare_segment_for_arrow()` resolves string pool offsets into Arrow string buffers per-segment — 10 segments × 3 string columns = 30 expensive operations. This is a **pre-existing** issue: even `lib.read(output_format='pyarrow')` is 4x slower than pandas (2.81s vs 0.69s for 1M rows)
+- **Profiling**: 1M rows (3 string + 6 numeric cols): `lib.read()` 0.69s, `lib.read(pyarrow)` 2.81s, `lib.sql()` 4.95s. Numeric-only: 0.01s / 0.34s / 0.45s
+- **Prefetch**: Sizes 2/10/50 make no difference — bottleneck is CPU-bound, not I/O
+- **Fix options evaluated**: Merged frame (rejected — defeats streaming), resolve in decode (marginal), dictionary-encoded Arrow export (best long-term — near zero-copy), hybrid local/remote (quick win)
+- **Benchmark fix**: Removed `number=5` / `number=3` from `sql.py` benchmark classes that forced too many iterations per sample for slow queries
+- Full analysis: `arrow-string-performance-investigation.md`
+
+## 35. SharedStringDictionary Optimization — Implemented but Marginal Speedup
+
+- **Goal**: Reduce `prepare_segment_for_arrow()` cost by building the pool offset→dictionary index mapping once per segment (shared across all string columns), instead of independently per column
+- **Implementation** (`arrow_output_frame.cpp`):
+  - `SharedStringDictionary` struct: `offset_to_index` map + Arrow dictionary buffers (`dict_offsets`, `dict_strings`)
+  - `build_shared_dictionary()`: walks StringPool buffer sequentially using `[uint32_t size][char data]` layout, O(U) where U = unique strings in pool
+  - `encode_dictionary_with_shared_dict()`: per-column row scan with read-only hash map lookups (no insert), copies shared dictionary buffers
+  - `prepare_segment_for_arrow()`: detects dynamic string columns, builds shared dict once, routes CATEGORICAL columns through new path; LARGE_STRING/SMALL_STRING/UTF_FIXED64 fall back to existing `ArrowStringHandler::convert_type()`
+- **Test results**: 306/311 DuckDB tests pass (5 pre-existing failures from `descriptor()` binding in #33)
+- **Benchmark results**: **No significant improvement**
+  - Before: lazy iterator ~4.95s, lib.sql() ~5.0s (1M rows, 3 string + 6 numeric)
+  - After: lazy iterator ~4.31s, lib.sql() ~4.9s
+  - Varying unique string count from 10 to 10,000 showed constant ~0.12s per 100K rows — proving hash map lookups are NOT the bottleneck
+  - The per-row Arrow buffer operations (iteration, offset writes, null tracking) dominate, not hash map find-or-insert
+- **Key finding**: Lazy iterator (0.120s/100K) is already competitive with `lib.read(pyarrow)` (0.134s/100K). The 3x gap to pandas (0.046s/100K) is inherent to Arrow dictionary encoding format
+- **Conclusion**: The only way to significantly improve string performance is to avoid per-row string resolution entirely — Option D (dictionary-encoded Arrow export where pool offsets map directly to Arrow dictionary indices) remains the recommended long-term approach
+
 ---
 
 ## Open Items
@@ -272,3 +311,5 @@ Chronological summary of work done on the `duckdb` branch.
 - Broad `except Exception` handlers in `pushdown.py` should catch specific exceptions
 - Complex SQL pattern tests (window functions, OUTER JOINs, subqueries)
 - DuckDB connection created outside try/finally in `Library.sql()`
+- **Arrow string conversion performance**: `prepare_segment_for_arrow()` is the dominant cost for string-heavy data. Dictionary-encoded Arrow export is the best long-term fix (see `arrow-string-performance-investigation.md`)
+- **C++ rebuild needed**: `descriptor()` binding for always-lazy simplification (#33) untested until next build

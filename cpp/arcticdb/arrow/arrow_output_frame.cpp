@@ -15,6 +15,8 @@
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/async/tasks.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
 #include <arcticdb/stream/stream_source.hpp>
@@ -23,6 +25,8 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/util/lambda_inlining.hpp>
+#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/type_handler.hpp>
 
@@ -44,12 +48,159 @@ void make_column_blocks_detachable(Column& column) {
     }
 }
 
+// Shared string dictionary built once per segment from the string pool.
+// All string columns in a segment share the same pool, so we walk it once
+// and build Arrow-ready dictionary buffers + an offset→index mapping that
+// each column can use for O(1) dictionary key lookups during its row scan.
+struct SharedStringDictionary {
+    // Pool offset → sequential dictionary index (0, 1, 2, ...)
+    ankerl::unordered_dense::map<StringPool::offset_t, int32_t> offset_to_index;
+    // Arrow dictionary values: cumulative byte offsets into dict_strings
+    std::vector<int64_t> dict_offsets;
+    // Arrow dictionary values: concatenated UTF-8 string data
+    std::vector<char> dict_strings;
+    int32_t unique_count = 0;
+};
+
+// Walk the string pool buffer sequentially, building a SharedStringDictionary.
+// The pool stores entries as [uint32_t size][char data...] packed back-to-back,
+// with minimum entry size of 8 bytes (sizeof(uint32_t) + 4 inline data bytes).
+// This is O(U) where U = number of unique strings in the pool, typically much
+// smaller than the total row count across all columns.
+SharedStringDictionary build_shared_dictionary(const std::shared_ptr<StringPool>& string_pool) {
+    SharedStringDictionary dict;
+    dict.dict_offsets.push_back(0); // Arrow offsets start at 0
+
+    if (!string_pool || string_pool->size() == 0) {
+        return dict;
+    }
+
+    // Use the public StringPool API to walk entries.
+    // get_const_view(offset) returns the string at that pool offset.
+    // Entry layout: [uint32_t size_][char data_[>=4]] with min entry size 8 bytes.
+    // We read the size field directly from the buffer to calculate stride.
+    const auto& buffer = string_pool->data();
+    const auto pool_bytes = buffer.bytes();
+
+    // Minimum entry size: sizeof(uint32_t) + 4 = 8 bytes (matching StringHead layout)
+    constexpr size_t MIN_ENTRY_SIZE = 8;
+    constexpr size_t SIZE_FIELD_BYTES = sizeof(uint32_t);
+
+    position_t pos = 0;
+    int64_t string_buffer_pos = 0;
+    while (static_cast<size_t>(pos) + MIN_ENTRY_SIZE <= pool_bytes) {
+        // Read the uint32_t size field at the start of the entry
+        auto* size_ptr = buffer.internal_ptr_cast<uint32_t>(pos, SIZE_FIELD_BYTES);
+        auto str_size = static_cast<size_t>(*size_ptr);
+        auto entry_size = std::max(SIZE_FIELD_BYTES + str_size, MIN_ENTRY_SIZE);
+
+        // Bounds check: ensure the full entry fits in the buffer
+        if (static_cast<size_t>(pos) + entry_size > pool_bytes) {
+            break;
+        }
+
+        // Use the public get_const_view API to get the string data safely
+        auto str = string_pool->get_const_view(pos);
+
+        // Map this pool offset to a sequential dictionary index
+        dict.offset_to_index[pos] = dict.unique_count++;
+
+        // Append string data to the dictionary buffers
+        dict.dict_strings.insert(dict.dict_strings.end(), str.begin(), str.end());
+        string_buffer_pos += static_cast<int64_t>(str.size());
+        dict.dict_offsets.push_back(string_buffer_pos);
+
+        pos += static_cast<position_t>(entry_size);
+    }
+
+    return dict;
+}
+
+// Encode a string column's dictionary keys using a pre-built SharedStringDictionary.
+// Instead of the per-column encode_dictionary() which does find-or-insert per row
+// (building the dictionary incrementally), this does read-only lookups against the
+// shared dictionary. The hash map is small (sized to unique count, not row count)
+// and read-only, giving better cache behavior and branch prediction.
+void encode_dictionary_with_shared_dict(
+        const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
+        const SharedStringDictionary& shared_dict
+) {
+    auto dest_ptr = reinterpret_cast<int32_t*>(dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_));
+
+    util::BitSet dest_bitset;
+    util::BitSet::bulk_insert_iterator inserter(dest_bitset);
+    bool populate_inverted_bitset = !source_column.opt_sparse_map().has_value();
+
+    details::visit_type(source_column.type().data_type(), [&](auto source_tag) {
+        using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
+        if constexpr (is_sequence_type(source_type_info::data_type)) {
+            for_each_enumerated<typename source_type_info::TDT>(
+                    source_column,
+                    [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                        if (is_a_string(en.value())) {
+                            auto it = shared_dict.offset_to_index.find(en.value());
+                            util::check(
+                                    it != shared_dict.offset_to_index.end(),
+                                    "String pool offset {} not found in shared dictionary",
+                                    en.value()
+                            );
+                            dest_ptr[en.idx()] = it->second;
+                            if (!populate_inverted_bitset) {
+                                inserter = en.idx();
+                            }
+                        } else if (populate_inverted_bitset) {
+                            inserter = en.idx();
+                        }
+                    }
+            );
+        } else {
+            util::raise_rte("Unexpected non-string type in shared dictionary encoder");
+        }
+    });
+
+    inserter.flush();
+    if (populate_inverted_bitset) {
+        dest_bitset.invert();
+    }
+    dest_bitset.resize(mapping.num_rows_);
+
+    if (dest_bitset.count() != dest_bitset.size()) {
+        handle_truncation(dest_bitset, mapping.truncate_);
+        create_dense_bitmap(mapping.offset_bytes_, dest_bitset, dest_column, AllocationType::DETACHABLE);
+    }
+
+    // Attach dictionary buffers (OFFSET + STRING) copied from the shared dictionary.
+    // Each column gets its own copy because Column owns its extra buffers.
+    if (dest_bitset.count() > 0 && shared_dict.unique_count > 0) {
+        auto& string_buffer = dest_column.create_extra_buffer(
+                mapping.offset_bytes_,
+                ExtraBufferType::STRING,
+                shared_dict.dict_strings.size(),
+                AllocationType::DETACHABLE
+        );
+        std::memcpy(string_buffer.data(), shared_dict.dict_strings.data(), shared_dict.dict_strings.size());
+
+        auto& offsets_buffer = dest_column.create_extra_buffer(
+                mapping.offset_bytes_,
+                ExtraBufferType::OFFSET,
+                shared_dict.dict_offsets.size() * sizeof(int64_t),
+                AllocationType::DETACHABLE
+        );
+        std::memcpy(
+                offsets_buffer.data(),
+                shared_dict.dict_offsets.data(),
+                shared_dict.dict_offsets.size() * sizeof(int64_t)
+        );
+    }
+}
+
 // Prepares a decoded segment for Arrow conversion.
 // The decoded segment from batch_read_uncompressed has DYNAMIC allocation (inline blocks)
 // and string columns contain raw string pool offsets. This function:
-// 1. For non-string columns: converts inline blocks to detachable (for block.release())
-// 2. For string columns: creates a new DETACHABLE column with proper Arrow structure
-//    (dictionary keys + OFFSET/STRING extra buffers) using ArrowStringHandler
+// 1. Builds a shared string dictionary from the pool (once per segment, shared across columns)
+// 2. For string columns (CATEGORICAL): encodes dictionary keys using the shared dictionary
+// 3. For string columns (LARGE/SMALL_STRING): falls back to per-column ArrowStringHandler
+// 4. For non-string columns: converts inline blocks to detachable (for block.release())
 void prepare_segment_for_arrow(SegmentInMemory& segment) {
     auto string_pool = segment.string_pool_ptr();
     DecodePathData shared_data;
@@ -57,12 +208,30 @@ void prepare_segment_for_arrow(SegmentInMemory& segment) {
     ReadOptions read_options;
     read_options.set_output_format(OutputFormat::ARROW);
 
+    // Check if we have any dynamic string columns that can use the shared dictionary path.
+    // UTF_FIXED64 columns store UTF-32 data and need special conversion, so they fall back
+    // to the per-column ArrowStringHandler which handles UTF-32→UTF-8 conversion.
+    bool has_dynamic_string_cols = false;
+    for (auto col_idx = 0UL; col_idx < segment.num_columns(); ++col_idx) {
+        if (is_dynamic_string_type(segment.field(col_idx).type().data_type())) {
+            has_dynamic_string_cols = true;
+            break;
+        }
+    }
+
+    // Build shared dictionary from the string pool once per segment.
+    // Only for dynamic strings — fixed-width strings need per-column UTF-32→UTF-8 conversion.
+    std::optional<SharedStringDictionary> shared_dict;
+    if (has_dynamic_string_cols && string_pool && string_pool->size() > 0) {
+        shared_dict = build_shared_dictionary(string_pool);
+    }
+
     for (auto col_idx = 0UL; col_idx < segment.num_columns(); ++col_idx) {
         auto& src_column_ptr = segment.columns()[col_idx];
         const auto& field = segment.field(col_idx);
 
         if (is_sequence_type(field.type().data_type())) {
-            // String column: use ArrowStringHandler to create proper Arrow buffers
+            // String column: determine output type and create destination column
             ArrowStringHandler arrow_handler;
             auto [output_type, extra_bytes] =
                     arrow_handler.output_type_and_extra_bytes(field.type(), field.name(), read_options);
@@ -71,12 +240,6 @@ void prepare_segment_for_arrow(SegmentInMemory& segment) {
             const auto dest_size = data_type_size(output_type);
             const auto dest_bytes = num_rows * dest_size;
 
-            // Create a new DETACHABLE column for Arrow output.
-            // Use expected_rows=0 then explicitly allocate to get exactly one block,
-            // matching the block structure of the other (non-string) columns in the segment.
-            // Note: extra_bytes is passed to the Column constructor which sets extra_bytes_per_block
-            // on the ChunkedBuffer. create_detachable_block() automatically adds extra_bytes_per_block
-            // to each block's capacity, so we must NOT add extra_bytes to alloc_bytes here.
             auto dest_column = std::make_shared<Column>(
                     output_type, 0, AllocationType::DETACHABLE, Sparsity::PERMITTED, extra_bytes
             );
@@ -97,9 +260,17 @@ void prepare_segment_for_arrow(SegmentInMemory& segment) {
                     col_idx
             };
 
-            arrow_handler.convert_type(
-                    *src_column_ptr, *dest_column, mapping, shared_data, handler_data, string_pool, read_options
-            );
+            // Use shared dictionary for dynamic string columns with CATEGORICAL output
+            auto string_format = arrow_handler.output_string_format(field.name(), read_options);
+            if (shared_dict.has_value() && is_dynamic_string_type(field.type().data_type()) &&
+                string_format == ArrowOutputStringFormat::CATEGORICAL) {
+                encode_dictionary_with_shared_dict(*src_column_ptr, *dest_column, mapping, *shared_dict);
+            } else {
+                // Fallback: fixed-width strings or non-CATEGORICAL format
+                arrow_handler.convert_type(
+                        *src_column_ptr, *dest_column, mapping, shared_data, handler_data, string_pool, read_options
+                );
+            }
             dest_column->set_inflated(num_rows);
 
             // Replace the column shared_ptr in the segment

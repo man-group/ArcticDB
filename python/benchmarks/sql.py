@@ -38,7 +38,6 @@ class SQLQueries:
     repeat = (1, 10, 20.0)
     warmup_time = 0.2
     timeout = 600
-    number = 5
 
     num_rows = [1_000_000, 10_000_000]
 
@@ -211,7 +210,6 @@ class SQLStreamingMemory:
     """
 
     timeout = 600
-    number = 3
 
     CONNECTION_STRING = "lmdb://sql_streaming"
     LIB_NAME = "sql_streaming"
