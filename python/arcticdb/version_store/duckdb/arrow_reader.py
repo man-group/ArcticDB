@@ -78,6 +78,35 @@ def _build_clean_to_storage_map(storage_names: List[str]) -> Dict[str, str]:
     return {clean: storage for clean, storage in zip(clean_names, storage_names) if clean != storage}
 
 
+def _pad_batch_to_schema(batch: pa.RecordBatch, target_schema: pa.Schema) -> pa.RecordBatch:
+    """Pad a record batch to match the target schema by adding null columns for missing fields.
+
+    Columns present in the batch but absent from the target schema are dropped.
+    Columns present in the target schema but absent from the batch are filled with nulls.
+    The result columns are ordered to match ``target_schema``.
+
+    Returns the batch unchanged (no copy) if it already matches the target schema.
+    """
+    if batch.schema.equals(target_schema):
+        return batch
+
+    batch_columns = {f.name: i for i, f in enumerate(batch.schema)}
+    num_rows = len(batch)
+
+    arrays = []
+    for field in target_schema:
+        idx = batch_columns.get(field.name)
+        if idx is not None:
+            col = batch.column(idx)
+            if col.type != field.type:
+                col = col.cast(field.type)
+            arrays.append(col)
+        else:
+            arrays.append(pa.nulls(num_rows, type=field.type))
+
+    return pa.RecordBatch.from_arrays(arrays, schema=target_schema)
+
+
 class ArcticRecordBatchReader:
     """
     Lazy record batch reader that streams Arrow data from ArcticDB storage.
@@ -96,7 +125,7 @@ class ArcticRecordBatchReader:
     Attempting to iterate over an exhausted reader will immediately raise StopIteration.
     """
 
-    def __init__(self, cpp_iterator: "LazyRecordBatchIterator"):
+    def __init__(self, cpp_iterator: "LazyRecordBatchIterator", columns: Optional[List[str]] = None):
         """
         Initialize the reader with a C++ lazy record batch iterator.
 
@@ -104,8 +133,13 @@ class ArcticRecordBatchReader:
         ----------
         cpp_iterator : LazyRecordBatchIterator
             The C++ iterator that reads segments on-demand from storage.
+        columns : list of str, optional
+            If provided, restricts the schema to only these columns (plus any
+            ``__idx__``-prefixed variants). Used for column projection so the
+            merged descriptor is filtered to the projected set.
         """
         self._cpp_iterator = cpp_iterator
+        self._projected_columns: Optional[set] = set(columns) if columns is not None else None
         self._schema: Optional[pa.Schema] = None
         self._first_batch: Optional[pa.RecordBatch] = None  # Cache for first batch
         self._first_batch_returned = False
@@ -113,24 +147,51 @@ class ArcticRecordBatchReader:
         self._iteration_started = False
 
     def _ensure_schema(self) -> None:
-        """Extract schema from first batch if not already done."""
+        """Derive schema from the merged descriptor and first batch, then cache the first batch.
+
+        The merged descriptor (from the version key's TimeseriesDescriptor) contains
+        ALL column names across ALL segments. The first batch provides the actual Arrow
+        types produced by the C++ conversion (which may differ from descriptor types,
+        e.g. dictionary-encoded strings vs large_string). For columns not in the first
+        batch, the descriptor-derived types are used as fallback.
+        """
         if self._schema is not None:
             return
 
+        # Get the full set of columns from the merged descriptor
+        descriptor_schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
+
+        # If column projection is active, restrict the descriptor schema to only
+        # the projected columns. This prevents the schema from including columns
+        # that won't appear in any batch.
+        if self._projected_columns is not None:
+            descriptor_schema = pa.schema([f for f in descriptor_schema if f.name in self._projected_columns])
+
         if self._cpp_iterator.num_batches() == 0:
-            # No data segments — derive schema from the C++ StreamDescriptor
-            # which is available even for empty symbols.
-            self._schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
+            self._schema = descriptor_schema
             return
 
-        # Extract first batch and cache it
+        # Cache the first batch so iteration doesn't lose it
         batch_data = self._cpp_iterator.next()
-        if batch_data is not None:
-            self._first_batch = pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
-            self._schema = self._first_batch.schema
-        else:
-            # All segments were empty after filtering — use descriptor for schema
-            self._schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
+        if batch_data is None:
+            # All segments were empty after filtering
+            self._schema = descriptor_schema
+            return
+
+        self._first_batch = pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
+
+        # Build the final schema from the descriptor, using the first batch's actual Arrow
+        # types where available (they reflect C++ conversion, e.g. dictionary-encoded strings).
+        # For columns absent from the first batch (dynamic schema), use the descriptor type.
+        batch_type_map = {f.name: f for f in self._first_batch.schema}
+        fields = []
+        for desc_field in descriptor_schema:
+            batch_field = batch_type_map.get(desc_field.name)
+            if batch_field is not None:
+                fields.append(batch_field)
+            else:
+                fields.append(desc_field)
+        self._schema = pa.schema(fields)
 
     @property
     def schema(self) -> pa.Schema:
@@ -200,14 +261,13 @@ class ArcticRecordBatchReader:
                 "ArcticRecordBatchReader is single-use - create a new reader to read all data."
             )
 
-        batches = list(self)
+        self._ensure_schema()
+        batches = [_pad_batch_to_schema(b, self._schema) for b in self]
         if not batches:
-            # Return empty table with schema if available
-            self._ensure_schema()
             if self._schema and len(self._schema) > 0:
                 return pa.Table.from_pydict({field.name: [] for field in self._schema}, schema=self._schema)
             return pa.table({})
-        table = pa.Table.from_batches(batches)
+        table = pa.Table.from_batches(batches, schema=self._schema)
         if strip_idx_prefix:
             storage_names = table.column_names
             clean_names = _strip_idx_prefix_from_names(storage_names)
@@ -265,6 +325,10 @@ class ArcticRecordBatchReader:
         The ``__idx__`` prefix that ArcticDB adds to MultiIndex levels 1+ is
         stripped so that SQL queries can reference the original index names.
 
+        For dynamic-schema symbols where segments have different column subsets,
+        each batch is padded with null columns to match the full schema derived
+        from the merged descriptor.
+
         Returns
         -------
         pa.RecordBatchReader
@@ -274,15 +338,18 @@ class ArcticRecordBatchReader:
         storage_names = [f.name for f in storage_schema]
         clean_names = _strip_idx_prefix_from_names(storage_names)
 
+        def _padded_batches(reader, schema, names):
+            for batch in reader:
+                padded = _pad_batch_to_schema(batch, schema)
+                if names is not None:
+                    padded = padded.rename_columns(names)
+                yield padded
+
         if clean_names == storage_names:
-            return pa.RecordBatchReader.from_batches(storage_schema, self)
+            return pa.RecordBatchReader.from_batches(storage_schema, _padded_batches(self, storage_schema, None))
 
         clean_schema = pa.schema(
             [pa.field(clean, field.type, field.nullable) for clean, field in zip(clean_names, storage_schema)]
         )
 
-        def _rename_batches(reader, names):
-            for batch in reader:
-                yield batch.rename_columns(names)
-
-        return pa.RecordBatchReader.from_batches(clean_schema, _rename_batches(self, clean_names))
+        return pa.RecordBatchReader.from_batches(clean_schema, _padded_batches(self, storage_schema, clean_names))

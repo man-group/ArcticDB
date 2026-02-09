@@ -1,6 +1,7 @@
 """
 Profile with warm LMDB cache to get true prepare_segment_for_arrow() cost.
 """
+
 import tempfile
 import time
 
@@ -14,14 +15,16 @@ from arcticdb.version_store.processing import QueryBuilder
 
 def _generate_numeric_df(n):
     np.random.seed(42)
-    return pd.DataFrame({
-        "a": np.random.randint(0, 1000, n),
-        "b": np.random.randint(0, 1000, n),
-        "c": np.random.uniform(0, 100, n),
-        "d": np.random.uniform(0, 100, n),
-        "e": np.random.randint(0, 10, n),
-        "f": np.random.randint(0, 100000, n),
-    })
+    return pd.DataFrame(
+        {
+            "a": np.random.randint(0, 1000, n),
+            "b": np.random.randint(0, 1000, n),
+            "c": np.random.uniform(0, 100, n),
+            "d": np.random.uniform(0, 100, n),
+            "e": np.random.randint(0, 10, n),
+            "f": np.random.randint(0, 100000, n),
+        }
+    )
 
 
 def time_cpp_iterator(lib, sym):
@@ -69,8 +72,9 @@ def main():
         print("\n  --- C++ iterator (prepare_segment_for_arrow) ---")
         for run in range(3):
             total, n_b, n_r, bt = time_cpp_iterator(lib, sym)
-            print(f"    Run {run+1}: {total:.3f}s  ({n_b} segs, {n_r:,} rows, "
-                  f"avg={sum(bt)/len(bt)*1000:.1f}ms/seg)")
+            print(
+                f"    Run {run+1}: {total:.3f}s  ({n_b} segs, {n_r:,} rows, " f"avg={sum(bt)/len(bt)*1000:.1f}ms/seg)"
+            )
 
         # Warm lib.sql()
         print("\n  --- lib.sql('SELECT *') ---")
@@ -98,10 +102,12 @@ def main():
 
         # QB GROUP BY
         print("\n  --- QB groupby(e).sum ---")
-        q = QueryBuilder(); q = q.groupby("e").agg({"c": "sum"})
+        q = QueryBuilder()
+        q = q.groupby("e").agg({"c": "sum"})
         lib.read(sym, query_builder=q)
         for run in range(3):
-            q = QueryBuilder(); q = q.groupby("e").agg({"c": "sum"})
+            q = QueryBuilder()
+            q = q.groupby("e").agg({"c": "sum"})
             t0 = time.perf_counter()
             lib.read(sym, query_builder=q)
             print(f"    Run {run+1}: {time.perf_counter()-t0:.3f}s")

@@ -1111,6 +1111,7 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
     std::string filter_root_node_name;
     if (filter_clause) {
         expression_context = filter_clause->expression_context_;
+        expression_context->dynamic_schema_ = opt_false(read_options.dynamic_schema());
         filter_root_node_name = filter_clause->root_node_name_.value;
     }
 

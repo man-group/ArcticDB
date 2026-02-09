@@ -184,13 +184,37 @@ Pushdown failures are non-fatal — logged as warnings, query falls through to D
 ### Key Properties
 
 - `_iteration_started` / `_exhausted` — guards against multiple iteration or re-iteration
-- `to_pyarrow_reader()` — converts to `pyarrow.RecordBatchReader` for DuckDB registration; strips `__idx__` prefix from MultiIndex column names
-- `read_all(strip_idx_prefix=True)` → `pyarrow.Table` — materializes all batches
-- `schema` → `pyarrow.Schema` — lazily extracted from first batch, or from `descriptor()` for empty symbols
+- `_projected_columns` — `set` of column names when column projection is active; filters the descriptor-derived schema to only projected columns
+- `to_pyarrow_reader()` — converts to `pyarrow.RecordBatchReader` for DuckDB registration; pads each batch to full schema via `_pad_batch_to_schema()`; strips `__idx__` prefix from MultiIndex column names
+- `read_all(strip_idx_prefix=True)` → `pyarrow.Table` — materializes all batches (padded to full schema)
+- `schema` → `pyarrow.Schema` — lazily derived from merged descriptor (all columns), refined with first batch's actual Arrow types
 
-### Schema Discovery for Empty Symbols
+### Schema Discovery (including Dynamic Schema)
 
-When a symbol has no data segments, `_ensure_schema()` uses `_descriptor_to_arrow_schema()` to build a PyArrow schema from the C++ `StreamDescriptor` (available from the index-only read). This maps `arcticdb_ext.types.DataType` enums to PyArrow types.
+`_ensure_schema()` builds the authoritative schema from the **merged descriptor** (`_cpp_iterator.descriptor()`), which contains ALL columns across ALL segments from the version key's `TimeseriesDescriptor`. This handles:
+
+| Case | Behaviour |
+|------|-----------|
+| Empty symbol (0 segments) | Schema from descriptor only |
+| Fixed schema (all segments same cols) | Descriptor = first batch schema (no-op padding) |
+| Dynamic schema (different cols per segment) | Descriptor has superset; first batch refines types; missing cols padded with nulls |
+| Column projection active | Descriptor filtered by `_projected_columns` before use |
+
+**Type refinement**: The descriptor maps `UTF_DYNAMIC64` → `pa.large_string()`, but C++ actually produces `pa.dictionary(pa.int32(), pa.large_string())` for CATEGORICAL strings. `_ensure_schema()` peeks at the first batch and uses its actual Arrow types where available, falling back to descriptor types only for columns absent from the first batch.
+
+### Batch Padding for Dynamic Schema
+
+`_pad_batch_to_schema(batch, target_schema)` ensures every batch matches the full schema:
+- Columns present in batch but with different type → `cast()` to target type
+- Columns missing from batch → `pa.nulls(num_rows, type=field.type)`
+- Columns reordered to match `target_schema` field order
+- No-op when batch already matches schema (common case for fixed-schema symbols)
+
+Used in both `to_pyarrow_reader()` (per-batch padding) and `read_all()` (batch list padding).
+
+### Dynamic Schema in SQL Paths
+
+`lib.sql()`, `lib.duckdb()`, and `DuckDBContext.register_symbol()` all pass `dynamic_schema=True` to `_read_as_record_batch_reader()`, which forwards it to the C++ `read_as_lazy_record_batch_iterator()`. This sets `ExpressionContext::dynamic_schema_` so FilterClause returns `EmptyResult` (instead of crashing) when a WHERE column is missing from a segment.
 
 ### Single-Use Constraint
 
@@ -306,7 +330,7 @@ python python/benchmarks/non_asv/duckdb/bench_sql_vs_qb.py
 ## Testing
 
 ```bash
-# All DuckDB tests (~307 tests)
+# All DuckDB tests (~317 tests)
 python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/
 
 # Specific test files
@@ -315,6 +339,7 @@ python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_duckdb.py
 python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_arrow_reader.py
 python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_lazy_streaming.py
 python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_doc_examples.py
+python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_duckdb_dynamic_schema.py
 ```
 
 ### Test Structure
@@ -326,6 +351,7 @@ python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_doc_exampl
 | `test_arrow_reader.py` | RecordBatchReader iteration, exhaustion, DuckDB integration | Streaming, single-use enforcement, schema |
 | `test_lazy_streaming.py` | Lazy iterator: basic SQL, groupby, filter, joins, versioning, multi-segment, truncation, FilterClause | Direct iterator, date_range/row_range, empty symbols, DuckDB context |
 | `test_doc_examples.py` | Tutorial code examples, as_of with dict/timestamp, explain() | End-to-end validation of documented examples |
+| `test_duckdb_dynamic_schema.py` | Dynamic schema: SELECT *, WHERE filter, aggregation, JOIN, DuckDBContext, strings | Symbols where segments have different column subsets; null padding, missing-column filters |
 
 ## Related Documentation
 

@@ -194,7 +194,7 @@ class TestLazyRecordBatchIteratorDirect:
         lib.write("sym", df)
 
         cpp_iterator = lib._nvs.read_as_lazy_record_batch_iterator("sym", columns=["a", "c"])
-        reader = ArcticRecordBatchReader(cpp_iterator)
+        reader = ArcticRecordBatchReader(cpp_iterator, columns=["a", "c"])
 
         table = reader.read_all()
         assert table.num_columns == 2

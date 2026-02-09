@@ -4,6 +4,7 @@ Head-to-head comparison of SQL (lib.sql via DuckDB) vs QueryBuilder (lib.read + 
 Tests equivalent operations on the same data at 1M and 10M rows.
 Measures wall-clock time, peak RSS memory delta, and result shape.
 """
+
 import gc
 import os
 import time
@@ -86,97 +87,95 @@ def run_comparison(lib, num_rows, symbol):
 
     # --- 1. SELECT ALL ---
     print("  [1/8] SELECT ALL ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT * FROM {symbol}"),
-        "SQL: SELECT *"
-    ))
-    results.append(measure(
-        lambda: lib.read(symbol).data,
-        "QB: read (all)"
-    ))
+    results.append(measure(lambda: lib.sql(f"SELECT * FROM {symbol}"), "SQL: SELECT *"))
+    results.append(measure(lambda: lib.read(symbol).data, "QB: read (all)"))
 
     # --- 2. Column projection ---
     print("  [2/8] Column projection (v1, v2, v3) ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT v1, v2, v3 FROM {symbol}"),
-        "SQL: SELECT v1,v2,v3"
-    ))
-    results.append(measure(
-        lambda: lib.read(symbol, columns=["v1", "v2", "v3"]).data,
-        "QB: read(columns=[v1,v2,v3])"
-    ))
+    results.append(measure(lambda: lib.sql(f"SELECT v1, v2, v3 FROM {symbol}"), "SQL: SELECT v1,v2,v3"))
+    results.append(measure(lambda: lib.read(symbol, columns=["v1", "v2", "v3"]).data, "QB: read(columns=[v1,v2,v3])"))
 
     # --- 3. Numeric filter (~1% selectivity) ---
     print("  [3/8] Numeric filter (v3 < 1.0, ~1%) ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT v3 FROM {symbol} WHERE v3 < 1.0"),
-        "SQL: WHERE v3 < 1.0"
-    ))
+    results.append(measure(lambda: lib.sql(f"SELECT v3 FROM {symbol} WHERE v3 < 1.0"), "SQL: WHERE v3 < 1.0"))
+
     def qb_filter_numeric():
         q = QueryBuilder()
         q = q[q["v3"] < 1.0]
         return lib.read(symbol, columns=["v3"], query_builder=q).data
+
     results.append(measure(qb_filter_numeric, "QB: filter v3 < 1.0"))
 
     # --- 4. String equality filter ---
     print("  [4/8] String filter (id1 = 'id001') ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT v1, v3 FROM {symbol} WHERE id1 = 'id001'"),
-        "SQL: WHERE id1='id001'"
-    ))
+    results.append(
+        measure(lambda: lib.sql(f"SELECT v1, v3 FROM {symbol} WHERE id1 = 'id001'"), "SQL: WHERE id1='id001'")
+    )
+
     def qb_filter_string():
         q = QueryBuilder()
         q = q[q["id1"] == "id001"]
         return lib.read(symbol, columns=["v1", "v3"], query_builder=q).data
+
     results.append(measure(qb_filter_string, "QB: filter id1=='id001'"))
 
     # --- 5. GROUP BY SUM (low cardinality - id6 has ~10 values) ---
     print("  [5/8] GROUP BY SUM (low cardinality, id6) ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT id6, SUM(v1) as total FROM {symbol} GROUP BY id6"),
-        "SQL: GROUP BY id6 SUM"
-    ))
+    results.append(
+        measure(lambda: lib.sql(f"SELECT id6, SUM(v1) as total FROM {symbol} GROUP BY id6"), "SQL: GROUP BY id6 SUM")
+    )
+
     def qb_groupby_low():
         q = QueryBuilder()
         q = q.groupby("id6").agg({"v1": "sum"})
         return lib.read(symbol, query_builder=q).data
+
     results.append(measure(qb_groupby_low, "QB: groupby(id6).sum"))
 
     # --- 6. GROUP BY SUM (high cardinality - id1 has ~N/10 values) ---
     print("  [6/8] GROUP BY SUM (high cardinality, id1) ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT id1, SUM(v1) as total FROM {symbol} GROUP BY id1"),
-        "SQL: GROUP BY id1 SUM"
-    ))
+    results.append(
+        measure(lambda: lib.sql(f"SELECT id1, SUM(v1) as total FROM {symbol} GROUP BY id1"), "SQL: GROUP BY id1 SUM")
+    )
+
     def qb_groupby_high():
         q = QueryBuilder()
         q = q.groupby("id1").agg({"v1": "sum"})
         return lib.read(symbol, query_builder=q).data
+
     results.append(measure(qb_groupby_high, "QB: groupby(id1).sum"))
 
     # --- 7. Multi-aggregation GROUP BY ---
     print("  [7/8] Multi-agg GROUP BY (id1: sum v1, sum v3) ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT id1, SUM(v1) as s1, SUM(v3) as s3 FROM {symbol} GROUP BY id1"),
-        "SQL: GROUP BY id1 multi-agg"
-    ))
+    results.append(
+        measure(
+            lambda: lib.sql(f"SELECT id1, SUM(v1) as s1, SUM(v3) as s3 FROM {symbol} GROUP BY id1"),
+            "SQL: GROUP BY id1 multi-agg",
+        )
+    )
+
     def qb_multi_agg():
         q = QueryBuilder()
         q = q.groupby("id1").agg({"v1": "sum", "v3": "sum"})
         return lib.read(symbol, query_builder=q).data
+
     results.append(measure(qb_multi_agg, "QB: groupby(id1).agg(sum,sum)"))
 
     # --- 8. Filter + GROUP BY ---
     print("  [8/8] Filter + GROUP BY (v3 < 10 then GROUP BY id1) ...")
-    results.append(measure(
-        lambda: lib.sql(f"SELECT id1, SUM(v3) as total FROM {symbol} WHERE v3 < 10.0 GROUP BY id1"),
-        "SQL: WHERE + GROUP BY"
-    ))
+    results.append(
+        measure(
+            lambda: lib.sql(f"SELECT id1, SUM(v3) as total FROM {symbol} WHERE v3 < 10.0 GROUP BY id1"),
+            "SQL: WHERE + GROUP BY",
+        )
+    )
+
     def qb_filter_group():
         q = QueryBuilder()
         q = q[q["v3"] < 10.0]
         q = q.groupby("id1").agg({"v3": "sum"})
         return lib.read(symbol, query_builder=q).data
+
     results.append(measure(qb_filter_group, "QB: filter+groupby"))
 
     # --- Print results table ---
@@ -184,20 +183,26 @@ def run_comparison(lib, num_rows, symbol):
     print(f"  {'Operation':<35} {'Time (s)':>10} {'Median':>10} {'Peak MB':>10} {'Shape':>20}")
     print(f"{'─'*90}")
     for r in results:
-        shape_str = f"{r['result_shape']}" if isinstance(r['result_shape'], tuple) else str(r['result_shape'])
-        print(f"  {r['label']:<35} {r['min_time_s']:>10.3f} {r['median_time_s']:>10.3f} {r['peak_mem_mb']:>10.1f} {shape_str:>20}")
+        shape_str = f"{r['result_shape']}" if isinstance(r["result_shape"], tuple) else str(r["result_shape"])
+        print(
+            f"  {r['label']:<35} {r['min_time_s']:>10.3f} {r['median_time_s']:>10.3f} {r['peak_mem_mb']:>10.1f} {shape_str:>20}"
+        )
     print(f"{'─'*90}")
 
     # Group SQL vs QB pairs
-    print(f"\n  {'Comparison':<30} {'SQL (s)':>10} {'QB (s)':>10} {'Ratio':>10} {'SQL MB':>10} {'QB MB':>10} {'Mem Ratio':>10}")
+    print(
+        f"\n  {'Comparison':<30} {'SQL (s)':>10} {'QB (s)':>10} {'Ratio':>10} {'SQL MB':>10} {'QB MB':>10} {'Mem Ratio':>10}"
+    )
     print(f"{'─'*100}")
     for i in range(0, len(results), 2):
         sql_r = results[i]
         qb_r = results[i + 1]
-        time_ratio = sql_r['min_time_s'] / qb_r['min_time_s'] if qb_r['min_time_s'] > 0 else float('inf')
-        mem_ratio = sql_r['peak_mem_mb'] / qb_r['peak_mem_mb'] if qb_r['peak_mem_mb'] > 0 else float('inf')
-        op_name = sql_r['label'].replace("SQL: ", "")
-        print(f"  {op_name:<30} {sql_r['min_time_s']:>10.3f} {qb_r['min_time_s']:>10.3f} {time_ratio:>10.2f}x {sql_r['peak_mem_mb']:>10.1f} {qb_r['peak_mem_mb']:>10.1f} {mem_ratio:>10.2f}x")
+        time_ratio = sql_r["min_time_s"] / qb_r["min_time_s"] if qb_r["min_time_s"] > 0 else float("inf")
+        mem_ratio = sql_r["peak_mem_mb"] / qb_r["peak_mem_mb"] if qb_r["peak_mem_mb"] > 0 else float("inf")
+        op_name = sql_r["label"].replace("SQL: ", "")
+        print(
+            f"  {op_name:<30} {sql_r['min_time_s']:>10.3f} {qb_r['min_time_s']:>10.3f} {time_ratio:>10.2f}x {sql_r['peak_mem_mb']:>10.1f} {qb_r['peak_mem_mb']:>10.1f} {mem_ratio:>10.2f}x"
+        )
     print(f"{'─'*100}")
     print("  (Ratio > 1.0 means SQL is slower/more memory; < 1.0 means SQL is faster/less memory)")
 
@@ -206,6 +211,7 @@ def run_comparison(lib, num_rows, symbol):
 
 def main():
     import tempfile
+
     lmdb_path = tempfile.mkdtemp(prefix="bench_sql_vs_qb_")
     conn = f"lmdb://{lmdb_path}"
 

@@ -350,6 +350,25 @@ Chronological summary of work done on the `duckdb` branch.
 - **`docs/claude/cpp/ARROW.md`**: Rewrote to reflect current codebase — `LazyRecordBatchIterator` as primary class, `SharedStringDictionary`, `prepare_segment_for_arrow()` breakdown, removed stale `RecordBatchIterator`/`create_iterator()` references
 - **Branch work log**: Added entries #36-39
 
+## 40. Dynamic Schema Support for SQL/DuckDB Queries
+
+- **Problem**: `lib.sql()` and `lib.duckdb()` crashed or produced wrong results on dynamic-schema symbols (where different segments have different column subsets)
+- **Three independent bugs fixed**:
+  1. **FilterClause crash**: `ProcessingUnit::get()` threw `E_ASSERTION_FAILURE` when a WHERE-pushdown column was missing from a segment. Fix: set `expression_context->dynamic_schema_ = opt_false(read_options.dynamic_schema())` in `version_store_api.cpp:1114`
+  2. **Schema too narrow**: `_ensure_schema()` derived schema from first batch only — columns absent from segment 0 were invisible to DuckDB. Fix: derive from merged descriptor (`_cpp_iterator.descriptor()`) with first-batch type refinement for accurate Arrow types
+  3. **Schema mismatch**: `pa.RecordBatchReader.from_batches(schema, batches)` requires all batches to match the declared schema. Fix: `_pad_batch_to_schema()` pads each batch with null columns of correct type for missing fields
+- **Column projection regression found & fixed**: merged descriptor includes ALL columns, but `_projected_columns` filter needed so column projection still works
+- **`dynamic_schema=True` passed** from `library.py:sql()`, `duckdb.py:register_symbol()` through `_read_as_record_batch_reader()` to C++ iterator
+- **Files changed**: `version_store_api.cpp` (+1 line), `library.py` (~5 lines), `duckdb.py` (1 line), `arrow_reader.py` (~50 lines), `test_lazy_streaming.py` (1 line fix)
+- **New test file**: `test_duckdb_dynamic_schema.py` — 10 tests across 3 classes (SQL, DuckDBContext, string columns)
+- **All 317 DuckDB tests pass** (307 existing + 10 new)
+
+## 41. Documentation Updates for Dynamic Schema
+
+- Updated `docs/claude/cpp/ARROW.md`: dynamic_schema_ on ExpressionContext for FilterClause, dynamic_schema forwarding in python bindings
+- Updated `docs/claude/python/DUCKDB.md`: schema discovery rewritten to cover dynamic schema, batch padding, projected columns, type refinement; added test file to test structure table; updated test count
+- Updated branch work log (entries #40-41)
+
 ---
 
 ## Open Items

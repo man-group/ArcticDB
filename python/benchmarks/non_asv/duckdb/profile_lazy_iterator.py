@@ -2,6 +2,7 @@
 Profile the lazy iterator to understand where time is spent.
 Breaks down: C++ next() calls vs Python overhead vs DuckDB scan time.
 """
+
 import tempfile
 import time
 
@@ -18,14 +19,16 @@ duckdb = __import__("duckdb")
 
 def _generate_numeric_df(n):
     np.random.seed(42)
-    return pd.DataFrame({
-        "a": np.random.randint(0, 1000, n),
-        "b": np.random.randint(0, 1000, n),
-        "c": np.random.uniform(0, 100, n),
-        "d": np.random.uniform(0, 100, n),
-        "e": np.random.randint(0, 10, n),
-        "f": np.random.randint(0, 100000, n),
-    })
+    return pd.DataFrame(
+        {
+            "a": np.random.randint(0, 1000, n),
+            "b": np.random.randint(0, 1000, n),
+            "c": np.random.uniform(0, 100, n),
+            "d": np.random.uniform(0, 100, n),
+            "e": np.random.randint(0, 10, n),
+            "f": np.random.randint(0, 100000, n),
+        }
+    )
 
 
 def main():
@@ -67,8 +70,10 @@ def main():
         print(f"  Total rows: {total_rows:,}")
         print(f"  Total C++ iterator time: {total_cpp:.3f}s")
         if batch_times:
-            print(f"  Per-batch: min={min(batch_times)*1000:.1f}ms, max={max(batch_times)*1000:.1f}ms, "
-                  f"avg={sum(batch_times)/len(batch_times)*1000:.1f}ms")
+            print(
+                f"  Per-batch: min={min(batch_times)*1000:.1f}ms, max={max(batch_times)*1000:.1f}ms, "
+                f"avg={sum(batch_times)/len(batch_times)*1000:.1f}ms"
+            )
             print(f"  Rows per batch: min={min(batch_rows):,}, max={max(batch_rows):,}")
 
         # 2. Measure ArcticRecordBatchReader -> PyArrow RecordBatchReader conversion

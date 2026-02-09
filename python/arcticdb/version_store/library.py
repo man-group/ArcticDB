@@ -2120,6 +2120,7 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
+        **kwargs,
     ) -> "ArcticRecordBatchReader":
         """
         Read data and return a lazy Arrow RecordBatchReader that streams data segment-by-segment.
@@ -2138,9 +2139,10 @@ class Library:
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
+            **kwargs,
         )
 
-        return ArcticRecordBatchReader(cpp_iterator)
+        return ArcticRecordBatchReader(cpp_iterator, columns=columns)
 
     @staticmethod
     def _get_index_columns_for_symbol(library: "Library", symbol: str, as_of=None):
@@ -2324,9 +2326,10 @@ class Library:
                         date_range=pushdown.date_range,
                         row_range=row_range,
                         query_builder=pushdown.query_builder,
+                        dynamic_schema=True,
                     )
                 else:
-                    reader = self._read_as_record_batch_reader(real_symbol, as_of=symbol_as_of)
+                    reader = self._read_as_record_batch_reader(real_symbol, as_of=symbol_as_of, dynamic_schema=True)
 
                 # Register under the SQL name so DuckDB can find it from the query.
                 conn.register(sql_name, reader.to_pyarrow_reader())

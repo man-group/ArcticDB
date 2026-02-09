@@ -4,6 +4,7 @@ Instruments each phase: read+decode, prepare_for_arrow, to_arrow, DuckDB scan.
 
 Generates its own numeric and string-heavy data so it's self-contained.
 """
+
 import tempfile
 import time
 
@@ -20,14 +21,16 @@ duckdb = __import__("duckdb")
 
 def _generate_numeric_df(n):
     np.random.seed(42)
-    return pd.DataFrame({
-        "a": np.random.randint(0, 1000, n),
-        "b": np.random.randint(0, 1000, n),
-        "c": np.random.uniform(0, 100, n),
-        "d": np.random.uniform(0, 100, n),
-        "e": np.random.randint(0, 10, n),
-        "f": np.random.randint(0, 100000, n),
-    })
+    return pd.DataFrame(
+        {
+            "a": np.random.randint(0, 1000, n),
+            "b": np.random.randint(0, 1000, n),
+            "c": np.random.uniform(0, 100, n),
+            "d": np.random.uniform(0, 100, n),
+            "e": np.random.randint(0, 10, n),
+            "f": np.random.randint(0, 100000, n),
+        }
+    )
 
 
 def _generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
@@ -87,12 +90,16 @@ def main():
         seg_times.append(elapsed)
         if data is not None:
             batch = pa.RecordBatch._import_from_c(data.array(), data.schema())
-            print(f"  Seg {i}: {elapsed*1000:.1f}ms, {batch.num_rows:,} rows, {batch.num_columns} cols, "
-                  f"{batch.nbytes / 1024:.0f}KB")
+            print(
+                f"  Seg {i}: {elapsed*1000:.1f}ms, {batch.num_rows:,} rows, {batch.num_columns} cols, "
+                f"{batch.nbytes / 1024:.0f}KB"
+            )
 
     print(f"\n  Average per segment: {sum(seg_times)/len(seg_times)*1000:.1f}ms")
-    print(f"  Projected total for {cpp_iter.num_batches()} segments: "
-          f"{sum(seg_times)/len(seg_times)*cpp_iter.num_batches():.2f}s")
+    print(
+        f"  Projected total for {cpp_iter.num_batches()} segments: "
+        f"{sum(seg_times)/len(seg_times)*cpp_iter.num_batches():.2f}s"
+    )
 
     # GROUP BY comparison
     print("\n  --- GROUP BY comparison ---")

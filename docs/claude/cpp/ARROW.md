@@ -63,7 +63,7 @@ LazyRecordBatchIterator
 
 **Truncation**: `apply_truncation()` handles `IndexRange` (timestamp binary search) and `RowRange` (row offset overlap) for date_range/row_range/LIMIT pushdown.
 
-**Filter**: `apply_filter_clause()` evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering.
+**Filter**: `apply_filter_clause()` evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering. For dynamic-schema symbols, `expression_context_->dynamic_schema_` must be `true` so that `ProcessingUnit::get()` returns `EmptyResult` instead of throwing when a filter column is missing from a segment.
 
 ### ArrowOutputFrame
 
@@ -154,6 +154,7 @@ DuckDB queries data via streaming scan
 `read_as_lazy_record_batch_iterator(symbol, ...)` — creates `LazyRecordBatchIterator`:
 - Parameters: `columns`, `date_range`, `row_range`, `as_of`, `filter_clause`, `filter_root_node_name`, `expression_context`, `prefetch_size`
 - Calls `PythonVersionStore::create_lazy_record_batch_iterator()` in `version_store_api.cpp`
+- When `dynamic_schema=True` is passed via `read_options`, `create_lazy_record_batch_iterator()` sets `expression_context->dynamic_schema_ = opt_false(read_options.dynamic_schema())` so FilterClause handles missing columns gracefully
 
 `LazyRecordBatchIterator` bindings:
 - `next()` — `py::call_guard<py::gil_scoped_release>()` (does Folly async I/O)
