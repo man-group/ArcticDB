@@ -10,7 +10,8 @@ from arcticdb.util.test import assert_frame_equal, merge
 
 DTYPES = ["uint32", "int64", "float", "object", "datetime64[ns]", "bool"]
 COL_NAMES = [f"{dtype}_col" for dtype in DTYPES]
-# Intentionally keep some pre-epoch dates in the interval. Some C++ had issues with dates before epoch in the past.
+# Intentionally keep some pre-epoch dates in the interval. Some C++ libraries had issues with dates before epoch in
+# the past e.g. std::gmtime returned nullptr when called with pre-epch timestamp.
 MIN_DATE = np.datetime64("1960-01-01")
 MAX_DATE = np.datetime64("2025-01-01")
 
@@ -71,17 +72,130 @@ def target_and_source(
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(target_source=target_and_source(COL_NAMES, DTYPES))
+@given(target_source=target_and_source(COL_NAMES, DTYPES), on=st.lists(st.sampled_from(COL_NAMES), unique=True))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_merge_update(lmdb_version_store_v1, target_source):
+def test_merge_update(lmdb_version_store_v1, target_source, on):
+    print("===============================================================================")
+    pd.set_option("display.max_rows", None)
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", 10000)
+    pd.set_option("display.expand_frame_repr", False)
+    on = None if len(on) == 0 else on
     target_list, source = target_source
+    print("target_list dataframes:")
+    for i, df in enumerate(target_list):
+        print(f"target_list[{i}]:\n{df}")
+    print("source dataframe:")
+    print(source)
+    print("on list:")
+    print(on)
+    print("===============================================================================")
     lib = lmdb_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     for df in target_list:
         lib.append(symbol, df)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
-    lib.merge_experimental(symbol, source, strategy=strategy)
+    lib.merge_experimental(symbol, source, strategy=strategy, on=on)
     result = lib.read(symbol).data
+<<<<<<< Updated upstream
     expected = merge(pd.concat(target_list), source, strategy=strategy, inplace=True)
+=======
+    expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
+>>>>>>> Stashed changes
     assert_frame_equal(result, expected)
+
+
+def test_merge_update_unit():
+    import pandas as pd
+    import numpy as np
+    from arcticdb.version_store._store import MergeStrategy
+    from arcticdb.util.test import merge
+
+    # Setup target_list
+    target_list = [
+        pd.DataFrame(
+            {
+                "uint32_col": [0, 4294967295, 768, 60835, 0, 0, 35526, 16777216, 0, 0],
+                "int64_col": [0, -57704, 0, -232, -3, -1, -1601978032, 0, 0, 0],
+                "float_col": [0.0, 0.0, 0.0, np.nan, 0.0, -1.099609, np.nan, -0.0, 0.0, 0.0],
+                "object_col": ["1", None, "1", None, "¡", np.nan, None, "000", "0", "0"],
+                "datetime64[ns]_col": [np.datetime64("1970-01-01T00:00:00.000065792")] * 10,
+                "bool_col": [True] * 9 + [False],
+            },
+            index=[
+                np.datetime64("1960-01-01T00:00:02.000000000"),
+                np.datetime64("1960-01-01T00:00:02.000000093"),
+                np.datetime64("1960-01-01T00:00:02.000001502"),
+                np.datetime64("1960-01-01T00:00:02.000045414"),
+                np.datetime64("1960-01-01T00:00:02.000052749"),
+                np.datetime64("1960-01-01T00:00:02.000058984"),
+                np.datetime64("1960-01-01T00:00:02.000062450"),
+                np.datetime64("1960-01-01T00:00:02.205470921"),
+                np.datetime64("1960-01-01T00:00:26.494832128"),
+                np.datetime64("1960-01-01T00:02:23.853458688"),
+            ],
+        ),
+        pd.DataFrame(
+            {
+                "uint32_col": [2],
+                "int64_col": [3],
+                "float_col": [0.0],
+                "object_col": ["\xa0"],
+                "datetime64[ns]_col": [np.datetime64("1970-01-01T00:00:04.295427842")],
+                "bool_col": [False],
+            },
+            index=[np.datetime64("1960-01-01T00:03:14.000000260")],
+        ),
+        pd.DataFrame(
+            {
+                "uint32_col": [0],
+                "int64_col": [65536],
+                "float_col": [0.0],
+                "object_col": ["0"],
+                "datetime64[ns]_col": [np.datetime64("2262-04-11T23:47:16.854775807")],
+                "bool_col": [True],
+            },
+            index=[np.datetime64("1960-01-01T01:06:58.924035585")],
+        ),
+        pd.DataFrame(
+            {
+                "uint32_col": [1],
+                "int64_col": [2],
+                "float_col": [0.0],
+                "object_col": ["\xa0"],
+                "datetime64[ns]_col": [np.datetime64("1970-01-01T00:00:02.576980376")],
+                "bool_col": [False],
+            },
+            index=[np.datetime64("1960-01-01T08:57:40")],
+        ),
+    ]
+
+    # Setup source
+    source = pd.DataFrame(
+        {
+            "uint32_col": [3, 0, 0],
+            "int64_col": [-2097152, 65536, 256],
+            "float_col": [0.0, 0.0, 255.0],
+            "object_col": ["0", "0", "0"],
+            "datetime64[ns]_col": [np.datetime64("1970-01-01T00:18:19.511824384")] * 3,
+            "bool_col": [True, True, False],
+        },
+        index=[
+            np.datetime64("1960-01-01T00:00:00.000000003"),
+            np.datetime64("1960-01-01T00:00:00.000001794"),
+            np.datetime64("1960-01-01T00:00:02.000000093"),
+        ],
+    )
+
+    # Setup 'on' list
+    on = ["object_col"]
+
+    # MergeStrategy
+    strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+
+    # Perform merge
+    result = merge(pd.concat(target_list), source, strategy=strategy, on=on)
+
+    print("Result DataFrame:")
+    print(result)
