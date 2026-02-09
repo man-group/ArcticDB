@@ -227,6 +227,43 @@ Chronological summary of work done on the `duckdb` branch.
 - **Tests**: 20 tests in `test_lazy_streaming.py` (4 classes: SQL queries, direct iterator, lazy-vs-eager consistency, DuckDB context), all passing
 - **No regressions**: All 285 DuckDB tests pass
 
+## 31. MultiIndex Join Tests & Transparent `__idx__` Prefix Handling
+
+- **Gap identified**: No existing tests for SQL joins on pandas MultiIndex DataFrames; users had to write `__idx__security_id` instead of `security_id`
+- **Transparent prefix stripping**: ArcticDB stores MultiIndex levels 1+ with `__idx__` prefix internally; the SQL interface now strips this transparently so users write original index names
+- **Implementation**:
+  - `arrow_reader.py`: `_strip_idx_prefix_from_names()` helper + `to_pyarrow_reader()` renames schema fields and yields renamed batches; `read_all()` also strips by default
+  - `library.py:sql()`: Expands pushdown column names to include both clean and `__idx__`-prefixed variants so C++ `build_column_bitset` matches whichever form is in storage
+  - `duckdb.py:DuckDBContext.register_symbol()` and `ArcticDuckDBContext.register_symbol()`: Same column expansion for user-provided `columns=` parameter
+  - C++ `column_index_with_name_demangling()` already handles filter pushdown (tries `__idx__ + name` as fallback)
+  - Collision safety: appends underscores if stripping would create duplicates (mirroring `_normalization.py` denormalization)
+- **Test class**: `TestMultiIndexJoins` in `test_duckdb.py` — 8 tests:
+  - INNER JOIN, LEFT JOIN on `(date, security_id)` using clean names
+  - MultiIndex ⋈ single DatetimeIndex (broadcast join)
+  - JOIN + GROUP BY with aggregation, JOIN + WHERE date filter
+  - `SELECT *` and `DESCRIBE` show clean column names
+  - Single-table `WHERE security_id = 100` filter on MultiIndex level
+- **Full suite**: All 293 DuckDB tests pass, zero regressions
+- **Docs updated**: `DUCKDB.md` (implementation details, test coverage), `sql_queries.md` tutorial (clean MultiIndex examples)
+
+## 32. Index Reconstruction in SQL Pandas Output
+
+- **Problem**: SQL queries via `lib.sql()` returned flat DataFrames with `RangeIndex` even for symbols that had a `MultiIndex` or named `DatetimeIndex` — original index structure was lost
+- **Solution**: After executing the SQL query, for pandas results, retrieve index metadata via `get_description()` (~4ms per symbol) and call `set_index()` using the most specific matching index across all symbols in the query
+- **Implementation**:
+  - `Library._get_index_columns_for_symbol()`: Static method that calls `get_description()` to retrieve index column names; returns `None` for RangeIndex or when names are unknown
+  - `Library.sql()`: Tracks `resolved_symbols` dict during registration loop; after execution, iterates all symbols to find the best (most levels) index whose columns are all present
+  - `DuckDBContext.sql()`: Same logic iterating `self._registered_symbols`
+- **Reconstruction rules**:
+  - All index columns in result → `set_index(index_cols)` reconstructs original index
+  - JOINs with index columns in result → most specific matching index across all symbols
+  - Partial index columns → no reconstruction (flat DataFrame)
+  - Aggregation dropping index columns → no reconstruction
+  - RangeIndex symbol → no reconstruction (nothing to restore)
+  - Arrow/Polars output → no reconstruction (pandas-only feature)
+- **Test class**: `TestIndexReconstruction` in `test_duckdb.py` — 9 tests covering all edge cases including JOIN reconstruction
+- **Full suite**: All 302 DuckDB tests pass (293 + 9 new)
+
 ---
 
 ## Open Items

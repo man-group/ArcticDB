@@ -395,17 +395,31 @@ class DuckDBContext(_BaseDuckDBContext):
 
         table_name = alias or symbol
 
+        # Expand user-facing column names to include __idx__-prefixed variants
+        # so the C++ reader matches whichever form is stored.
+        resolved_columns = columns
+        if resolved_columns is not None:
+            from arcticdb.version_store.duckdb.arrow_reader import _IDX_PREFIX
+
+            expanded = []
+            for c in resolved_columns:
+                expanded.append(c)
+                if not c.startswith(_IDX_PREFIX):
+                    expanded.append(_IDX_PREFIX + c)
+            resolved_columns = expanded
+
         reader = self._library._read_as_record_batch_reader(
             symbol=symbol,
             as_of=as_of,
             date_range=date_range,
             row_range=row_range,
-            columns=columns,
+            columns=resolved_columns,
             query_builder=query_builder,
             lazy=True,
         )
 
-        # Convert to native PyArrow RecordBatchReader for DuckDB compatibility
+        # Convert to native PyArrow RecordBatchReader for DuckDB compatibility.
+        # to_pyarrow_reader() strips __idx__ prefixes from column names.
         self._conn.register(table_name, reader.to_pyarrow_reader())
         self._registered_symbols[table_name] = {
             "symbol": symbol,
@@ -489,7 +503,25 @@ class DuckDBContext(_BaseDuckDBContext):
         self._check_in_context()
         self._auto_register(query)
 
-        return self._execute_sql(query, output_format)
+        result = self._execute_sql(query, output_format)
+
+        # Reconstruct the original index in the pandas result.  Check each
+        # registered symbol's index columns; pick the most specific (most
+        # levels) index whose columns are all present in the result.
+        fmt = output_format.lower() if output_format is not None else OutputFormat.PANDAS.lower()
+        if fmt == OutputFormat.PANDAS.lower() and self._registered_symbols:
+            from arcticdb.version_store.library import Library
+
+            best_index = None
+            for info in self._registered_symbols.values():
+                idx_cols = Library._get_index_columns_for_symbol(self._library, info["symbol"], as_of=info.get("as_of"))
+                if idx_cols is not None and all(c in result.columns for c in idx_cols):
+                    if best_index is None or len(idx_cols) > len(best_index):
+                        best_index = idx_cols
+            if best_index is not None:
+                result = result.set_index(best_index)
+
+        return result
 
     def register_all_symbols(self, as_of: Optional[AsOf] = None) -> "DuckDBContext":
         """
@@ -695,12 +727,24 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
         library = self._arctic.get_library(library_name)
         table_name = alias or symbol
 
+        # Expand user-facing column names to include __idx__-prefixed variants
+        resolved_columns = columns
+        if resolved_columns is not None:
+            from arcticdb.version_store.duckdb.arrow_reader import _IDX_PREFIX
+
+            expanded = []
+            for c in resolved_columns:
+                expanded.append(c)
+                if not c.startswith(_IDX_PREFIX):
+                    expanded.append(_IDX_PREFIX + c)
+            resolved_columns = expanded
+
         reader = library._read_as_record_batch_reader(
             symbol=symbol,
             as_of=as_of,
             date_range=date_range,
             row_range=row_range,
-            columns=columns,
+            columns=resolved_columns,
             query_builder=query_builder,
             lazy=True,
         )

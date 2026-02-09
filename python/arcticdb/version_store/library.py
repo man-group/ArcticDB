@@ -2162,6 +2162,28 @@ class Library:
 
         return ArcticRecordBatchReader(cpp_iterator)
 
+    @staticmethod
+    def _get_index_columns_for_symbol(library: "Library", symbol: str, as_of=None):
+        """Return the list of index column names for a symbol, or None if not applicable.
+
+        Uses get_description() to retrieve index metadata.  Returns None for
+        RangeIndex (no physical index columns) or when index names are unknown.
+        """
+        try:
+            desc = library.get_description(symbol, as_of=as_of)
+        except Exception:
+            return None
+
+        if desc.index_type not in ("index", "multi_index"):
+            return None
+
+        index_names = [idx.name for idx in desc.index]
+        # RangeIndex or unnamed index — nothing to reconstruct
+        if not index_names or all(n is None for n in index_names):
+            return None
+
+        return index_names
+
     def sql(
         self,
         query: str,
@@ -2277,6 +2299,9 @@ class Library:
             # Resolve as_of: if dict, look up per-symbol; if scalar, apply globally
             as_of_is_dict = isinstance(as_of, dict)
 
+            # Track resolved symbols for index reconstruction after query execution
+            resolved_symbols = {}  # real_symbol -> symbol_as_of
+
             for sql_name in symbols:
                 real_symbol = _resolve_symbol(sql_name, self)
 
@@ -2291,13 +2316,31 @@ class Library:
                 else:
                     symbol_as_of = as_of
 
+                resolved_symbols[real_symbol] = symbol_as_of
+
                 pushdown = pushdown_by_table.get(sql_name)
                 if pushdown:
                     row_range = (0, pushdown.limit) if pushdown.limit is not None else None
+                    # Map user-facing column names to storage names.  ArcticDB stores
+                    # MultiIndex levels 1+ with an "__idx__" prefix; the SQL interface
+                    # strips this prefix so users write the original index names.  We
+                    # pass both the clean name and the __idx__-prefixed name so that
+                    # the C++ column bitset matches whichever form is in storage.
+                    columns = pushdown.columns
+                    if columns is not None:
+                        from arcticdb.version_store.duckdb.arrow_reader import _IDX_PREFIX
+
+                        expanded = []
+                        for c in columns:
+                            expanded.append(c)
+                            if not c.startswith(_IDX_PREFIX):
+                                expanded.append(_IDX_PREFIX + c)
+                        columns = expanded
+
                     reader = self._read_as_record_batch_reader(
                         real_symbol,
                         as_of=symbol_as_of,
-                        columns=pushdown.columns,
+                        columns=columns,
                         date_range=pushdown.date_range,
                         row_range=row_range,
                         query_builder=pushdown.query_builder,
@@ -2319,7 +2362,23 @@ class Library:
             from arcticdb.version_store.duckdb.duckdb import _BaseDuckDBContext
 
             result_arrow = conn.execute(query).fetch_arrow_table()
-            return _BaseDuckDBContext._convert_arrow_table(result_arrow, output_format)
+            result = _BaseDuckDBContext._convert_arrow_table(result_arrow, output_format)
+
+            # Reconstruct the original index in the pandas result.  Check each
+            # symbol's index columns; pick the most specific (most levels) index
+            # whose columns are all present in the result.
+            fmt = output_format.lower() if output_format is not None else OutputFormat.PANDAS.lower()
+            if fmt == OutputFormat.PANDAS.lower():
+                best_index = None
+                for sym, sym_as_of in resolved_symbols.items():
+                    idx_cols = self._get_index_columns_for_symbol(self, sym, as_of=sym_as_of)
+                    if idx_cols is not None and all(c in result.columns for c in idx_cols):
+                        if best_index is None or len(idx_cols) > len(best_index):
+                            best_index = idx_cols
+                if best_index is not None:
+                    result = result.set_index(best_index)
+
+            return result
 
         finally:
             if conn is not None:

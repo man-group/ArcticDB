@@ -7,7 +7,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 be governed by the Apache License, version 2.0.
 """
 
-from arcticdb.version_store.duckdb.arrow_reader import ArcticRecordBatchReader
+from arcticdb.version_store.duckdb.arrow_reader import (
+    ArcticRecordBatchReader,
+    _build_clean_to_storage_map,
+    _strip_idx_prefix_from_names,
+)
 from arcticdb.version_store.duckdb.duckdb import ArcticDuckDBContext, DuckDBContext
 
 __all__ = ["ArcticDuckDBContext", "DuckDBContext"]

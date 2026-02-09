@@ -66,6 +66,81 @@ result = lib.sql("""
 """)
 ```
 
+### MultiIndex DataFrames
+
+When you write a pandas DataFrame with a `MultiIndex`, ArcticDB flattens the index levels
+into columns. All index levels are exposed using their original names — no special prefixes:
+
+```python
+import pandas as pd
+
+# Write a MultiIndex DataFrame (e.g., a security-level panel)
+dates = pd.to_datetime(["2025-01-02", "2025-01-02", "2025-01-03", "2025-01-03"])
+sids = [100, 200, 100, 200]
+momentum = pd.DataFrame(
+    {"momentum": [-2.7, 0.19, -0.25, 0.27]},
+    index=pd.MultiIndex.from_arrays([dates, sids], names=["date", "security_id"]),
+)
+lib.write("momentum", momentum)
+
+# In SQL, the columns are: date, security_id, momentum
+# When all index columns are in the result, the original MultiIndex is reconstructed
+result = lib.sql("SELECT * FROM momentum")
+# result.index is a MultiIndex with levels (date, security_id)
+# result.columns is just ["momentum"]
+```
+
+!!! note "Index Reconstruction"
+    When the result contains **all original index columns** from a source symbol, the
+    pandas DataFrame automatically reconstructs the original index (single or MultiIndex).
+    For JOINs, the **most specific** matching index (most levels) is used. Index
+    reconstruction only applies to pandas output, not Arrow or Polars.
+
+#### Joining Two MultiIndex Symbols
+
+Join two `(date, security_id)` panels on both index levels:
+
+```python
+inflow = pd.DataFrame(
+    {"inflow": [0.5, 0.6, 0.7, 0.8]},
+    index=pd.MultiIndex.from_arrays([dates, sids], names=["date", "security_id"]),
+)
+lib.write("inflow", inflow)
+
+result = lib.sql("""
+    SELECT m.date, m.security_id, m.momentum, i.inflow
+    FROM momentum m
+    JOIN inflow i
+      ON m.date = i.date
+     AND m.security_id = i.security_id
+    ORDER BY m.date, m.security_id
+""")
+```
+
+#### Joining MultiIndex with Single-Index
+
+Join a security-level panel with a market-level signal (single `DatetimeIndex`).
+The market-level value broadcasts across all securities for each matching date:
+
+```python
+analyst = pd.DataFrame(
+    {"analyst_mom": [0.019, 0.020]},
+    index=pd.DatetimeIndex(pd.to_datetime(["2025-01-02", "2025-01-03"]), name="date"),
+)
+lib.write("analyst", analyst)
+
+result = lib.sql("""
+    SELECT m.date, m.security_id, m.momentum, a.analyst_mom
+    FROM momentum m
+    JOIN analyst a ON m.date = a.date
+    ORDER BY m.date, m.security_id
+""")
+```
+
+!!! tip
+    Use `SELECT * FROM <symbol> LIMIT 1` or `DESCRIBE <symbol>` to discover
+    the exact column names for any symbol.
+
 ### Output Formats
 
 Results can be returned in different formats:

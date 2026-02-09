@@ -7,12 +7,40 @@ As of the Change Date specified in that file, in accordance with the Business So
 be governed by the Apache License, version 2.0.
 """
 
-from typing import TYPE_CHECKING, Iterator, Optional, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Union
 
 import pyarrow as pa
 
 if TYPE_CHECKING:
     from arcticdb_ext.version_store import LazyRecordBatchIterator, RecordBatchIterator
+
+_IDX_PREFIX = "__idx__"
+
+
+def _strip_idx_prefix_from_names(names: List[str]) -> List[str]:
+    """Strip the ``__idx__`` prefix that ArcticDB adds to MultiIndex levels 1+.
+
+    Handles the (theoretical) case where stripping would create a duplicate by
+    appending underscores, mirroring ``_normalization.py`` denormalization logic.
+    """
+    seen: set = set()
+    clean: List[str] = []
+    for name in names:
+        stripped = name[len(_IDX_PREFIX) :] if name.startswith(_IDX_PREFIX) else name
+        while stripped in seen:
+            stripped = f"_{stripped}_"
+        seen.add(stripped)
+        clean.append(stripped)
+    return clean
+
+
+def _build_clean_to_storage_map(storage_names: List[str]) -> Dict[str, str]:
+    """Build a mapping from user-facing (clean) column names to storage names.
+
+    Only includes entries where the names differ (i.e. where ``__idx__`` was stripped).
+    """
+    clean_names = _strip_idx_prefix_from_names(storage_names)
+    return {clean: storage for clean, storage in zip(clean_names, storage_names) if clean != storage}
 
 
 class ArcticRecordBatchReader:
@@ -108,12 +136,17 @@ class ArcticRecordBatchReader:
 
         return pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
 
-    def read_all(self) -> pa.Table:
+    def read_all(self, strip_idx_prefix: bool = True) -> pa.Table:
         """
         Read all remaining record batches and return as a PyArrow Table.
 
         This materializes all data into memory. For large datasets, prefer
         iterating over batches or using DuckDB's lazy evaluation.
+
+        Parameters
+        ----------
+        strip_idx_prefix : bool, default True
+            If True, strip the ``__idx__`` prefix from MultiIndex column names.
 
         Returns
         -------
@@ -138,7 +171,13 @@ class ArcticRecordBatchReader:
             if self._schema and len(self._schema) > 0:
                 return pa.Table.from_pydict({field.name: [] for field in self._schema}, schema=self._schema)
             return pa.table({})
-        return pa.Table.from_batches(batches)
+        table = pa.Table.from_batches(batches)
+        if strip_idx_prefix:
+            storage_names = table.column_names
+            clean_names = _strip_idx_prefix_from_names(storage_names)
+            if clean_names != storage_names:
+                table = table.rename_columns(clean_names)
+        return table
 
     @property
     def is_exhausted(self) -> bool:
@@ -187,9 +226,27 @@ class ArcticRecordBatchReader:
         This is useful for passing to libraries like DuckDB that require
         a native PyArrow RecordBatchReader type.
 
+        The ``__idx__`` prefix that ArcticDB adds to MultiIndex levels 1+ is
+        stripped so that SQL queries can reference the original index names.
+
         Returns
         -------
         pa.RecordBatchReader
             A PyArrow RecordBatchReader that streams batches from ArcticDB.
         """
-        return pa.RecordBatchReader.from_batches(self.schema, self)
+        storage_schema = self.schema
+        storage_names = [f.name for f in storage_schema]
+        clean_names = _strip_idx_prefix_from_names(storage_names)
+
+        if clean_names == storage_names:
+            return pa.RecordBatchReader.from_batches(storage_schema, self)
+
+        clean_schema = pa.schema(
+            [pa.field(clean, field.type, field.nullable) for clean, field in zip(clean_names, storage_schema)]
+        )
+
+        def _rename_batches(reader, names):
+            for batch in reader:
+                yield batch.rename_columns(names)
+
+        return pa.RecordBatchReader.from_batches(clean_schema, _rename_batches(self, clean_names))

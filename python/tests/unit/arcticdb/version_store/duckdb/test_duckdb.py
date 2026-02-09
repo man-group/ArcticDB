@@ -1054,3 +1054,371 @@ class TestTimestampPrecisions:
 
         assert len(result) == 2
         assert list(result["value"]) == [3, 4]
+
+
+class TestMultiIndexJoins:
+    """Tests for SQL JOINs on pandas MultiIndex DataFrames.
+
+    ArcticDB flattens MultiIndex levels into columns. The first level keeps its
+    original name; subsequent levels are prefixed with ``__idx__``.  These tests
+    verify that joins on those flattened index columns work correctly.
+    """
+
+    # -- helpers ---------------------------------------------------------------
+
+    @staticmethod
+    def _momentum_df():
+        """(date, security_id) -> momentum — mimics a risk-factor panel."""
+        dates = pd.to_datetime(["2025-01-02", "2025-01-02", "2025-01-03", "2025-01-03", "2025-01-06", "2025-01-06"])
+        sids = [100, 200, 100, 200, 100, 200]
+        return pd.DataFrame(
+            {"momentum": [-2.7, 0.19, -0.25, 0.27, 0.06, -1.75]},
+            index=pd.MultiIndex.from_arrays([dates, sids], names=["date", "security_id"]),
+        )
+
+    @staticmethod
+    def _inflow_df():
+        """(date, security_id) -> inflow — mimics a fund-flow panel."""
+        dates = pd.to_datetime(["2025-01-02", "2025-01-02", "2025-01-03", "2025-01-03", "2025-01-06", "2025-01-06"])
+        sids = [100, 200, 100, 300, 100, 200]  # sid 300 only in inflow
+        return pd.DataFrame(
+            {"inflow": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]},
+            index=pd.MultiIndex.from_arrays([dates, sids], names=["date", "security_id"]),
+        )
+
+    @staticmethod
+    def _analyst_df():
+        """Single DatetimeIndex -> analyst_mom — mimics a market-level signal."""
+        return pd.DataFrame(
+            {"analyst_mom": [0.019, 0.020, 0.021]},
+            index=pd.DatetimeIndex(pd.to_datetime(["2025-01-02", "2025-01-03", "2025-01-06"]), name="date"),
+        )
+
+    # -- tests -----------------------------------------------------------------
+
+    def test_inner_join_two_multiindex_symbols(self, lmdb_library):
+        """INNER JOIN two (date, security_id) MultiIndex symbols on both index levels."""
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+        lib.write("inflow", self._inflow_df())
+
+        result = lib.sql("""
+            SELECT m.date, m.security_id,
+                   m.momentum, i.inflow
+            FROM momentum m
+            JOIN inflow i
+              ON m.date = i.date
+             AND m.security_id = i.security_id
+            ORDER BY m.date, m.security_id
+        """)
+
+        # Index reconstructed from (date, security_id)
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        # sid 300 is only in inflow, so inner join should exclude it
+        assert len(result) == 5
+        assert set(result.index.get_level_values("security_id")) == {100, 200}
+        # Check a specific row: 2025-01-02, sid=100
+        row = result.loc[(pd.Timestamp("2025-01-02"), 100)]
+        assert row["momentum"] == pytest.approx(-2.7)
+        assert row["inflow"] == pytest.approx(0.5)
+
+    def test_left_join_two_multiindex_symbols(self, lmdb_library):
+        """LEFT JOIN preserves all rows from the left table even when right has no match."""
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+        lib.write("inflow", self._inflow_df())
+
+        result = lib.sql("""
+            SELECT m.date, m.security_id,
+                   m.momentum, i.inflow
+            FROM momentum m
+            LEFT JOIN inflow i
+              ON m.date = i.date
+             AND m.security_id = i.security_id
+            ORDER BY m.date, m.security_id
+        """)
+
+        # All 6 momentum rows should appear; sid 200 on 2025-01-03 has no match
+        assert isinstance(result.index, pd.MultiIndex)
+        assert len(result) == 6
+        no_match = result.loc[(pd.Timestamp("2025-01-03"), 200)]
+        assert pd.isna(no_match["inflow"])
+
+    def test_join_multiindex_with_single_index(self, lmdb_library):
+        """JOIN a (date, security_id) MultiIndex symbol with a date-only single-index symbol.
+
+        This broadcasts the single-index value across all securities for the
+        matching date — a common pattern when enriching a security-level panel
+        with a market-level signal.
+
+        The most specific index (date, security_id) is reconstructed.
+        """
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+        lib.write("analyst", self._analyst_df())
+
+        result = lib.sql("""
+            SELECT m.date, m.security_id,
+                   m.momentum, a.analyst_mom
+            FROM momentum m
+            JOIN analyst a ON m.date = a.date
+            ORDER BY m.date, m.security_id
+        """)
+
+        # Most specific index (date, security_id) is reconstructed
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        # Every momentum row should match since all 3 dates exist in analyst
+        assert len(result) == 6
+        # analyst_mom should be the same for all securities on the same date
+        flat = result.reset_index()
+        for date_val in flat["date"].unique():
+            subset = flat[flat["date"] == date_val]
+            assert subset["analyst_mom"].nunique() == 1
+
+        row = result.loc[(pd.Timestamp("2025-01-02"), 100)]
+        assert row["analyst_mom"] == pytest.approx(0.019)
+        assert row["momentum"] == pytest.approx(-2.7)
+
+    def test_multiindex_join_with_aggregation(self, lmdb_library):
+        """JOIN two MultiIndex symbols and aggregate by date.
+
+        Only ``date`` is in the result (not ``security_id``), so the best
+        matching index is the single ``date`` index from either symbol.
+        """
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+        lib.write("inflow", self._inflow_df())
+
+        result = lib.sql("""
+            SELECT m.date,
+                   AVG(m.momentum) AS avg_momentum,
+                   SUM(i.inflow) AS total_inflow
+            FROM momentum m
+            JOIN inflow i
+              ON m.date = i.date
+             AND m.security_id = i.security_id
+            GROUP BY m.date
+            ORDER BY m.date
+        """)
+
+        assert len(result) == 3
+        # 2025-01-02: sids 100,200 match — avg(-2.7, 0.19) = -1.255
+        assert result["avg_momentum"].iloc[0] == pytest.approx(-1.255)
+        assert result["total_inflow"].iloc[0] == pytest.approx(1.1)
+
+    def test_multiindex_join_with_date_filter(self, lmdb_library):
+        """JOIN two MultiIndex symbols with a WHERE clause filtering on the date index."""
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+        lib.write("inflow", self._inflow_df())
+
+        result = lib.sql("""
+            SELECT m.date, m.security_id,
+                   m.momentum, i.inflow
+            FROM momentum m
+            JOIN inflow i
+              ON m.date = i.date
+             AND m.security_id = i.security_id
+            WHERE m.date = '2025-01-06'
+            ORDER BY m.security_id
+        """)
+
+        assert isinstance(result.index, pd.MultiIndex)
+        assert len(result) == 2
+        assert list(result.index.get_level_values("security_id")) == [100, 200]
+
+    def test_select_star_shows_clean_column_names(self, lmdb_library):
+        """SELECT * on a MultiIndex symbol shows clean column names without __idx__ prefix.
+
+        For a single-symbol query, the original MultiIndex is reconstructed so
+        ``date`` and ``security_id`` appear as index levels rather than columns.
+        """
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+
+        result = lib.sql("SELECT * FROM momentum LIMIT 1")
+
+        # Index reconstructed — date and security_id are now index levels
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        assert "momentum" in result.columns
+        # No __idx__ prefix anywhere
+        assert "__idx__security_id" not in result.columns
+        assert "__idx__security_id" not in result.index.names
+
+    def test_describe_shows_clean_column_names(self, lmdb_library):
+        """DESCRIBE on a MultiIndex symbol shows clean column names."""
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+
+        schema = lib.sql("DESCRIBE momentum")
+
+        col_names = list(schema["column_name"])
+        assert "security_id" in col_names
+        assert "__idx__security_id" not in col_names
+
+    def test_multiindex_filter_on_index_column(self, lmdb_library):
+        """Single-table WHERE filter on a MultiIndex level uses clean column name."""
+        lib = lmdb_library
+        lib.write("momentum", self._momentum_df())
+
+        result = lib.sql("""
+            SELECT date, security_id, momentum
+            FROM momentum
+            WHERE security_id = 100
+            ORDER BY date
+        """)
+
+        assert len(result) == 3
+        # Index reconstructed — security_id is in the index
+        assert isinstance(result.index, pd.MultiIndex)
+        assert all(result.index.get_level_values("security_id") == 100)
+
+
+class TestIndexReconstruction:
+    """Tests for index round-trip: SQL output should reconstruct the original pandas index
+    for single-symbol queries when all index columns are present in the result."""
+
+    @staticmethod
+    def _multiindex_df():
+        """MultiIndex (date, security_id) -> momentum"""
+        dates = pd.to_datetime(["2025-01-02", "2025-01-02", "2025-01-03", "2025-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, [100, 200, 100, 200]], names=["date", "security_id"])
+        return pd.DataFrame({"momentum": [1.1, 2.2, 3.3, 4.4]}, index=idx)
+
+    @staticmethod
+    def _single_index_df():
+        """Single DatetimeIndex named 'date' -> value"""
+        dates = pd.to_datetime(["2025-01-02", "2025-01-03", "2025-01-04"])
+        return pd.DataFrame({"value": [10.0, 20.0, 30.0]}, index=pd.DatetimeIndex(dates, name="date"))
+
+    @staticmethod
+    def _rangeindex_df():
+        """Default RangeIndex -> a, b"""
+        return pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
+
+    def test_multiindex_roundtrip_via_sql(self, lmdb_library):
+        """MultiIndex is reconstructed for single-symbol SELECT *."""
+        lib = lmdb_library
+        original = self._multiindex_df()
+        lib.write("sym", original)
+
+        result = lib.sql("SELECT * FROM sym ORDER BY date, security_id")
+
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        assert list(result.columns) == ["momentum"]
+        pd.testing.assert_frame_equal(result, original)
+
+    def test_single_named_index_roundtrip_via_sql(self, lmdb_library):
+        """Single named DatetimeIndex is reconstructed for single-symbol query."""
+        lib = lmdb_library
+        original = self._single_index_df()
+        lib.write("sym", original)
+
+        result = lib.sql("SELECT * FROM sym ORDER BY date")
+
+        assert result.index.name == "date"
+        assert list(result.columns) == ["value"]
+        pd.testing.assert_frame_equal(result, original)
+
+    def test_rangeindex_stays_flat(self, lmdb_library):
+        """RangeIndex symbols stay as RangeIndex (no reconstruction needed)."""
+        lib = lmdb_library
+        original = self._rangeindex_df()
+        lib.write("sym", original)
+
+        result = lib.sql("SELECT * FROM sym")
+
+        assert isinstance(result.index, pd.RangeIndex)
+        assert list(result.columns) == ["a", "b"]
+        pd.testing.assert_frame_equal(result, original)
+
+    def test_aggregation_drops_index(self, lmdb_library):
+        """Aggregation that doesn't include all index columns → no reconstruction."""
+        lib = lmdb_library
+        lib.write("sym", self._multiindex_df())
+
+        result = lib.sql("SELECT AVG(momentum) AS avg_mom FROM sym")
+
+        # Only one row with aggregation, no index columns present
+        assert isinstance(result.index, pd.RangeIndex)
+        assert "avg_mom" in result.columns
+
+    def test_partial_index_columns_no_reconstruction(self, lmdb_library):
+        """When only some index columns are selected, index is NOT reconstructed."""
+        lib = lmdb_library
+        lib.write("sym", self._multiindex_df())
+
+        # Select only security_id (missing date) — can't reconstruct full MultiIndex
+        result = lib.sql("SELECT security_id, momentum FROM sym")
+
+        assert isinstance(result.index, pd.RangeIndex)
+        assert "security_id" in result.columns
+
+    def test_join_reconstructs_best_index(self, lmdb_library):
+        """JOINs reconstruct the most specific matching index."""
+        lib = lmdb_library
+        lib.write("left_sym", self._multiindex_df())
+        lib.write("right_sym", self._single_index_df())
+
+        result = lib.sql("""
+            SELECT l.date, l.security_id, l.momentum, r.value
+            FROM left_sym l
+            JOIN right_sym r ON l.date = r.date
+            ORDER BY l.date, l.security_id
+        """)
+
+        # Most specific index (date, security_id) from left_sym is reconstructed
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        assert list(result.columns) == ["momentum", "value"]
+
+    def test_arrow_output_no_reconstruction(self, lmdb_library):
+        """Arrow output format should not attempt index reconstruction."""
+        lib = lmdb_library
+        lib.write("sym", self._multiindex_df())
+
+        import pyarrow as pa
+
+        result = lib.sql("SELECT * FROM sym", output_format="pyarrow")
+
+        assert isinstance(result, pa.Table)
+        assert "date" in result.column_names
+        assert "security_id" in result.column_names
+        assert "momentum" in result.column_names
+
+    def test_duckdb_context_single_symbol_reconstruction(self, lmdb_library):
+        """DuckDBContext.sql() also reconstructs the index for single-symbol queries."""
+        lib = lmdb_library
+        original = self._multiindex_df()
+        lib.write("sym", original)
+
+        with lib.duckdb() as ddb:
+            result = ddb.sql("SELECT * FROM sym ORDER BY date, security_id")
+
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        pd.testing.assert_frame_equal(result, original)
+
+    def test_duckdb_context_multi_symbol_reconstruction(self, lmdb_library):
+        """DuckDBContext.sql() reconstructs the best matching index even for JOINs."""
+        lib = lmdb_library
+        lib.write("sym1", self._multiindex_df())
+        lib.write("sym2", self._single_index_df())
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("sym1")
+            ddb.register_symbol("sym2")
+            result = ddb.sql("""
+                SELECT s1.date, s1.security_id, s1.momentum, s2.value
+                FROM sym1 s1
+                JOIN sym2 s2 ON s1.date = s2.date
+            """)
+
+        # Most specific index (date, security_id) from sym1 is reconstructed
+        assert isinstance(result.index, pd.MultiIndex)
+        assert result.index.names == ["date", "security_id"]
+        assert list(result.columns) == ["momentum", "value"]
