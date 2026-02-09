@@ -148,7 +148,6 @@ class CompileProto(Command):
                 # --use-pep517 to force parameters being passed to sub-build pipeline
                 # CI still uses pip 25.1.1, which the option is OFF by default
                 # It will be on by default in pip 25.3 anyway
-                # extra_pip_args = ["--use-pep517", "--build-constraint", constraints]
                 extra_pip_args = ["--use-pep517"]
             else:
                 install_env = {**os.environ}
