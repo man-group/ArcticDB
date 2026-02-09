@@ -286,7 +286,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     R"pbdoc(
         Returns the number of fields (columns) in the schema, including index fields.
     )pbdoc"
-            );
+            )
+            .def("descriptor",
+                 &LazyRecordBatchIterator::descriptor,
+                 py::return_value_policy::reference_internal,
+                 R"pbdoc(
+        Returns the StreamDescriptor containing field names and types.
+        Available even when num_batches() == 0 (empty symbols).
+    )pbdoc");
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.

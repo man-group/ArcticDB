@@ -87,15 +87,29 @@ class TestLazyRecordBatchIterator:
         assert len(result) == 10
 
     def test_lazy_empty_symbol(self, lmdb_library):
-        """Empty symbol returns empty result via direct lazy iterator."""
+        """Empty symbol returns empty result via lazy iterator with schema from descriptor."""
         lib = lmdb_library
         df = pd.DataFrame({"x": pd.array([], dtype="int64"), "y": pd.array([], dtype="float64")})
         lib.write("sym", df)
 
-        # Use the direct iterator — DuckDB rejects registering readers with 0 rows/columns
+        # Direct iterator: verify descriptor provides schema for empty symbols
         cpp_iterator = lib._nvs.read_as_lazy_record_batch_iterator("sym")
         assert not cpp_iterator.has_next()
         assert cpp_iterator.num_batches() == 0
+        # descriptor() should have the column schema even with no data segments
+        desc = cpp_iterator.descriptor()
+        assert desc.field_count() > 0
+
+    def test_lazy_empty_symbol_sql(self, lmdb_library):
+        """Empty symbol works through lib.sql() using schema from descriptor."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": pd.array([], dtype="int64"), "y": pd.array([], dtype="float64")})
+        lib.write("sym", df)
+
+        result = lib.sql("SELECT * FROM sym")
+        assert len(result) == 0
+        assert "x" in result.columns
+        assert "y" in result.columns
 
     def test_lazy_join_two_symbols(self, lmdb_library):
         """JOIN across two symbols works with lazy streaming."""

@@ -14,6 +14,41 @@ import pyarrow as pa
 if TYPE_CHECKING:
     from arcticdb_ext.version_store import LazyRecordBatchIterator, RecordBatchIterator
 
+
+def _descriptor_to_arrow_schema(descriptor) -> pa.Schema:
+    """Build a PyArrow schema from a C++ StreamDescriptor.
+
+    Used to discover the schema of empty symbols without reading any data segments.
+    The descriptor is always available from the index-only read, even when there are
+    no data segments.
+    """
+    from arcticdb_ext.stream import DataType
+
+    _DATATYPE_TO_ARROW = {
+        DataType.UINT8: pa.uint8(),
+        DataType.UINT16: pa.uint16(),
+        DataType.UINT32: pa.uint32(),
+        DataType.UINT64: pa.uint64(),
+        DataType.INT8: pa.int8(),
+        DataType.INT16: pa.int16(),
+        DataType.INT32: pa.int32(),
+        DataType.INT64: pa.int64(),
+        DataType.FLOAT32: pa.float32(),
+        DataType.FLOAT64: pa.float64(),
+        DataType.BOOL8: pa.bool_(),
+        DataType.NANOSECONDS_UTC64: pa.timestamp("ns"),
+        DataType.ASCII_DYNAMIC64: pa.large_string(),
+        DataType.UTF_DYNAMIC64: pa.large_string(),
+    }
+
+    fields = []
+    for field_wrapper in descriptor.fields():
+        dt = field_wrapper.type.data_type()
+        arrow_type = _DATATYPE_TO_ARROW.get(dt, pa.string())
+        fields.append(pa.field(field_wrapper.name, arrow_type))
+    return pa.schema(fields)
+
+
 _IDX_PREFIX = "__idx__"
 
 
@@ -84,8 +119,14 @@ class ArcticRecordBatchReader:
             return
 
         if self._cpp_iterator.num_batches() == 0:
-            # Empty result - return empty schema
-            self._schema = pa.schema([])
+            # No data segments.  Try to derive the schema from the C++
+            # StreamDescriptor (available on LazyRecordBatchIterator even for
+            # empty symbols).  Fall back to an empty schema for the legacy
+            # eager RecordBatchIterator which does not expose a descriptor.
+            if hasattr(self._cpp_iterator, "descriptor"):
+                self._schema = _descriptor_to_arrow_schema(self._cpp_iterator.descriptor())
+            else:
+                self._schema = pa.schema([])
             return
 
         # Extract first batch and cache it
