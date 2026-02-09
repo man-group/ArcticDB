@@ -261,6 +261,26 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
         Returns the current position (0-indexed).
     )pbdoc");
 
+    py::class_<LazyRecordBatchIterator, std::shared_ptr<LazyRecordBatchIterator>>(
+            version, "LazyRecordBatchIterator", R"pbdoc(
+        Iterator that reads and decodes Arrow record batches lazily from storage.
+        Segments are fetched on-demand with a configurable prefetch buffer for latency hiding.
+        This enables querying symbols larger than available memory.
+    )pbdoc"
+    )
+            .def("next", &LazyRecordBatchIterator::next, py::call_guard<py::gil_scoped_release>(), R"pbdoc(
+        Returns the next record batch by reading from storage, or None if exhausted.
+    )pbdoc")
+            .def("has_next", &LazyRecordBatchIterator::has_next, R"pbdoc(
+        Returns True if there are more segments to read.
+    )pbdoc")
+            .def("num_batches", &LazyRecordBatchIterator::num_batches, R"pbdoc(
+        Returns the total number of segments.
+    )pbdoc")
+            .def("current_index", &LazyRecordBatchIterator::current_index, R"pbdoc(
+        Returns the current position (0-indexed).
+    )pbdoc");
+
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
     )pbdoc")
@@ -813,6 +833,15 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Read the specified version of the dataframe from the store"
             )
+            .def("create_lazy_record_batch_iterator",
+                 &PythonVersionStore::create_lazy_record_batch_iterator,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Create a lazy record batch iterator that reads segments on-demand",
+                 py::arg("stream_id"),
+                 py::arg("version_query"),
+                 py::arg("read_query"),
+                 py::arg("read_options"),
+                 py::arg("prefetch_size") = 2)
             .def("_read_modify_write",
                  &PythonVersionStore::read_modify_write,
                  py::call_guard<SingleThreadMutexHolder>(),

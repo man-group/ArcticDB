@@ -189,6 +189,44 @@ Chronological summary of work done on the `duckdb` branch.
 - **Result**: `SELECT * FROM t LIMIT 100` on 1M rows: 2.8s → 0.36s (7.8x faster)
 - **Tests**: 3 new unit tests (ORDER BY, GROUP BY, DISTINCT prevent LIMIT pushdown), 2 new integration tests (ORDER BY, GROUP BY correctness with unpushed LIMIT), updated 3 existing tests for corrected semantics
 
+## 28. DuckDB Streaming Memory Investigation
+
+- Investigated whether DuckDB materializes full RecordBatchReader or streams incrementally
+- **Batch consumption is eager**: DuckDB reads ALL batches (no early termination for LIMIT)
+- **Pipeline processing is streaming**: batches processed incrementally, memory proportional to result/aggregation state, not source
+- 8 GB dataset: GROUP BY used +1.3 GB (6x less), WHERE 1% used +219 MB (37x less), full scan +16.5 GB (2x source+pandas)
+- Researched DuckDB integration patterns: Parquet/Delta/Iceberg all use C++ extensions for pushdown, no Python API exists
+- See `docs/claude/plans/duckdb/duckdb-streaming-memory-investigation.md`
+
+## 29. ArcticDB Backend Eagerness Investigation (current session)
+
+- **Question**: Does ArcticDB read all data eagerly from storage (e.g., S3) before the RecordBatchIterator is created, or is there on-demand/backpressure?
+- **Answer**: All data is read eagerly. The RecordBatchIterator is a memory cursor, not a lazy reader.
+- **Code trace**: `read_dataframe_version_internal()` calls `fetch_data()` which queues reads for ALL segments via `batch_read_compressed()` using `folly::window(batch_size=200)` for up to 200 parallel reads, then `folly::collect()` blocks until all complete
+- `RecordBatchIterator::next()` just returns `(*data_)[current_index_++]` — no storage I/O
+- **Two layers of streaming**: Storage→Memory is eager (all data materialized); Memory→DuckDB is incremental (DuckDB processes batches through pipeline)
+- **Implication**: For a 10 GB S3 symbol, all 10 GB downloaded before DuckDB sees any data. Pushdown is the only mechanism to reduce data read.
+- Updated `duckdb-streaming-memory-investigation.md` with full code trace and corrected summary
+
+## 30. Lazy Streaming RecordBatchIterator
+
+- **Goal**: Avoid reading all data eagerly from storage before DuckDB gets any batches. For large remote datasets (S3), the eager path materializes everything into memory before streaming begins.
+- **New C++ class `LazyRecordBatchIterator`** in `arrow_output_frame.hpp/cpp`:
+  - Holds `slice_and_keys_` (segment metadata from index), reads+decodes one segment at a time in `next()`
+  - Prefetch buffer (`std::deque<folly::Future>`) with configurable `prefetch_size` (default 2) to hide storage latency
+  - `read_and_decode_segment()` uses `store_->batch_read_uncompressed()` (reuses existing `DecodeSliceTask` pattern)
+  - `prepare_segment_for_arrow()` handles conversion of decoded segments to Arrow-compatible format:
+    - Non-string columns: makes inline blocks detachable (for `block.release()` ownership transfer)
+    - String columns: creates new DETACHABLE column with proper Arrow buffers via `ArrowStringHandler::convert_type()`
+- **Key bug fix**: `extra_bytes_per_block` double-counting. `create_detachable_block()` already adds `extra_bytes_per_block_` to block capacity internally. The allocation must pass only `dest_bytes` (= `num_rows * data_size`), NOT `dest_bytes + extra_bytes`. Double-counting caused `block.row_count()` to return `num_rows + 1`, triggering Sparrow's `child.size() == size` assertion.
+- **C++ entry point**: `PythonVersionStore::create_lazy_record_batch_iterator()` in `version_store_api.cpp` — calls `setup_pipeline_context()` (index-only read), extracts `slice_and_keys_` and `columns_to_decode`, creates `LazyRecordBatchIterator`
+- **Python bindings**: `LazyRecordBatchIterator` bound with `py::call_guard<py::gil_scoped_release>()` on `next()` (does Folly async I/O)
+- **Python integration**: `NativeVersionStore.read_as_lazy_record_batch_iterator()` in `_store.py`, `Library._read_as_record_batch_reader(lazy=True)` in `library.py`
+- **Fallback to eager**: When `date_range` or `row_range` specified (lazy path only filters at segment granularity), when `query_builder` has clauses, or when symbol is empty (lazy iterator can't discover schema without data)
+- **`Library.sql()`** now uses lazy=True by default for all symbol registration
+- **Tests**: 20 tests in `test_lazy_streaming.py` (4 classes: SQL queries, direct iterator, lazy-vs-eager consistency, DuckDB context), all passing
+- **No regressions**: All 285 DuckDB tests pass
+
 ---
 
 ## Open Items

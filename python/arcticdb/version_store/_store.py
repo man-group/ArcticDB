@@ -2498,6 +2498,65 @@ class NativeVersionStore:
 
         return read_result.frame_data.create_iterator()
 
+    def read_as_lazy_record_batch_iterator(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        prefetch_size: int = 2,
+        **kwargs,
+    ):
+        """
+        Read data and return a lazy streaming record batch iterator.
+
+        Unlike read_as_record_batch_iterator() which reads all data eagerly into
+        memory, this method only reads segment metadata upfront and fetches actual
+        segment data on-demand as next() is called, with a configurable prefetch
+        buffer for latency hiding.
+
+        This is used by Library.sql() and Library.duckdb() for memory-efficient
+        streaming of large datasets from remote storage backends.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name to read.
+        as_of : Optional[VersionQueryInput], default=None
+            Version to read.
+        date_range : Optional[DateRangeInput], default=None
+            Date range filter.
+        row_range : Optional[Tuple[int, int]], default=None
+            Row range filter.
+        columns : Optional[List[str]], default=None
+            Columns to read.
+        prefetch_size : int, default=2
+            Number of segments to prefetch ahead of the current position.
+            Higher values hide more storage latency but use more memory.
+
+        Returns
+        -------
+        LazyRecordBatchIterator
+            C++ iterator that reads and yields Arrow record batches on-demand.
+        """
+        # Force Arrow output format
+        kwargs["output_format"] = OutputFormat.PYARROW
+
+        query_builder = None
+        version_query, read_options, read_query, _ = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            **kwargs,
+        )
+
+        return self.version_store.create_lazy_record_batch_iterator(
+            symbol, version_query, read_query, read_options, prefetch_size
+        )
+
     def _read_modify_write(
         self,
         source_symbol: str,

@@ -18,6 +18,7 @@
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 
 namespace arcticdb::version_store {
 
@@ -122,6 +123,14 @@ class PythonVersionStore : public LocalVersionedEngine {
     ReadResult read_dataframe_version(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::any& handler_data
+    );
+
+    // Creates a lazy record batch iterator that reads segments on-demand from storage.
+    // Only reads the index (segment metadata) upfront; actual segment data is fetched
+    // incrementally as next() is called, with a configurable prefetch buffer.
+    std::shared_ptr<LazyRecordBatchIterator> create_lazy_record_batch_iterator(
+            const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+            const ReadOptions& read_options, size_t prefetch_size = 2
     );
 
     VersionedItem read_modify_write(

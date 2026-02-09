@@ -1058,6 +1058,55 @@ ReadResult PythonVersionStore::read_dataframe_version(
     );
 }
 
+std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_batch_iterator(
+        const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, size_t prefetch_size
+) {
+    py::gil_scoped_release release_gil;
+
+    // Resolve version
+    auto version = get_version_to_read(stream_id, version_query);
+    std::variant<VersionedItem, StreamId> version_info;
+    if (version) {
+        version_info = *version;
+    } else if (opt_false(read_options.incompletes())) {
+        version_info = stream_id;
+    } else {
+        missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                "create_lazy_record_batch_iterator: version matching query '{}' not found for symbol '{}'",
+                version_query,
+                stream_id
+        );
+    }
+
+    // Read only the index — populates slice_and_keys_ (cheap metadata I/O, no segment data)
+    auto pipeline_context = version_store::setup_pipeline_context(store(), version_info, *read_query, read_options);
+
+    util::check(
+            !pipeline_context->multi_key_,
+            "Lazy record batch iterator does not support recursive/composite data (multi_key)"
+    );
+
+    // Build columns_to_decode from the pipeline context's column bitset
+    std::shared_ptr<std::unordered_set<std::string>> cols_to_decode;
+    if (pipeline_context->overall_column_bitset_) {
+        cols_to_decode = std::make_shared<std::unordered_set<std::string>>();
+        auto en = pipeline_context->overall_column_bitset_->first();
+        auto en_end = pipeline_context->overall_column_bitset_->end();
+        while (en < en_end) {
+            cols_to_decode->insert(std::string(pipeline_context->desc_->field(*en++).name()));
+        }
+    }
+
+    return std::make_shared<LazyRecordBatchIterator>(
+            std::move(pipeline_context->slice_and_keys_),
+            pipeline_context->descriptor(),
+            store(),
+            std::move(cols_to_decode),
+            prefetch_size
+    );
+}
+
 VersionedItem PythonVersionStore::read_modify_write(
         const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
         const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,

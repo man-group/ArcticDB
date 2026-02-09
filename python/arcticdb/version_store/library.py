@@ -2120,22 +2120,45 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
+        lazy: bool = False,
     ) -> "ArcticRecordBatchReader":
         """
         Read data and return a lazy Arrow RecordBatchReader that streams data segment-by-segment.
 
         This is an internal method used by sql() and duckdb() for memory-efficient streaming.
+
+        Parameters
+        ----------
+        lazy : bool, default=False
+            If True, use lazy streaming that reads segments on-demand from storage
+            with prefetch. This avoids loading all data into memory upfront, making
+            it suitable for large datasets on remote storage backends.
+            Falls back to eager mode if query_builder has clauses (which require
+            all segments for processing).
         """
         from arcticdb.version_store.duckdb import ArcticRecordBatchReader
 
-        cpp_iterator = self._nvs.read_as_record_batch_iterator(
-            symbol=symbol,
-            as_of=as_of,
-            date_range=date_range,
-            row_range=row_range,
-            columns=columns,
-            query_builder=query_builder,
-        )
+        # Lazy mode: read segments on-demand with prefetch.
+        # Falls back to eager when query_builder has clauses, or when date_range/row_range
+        # are specified (lazy path filters at segment granularity only; the eager path does
+        # row-level truncation within segments).
+        if lazy and query_builder is None and date_range is None and row_range is None:
+            cpp_iterator = self._nvs.read_as_lazy_record_batch_iterator(
+                symbol=symbol,
+                as_of=as_of,
+                date_range=date_range,
+                row_range=row_range,
+                columns=columns,
+            )
+        else:
+            cpp_iterator = self._nvs.read_as_record_batch_iterator(
+                symbol=symbol,
+                as_of=as_of,
+                date_range=date_range,
+                row_range=row_range,
+                columns=columns,
+                query_builder=query_builder,
+            )
 
         return ArcticRecordBatchReader(cpp_iterator)
 
@@ -2278,12 +2301,19 @@ class Library:
                         date_range=pushdown.date_range,
                         row_range=row_range,
                         query_builder=pushdown.query_builder,
+                        lazy=True,
                     )
                 else:
-                    reader = self._read_as_record_batch_reader(real_symbol, as_of=symbol_as_of)
+                    reader = self._read_as_record_batch_reader(real_symbol, as_of=symbol_as_of, lazy=True)
 
-                # Register under the SQL name so DuckDB can find it from the query
-                conn.register(sql_name, reader.to_pyarrow_reader())
+                # Register under the SQL name so DuckDB can find it from the query.
+                # If the lazy reader has no schema (empty symbol), fall back to eager
+                # which can discover schema from metadata even without data segments.
+                if len(reader.schema) == 0:
+                    eager_reader = self._read_as_record_batch_reader(real_symbol, as_of=symbol_as_of, lazy=False)
+                    conn.register(sql_name, eager_reader.read_all())
+                else:
+                    conn.register(sql_name, reader.to_pyarrow_reader())
 
             # Execute query and convert to requested format
             from arcticdb.version_store.duckdb.duckdb import _BaseDuckDBContext

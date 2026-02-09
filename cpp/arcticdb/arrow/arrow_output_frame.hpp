@@ -8,11 +8,18 @@
 #pragma once
 
 #include <cstring>
+#include <deque>
 #include <memory>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 #include <sparrow/c_interface.hpp>
+
+#include <folly/futures/Future.h>
+
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 
 // Anything that transitively includes sparrow.array.hpp takes ages to build the (unused by us) std::format impl
 // So avoid including sparrow in headers where possible until this is resolved
@@ -22,8 +29,13 @@ class record_batch;
 
 namespace arcticdb {
 
-// Forward declaration
+namespace stream {
+class StreamSource;
+}
+
+// Forward declarations
 class RecordBatchIterator;
+class LazyRecordBatchIterator;
 
 // C arrow representation of a record batch. Can be converted to a pyarrow.RecordBatch zero copy.
 // Follows Rule of Five: move-only semantics to prevent double-free of Arrow structures.
@@ -128,6 +140,55 @@ class RecordBatchIterator {
   private:
     std::shared_ptr<std::vector<sparrow::record_batch>> data_;
     size_t current_index_ = 0;
+};
+
+// Lazy iterator that reads and decodes segments on-demand from storage.
+// Instead of pre-loading all data, it holds segment metadata (keys) and reads
+// one segment at a time in next(), with a configurable prefetch buffer for
+// latency hiding. This enables querying symbols larger than available memory.
+class LazyRecordBatchIterator {
+  public:
+    LazyRecordBatchIterator(
+            std::vector<pipelines::SliceAndKey> slice_and_keys, StreamDescriptor descriptor,
+            std::shared_ptr<stream::StreamSource> store,
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode, size_t prefetch_size = 2
+    );
+
+    // Returns the next record batch by reading from storage, or nullopt if exhausted.
+    std::optional<RecordBatchData> next();
+
+    // Returns true if there are more segments to read.
+    [[nodiscard]] bool has_next() const;
+
+    // Returns the total number of segments.
+    [[nodiscard]] size_t num_batches() const;
+
+    // Returns the current position (0-indexed).
+    [[nodiscard]] size_t current_index() const { return current_index_; }
+
+  private:
+    std::vector<pipelines::SliceAndKey> slice_and_keys_;
+    StreamDescriptor descriptor_;
+    std::shared_ptr<stream::StreamSource> store_;
+    std::shared_ptr<std::unordered_set<std::string>> columns_to_decode_;
+    size_t prefetch_size_;
+    size_t current_index_ = 0;
+    // Next segment index to submit for prefetch (may be ahead of current_index_)
+    size_t next_prefetch_index_ = 0;
+
+    // Prefetch buffer: queue of futures for upcoming decoded segments
+    std::deque<folly::Future<pipelines::SegmentAndSlice>> prefetch_buffer_;
+
+    // Buffer for extra record batches when a single segment produces multiple blocks.
+    // A segment's column data can span multiple ChunkedBuffer blocks (each 64KB),
+    // and segment_to_arrow_data() produces one record_batch per block.
+    std::deque<RecordBatchData> pending_batches_;
+
+    // Submit a read+decode for one segment, returns a future
+    folly::Future<pipelines::SegmentAndSlice> read_and_decode_segment(size_t idx);
+
+    // Fill the prefetch buffer up to prefetch_size_ entries
+    void fill_prefetch_buffer();
 };
 
 } // namespace arcticdb

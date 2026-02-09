@@ -7,12 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 be governed by the Apache License, version 2.0.
 """
 
-from typing import TYPE_CHECKING, Iterator, Optional
+from typing import TYPE_CHECKING, Iterator, Optional, Union
 
 import pyarrow as pa
 
 if TYPE_CHECKING:
-    from arcticdb_ext.version_store import RecordBatchIterator
+    from arcticdb_ext.version_store import LazyRecordBatchIterator, RecordBatchIterator
 
 
 class ArcticRecordBatchReader:
@@ -33,14 +33,15 @@ class ArcticRecordBatchReader:
     Attempting to iterate over an exhausted reader will immediately raise StopIteration.
     """
 
-    def __init__(self, cpp_iterator: "RecordBatchIterator"):
+    def __init__(self, cpp_iterator: "Union[RecordBatchIterator, LazyRecordBatchIterator]"):
         """
-        Initialize the reader with a C++ RecordBatchIterator.
+        Initialize the reader with a C++ record batch iterator.
 
         Parameters
         ----------
-        cpp_iterator : RecordBatchIterator
-            The C++ iterator from ArrowOutputFrame.create_iterator()
+        cpp_iterator : RecordBatchIterator or LazyRecordBatchIterator
+            The C++ iterator. RecordBatchIterator reads eagerly from memory;
+            LazyRecordBatchIterator reads segments on-demand from storage.
         """
         self._cpp_iterator = cpp_iterator
         self._schema: Optional[pa.Schema] = None

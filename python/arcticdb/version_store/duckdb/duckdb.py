@@ -402,6 +402,7 @@ class DuckDBContext(_BaseDuckDBContext):
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
+            lazy=True,
         )
 
         # Convert to native PyArrow RecordBatchReader for DuckDB compatibility
@@ -701,6 +702,7 @@ class ArcticDuckDBContext(_BaseDuckDBContext):
             row_range=row_range,
             columns=columns,
             query_builder=query_builder,
+            lazy=True,
         )
 
         self._conn.register(table_name, reader.to_pyarrow_reader())
