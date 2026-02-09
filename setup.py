@@ -135,17 +135,21 @@ class CompileProto(Command):
             # the correct version at run time.
             packages = ["grpcio-tools" + grpc_version, f"protobuf=={proto_ver}.*"]
             if proto_ver == "3":
-                # proto 3 requires grpcio-tools<1.31. Old grpcio-tools version doesn't ship with python3.10+ wheels.
-                # So pip will build it from tarball. Both its setup.py and its protoc entry point depend on
-                # pkg_resources, which is removed in setuptools>=82. The constraint pins setuptools in pip's
-                # build isolation env, and the explicit package makes it available at protoc runtime.
+                # grpcio-tools<1.31 has no pre-built wheels for newer Pythons, so pip builds from
+                # tarball. Both its setup.py and its protoc entry point import pkg_resources, which
+                # was removed in setuptools>=82. PIP_CONSTRAINT pins setuptools in pip's build
+                # isolation env, and the explicit package makes it available at protoc runtime.
+                # --use-pep517 forces the PEP 517 build path on all platforms (Windows/Mac default
+                # to the legacy setup.py path where PIP_CONSTRAINT is not propagated).
                 constraints = os.path.join(pythonpath, "constraints.txt")
                 with open(constraints, "w") as f:
                     f.write("setuptools<82\n")
                 install_env = {**os.environ, "PIP_CONSTRAINT": constraints}
                 packages.append("setuptools<82")
+                extra_pip_args = ["--use-pep517"]
             else:
                 install_env = {**os.environ}
+                extra_pip_args = []
 
             _log_and_run(
                 sys.executable,
@@ -153,6 +157,7 @@ class CompileProto(Command):
                 "install",
                 "--disable-pip-version-check",
                 "--target=" + pythonpath,
+                *extra_pip_args,
                 *packages,
                 env=install_env,
             )
