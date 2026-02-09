@@ -314,15 +314,14 @@ class TestDocumentationExamples:
     def test_dict_as_of_with_timestamp(self, lmdb_library):
         """Test dict-based as_of using datetime values."""
         lib = lmdb_library
-        import time
 
-        lib.write("trades", pd.DataFrame({"value": [1]}))  # v0
-        time.sleep(0.1)
-        t_between = pd.Timestamp.now()
-        time.sleep(0.1)
-        lib.write("trades", pd.DataFrame({"value": [2]}))  # v1
+        vi0 = lib.write("trades", pd.DataFrame({"value": [1]}))  # v0
+        vi1 = lib.write("trades", pd.DataFrame({"value": [2]}))  # v1
 
-        # Query as of the timestamp between the two writes
+        # Compute a timestamp between the two writes from their creation times
+        t_between = pd.Timestamp(vi0.timestamp + (vi1.timestamp - vi0.timestamp) // 2, unit="ns", tz="UTC")
+
+        # Query as of the timestamp between the two writes — should resolve to v0
         result = lib.sql("SELECT * FROM trades", as_of={"trades": t_between})
         assert result["value"].iloc[0] == 1
 
