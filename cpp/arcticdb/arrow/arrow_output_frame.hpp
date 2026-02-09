@@ -12,12 +12,14 @@
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <variant>
 #include <vector>
 
 #include <sparrow/c_interface.hpp>
 
 #include <folly/futures/Future.h>
 
+#include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
@@ -33,9 +35,15 @@ namespace stream {
 class StreamSource;
 }
 
+struct ExpressionContext;
+
 // Forward declarations
 class RecordBatchIterator;
 class LazyRecordBatchIterator;
+
+// FilterRange: same definition as pipelines::FilterRange from read_query.hpp,
+// repeated here to avoid pulling in clause.hpp (which is very heavy to compile).
+using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
 
 // C arrow representation of a record batch. Can be converted to a pyarrow.RecordBatch zero copy.
 // Follows Rule of Five: move-only semantics to prevent double-free of Arrow structures.
@@ -146,12 +154,18 @@ class RecordBatchIterator {
 // Instead of pre-loading all data, it holds segment metadata (keys) and reads
 // one segment at a time in next(), with a configurable prefetch buffer for
 // latency hiding. This enables querying symbols larger than available memory.
+//
+// Supports optional row-level truncation (date_range/row_range) and per-segment
+// FilterClause application (WHERE pushdown from SQL). These are applied after
+// decoding but before Arrow conversion, so DuckDB only sees the filtered data.
 class LazyRecordBatchIterator {
   public:
     LazyRecordBatchIterator(
             std::vector<pipelines::SliceAndKey> slice_and_keys, StreamDescriptor descriptor,
             std::shared_ptr<stream::StreamSource> store,
-            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode, size_t prefetch_size = 2
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode, FilterRange row_filter,
+            std::shared_ptr<ExpressionContext> expression_context, std::string filter_root_node_name,
+            size_t prefetch_size = 2
     );
 
     // Returns the next record batch by reading from storage, or nullopt if exhausted.
@@ -166,6 +180,10 @@ class LazyRecordBatchIterator {
     // Returns the current position (0-indexed).
     [[nodiscard]] size_t current_index() const { return current_index_; }
 
+    // Returns the stream descriptor (schema) for this iterator.
+    // Used by Python to build a pyarrow.Schema even when there are no data segments.
+    [[nodiscard]] const StreamDescriptor& descriptor() const { return descriptor_; }
+
   private:
     std::vector<pipelines::SliceAndKey> slice_and_keys_;
     StreamDescriptor descriptor_;
@@ -175,6 +193,17 @@ class LazyRecordBatchIterator {
     size_t current_index_ = 0;
     // Next segment index to submit for prefetch (may be ahead of current_index_)
     size_t next_prefetch_index_ = 0;
+
+    // Row-level truncation for date_range/row_range filtering.
+    // setup_pipeline_context() already filters segments at segment-granularity;
+    // this truncates the boundary segments to exact row boundaries.
+    FilterRange row_filter_;
+
+    // Per-segment filter from QueryBuilder WHERE pushdown (SQL path).
+    // If expression_context_ is non-null, each decoded segment is filtered through
+    // the expression before Arrow conversion.
+    std::shared_ptr<ExpressionContext> expression_context_;
+    std::string filter_root_node_name_;
 
     // Prefetch buffer: queue of futures for upcoming decoded segments
     std::deque<folly::Future<pipelines::SegmentAndSlice>> prefetch_buffer_;
@@ -189,6 +218,14 @@ class LazyRecordBatchIterator {
 
     // Fill the prefetch buffer up to prefetch_size_ entries
     void fill_prefetch_buffer();
+
+    // Apply row-level truncation to a decoded segment based on row_filter_.
+    // Modifies the segment in-place (truncates boundary rows).
+    void apply_truncation(SegmentInMemory& segment, const pipelines::RowRange& slice_row_range);
+
+    // Apply FilterClause expression to a decoded segment.
+    // Returns true if the segment has rows remaining after filtering, false if empty.
+    bool apply_filter_clause(SegmentInMemory& segment);
 };
 
 } // namespace arcticdb

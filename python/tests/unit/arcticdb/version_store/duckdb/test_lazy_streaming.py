@@ -256,7 +256,7 @@ class TestLazyVsEagerConsistency:
         assert eager_table.equals(lazy_table)
 
     def test_consistency_with_date_range(self, lmdb_library):
-        """Lazy date_range filters at segment granularity; row-level filtering is done by DuckDB."""
+        """Lazy date_range now does row-level truncation, matching the eager path exactly."""
         lib = lmdb_library
         idx = pd.date_range("2024-01-01", periods=100, freq="D")
         df = pd.DataFrame({"value": np.arange(100)}, index=idx)
@@ -269,19 +269,16 @@ class TestLazyVsEagerConsistency:
         eager_reader = ArcticRecordBatchReader(eager_iter)
         eager_table = eager_reader.read_all()
 
-        # Lazy path filters at segment granularity — returns full segments that overlap.
-        # In production, DuckDB applies row-level filtering via the SQL WHERE clause.
+        # Lazy path now also does row-level truncation within boundary segments
         lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym", date_range=date_range)
         lazy_reader = ArcticRecordBatchReader(lazy_iter)
         lazy_table = lazy_reader.read_all()
 
-        # Lazy table is a superset of or equal to the eager table
-        assert lazy_table.num_rows >= eager_table.num_rows
-        # Eager data must be a subset of the lazy data
+        # Both should produce identical row counts and data
+        assert lazy_table.num_rows == eager_table.num_rows
         eager_df = eager_table.to_pandas()
         lazy_df = lazy_table.to_pandas()
-        merged = eager_df.merge(lazy_df, how="left", indicator=True)
-        assert (merged["_merge"] == "both").all()
+        pd.testing.assert_frame_equal(eager_df, lazy_df)
 
     def test_consistency_large_data(self, lmdb_library):
         """Lazy and eager produce identical results for larger multi-segment data."""
@@ -306,6 +303,125 @@ class TestLazyVsEagerConsistency:
         lazy_table = lazy_reader.read_all()
 
         assert eager_table.equals(lazy_table)
+
+
+class TestLazyTruncationAndFilter:
+    """Tests for row-level truncation (date_range/row_range) and FilterClause in the lazy path."""
+
+    def test_lazy_date_range_exact_match(self, lmdb_library):
+        """Lazy date_range truncation produces the exact same row count as eager."""
+        lib = lmdb_library
+        idx = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365), "label": ["A"] * 365}, index=idx)
+        lib.write("sym", df)
+
+        date_range = (pd.Timestamp("2024-03-15"), pd.Timestamp("2024-06-30"))
+
+        eager_result = lib.read("sym", date_range=date_range).data
+        lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym", date_range=date_range)
+        lazy_reader = ArcticRecordBatchReader(lazy_iter)
+        lazy_table = lazy_reader.read_all()
+
+        # Lazy returns index as a regular column; eager has it as DataFrame index.
+        # Compare row counts and data column values to verify truncation correctness.
+        assert lazy_table.num_rows == len(eager_result)
+        lazy_df = lazy_table.to_pandas()
+        np.testing.assert_array_equal(lazy_df["value"].values, eager_result["value"].values)
+
+    def test_lazy_row_range_exact_match(self, lmdb_library):
+        """Lazy row_range truncation produces the exact same rows as eager."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(500), "y": np.random.default_rng(42).standard_normal(500)})
+        lib.write("sym", df)
+
+        row_range = (100, 250)
+
+        eager_result = lib.read("sym", row_range=row_range).data
+        lazy_iter = lib._nvs.read_as_lazy_record_batch_iterator("sym", row_range=row_range)
+        lazy_reader = ArcticRecordBatchReader(lazy_iter)
+        lazy_df = lazy_reader.read_all().to_pandas()
+
+        assert len(lazy_df) == len(eager_result)
+        pd.testing.assert_frame_equal(lazy_df.reset_index(drop=True), eager_result.reset_index(drop=True))
+
+    def test_lazy_filter_clause_via_sql(self, lmdb_library):
+        """SQL WHERE pushdown with FilterClause applied lazily in the C++ iterator."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(200), "y": np.arange(200, 400)})
+        lib.write("sym", df)
+
+        # SQL WHERE clause gets pushed down as a FilterClause to the lazy iterator
+        result = lib.sql("SELECT x, y FROM sym WHERE x >= 100 AND x < 150 ORDER BY x")
+
+        assert len(result) == 50
+        assert result["x"].min() == 100
+        assert result["x"].max() == 149
+
+    def test_lazy_date_range_via_sql(self, lmdb_library):
+        """SQL date_range pushdown with row-level truncation in the lazy iterator."""
+        lib = lmdb_library
+        idx = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365)}, index=idx)
+        lib.write("sym", df)
+
+        # SQL pushdown extracts date_range from WHERE clause on index
+        result = lib.sql("SELECT * FROM sym WHERE index >= '2024-04-01' AND index < '2024-05-01'")
+
+        # April 2024 has 30 days
+        assert len(result) == 30
+
+    def test_lazy_date_range_and_filter_combined(self, lmdb_library):
+        """Combined date_range + WHERE filter applied lazily."""
+        lib = lmdb_library
+        idx = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame(
+            {"value": np.arange(365), "category": np.where(np.arange(365) % 2 == 0, "even", "odd")}, index=idx
+        )
+        lib.write("sym", df)
+
+        # SQL query with both date range on index and value filter
+        result = lib.sql("SELECT * FROM sym WHERE index >= '2024-03-01' AND index < '2024-04-01' AND category = 'even'")
+
+        # March 2024 has 31 days, roughly half are "even"
+        assert len(result) > 0
+        assert all(result["category"] == "even")
+        # Verify date range constraint (index column may be returned as a regular column)
+        if "index" in result.columns:
+            ts_col = result["index"]
+        else:
+            ts_col = result.index
+        assert pd.Timestamp(ts_col.min()) >= pd.Timestamp("2024-03-01")
+        assert pd.Timestamp(ts_col.max()) < pd.Timestamp("2024-04-01")
+
+    def test_lazy_row_range_via_sql_limit(self, lmdb_library):
+        """SQL LIMIT clause is translated to row_range and applied lazily."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(1000)})
+        lib.write("sym", df)
+
+        result = lib.sql("SELECT x FROM sym LIMIT 25")
+
+        assert len(result) == 25
+
+    def test_lazy_filter_all_rows_removed(self, lmdb_library):
+        """FilterClause that removes all rows returns empty result."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("sym", df)
+
+        result = lib.sql("SELECT x FROM sym WHERE x > 9999")
+
+        assert len(result) == 0
+
+    def test_lazy_field_count(self, lmdb_library):
+        """field_count() accessor returns the correct number of schema fields."""
+        lib = lmdb_library
+        df = pd.DataFrame({"a": [1, 2], "b": [3, 4], "c": [5, 6]})
+        lib.write("sym", df)
+
+        cpp_iterator = lib._nvs.read_as_lazy_record_batch_iterator("sym")
+        # field_count includes index + data columns
+        assert cpp_iterator.field_count() >= 3
 
 
 class TestLazyWithDuckDBContext:

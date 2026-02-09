@@ -279,7 +279,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     )pbdoc")
             .def("current_index", &LazyRecordBatchIterator::current_index, R"pbdoc(
         Returns the current position (0-indexed).
-    )pbdoc");
+    )pbdoc")
+            .def(
+                    "field_count",
+                    [](const LazyRecordBatchIterator& self) { return self.descriptor().field_count(); },
+                    R"pbdoc(
+        Returns the number of fields (columns) in the schema, including index fields.
+    )pbdoc"
+            );
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -841,6 +848,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  py::arg("version_query"),
                  py::arg("read_query"),
                  py::arg("read_options"),
+                 py::arg("filter_clause") = std::shared_ptr<FilterClause>{},
                  py::arg("prefetch_size") = 2)
             .def("_read_modify_write",
                  &PythonVersionStore::read_modify_write,

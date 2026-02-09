@@ -16,8 +16,12 @@
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/pipeline/filter_segment.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
+#include <arcticdb/processing/expression_context.hpp>
+#include <arcticdb/processing/expression_node.hpp>
+#include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/type_handler.hpp>
@@ -190,13 +194,17 @@ std::optional<RecordBatchData> RecordBatchIterator::next() {
 LazyRecordBatchIterator::LazyRecordBatchIterator(
         std::vector<pipelines::SliceAndKey> slice_and_keys, StreamDescriptor descriptor,
         std::shared_ptr<stream::StreamSource> store, std::shared_ptr<std::unordered_set<std::string>> columns_to_decode,
-        size_t prefetch_size
+        FilterRange row_filter, std::shared_ptr<ExpressionContext> expression_context,
+        std::string filter_root_node_name, size_t prefetch_size
 ) :
     slice_and_keys_(std::move(slice_and_keys)),
     descriptor_(std::move(descriptor)),
     store_(std::move(store)),
     columns_to_decode_(std::move(columns_to_decode)),
-    prefetch_size_(std::max(prefetch_size, size_t{1})) {
+    prefetch_size_(std::max(prefetch_size, size_t{1})),
+    row_filter_(std::move(row_filter)),
+    expression_context_(std::move(expression_context)),
+    filter_root_node_name_(std::move(filter_root_node_name)) {
     fill_prefetch_buffer();
 }
 
@@ -221,6 +229,98 @@ void LazyRecordBatchIterator::fill_prefetch_buffer() {
     }
 }
 
+void LazyRecordBatchIterator::apply_truncation(SegmentInMemory& segment, const pipelines::RowRange& slice_row_range) {
+    util::variant_match(
+            row_filter_,
+            [&segment, &slice_row_range](const entity::IndexRange& index_filter) {
+                // Timestamp-based truncation (date_range).
+                // The segment's index column (column 0) contains timestamps.
+                // Binary search to find the exact row boundaries within this segment.
+                const auto& time_filter = static_cast<const TimestampRange&>(index_filter);
+                const auto num_rows = segment.row_count();
+                if (num_rows == 0) {
+                    return;
+                }
+                auto index_column = segment.column_ptr(0);
+                auto first_ts = *index_column->scalar_at<timestamp>(0);
+                auto last_ts = *index_column->scalar_at<timestamp>(num_rows - 1);
+
+                // Only truncate if the filter boundary falls inside this segment
+                if ((time_filter.first > first_ts && time_filter.first <= last_ts) ||
+                    (time_filter.second >= first_ts && time_filter.second < last_ts)) {
+                    auto start_row = index_column->search_sorted<timestamp>(time_filter.first, false);
+                    auto end_row = index_column->search_sorted<timestamp>(time_filter.second, true);
+                    segment = segment.truncate(start_row, end_row, false);
+                } else if (time_filter.first > last_ts) {
+                    // Filter starts after all rows in this segment — empty result
+                    segment = segment.truncate(0, 0, false);
+                }
+            },
+            [&segment, &slice_row_range](const pipelines::RowRange& row_filter) {
+                // Row-based truncation (row_range / LIMIT).
+                // Calculate the overlap between this segment's row range and the filter.
+                const auto num_rows = segment.row_count();
+                if (num_rows == 0) {
+                    return;
+                }
+                auto seg_start = static_cast<int64_t>(slice_row_range.first);
+                auto filter_start = static_cast<int64_t>(row_filter.first);
+                auto filter_end = static_cast<int64_t>(row_filter.second);
+
+                // Local row indices within this segment
+                auto local_start = std::max(int64_t{0}, filter_start - seg_start);
+                auto local_end = std::min(static_cast<int64_t>(num_rows), filter_end - seg_start);
+
+                if (local_start > 0 || local_end < static_cast<int64_t>(num_rows)) {
+                    segment = segment.truncate(
+                            static_cast<size_t>(local_start),
+                            static_cast<size_t>(std::max(local_end, int64_t{0})),
+                            false
+                    );
+                }
+            },
+            [](const std::monostate&) {
+                // No filter — nothing to truncate
+            }
+    );
+}
+
+bool LazyRecordBatchIterator::apply_filter_clause(SegmentInMemory& segment) {
+    if (!expression_context_) {
+        return true; // No filter — keep all rows
+    }
+    if (segment.row_count() == 0) {
+        return false;
+    }
+
+    ExpressionName root_node_name(filter_root_node_name_);
+    ProcessingUnit proc(std::move(segment));
+    proc.set_expression_context(expression_context_);
+    auto variant_data = proc.get(root_node_name);
+
+    bool has_rows = false;
+    util::variant_match(
+            variant_data,
+            [&proc, &has_rows](util::BitSet& bitset) {
+                if (bitset.count() > 0) {
+                    proc.apply_filter(std::move(bitset), PipelineOptimisation::SPEED);
+                    has_rows = true;
+                }
+            },
+            [](EmptyResult) { /* Empty — no rows match */ },
+            [&has_rows](FullResult) {
+                has_rows = true; // All rows match — no filtering needed
+            },
+            [](const auto&) { util::raise_rte("Expected bitset from filter clause in lazy iterator"); }
+    );
+
+    if (has_rows) {
+        // Extract the filtered segment back from the ProcessingUnit
+        segment = std::move(*proc.segments_->at(0));
+    }
+    return has_rows;
+}
+
 std::optional<RecordBatchData> LazyRecordBatchIterator::next() {
     // Drain any buffered batches from a previous multi-block segment first
     if (!pending_batches_.empty()) {
@@ -241,15 +341,26 @@ std::optional<RecordBatchData> LazyRecordBatchIterator::next() {
     // Kick off reads for the next segments
     fill_prefetch_buffer();
 
+    auto& segment = segment_and_slice.segment_in_memory_;
+
+    // Apply row-level truncation for date_range/row_range
+    apply_truncation(segment, segment_and_slice.ranges_and_key_.row_range());
+
+    // Apply FilterClause expression (WHERE pushdown)
+    if (!apply_filter_clause(segment)) {
+        // All rows filtered out — try next segment
+        return next();
+    }
+
     // Prepare the decoded segment for Arrow conversion:
     // - Non-string columns: make inline blocks detachable for block.release()
     // - String columns: resolve string pool offsets into proper Arrow dictionary/string buffers
-    prepare_segment_for_arrow(segment_and_slice.segment_in_memory_);
+    prepare_segment_for_arrow(segment);
 
     // Convert the decoded SegmentInMemory to Arrow record batches.
     // A single segment can produce multiple record batches when column data spans
     // multiple ChunkedBuffer blocks (each block = one batch, blocks are ~64KB).
-    auto arrow_batches = segment_to_arrow_data(segment_and_slice.segment_in_memory_);
+    auto arrow_batches = segment_to_arrow_data(segment);
     if (!arrow_batches || arrow_batches->empty()) {
         // Empty segment — try next
         return next();

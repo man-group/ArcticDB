@@ -2133,22 +2133,19 @@ class Library:
             If True, use lazy streaming that reads segments on-demand from storage
             with prefetch. This avoids loading all data into memory upfront, making
             it suitable for large datasets on remote storage backends.
-            Falls back to eager mode if query_builder has clauses (which require
-            all segments for processing).
+            The lazy path supports row-level truncation (date_range/row_range) and
+            per-segment FilterClause application (WHERE pushdown from SQL).
         """
         from arcticdb.version_store.duckdb import ArcticRecordBatchReader
 
-        # Lazy mode: read segments on-demand with prefetch.
-        # Falls back to eager when query_builder has clauses, or when date_range/row_range
-        # are specified (lazy path filters at segment granularity only; the eager path does
-        # row-level truncation within segments).
-        if lazy and query_builder is None and date_range is None and row_range is None:
+        if lazy:
             cpp_iterator = self._nvs.read_as_lazy_record_batch_iterator(
                 symbol=symbol,
                 as_of=as_of,
                 date_range=date_range,
                 row_range=row_range,
                 columns=columns,
+                query_builder=query_builder,
             )
         else:
             cpp_iterator = self._nvs.read_as_record_batch_iterator(

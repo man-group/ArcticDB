@@ -1060,7 +1060,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
 
 std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_batch_iterator(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, size_t prefetch_size
+        const ReadOptions& read_options, std::shared_ptr<FilterClause> filter_clause, size_t prefetch_size
 ) {
     py::gil_scoped_release release_gil;
 
@@ -1087,7 +1087,9 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
             "Lazy record batch iterator does not support recursive/composite data (multi_key)"
     );
 
-    // Build columns_to_decode from the pipeline context's column bitset
+    // Build columns_to_decode from the pipeline context's column bitset.
+    // If a FilterClause is provided, also include its required input columns
+    // so that segments contain the columns needed for expression evaluation.
     std::shared_ptr<std::unordered_set<std::string>> cols_to_decode;
     if (pipeline_context->overall_column_bitset_) {
         cols_to_decode = std::make_shared<std::unordered_set<std::string>>();
@@ -1096,6 +1098,20 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
         while (en < en_end) {
             cols_to_decode->insert(std::string(pipeline_context->desc_->field(*en++).name()));
         }
+        // Ensure filter clause input columns are decoded even if not in the user's column selection
+        if (filter_clause && filter_clause->clause_info().input_columns_) {
+            for (const auto& col : *filter_clause->clause_info().input_columns_) {
+                cols_to_decode->insert(col);
+            }
+        }
+    }
+
+    // Extract filter expression context and root node name from the FilterClause
+    std::shared_ptr<ExpressionContext> expression_context;
+    std::string filter_root_node_name;
+    if (filter_clause) {
+        expression_context = filter_clause->expression_context_;
+        filter_root_node_name = filter_clause->root_node_name_.value;
     }
 
     return std::make_shared<LazyRecordBatchIterator>(
@@ -1103,6 +1119,9 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
             pipeline_context->descriptor(),
             store(),
             std::move(cols_to_decode),
+            read_query->row_filter,
+            std::move(expression_context),
+            std::move(filter_root_node_name),
             prefetch_size
     );
 }

@@ -128,9 +128,10 @@ class PythonVersionStore : public LocalVersionedEngine {
     // Creates a lazy record batch iterator that reads segments on-demand from storage.
     // Only reads the index (segment metadata) upfront; actual segment data is fetched
     // incrementally as next() is called, with a configurable prefetch buffer.
+    // Optional filter_clause provides a per-segment FilterClause (from SQL WHERE pushdown).
     std::shared_ptr<LazyRecordBatchIterator> create_lazy_record_batch_iterator(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-            const ReadOptions& read_options, size_t prefetch_size = 2
+            const ReadOptions& read_options, std::shared_ptr<FilterClause> filter_clause, size_t prefetch_size = 2
     );
 
     VersionedItem read_modify_write(

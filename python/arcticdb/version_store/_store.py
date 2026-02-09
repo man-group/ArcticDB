@@ -2505,6 +2505,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
+        query_builder: Optional["QueryBuilder"] = None,
         prefetch_size: int = 2,
         **kwargs,
     ):
@@ -2515,6 +2516,9 @@ class NativeVersionStore:
         memory, this method only reads segment metadata upfront and fetches actual
         segment data on-demand as next() is called, with a configurable prefetch
         buffer for latency hiding.
+
+        Supports row-level truncation for date_range/row_range and per-segment
+        FilterClause application for WHERE pushdown from SQL queries.
 
         This is used by Library.sql() and Library.duckdb() for memory-efficient
         streaming of large datasets from remote storage backends.
@@ -2531,6 +2535,8 @@ class NativeVersionStore:
             Row range filter.
         columns : Optional[List[str]], default=None
             Columns to read.
+        query_builder : Optional[QueryBuilder], default=None
+            Query builder with FilterClause for WHERE pushdown.
         prefetch_size : int, default=2
             Number of segments to prefetch ahead of the current position.
             Higher values hide more storage latency but use more memory.
@@ -2543,18 +2549,32 @@ class NativeVersionStore:
         # Force Arrow output format
         kwargs["output_format"] = OutputFormat.PYARROW
 
-        query_builder = None
+        # Build the read query WITHOUT query_builder so that _get_read_query doesn't
+        # prepend DateRangeClause/RowRangeClause into clauses_ (the lazy iterator
+        # handles date_range/row_range via row-level truncation, not clause processing).
         version_query, read_options, read_query, _ = self._get_queries(
             as_of=as_of,
             date_range=date_range,
             row_range=row_range,
             columns=columns,
-            query_builder=query_builder,
+            query_builder=None,
             **kwargs,
         )
 
+        # Extract FilterClause from query_builder (if any) to pass directly to C++.
+        # SQL pushdown only produces FilterClause (from WHERE); other clause types
+        # (aggregation, groupby, etc.) are handled by DuckDB, not pushed into ArcticDB.
+        filter_clause = None
+        if query_builder is not None:
+            from arcticdb_ext.version_store import FilterClause as _FilterClause
+
+            for clause in query_builder.clauses:
+                if isinstance(clause, _FilterClause):
+                    filter_clause = clause
+                    break
+
         return self.version_store.create_lazy_record_batch_iterator(
-            symbol, version_query, read_query, read_options, prefetch_size
+            symbol, version_query, read_query, read_options, filter_clause, prefetch_size
         )
 
     def _read_modify_write(
