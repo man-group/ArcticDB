@@ -133,19 +133,13 @@ class CompileProto(Command):
             # Python protobuf 3 and 4 are incompatible and we do not want to dictate which version of protobuf
             # the user can have, so we compile the Python binding files with both versions and dynamically load
             # the correct version at run time.
-            deps = ["grpcio-tools" + grpc_version, f"protobuf=={proto_ver}.*"]
-            # proto 3 requires grpcio-tools<1.31. Old grpcio-tools version doesn't ship with python3.10+ wheels.
-            # So pip will build it for tar ball. The build depends on pkg_resources, which is removed in
-            # setuptools>=82 hence the pin
             if proto_ver == "3":
-                _log_and_run(
-                    sys.executable,
-                    "-mpip",
-                    "install",
-                    "--disable-pip-version-check",
-                    "--target=" + pythonpath,
-                    "setuptools<82",
-                )
+                constraints = os.path.join(pythonpath, "constraints.txt")
+                with open(constraints, "w") as f:
+                    f.write("setuptools<82\n")
+                install_env = {**os.environ, "PIP_CONSTRAINT": constraints}
+            else:
+                install_env = {**os.environ}
 
             _log_and_run(
                 sys.executable,
@@ -153,7 +147,9 @@ class CompileProto(Command):
                 "install",
                 "--disable-pip-version-check",
                 "--target=" + pythonpath,
-                *deps,
+                "grpcio-tools" + grpc_version,
+                f"protobuf=={proto_ver}.*",
+                env=install_env,
             )
             env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
         else:
