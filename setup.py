@@ -136,9 +136,16 @@ class CompileProto(Command):
             packages = ["grpcio-tools" + grpc_version, f"protobuf=={proto_ver}.*"]
             if proto_ver == "3":
                 # proto 3 requires grpcio-tools<1.31. Old grpcio-tools version doesn't ship with python3.10+ wheels.
-                # So pip will build it for tar ball. The build depends on pkg_resources, which is removed in
-                # setuptools>=82 hence the pin
+                # So pip will build it from tarball. Both its setup.py and its protoc entry point depend on
+                # pkg_resources, which is removed in setuptools>=82. The constraint pins setuptools in pip's
+                # build isolation env, and the explicit package makes it available at protoc runtime.
+                constraints = os.path.join(pythonpath, "constraints.txt")
+                with open(constraints, "w") as f:
+                    f.write("setuptools<82\n")
+                install_env = {**os.environ, "PIP_CONSTRAINT": constraints}
                 packages.append("setuptools<82")
+            else:
+                install_env = {**os.environ}
 
             _log_and_run(
                 sys.executable,
@@ -147,6 +154,7 @@ class CompileProto(Command):
                 "--disable-pip-version-check",
                 "--target=" + pythonpath,
                 *packages,
+                env=install_env,
             )
             env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
         else:
