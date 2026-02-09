@@ -135,20 +135,21 @@ class CompileProto(Command):
             # the correct version at run time.
             packages = ["grpcio-tools" + grpc_version, f"protobuf=={proto_ver}.*"]
             if proto_ver == "3":
-                # grpcio-tools<1.31 has no pre-built wheels for newer Pythons, so pip builds from
-                # tarball. Both its setup.py and its protoc entry point import pkg_resources, which
-                # was removed in setuptools>=82. PIP_CONSTRAINT pins setuptools in pip's build
-                # isolation env, and the explicit package makes it available at protoc runtime.
-                # --use-pep517 forces the PEP 517 build path on all platforms (Windows/Mac default
-                # to the legacy setup.py path where PIP_CONSTRAINT is not propagated).
+                # grpcio-tools<1.31 has no pyproject.toml and no pre-built wheels for newer
+                # Pythons, so pip builds from tarball. Both its setup.py and its protoc entry
+                # point import pkg_resources, which was removed in setuptools>=82.
+                # --build-constraint pins setuptools in pip's build isolation env.
+                # The explicit setuptools<82 package makes pkg_resources available at protoc runtime.
                 constraints = os.path.join(pythonpath, "constraints.txt")
                 with open(constraints, "w") as f:
                     f.write("setuptools<82\n")
-                install_env = {**os.environ, "PIP_CONSTRAINT": constraints}
                 packages.append("setuptools<82")
-                extra_pip_args = ["--use-pep517"]
+                # --use-pep517 to force parameters being passed to sub-build pipeline
+                # CI still uses pip 25.1.1, which the option is OFF by default
+                # It will be on by default in pip 25.3 anyway
+                # extra_pip_args = ["--use-pep517", "--build-constraint", constraints]
+                extra_pip_args = ["--build-constraint", constraints]
             else:
-                install_env = {**os.environ}
                 extra_pip_args = []
 
             _log_and_run(
@@ -159,7 +160,6 @@ class CompileProto(Command):
                 "--target=" + pythonpath,
                 *extra_pip_args,
                 *packages,
-                env=install_env,
             )
             env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
         else:
