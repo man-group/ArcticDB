@@ -1,13 +1,15 @@
-# Arrow Output Frame
+# Arrow Output & Lazy Streaming
 
-Arrow C Data Interface integration for streaming ArcticDB query results to DuckDB.
+Arrow C Data Interface integration for streaming ArcticDB data to DuckDB and PyArrow consumers.
 
 ## Location
 
 ```
 cpp/arcticdb/arrow/
-├── arrow_output_frame.hpp   # RecordBatchData, RecordBatchIterator, ArrowOutputFrame (132 lines)
-└── arrow_output_frame.cpp   # Implementation (89 lines)
+├── arrow_output_frame.hpp   # RecordBatchData, LazyRecordBatchIterator, ArrowOutputFrame
+├── arrow_output_frame.cpp   # Implementation: lazy iterator, prepare_segment_for_arrow, SharedStringDictionary
+├── arrow_handlers.hpp/cpp   # Per-type Arrow conversion (string, numeric, timestamp)
+└── arrow_utils.hpp/cpp      # segment_to_arrow_data(), arrow_arrays_from_column()
 ```
 
 ## Classes
@@ -20,98 +22,168 @@ Single Arrow record batch: `ArrowArray` + `ArrowSchema` pair (Arrow C Data Inter
 RecordBatchData
 ├── array_   (ArrowArray)  — zero-initialized with std::memset
 ├── schema_  (ArrowSchema) — zero-initialized with std::memset
-├── extract_struct_array() → sparrow::record_batch  (destructive, moves data out)
 ├── array() → ArrowArray&
 └── schema() → ArrowSchema&
 ```
 
-**Key design**: Zero-initialized in constructor via `std::memset` to ensure safe release callback behavior. The Arrow C Data Interface requires that `release` is either `NULL` (no-op) or a valid callback. Zero-init guarantees `release == NULL` before data is populated.
+**Key design**: Zero-initialized in constructor via `std::memset` to ensure safe release callback behavior. The Arrow C Data Interface requires that `release` is either `NULL` (no-op) or a valid callback.
 
-### RecordBatchIterator
+### LazyRecordBatchIterator
 
-Iterates over `vector<RecordBatchData>`, yielding `sparrow::record_batch` objects.
+On-demand segment reader — the **primary path** for SQL/DuckDB queries. Reads and decodes one segment at a time from storage, with prefetch for latency hiding.
 
 ```
-RecordBatchIterator
-├── data_            (vector<RecordBatchData>)
-├── current_index_   (size_t)
-├── next() → optional<sparrow::record_batch>  (destructive extraction)
-├── schema() → ArrowSchema*   (from first batch)
+LazyRecordBatchIterator
+├── slice_and_keys_         (vector<SliceAndKey> — segment metadata from index-only read)
+├── descriptor_             (StreamDescriptor — schema, available even for empty symbols)
+├── store_                  (shared_ptr<StreamSource> — storage backend)
+├── columns_to_decode_      (shared_ptr<unordered_set<string>> — column projection)
+├── prefetch_buffer_        (deque<Future<SegmentAndSlice>>, default size 2)
+├── row_filter_             (FilterRange variant: IndexRange | RowRange | monostate)
+├── expression_context_     (shared_ptr<ExpressionContext> — FilterClause from WHERE)
+├── pending_batches_        (deque<RecordBatchData> — multi-block segment buffer)
+│
+├── next() → optional<RecordBatchData>
+│   ├── drain pending_batches_ first (multi-block segments)
+│   ├── block on prefetch_buffer_.front().get()
+│   ├── fill_prefetch_buffer() — kick off next reads
+│   ├── apply_truncation(segment, slice_row_range)
+│   ├── apply_filter_clause(segment) → bool
+│   ├── prepare_segment_for_arrow(segment)
+│   └── segment_to_arrow_data(segment) → vector<record_batch>
+│
+├── has_next() → bool
 ├── num_batches() → size_t
-└── current_index() → size_t
+├── current_index() → size_t
+├── descriptor() → StreamDescriptor
+└── field_count() → size_t
 ```
 
-Exposed to Python via pybind11 in `python_bindings_common.cpp` with `__next__` protocol.
+**Prefetch**: `fill_prefetch_buffer()` maintains up to `prefetch_size_` (default 2) in-flight `folly::Future<SegmentAndSlice>` via `read_and_decode_segment()` → `store_->batch_read_uncompressed()`.
+
+**Truncation**: `apply_truncation()` handles `IndexRange` (timestamp binary search) and `RowRange` (row offset overlap) for date_range/row_range/LIMIT pushdown.
+
+**Filter**: `apply_filter_clause()` evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering.
 
 ### ArrowOutputFrame
 
-Container holding all record batches from a query result.
+Container for `lib.read(output_format='pyarrow')` results. **Not used by the SQL/DuckDB path**.
 
 ```
 ArrowOutputFrame
-├── data_           (vector<RecordBatchData>)
+├── data_           (shared_ptr<vector<sparrow::record_batch>>)
 ├── data_consumed_  (bool, default false)
-├── create_iterator() → shared_ptr<RecordBatchIterator>  (sets data_consumed_)
-├── extract_record_batches() → vector<RecordBatchData>   (sets data_consumed_)
-└── num_record_batches() → size_t
+├── extract_record_batches() → vector<RecordBatchData>  (sets data_consumed_)
+└── num_blocks() → size_t
 ```
 
-**Single-use enforcement**: `data_consumed_` flag prevents double consumption. Both `create_iterator()` and `extract_record_batches()` check this flag and raise `util::check` error if already consumed. This is critical because `extract_struct_array()` destructively moves data — a second read would get empty/invalid data.
+Single-use enforcement via `data_consumed_` flag — `extract_record_batches()` raises error if already consumed.
+
+## Segment-to-Arrow Conversion
+
+### prepare_segment_for_arrow() (anonymous namespace in arrow_output_frame.cpp)
+
+Converts a decoded `SegmentInMemory` for Arrow consumption. **This is the dominant cost** in the SQL pipeline.
+
+| Column Type | Action | Cost |
+|------------|--------|------|
+| Non-string | `make_column_blocks_detachable()` — `allocate_detachable_memory()` + `memcpy` | O(data_size) per block |
+| Dynamic string (CATEGORICAL) | `encode_dictionary_with_shared_dict()` using `SharedStringDictionary` | O(rows) lookups + buffer copy |
+| Dynamic string (LARGE/SMALL) | `ArrowStringHandler::convert_type()` | O(rows) full conversion |
+| Fixed string (UTF_FIXED64) | `ArrowStringHandler::convert_type()` (handles UTF-32→UTF-8) | Rare/legacy |
+
+### SharedStringDictionary
+
+Built once per segment from the string pool, shared across all string columns in that segment:
+
+```cpp
+struct SharedStringDictionary {
+    ankerl::unordered_dense::map<StringPool::offset_t, int32_t> offset_to_index;
+    std::vector<int64_t> dict_offsets;   // Arrow cumulative byte offsets
+    std::vector<char> dict_strings;       // Concatenated UTF-8 data
+    int32_t unique_count = 0;
+};
+```
+
+`build_shared_dictionary()` walks the pool buffer sequentially using `[uint32_t size][char data]` entry layout (min 8 bytes per entry). O(U) where U = unique strings in pool.
+
+`encode_dictionary_with_shared_dict()` does read-only hash map lookups per row (no insert), then copies the shared dictionary buffers into each column's extra buffers.
+
+### make_column_blocks_detachable()
+
+For non-string columns, allocates new memory via `std::allocator` (`allocate_detachable_memory()`) and copies block data. Required because:
+- Sparrow (Arrow library) calls `std::allocator::deallocate()` to free memory
+- ArcticDB's decoded segments use `ChunkedBuffer` with different allocation
+- `block.release()` in `arrow_arrays_from_column()` transfers ownership to Sparrow
+
+### segment_to_arrow_data() (arrow_utils.cpp)
+
+Iterates columns, calls `arrow_arrays_from_column()` which calls `block.release()` on each block to transfer memory ownership. Produces `vector<sparrow::record_batch>` (one per block when columns span multiple ChunkedBuffer blocks).
 
 ## Data Flow
 
 ```
-C++ read pipeline
+Storage (LMDB/S3)
     │
-    ▼
-ArrowOutputFrame (holds vector<RecordBatchData>)
+    ▼ (batch_read_uncompressed — one segment at a time, with prefetch)
+SegmentInMemory (decoded, inline blocks)
     │
-    ├── create_iterator()  ──→  RecordBatchIterator (C++)
-    │                                │
-    │                                ▼ (pybind11)
-    │                           Python RecordBatchIterator
-    │                                │
-    │                                ▼
-    │                           ArcticRecordBatchReader (arrow_reader.py)
-    │                                │
-    │                                ├── to_pyarrow_reader() ──→ pyarrow.RecordBatchReader
-    │                                │                                │
-    │                                │                                ▼
-    │                                │                         conn.register(name, reader)
-    │                                │                                │
-    │                                │                                ▼
-    │                                │                         DuckDB queries data lazily
-    │                                │
-    │                                └── read_all() ──→ pyarrow.Table (materialized)
+    ▼ (prepare_segment_for_arrow)
+SegmentInMemory (detachable blocks, Arrow-ready string columns)
     │
-    └── extract_record_batches()  ──→  Direct batch access (not used by DuckDB path)
+    ▼ (segment_to_arrow_data)
+vector<sparrow::record_batch>
+    │
+    ▼ (extract_arrow_structures)
+RecordBatchData (ArrowArray + ArrowSchema)
+    │
+    ▼ (pybind11 → Python)
+pa.RecordBatch._import_from_c(array, schema)
+    │
+    ▼ (ArcticRecordBatchReader.to_pyarrow_reader)
+pa.RecordBatchReader
+    │
+    ▼ (conn.register)
+DuckDB queries data via streaming scan
 ```
 
 ## Python Bindings
 
-### `python_bindings.cpp`
+### python_bindings.cpp
 
-`read_as_record_batch_iterator()` — calls the C++ read pipeline, returns `ArrowOutputFrame::create_iterator()`.
+`read_as_lazy_record_batch_iterator(symbol, ...)` — creates `LazyRecordBatchIterator`:
+- Parameters: `columns`, `date_range`, `row_range`, `as_of`, `filter_clause`, `filter_root_node_name`, `expression_context`, `prefetch_size`
+- Calls `PythonVersionStore::create_lazy_record_batch_iterator()` in `version_store_api.cpp`
 
-### `python_bindings_common.cpp`
+`LazyRecordBatchIterator` bindings:
+- `next()` — `py::call_guard<py::gil_scoped_release>()` (does Folly async I/O)
+- `has_next()`, `num_batches()`, `current_index()`, `descriptor()`, `field_count()`
 
-Binds `RecordBatchIterator` as Python class with:
-- `__next__` → calls `next()`, converts `sparrow::record_batch` to Python `(ArrowArray, ArrowSchema)` tuple
-- `schema` property → returns first batch's schema
-- `num_batches` property
-- `current_index` property
+### python_bindings_common.cpp
+
+`ArrowOutputFrame` bindings: `extract_record_batches()`, `num_blocks()`
 
 ## Memory Safety
 
 | Concern | Mitigation |
 |---------|-----------|
-| Double consumption | `data_consumed_` flag in `ArrowOutputFrame` |
+| Sparrow deallocation | `allocate_detachable_memory()` uses `std::allocator` matching Sparrow's `deallocate()` |
 | Dangling release callbacks | `std::memset` zero-init in `RecordBatchData` constructor |
-| Ownership transfer | `extract_struct_array()` moves data out, source becomes empty |
-| Rule of Five | `RecordBatchData` uses default move semantics; Arrow structs are C structs with release callbacks |
+| Ownership transfer | `block.release()` moves data out; `make_column_blocks_detachable()` ensures blocks are external |
+| GIL safety | `next()` releases GIL for storage I/O via Folly futures |
+| Single consumption | `ArrowOutputFrame::data_consumed_` flag; `ArcticRecordBatchReader._exhausted` in Python |
+
+## Performance
+
+The Arrow conversion path has an inherent overhead vs the pandas path:
+
+- **Pandas path** (`lib.read()`): numpy arrays reference decoded `ChunkedBuffer` memory directly (zero-copy)
+- **Arrow path** (`lib.sql()`): every block requires `allocate_detachable_memory()` + `memcpy` for ownership transfer to Sparrow
+
+At 10M rows (100 segments, 100K rows each), `prepare_segment_for_arrow()` accounts for ~90% of `lib.sql()` wall time. See profiling scripts in `python/benchmarks/non_asv/duckdb/` for detailed measurements.
 
 ## Related Documentation
 
 - [PYTHON_BINDINGS.md](PYTHON_BINDINGS.md) — pybind11 binding details
-- [../python/DUCKDB.md](../python/DUCKDB.md) — Python DuckDB integration using these Arrow types
-- [PIPELINE.md](PIPELINE.md) — Read pipeline that produces `ArrowOutputFrame`
+- [../python/DUCKDB.md](../python/DUCKDB.md) — Python DuckDB integration
+- [PIPELINE.md](PIPELINE.md) — Read pipeline that produces segments

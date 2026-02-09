@@ -303,6 +303,53 @@ Chronological summary of work done on the `duckdb` branch.
 - **Key finding**: Lazy iterator (0.120s/100K) is already competitive with `lib.read(pyarrow)` (0.134s/100K). The 3x gap to pandas (0.046s/100K) is inherent to Arrow dictionary encoding format
 - **Conclusion**: The only way to significantly improve string performance is to avoid per-row string resolution entirely — Option D (dictionary-encoded Arrow export where pool offsets map directly to Arrow dictionary indices) remains the recommended long-term approach
 
+## 36. Remove Eager RecordBatchIterator — All SQL/DuckDB Reads Use Lazy Streaming
+
+- **Motivation**: After #33 made the lazy path always-on, the eager `RecordBatchIterator` and `read_as_record_batch_iterator()` were dead code
+- **Removed**:
+  - C++: `RecordBatchIterator` class (hpp/cpp), `ArrowOutputFrame::create_iterator()`, pybind11 binding
+  - Python: `NativeVersionStore.read_as_record_batch_iterator()` method (~56 lines)
+  - `ArcticRecordBatchReader.__init__` type hint narrowed from `Union[RecordBatchIterator, LazyRecordBatchIterator]` to `LazyRecordBatchIterator`
+  - Test class `TestLazyVsEagerConsistency` (4 tests, ~85 lines)
+- **Bug fixes during removal**:
+  - `DataType` import: `from arcticdb_ext.types import DataType` (was incorrectly `arcticdb_ext.stream`)
+  - `StreamDescriptor` API: `len(desc.fields())` not `desc.field_count()` (that's only on the iterator binding)
+  - Empty-after-filtering schema: when all rows filtered out, use `descriptor()` instead of `pa.schema([])`
+- **ArrowOutputFrame retained**: Still needed by `lib.read(output_format='pyarrow')` via `extract_record_batches()`
+- **307/307 DuckDB tests pass**
+
+## 37. Fix test_dict_as_of_with_timestamp — Deterministic UTC Timestamps
+
+- **Bug**: `test_dict_as_of_with_timestamp` failed because `pd.Timestamp.now()` returns tz-naive local time but ArcticDB stores version creation timestamps in UTC. On UTC+2 machines, the local timestamp was ahead of both writes
+- **Fix**: Use `lib.write()` return values (`VersionedItem.timestamp`) to compute a deterministic midpoint timestamp with explicit `tz="UTC"` — no `time.sleep()` needed
+
+## 38. Comprehensive SQL vs QueryBuilder Performance Benchmarking
+
+- **Head-to-head comparison** at 1M and 10M rows using same `generate_benchmark_df()` data as ASV benchmarks
+- **Key findings at 10M rows** (string-heavy: 3 string + 6 numeric cols):
+  - SELECT *: SQL 48s vs QB 16s (3x slower, but SQL uses 3x less memory)
+  - Column projection: SQL 4.3s vs QB 0.08s (55x)
+  - Numeric filter ~1%: SQL 1.2s vs QB 0.09s (13x)
+  - GROUP BY low cardinality: SQL 1.2s vs QB 0.4s (3x)
+  - Filter + GROUP BY: SQL 2.3s vs QB 1.2s (1.9x — most competitive)
+- **Numeric-only at 10M rows** (6 int/float cols): GROUP BY with 10 groups SQL **0.6x faster** (SQL wins)
+- **Bottleneck**: `prepare_segment_for_arrow()` accounts for ~90% of wall time (43s of 47s for string-heavy 10M)
+  - Even for numeric-only data: 5s of 5.7s is `make_column_blocks_detachable()` (memcpy overhead)
+  - Root cause: pandas path returns numpy arrays referencing decoded buffer memory (zero-copy), Arrow path requires `allocate_detachable_memory()` + `memcpy` per block
+- **Profiling scripts** created in `python/benchmarks/non_asv/duckdb/`:
+  - `bench_sql_vs_qb.py` — head-to-head SQL vs QB comparison
+  - `bench_sql_numeric_only.py` — numeric-only variant isolating string overhead
+  - `profile_lazy_iterator.py` — time breakdown: C++ iterator vs DuckDB vs lib.read
+  - `profile_per_step.py` — per-segment + per-step profiling (both numeric & string data)
+  - `profile_warm_cache.py` — warm-cache profiling for true CPU cost
+  - All scripts self-contained (generate data in tempdir, no hardcoded paths)
+
+## 39. Documentation Updates
+
+- **`docs/claude/python/DUCKDB.md`**: Rewrote to reflect lazy-only architecture, removed all references to eager `RecordBatchIterator`, added LazyRecordBatchIterator details, performance characteristics section, profiling scripts reference, updated test structure table
+- **`docs/claude/cpp/ARROW.md`**: Rewrote to reflect current codebase — `LazyRecordBatchIterator` as primary class, `SharedStringDictionary`, `prepare_segment_for_arrow()` breakdown, removed stale `RecordBatchIterator`/`create_iterator()` references
+- **Branch work log**: Added entries #36-39
+
 ---
 
 ## Open Items
@@ -311,5 +358,4 @@ Chronological summary of work done on the `duckdb` branch.
 - Broad `except Exception` handlers in `pushdown.py` should catch specific exceptions
 - Complex SQL pattern tests (window functions, OUTER JOINs, subqueries)
 - DuckDB connection created outside try/finally in `Library.sql()`
-- **Arrow string conversion performance**: `prepare_segment_for_arrow()` is the dominant cost for string-heavy data. Dictionary-encoded Arrow export is the best long-term fix (see `arrow-string-performance-investigation.md`)
-- **C++ rebuild needed**: `descriptor()` binding for always-lazy simplification (#33) untested until next build
+- **Arrow conversion performance**: `prepare_segment_for_arrow()` dominates SQL query time. The memcpy in `make_column_blocks_detachable()` is the core issue even for numeric data. Long-term fix: allocate segments as detachable from the start in the decode path, or use Arrow C Data Interface with custom release callbacks for true zero-copy

@@ -35,9 +35,15 @@ lib.sql(query) ─────────────────────�
     │   │   └─ symbol names from FROM/JOIN              │
     │   └─ returns PushdownInfo per table               │
     │                                                   │
-    ├─ read with pushdown applied                       │
-    │   └─ _read_as_record_batch_reader()               │
-    │       └─ C++ RecordBatchIterator (Arrow streaming) │
+    ├─ create lazy iterator per symbol                  │
+    │   └─ C++ LazyRecordBatchIterator                  │
+    │       ├─ reads+decodes segments on-demand         │
+    │       ├─ applies truncation (date_range/row_range)│
+    │       ├─ applies FilterClause (WHERE pushdown)    │
+    │       └─ prepare_segment_for_arrow() per segment  │
+    │                                                   │
+    ├─ Python ArcticRecordBatchReader                   │
+    │   └─ to_pyarrow_reader() → pa.RecordBatchReader   │
     │                                                   │
     └─ DuckDB in-memory connection                      │
         ├─ conn.register(symbol, arrow_reader)          │
@@ -111,25 +117,9 @@ The SQL interface **strips this prefix transparently** so users write original i
 - **Filter pushdown**: C++ `column_index_with_name_demangling()` already tries `__idx__ + name` as fallback, so `QueryBuilder` filters with clean names work without additional mapping
 - **Collision safety**: `_strip_idx_prefix_from_names()` appends underscores if stripping would create duplicates (mirroring `_normalization.py` denormalization)
 
-### Join Patterns
-
-**Two MultiIndex symbols** — join on all index columns using clean names:
-```sql
-SELECT m.date, m.security_id, m.momentum, i.inflow
-FROM momentum m
-JOIN inflow i ON m.date = i.date AND m.security_id = i.security_id
-```
-
-**MultiIndex + single-index** — join on shared index (broadcasts single-index values):
-```sql
-SELECT m.date, m.security_id, m.momentum, a.analyst_mom
-FROM momentum m
-JOIN analyst a ON m.date = a.date
-```
-
 ### Index Reconstruction
 
-For **pandas** output (`output_format=None` or `OutputFormat.PANDAS`), the SQL result reconstructs the original index using `set_index()`. When multiple symbols are involved (JOINs), the **most specific** matching index (most levels) is chosen.
+For **pandas** output, the SQL result reconstructs the original index using `set_index()`. When multiple symbols are involved (JOINs), the **most specific** matching index (most levels) is chosen.
 
 | Condition | Behaviour |
 |-----------|-----------|
@@ -141,35 +131,6 @@ For **pandas** output (`output_format=None` or `OutputFormat.PANDAS`), the SQL r
 | Arrow/Polars output | No reconstruction — only applies to pandas |
 
 **Implementation**: `Library._get_index_columns_for_symbol()` calls `get_description()` (~4ms) to retrieve index metadata. `Library.sql()` and `DuckDBContext.sql()` iterate all symbols in the query, find which ones have all their index columns present in the result, and pick the one with the most levels.
-
-### Test Coverage
-
-`test_duckdb.py::TestMultiIndexJoins` — 8 tests:
-
-| Test | Pattern |
-|------|---------|
-| `test_inner_join_two_multiindex_symbols` | INNER JOIN on `(date, security_id)`, non-matching sids excluded |
-| `test_left_join_two_multiindex_symbols` | LEFT JOIN preserving unmatched rows with NULLs |
-| `test_join_multiindex_with_single_index` | MultiIndex ⋈ single DatetimeIndex (broadcast join) |
-| `test_multiindex_join_with_aggregation` | JOIN + GROUP BY date with AVG/SUM |
-| `test_multiindex_join_with_date_filter` | JOIN + WHERE date filter |
-| `test_select_star_shows_clean_column_names` | SELECT * reconstructs MultiIndex, no `__idx__` prefix |
-| `test_describe_shows_clean_column_names` | DESCRIBE shows clean names |
-| `test_multiindex_filter_on_index_column` | WHERE filter on MultiIndex level, index reconstructed |
-
-`test_duckdb.py::TestIndexReconstruction` — 9 tests:
-
-| Test | Pattern |
-|------|---------|
-| `test_multiindex_roundtrip_via_sql` | MultiIndex round-trips through `lib.sql()` with `pd.testing.assert_frame_equal` |
-| `test_single_named_index_roundtrip_via_sql` | Single DatetimeIndex round-trips through `lib.sql()` |
-| `test_rangeindex_stays_flat` | RangeIndex preserved as-is |
-| `test_aggregation_drops_index` | Aggregation → no index reconstruction |
-| `test_partial_index_columns_no_reconstruction` | Partial index columns → flat DataFrame |
-| `test_join_reconstructs_best_index` | JOINs → most specific matching index |
-| `test_arrow_output_no_reconstruction` | Arrow output → no reconstruction |
-| `test_duckdb_context_single_symbol_reconstruction` | `DuckDBContext.sql()` single-symbol reconstruction |
-| `test_duckdb_context_multi_symbol_reconstruction` | `DuckDBContext.sql()` multi-symbol → best index |
 
 ## Module: pushdown.py
 
@@ -208,7 +169,7 @@ class PushdownInfo:
 - **Columns**: Pushed for single-table queries. Disabled for JOINs (columns may be needed for join conditions).
 - **Filters**: Comparison ops (`=`, `!=`, `<`, `>`, `<=`, `>=`), `IN`, `NOT IN`, `IS NULL`, `IS NOT NULL`, `BETWEEN`. OR conditions and functions NOT pushed down.
 - **Date range**: Filters on `index` column converted to `date_range` tuple. Requires timestamp comparisons.
-- **LIMIT**: Pushed only for single-table, non-aggregation queries.
+- **LIMIT**: Pushed only for single-table, non-aggregation queries without ORDER BY, GROUP BY, DISTINCT, or WHERE.
 
 ### Exception Handling
 
@@ -218,62 +179,142 @@ Pushdown failures are non-fatal — logged as warnings, query falls through to D
 
 ## Module: arrow_reader.py
 
-`ArcticRecordBatchReader` wraps the C++ `RecordBatchIterator` for Python/DuckDB consumption.
+`ArcticRecordBatchReader` wraps the C++ `LazyRecordBatchIterator` for Python/DuckDB consumption.
 
 ### Key Properties
 
 - `_iteration_started` / `_exhausted` — guards against multiple iteration or re-iteration
-- `to_pyarrow_reader()` — converts to `pyarrow.RecordBatchReader` for DuckDB registration
-- `read_all()` → `pyarrow.Table` — materializes all batches
-- `schema` → `pyarrow.Schema` — from first batch
+- `to_pyarrow_reader()` — converts to `pyarrow.RecordBatchReader` for DuckDB registration; strips `__idx__` prefix from MultiIndex column names
+- `read_all(strip_idx_prefix=True)` → `pyarrow.Table` — materializes all batches
+- `schema` → `pyarrow.Schema` — lazily extracted from first batch, or from `descriptor()` for empty symbols
+
+### Schema Discovery for Empty Symbols
+
+When a symbol has no data segments, `_ensure_schema()` uses `_descriptor_to_arrow_schema()` to build a PyArrow schema from the C++ `StreamDescriptor` (available from the index-only read). This maps `arcticdb_ext.types.DataType` enums to PyArrow types.
 
 ### Single-Use Constraint
 
 Arrow RecordBatchReaders are **single-use**. After iteration, data is consumed. This is why:
 - `lib.sql()` creates a fresh reader per query
-- C++ side enforces with `data_consumed_` flag in `ArrowOutputFrame`
+- `ArcticRecordBatchReader` tracks `_iteration_started` and `_exhausted` flags
 
-## C++ Layer
+## C++ Layer: Lazy Streaming
 
-### Arrow Output Frame (`cpp/arcticdb/arrow/`)
+### LazyRecordBatchIterator (`cpp/arcticdb/arrow/arrow_output_frame.hpp/cpp`)
 
-| File | Key Classes |
-|------|------------|
-| `arrow_output_frame.hpp` | `RecordBatchData`, `RecordBatchIterator`, `ArrowOutputFrame` |
-| `arrow_output_frame.cpp` | Implementation of iterator and frame extraction |
+On-demand segment reader that streams Arrow record batches from storage. This is the **only** iterator used by the SQL/DuckDB path (the eager `RecordBatchIterator` was removed).
+
+```
+LazyRecordBatchIterator
+├── slice_and_keys_         (segment metadata from index-only read)
+├── store_                  (StreamSource for storage I/O)
+├── prefetch_buffer_        (deque<Future<SegmentAndSlice>>, default size 2)
+├── row_filter_             (FilterRange: date_range/row_range/none)
+├── expression_context_     (FilterClause from WHERE pushdown)
+├── descriptor_             (StreamDescriptor for schema discovery)
+│
+├── next() → optional<RecordBatchData>
+│   ├── apply_truncation()       — date_range/row_range row-level filtering
+│   ├── apply_filter_clause()    — WHERE pushdown via ProcessingUnit
+│   ├── prepare_segment_for_arrow() — convert to Arrow-compatible format
+│   └── segment_to_arrow_data()  — produce sparrow::record_batch
+│
+├── has_next(), num_batches(), current_index()
+├── descriptor() → StreamDescriptor (for empty symbol schema)
+└── field_count() → size_t
+```
+
+### prepare_segment_for_arrow() (anonymous namespace)
+
+Converts decoded segments for Arrow consumption. This is the **dominant cost** in the SQL pipeline:
+
+- **Non-string columns**: `make_column_blocks_detachable()` — allocates detachable memory via `std::allocator` and memcpys block data (required for Sparrow ownership transfer via `block.release()`)
+- **String columns (CATEGORICAL)**: `encode_dictionary_with_shared_dict()` — uses a `SharedStringDictionary` built once per segment from the string pool, then read-only hash map lookups per row
+- **String columns (LARGE/SMALL_STRING)**: falls back to `ArrowStringHandler::convert_type()`
+
+### SharedStringDictionary
+
+Built once per segment from the string pool, shared across all string columns:
+
+```
+SharedStringDictionary
+├── offset_to_index   (pool_offset → sequential dict index)
+├── dict_offsets      (Arrow cumulative byte offsets)
+├── dict_strings      (concatenated UTF-8 data)
+└── unique_count
+```
+
+`build_shared_dictionary()` walks the pool buffer sequentially using `[uint32_t size][char data]` entry layout. O(U) where U = unique strings, typically much smaller than row count.
 
 ### RecordBatchData
 
-Holds one Arrow record batch via `ArrowArray` + `ArrowSchema` (Arrow C Data Interface). Zero-initialized with `std::memset`. Release callbacks clean up memory.
-
-### RecordBatchIterator
-
-C++ iterator over `vector<RecordBatchData>`. Destructively extracts `sparrow::record_batch` data via `extract_struct_array()`. Exposed to Python via pybind11.
+Holds one Arrow record batch via `ArrowArray` + `ArrowSchema` (Arrow C Data Interface). Zero-initialized with `std::memset`. Used by both the lazy iterator and `ArrowOutputFrame::extract_record_batches()`.
 
 ### ArrowOutputFrame
 
-Container for query results as Arrow batches. Enforces single consumption via `data_consumed_` flag — calling `create_iterator()` or `extract_record_batches()` twice raises an error.
+Container for `lib.read(output_format='pyarrow')` results. Holds `vector<sparrow::record_batch>`. **Not used by the SQL/DuckDB path** (which uses `LazyRecordBatchIterator` directly). Enforces single consumption via `data_consumed_` flag.
 
 ### Python Bindings
 
-`cpp/arcticdb/version/python_bindings.cpp` — binds `read_as_record_batch_iterator()` which returns a `RecordBatchIterator` to Python.
+`cpp/arcticdb/version/python_bindings.cpp`:
+- `read_as_lazy_record_batch_iterator()` — creates `LazyRecordBatchIterator` with pushdown params
+- `LazyRecordBatchIterator` bindings: `next()` (GIL-released), `has_next()`, `num_batches()`, `current_index()`, `descriptor()`, `field_count()`
 
-`cpp/arcticdb/version/python_bindings_common.cpp` — binds `RecordBatchIterator` class with `__next__`, `schema`, `num_batches` properties.
+`cpp/arcticdb/version/python_bindings_common.cpp`:
+- `ArrowOutputFrame`: `extract_record_batches()`, `num_blocks()`
+
+## Performance Characteristics
+
+### Bottleneck: prepare_segment_for_arrow()
+
+The Arrow conversion in `prepare_segment_for_arrow()` dominates SQL query time. For 10M rows (100 segments):
+
+| Data Type | C++ Iterator | lib.sql() | lib.read() (pandas) | SQL/read Ratio |
+|-----------|-------------|-----------|---------------------|---------------|
+| Numeric-only (6 cols) | 5.0s | 5.7s | 0.09s | 63x |
+| String-heavy (3 str + 6 num) | 43s | 47s | 10s | 5x |
+
+The cost is inherent: the pandas path returns numpy arrays referencing decoded buffer memory (zero-copy), while Arrow requires `allocate_detachable_memory()` + `memcpy` per block so Sparrow can own/free the memory.
+
+### Where SQL Wins
+
+| Query Pattern | SQL vs QueryBuilder | Why |
+|--------------|-------------------|-----|
+| GROUP BY (low cardinality, 10M rows) | **SQL 0.6x faster** | DuckDB's columnar aggregation engine |
+| Filter + GROUP BY | ~2x slower | Competitive after pushdown |
+| Full scan (SELECT *) | 3-60x slower | Arrow conversion overhead dominates |
+| Memory (SELECT *, 10M rows) | **3x less** (337 vs 1033 MB) | Streaming avoids full materialization |
+
+### Profiling Scripts
+
+Non-ASV profiling scripts for investigating performance:
+
+```
+python/benchmarks/non_asv/duckdb/
+├── bench_sql_vs_qb.py          # Head-to-head SQL vs QueryBuilder (1M & 10M rows)
+├── bench_sql_numeric_only.py   # Numeric-only variant isolating string overhead
+├── profile_lazy_iterator.py    # Time breakdown: C++ iterator vs DuckDB vs lib.read
+├── profile_per_step.py         # Per-segment + per-step profiling (numeric & string)
+└── profile_warm_cache.py       # Warm-cache profiling for true CPU cost
+```
+
+All scripts are self-contained (generate own data in tempdir). Run with:
+```bash
+python python/benchmarks/non_asv/duckdb/bench_sql_vs_qb.py
+```
 
 ## Testing
 
 ```bash
-# All DuckDB tests (201 tests)
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/ -v
+# All DuckDB tests (~307 tests)
+python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/
 
-# Just pushdown tests
+# Specific test files
 python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_pushdown.py
-
-# Just integration tests
 python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_duckdb.py
-
-# Just Arrow reader tests
 python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_arrow_reader.py
+python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_lazy_streaming.py
+python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_doc_examples.py
 ```
 
 ### Test Structure
@@ -281,12 +322,14 @@ python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_arrow_read
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_pushdown.py` | AST parsing, filter conversion, QueryBuilder generation, end-to-end pushdown | Column, filter, date range, limit pushdown; edge cases for types, OR, LIKE, functions |
-| `test_duckdb.py` | Context managers, sql(), external connections, MultiIndex joins | Simple queries, JOINs, MultiIndex schema, output formats, edge cases |
+| `test_duckdb.py` | Context managers, sql(), external connections, MultiIndex joins, index reconstruction | Simple queries, JOINs, MultiIndex schema, output formats, case sensitivity |
 | `test_arrow_reader.py` | RecordBatchReader iteration, exhaustion, DuckDB integration | Streaming, single-use enforcement, schema |
+| `test_lazy_streaming.py` | Lazy iterator: basic SQL, groupby, filter, joins, versioning, multi-segment, truncation, FilterClause | Direct iterator, date_range/row_range, empty symbols, DuckDB context |
+| `test_doc_examples.py` | Tutorial code examples, as_of with dict/timestamp, explain() | End-to-end validation of documented examples |
 
 ## Related Documentation
 
 - [LIBRARY_API.md](LIBRARY_API.md) — Library class (sql, explain, duckdb methods)
 - [ARCTIC_CLASS.md](ARCTIC_CLASS.md) — Arctic class (sql, duckdb methods)
 - [QUERY_PROCESSING.md](QUERY_PROCESSING.md) — QueryBuilder used by pushdown
-- [../cpp/PYTHON_BINDINGS.md](../cpp/PYTHON_BINDINGS.md) — C++ bindings for RecordBatchIterator
+- [../cpp/ARROW.md](../cpp/ARROW.md) — C++ Arrow output frame and lazy iterator
