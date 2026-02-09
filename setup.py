@@ -138,7 +138,14 @@ class CompileProto(Command):
             # So pip will build it for tar ball. The build depends on pkg_resources, which is removed in
             # setuptools>=82 hence the pin
             if proto_ver == "3":
-                deps.append("setuptools<82")
+                _log_and_run(
+                    sys.executable,
+                    "-mpip",
+                    "install",
+                    "--disable-pip-version-check",
+                    "--target=" + pythonpath,
+                    "setuptools<82",
+                )
 
             _log_and_run(
                 sys.executable,
