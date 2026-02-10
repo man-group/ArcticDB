@@ -737,16 +737,18 @@ class VersionMapImpl {
             return false;
         }
 
-        const bool has_loaded_everything = entry->load_progress_.is_earliest_version_loaded;
-        const bool has_loaded_requested_version_id = requested_load_type == LoadType::DOWNTO ?
-                loaded_as_far_as_version_id(*entry, requested_load_strategy.load_until_version_.value()) :
-                true;
-        const bool has_loaded_requested_timestamp = requested_load_type == LoadType::FROM_TIME ?
-                loaded_as_far_as_timestamp(
-                        *entry, requested_load_strategy.load_from_time_.value(),
-                        requested_load_strategy.should_include_deleted()
-                ) :
-                true;
+        const bool has_loaded_earliest_version = entry->load_progress_.is_earliest_version_loaded;
+        const bool has_loaded_requested_version_id =
+                requested_load_type == LoadType::DOWNTO
+                        ? loaded_as_far_as_version_id(*entry, requested_load_strategy.load_until_version_.value())
+                        : true;
+        const bool has_loaded_requested_timestamp = requested_load_type == LoadType::FROM_TIME
+                                                            ? loaded_as_far_as_timestamp(
+                                                                      *entry,
+                                                                      requested_load_strategy.load_from_time_.value(),
+                                                                      requested_load_strategy.should_include_deleted()
+                                                              )
+                                                            : true;
         const bool has_loaded_earliest_undeleted =
                 entry->tombstone_all_.has_value() &&
                 entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
@@ -867,8 +869,7 @@ class VersionMapImpl {
             // 2. The requested version is within our known range: requested_version_id <= latest_known_version_id
             // Without check 2, we'd incorrectly claim to have versions that were written after our cache was populated
             auto opt_latest = entry.get_first_index(true).first;
-            if (opt_latest.has_value() &&
-                static_cast<VersionId>(requested_version_id) <= opt_latest->version_id() &&
+            if (opt_latest.has_value() && static_cast<VersionId>(requested_version_id) <= opt_latest->version_id() &&
                 entry.load_progress_.oldest_loaded_index_version_ <= static_cast<VersionId>(requested_version_id)) {
                 ARCTICDB_DEBUG(
                         log::version(),
@@ -904,7 +905,8 @@ class VersionMapImpl {
      * the loaded timestamps cover the requested timestamp range.
      */
     bool loaded_as_far_as_timestamp(
-            const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions) const {
+            const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions
+    ) const {
         if (requested_timestamp < 0) {
             // In case of the negative timestamp, we check if everything was already loaded
             return entry.load_progress_.is_earliest_version_loaded;
@@ -915,9 +917,9 @@ class VersionMapImpl {
         timestamp latest_loaded_timestamp = entry.load_progress_.latest_loaded_timestamp_;
 
         // Lower bound: use the appropriate timestamp based on whether we need deleted versions
-        timestamp earliest_loaded_timestamp = include_deleted_versions ?
-                entry.load_progress_.earliest_loaded_timestamp_ :
-                entry.load_progress_.earliest_loaded_undeleted_timestamp_;
+        timestamp earliest_loaded_timestamp = include_deleted_versions
+                                                      ? entry.load_progress_.earliest_loaded_timestamp_
+                                                      : entry.load_progress_.earliest_loaded_undeleted_timestamp_;
         if (latest_loaded_timestamp >= requested_timestamp &&
             (earliest_loaded_timestamp <= requested_timestamp || entry.load_progress_.is_earliest_version_loaded)) {
             ARCTICDB_DEBUG(
