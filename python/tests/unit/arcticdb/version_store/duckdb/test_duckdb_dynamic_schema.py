@@ -439,17 +439,11 @@ class TestWideTableMultiSegmentGroupBy:
         df = _write_wide_multi_segment_symbol(lib)
 
         # f0 is in slice 0, s0 is in slice 2 — they are in *different* column slices
-        result = lib.sql(
-            "SELECT f0, SUM(value) AS total FROM wide_ms WHERE s0 = 'A' GROUP BY f0 ORDER BY f0"
-        )
+        result = lib.sql("SELECT f0, SUM(value) AS total FROM wide_ms WHERE s0 = 'A' GROUP BY f0 ORDER BY f0")
 
         filtered = df[df["s0"] == "A"]
         expected = (
-            filtered.groupby("f0")["value"]
-            .sum()
-            .reset_index(name="total")
-            .sort_values("f0")
-            .reset_index(drop=True)
+            filtered.groupby("f0")["value"].sum().reset_index(name="total").sort_values("f0").reset_index(drop=True)
         )
         assert len(result) == len(expected), f"Expected {len(expected)} groups, got {len(result)}"
         np.testing.assert_allclose(result["total"].values, expected["total"].values, rtol=1e-10)
