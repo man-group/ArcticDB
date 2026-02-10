@@ -366,6 +366,337 @@ Verbatim user prompts that drove work on the `duckdb` branch, mapped to the resu
 
 ---
 
+## Session 8 — Feb 7 07:34–12:53 (e00b16a53)
+
+> commit prompts.md
+
+**Commit:** `38046fe05` — Add verbatim prompt history for duckdb branch
+
+> Working on: benchmark_arcticdb_query_paths.ipynb now, add a section between 4 and 4 with some cells to run some of the example benchmarks one at a time for testing (without needing to run them all)
+
+> Summarise how big this branch is in terms of changed lines of code. Approximate time for a developer to make by hand
+
+> can you try to run the asv performance tests
+
+> Update the CLAUDE.md if it's helpful on how to run the asv benchmark tests
+
+> git ignore .ipynb_checkpoints
+
+> commit
+
+**Commit:** `e00b16a53` — Update ASV benchmark docs and globalize .ipynb_checkpoints gitignore
+
+---
+
+## Session 9 — Feb 8 17:47–22:14 (24c5add8c → 5c47d25de)
+
+> Do we support multiple nested context managers with different ArcticDB (llmdb) instances to allow joins across multiple tables and instances? Add a simple test, and docs.
+
+> What about joining across two separate lmdb instances?
+
+> commit
+
+**Commit:** `24c5add8c` — Add cross-library and cross-instance JOIN tests and docs
+
+> For the .sql() method, can we support reading a specific version of a symbol table similar to how is done with Iceberg?
+
+> Let's go with Option C
+
+> commit
+
+**Commit:** `5eaba08e8` — Add dict-based as_of parameter to lib.sql() for per-symbol versioning
+
+> DO we still need the context manager approach? What would we lose if we just relied on sql()?
+
+> register_symbol seems to actually read data - this is bad as data can be very large. What other ways of doing this?
+
+> OK perhaps we should remove duckdb_register, presumably it doesn't add anything over the context manager and the .sql() interface?
+
+> commit
+
+**Commit:** `e23faf3a7` — Remove duckdb_register() from Library and Arctic APIs
+
+> When you use the context manager like this (without nesting) isn't it surprising that the ddb instance works for both libraries?
+
+> How about an API with nested context managers?
+
+> Can you check the code for any other leaks related to duckdb tables / connections etc?
+
+> commit
+
+**Commit:** `6ad4d9124` — Add connection property and symbol cleanup for nested context managers
+
+> The context manager query() method - have a look at the duckdb documentation. Would sql() be a better method name to minimise surprise for duckdb users?
+
+> commit
+
+**Commit:** `3a45bb510` — Rename context manager query() to sql() and unify output_format API
+
+> Check your existing usage of list_symbols() can it be made more efficient with has_symbol?
+
+> Can we review again the show databases command and the output?
+
+> commit
+
+**Commit:** `4334d4bca` — SHOW DATABASES returns per-library rows and remove duplicate format helper
+
+> code review what do we think of the API? any code issues?
+
+> Let's fix 2 (and any related docs), 9, 12, 14, 15, 16, 17
+
+> commit
+
+**Commit:** `74e548176` — Document auto-registration, avoid double AST parse, add test coverage
+
+> Is the user and developer documentation all up-to-date?
+
+> commit
+
+**Commit:** `7639f6b72` — Update documentation for current DuckDB API
+
+> For the unsupported types in the documentation, does ArcticDB support these types?
+
+**Commit:** `cf3ea6f6a` — Correct unsupported types docs: non-ns timestamps are supported
+
+> Can you review the files on this branch, some of them are getting quite big. Are there natural additional modules we should create? Perhaps split the tests up appropriately
+
+**Commit:** `8cf7a6a35` — Split test_duckdb.py (2364 lines) into four focused test modules
+
+> Looking at the existing asv tests, can we add some similar performance tests for the SQL functionality? We should also consider tests for large data where groupby or filtering is used so that the result set is smaller than the input
+
+> Can you investigate the limit slowness and fix?
+
+> commit
+
+**Commit:** `5c47d25de` — Add SQL benchmarks and fix LIMIT pushdown to actually reduce storage reads
+
+> What does memory look like for the performance tests?
+
+> What happens if you have a where so the limit isn't pushed down, and the limit is done in duckdb. Does duckdb only stream the first few chunks?
+
+> Ok. What happens if we query a symbol which is gigabytes big with a groupby / filter in duckdb. Does duckdb try to materialize it all from arrow before filtering or grouping?
+
+> Please save this evidence / investigation under plans
+
+> For the investigation you did on streaming within ArcticDB, come up with a sensible plan to fix when working with remote storage backends.
+
+---
+
+## Session 10 — Feb 9 05:14–17:55 (f4d8b2344 → 6e1611cdc)
+
+> *(multiple context restorations — long session)*
+
+**Commit:** `f4d8b2344` — Add LazyRecordBatchIterator for on-demand segment streaming
+
+> In arrow_output_frame you have this comment - what does this mean? Is there a risk that some data is lost in the query?
+
+> commit
+
+**Commit:** `b82589ef7` — Add row-level truncation and FilterClause support to LazyRecordBatchIterator
+
+> In what instances is a lazy read not possible? You suggested for QueryBuilder queries. Is it possible to consolidate this and make all reads lazy?
+
+> Let's do the full C++ solution. How hard is it to do it while supporting the query builder pushdown?
+
+> Can you update all the relevant docs for this schema?
+
+> For the SQL interface should we handle the __idx__ prefix transparently for the user?
+
+> Should the pandas output preserve the multi-index? It likely should if the user is querying with the multi-index as part of the query
+
+> If you do a multi-index join, and the index columns are in the output, then you should reconstruct the index in pandas
+
+> commit
+
+**Commit:** `cd93d9139` — Transparent MultiIndex handling and index reconstruction for SQL queries
+
+> Continue investigation as to whether lazy=false is needed for the sql iterator, can we simplify by making it always lazy?
+
+> How do the SQL asv benchmarks look now that we're using the lazy iterator
+
+> are you sure this is running correctly, I see the virtual memory ballooning to 400GB+ that sounds too high?
+
+> Why is it taking so long? How does this compare to the querybuilder example? This needs fixing...
+
+> Think we need to discuss the tradeoffs. It sounds like Option A would materialize everything which would have the memory problem for large tables.
+
+> How does the existing Arrow code-path handle strings? Does it also have this slow performance
+
+> remember this investigation in claude/plans
+
+> Why is reduce_and_fix_columns() so much faster than prepare_segment_for_arrow() again?
+
+> Can we make this change for the SQL iterator logic?
+
+**Commit:** `ffd3c22b4` — Simplify to always-lazy iterator and expose descriptor() for empty symbol schemas
+
+**Commit:** `749459e03` — Add SharedStringDictionary optimization for Arrow string export in lazy iterator
+
+> Is there anything else that needs the non-lazy materialized dataframes for sql now? Shall we remove that code
+
+**Commit:** `82668a1de` — Remove eager RecordBatchIterator — all SQL/DuckDB reads use lazy streaming
+
+> Can you investigate the failing test
+
+**Commit:** `e172cbe17` — Fix test_dict_as_of_with_timestamp: use UTC timestamp for version lookup
+
+> Ok let's return to the ASV tests for the SQL interface with larger data. How are we looking vs query builder?
+
+> For the python scratch tests you've written, perhaps store them in benchmarks/non_asv/duckdb?
+
+> Are the docs up to date? Perhaps update the claude docs to reference these bespoke profiling scripts
+
+> commit
+
+**Commit:** `516b96564` — Add SQL profiling scripts and update Claude docs for lazy-only architecture
+
+> Can you review the string pool you created on this branch? What's the lifetime of the pool, is it garbage collected correctly?
+
+> Is the string pool saved / shared between calls to the iterator? Should it be, would it have a positive impact on performance?
+
+> Can we investigate what it would take to support dynamic schema from sql() queries? Particularly if all columns aren't in the first chunk
+
+> commit
+
+**Commit:** `6e1611cdc` — Dynamic schema support for SQL/DuckDB queries
+
+> did you update all the docs?
+
+---
+
+## Session 11 — Feb 9 19:51 – Feb 10 04:28 (Side investigation)
+
+> The single operation testing in the benchmark notebook is 100s times slower. Please can you try to reproduce in an asv performance test to understand what's going on? Note this is a dynamic schema dataset
+
+> Let's create a new branch off master for this bug. Please move the example test you made into benchmarks/non_asv/ to demonstrate it
+
+*(Multiple context restorations — deep investigation into wide-table Arrow conversion perf)*
+
+> commit analysis
+
+> commit your profiling scratch scripts too into benchmarks/non_asv
+
+> push this branch to origin/jb/arrow-wide-table-string-perf
+
+> switch back to duckdb branch, do a non-debug build, then run the equivalent wide-arrow string tests
+
+---
+
+## Session 12 — Feb 10 05:47–15:40 (57bc67214 → 4812c3109)
+
+> And this was with a non-debug build?
+
+> This overhead is too much. Please investigate — arrow should on the whole be zero copy, so it's surprising the duckdb implementation is so much slower than QB
+
+> To be clear when running the profiling notebook, for this wide dataframe example they're not even in the same order of magnitude. I see the duckdb version take 168s vs 1s for the pandas or QB versions
+
+> I think ArcticDB can also use numeric indexes. Can you add a test for this too
+
+> The benchmark notebook filter query is still taking 100x the basic Pandas and QB tests. Can you confirm you have a representative asv benchmark for this?
+
+> Please fix
+
+> Performance of the query is terrible again - 100x slower. Make sure you have an ASV test for SQL that replicates the issue. Fix the issue and continue to iterate on the problem
+
+> Please confirm what you changed to make this improvement?
+
+> So how did you handle the case of dataframes that don't fit in memory?
+
+> I don't think this complexity should be in the python. Can we work on making the C++ faster? For example what would it look like for the LazyRecordBatchIterator to use the same folly infrastructure to load and prepare batches in parallel?
+
+> Yes lets implement the parallel approach
+
+**Commit:** `57bc67214` — Parallel Arrow conversion, column-slice merging, and cross-slice filter fix
+
+> Please resume the profiling to check performance is as expected. Any new unexpected errors will need tests.
+
+> Did you add a test for this failure case? Can you add it?
+
+> commit
+
+> In library.py sql() do we still need the fast-path if sql() is approximately the right performance? If not, please remove and run the sql benchmark
+
+> Ok revert the changes then
+
+> add the analysis plan files
+
+> code review the c++ and python changes in this branch. Is there any legacy code that we no longer need, or any memory issues?
+
+> Please go through the test profiling .py scripts in scratch, and the profile scripts under python/benchmarks/non_asv/duckdb. Consolidate them
+
+> For the profile files in non_asv/duckdb perhaps number them in terms of usefulness
+
+> commit
+
+**Commit:** `4812c3109` — Consolidate SQL/DuckDB profiling scripts into 4 numbered benchmarks
+
+---
+
+## Session 13 — Feb 10 19:36–22:50 (bf2de8ca8 → 471788f6a)
+
+> commit
+
+**Commit:** `bf2de8ca8` — Add DuckDB analysis and design docs
+
+> check the user and developer docs for any updates which may be needed based on the recent changes in git
+
+> did you check the claude docs too for any updates?
+
+> Re-run the sql asv test for the latest performance numbers
+
+> commit docs
+
+**Commit:** `e0ef9e5e4` — Update docs: FAQ SQL answer, parallel conversion, profiling scripts
+
+> Format the python code under benchmarks/
+
+**Commit:** `4ae768ecb` — Format benchmark scripts with black
+
+> Fix CICD error: StreamSource defined as a struct here but previously declared as a class
+
+**Commit:** `928897ce8` — Fix mismatched-tags: forward-declare StreamSource as struct
+
+> black needed for /test_duckdb_dynamic_schema.py
+
+**Commit:** `471788f6a` — Format test_duckdb_dynamic_schema.py with black
+
+> CI ASV error: transform_asv_results.py assertion failure — not our fault (CI infra issue)
+
+> for the benchmark notebook, add a sql test that tests increasing date ranges, 1 week, 1 month, 3 months, 6 months, 1 year with group by / resample to check the time and the memory usage
+
+> Create a pull request comment for the changes on this branch
+
+> Please give me an overview of performance from SQL
+
+> Why are the row-counts in the test: # --- Test: Weighted Average different in the benchmark notebook?
+
+> should we try updating the pushdown, what does that look like?
+
+> Re-estimate the developer time
+
+---
+
+## Developer Time Analysis
+
+**390 real human prompts** over 6 days (Feb 5–10, 2026).
+
+Using 2-minute cap methodology (only counting actual typed prompts, not tool confirmations):
+
+| Date | Prompts | Developer Time |
+|---|---|---|
+| Feb 5 | 121 | 3h 17m |
+| Feb 6 | 62 | 1h 50m |
+| Feb 7 | 16 | 0h 23m |
+| Feb 8 | 58 | 1h 37m |
+| Feb 9 | 78 | 2h 14m |
+| Feb 10 | 55 | 1h 45m |
+| **Total** | **390** | **11h 06m** |
+
+Traditional estimate: 192–296 hours (24–37 working days).
+**Acceleration factor: 17–27x.**
+
+---
+
 ## Meta Commits (CLAUDE.md housekeeping)
 
 These commits were prompted by general workflow/settings requests, not DuckDB feature work:
