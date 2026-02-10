@@ -752,8 +752,7 @@ class VersionMapImpl {
                 entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
 
         if ((has_loaded_everything && has_loaded_requested_version_id && has_loaded_requested_timestamp) ||
-            (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted &&
-             has_loaded_requested_timestamp)) {
+            (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted)) {
             return true;
         }
 
@@ -906,6 +905,11 @@ class VersionMapImpl {
      */
     bool loaded_as_far_as_timestamp(
             const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions) const {
+        if (requested_timestamp < 0) {
+            // In case of the negative timestamp, we check if everything was already loaded
+            return entry.load_progress_.is_earliest_version_loaded;
+        }
+
         // Upper bound: always use latest_loaded_timestamp (including deleted) because we need to
         // know if the requested timestamp within the loaded range
         timestamp latest_loaded_timestamp = entry.load_progress_.latest_loaded_timestamp_;
@@ -914,7 +918,8 @@ class VersionMapImpl {
         timestamp earliest_loaded_timestamp = include_deleted_versions ?
                 entry.load_progress_.earliest_loaded_timestamp_ :
                 entry.load_progress_.earliest_loaded_undeleted_timestamp_;
-        if (latest_loaded_timestamp >= requested_timestamp && earliest_loaded_timestamp <= requested_timestamp) {
+        if (latest_loaded_timestamp >= requested_timestamp &&
+            (earliest_loaded_timestamp <= requested_timestamp || entry.load_progress_.is_earliest_version_loaded)) {
             ARCTICDB_DEBUG(
                     log::version(),
                     "Loaded as far as required timestamp {}, have latest loaded timestamp {}",
