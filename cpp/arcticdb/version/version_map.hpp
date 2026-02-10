@@ -753,7 +753,7 @@ class VersionMapImpl {
                 entry->tombstone_all_.has_value() &&
                 entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
 
-        if ((has_loaded_everything && has_loaded_requested_version_id && has_loaded_requested_timestamp) ||
+        if ((has_loaded_earliest_version && has_loaded_requested_version_id && has_loaded_requested_timestamp) ||
             (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted)) {
             return true;
         }
