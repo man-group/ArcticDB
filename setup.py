@@ -133,14 +133,35 @@ class CompileProto(Command):
             # Python protobuf 3 and 4 are incompatible and we do not want to dictate which version of protobuf
             # the user can have, so we compile the Python binding files with both versions and dynamically load
             # the correct version at run time.
+            packages = ["grpcio-tools" + grpc_version, f"protobuf=={proto_ver}.*"]
+            if proto_ver == "3":
+                # grpcio-tools<1.31 has no pre-built wheels for py3.9+, so pip builds 
+                # from tarball. Its setup.py uses pkg_resources, which was 
+                # removed in setuptools>=82.
+                # PIP_CONSTRAINT pins setuptools in pip's build isolation env.
+                # where build constraints aren't propagated).
+                constraints = os.path.join(pythonpath, "constraints.txt")
+                with open(constraints, "w") as f:
+                    f.write("setuptools<82\n")
+                install_env = {**os.environ, "PIP_CONSTRAINT": constraints}
+                packages.append("setuptools<82")
+                # --use-pep517 to force parameters being passed to sub-build pipeline
+                # CI still uses pip 25.1.1, which the option is OFF by default
+                # It will be on by default in pip 25.3 anyway
+                extra_pip_args = ["--use-pep517"]
+            else:
+                install_env = {**os.environ}
+                extra_pip_args = []
+
             _log_and_run(
                 sys.executable,
                 "-mpip",
                 "install",
                 "--disable-pip-version-check",
                 "--target=" + pythonpath,
-                "grpcio-tools" + grpc_version,
-                f"protobuf=={proto_ver}.*",
+                *extra_pip_args,
+                *packages,
+                env=install_env,
             )
             env = {**os.environ, "PYTHONPATH": pythonpath, "PYTHONNOUSERSITE": "1"}
         else:
