@@ -1466,7 +1466,10 @@ TEST(VersionMap, HasCachedEntryDowntoReloadsWhenVersionNotLoaded) {
     // from has_cached_entry, causing check_reload to actually reload from storage).
     // Note: DOWNTO 5 will only load from latest (v5) down to v5, so just v5.
     entry = version_map_b->check_reload(
-            store, id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(5)}, __FUNCTION__
+            store,
+            id,
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(5)},
+            __FUNCTION__
     );
     // The entry should now include version 5
     auto opt_v5 = entry->get_first_index(true);
@@ -1609,11 +1612,14 @@ TEST(VersionMap, FromTimeCacheInvalidationOnNewVersion) {
     // Client B reloads with FROM_TIME=250, which loads from newest (300) back to earliest <= 250 (200)
     // This loads v2 (300) and v1 (200), but not v0 (100)
     entry_b = version_map_b->check_reload(
-            store, id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(250)}, __FUNCTION__
+            store,
+            id,
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(250)},
+            __FUNCTION__
     );
-    ASSERT_EQ(entry_b->get_indexes(true).size(), 2);  // v2 and v1
-    EXPECT_EQ(entry_b->load_progress_.latest_loaded_timestamp_, 300);  // newest loaded is v2
-    EXPECT_EQ(entry_b->load_progress_.earliest_loaded_timestamp_, 200);  // earliest loaded is v1
+    ASSERT_EQ(entry_b->get_indexes(true).size(), 2);                    // v2 and v1
+    EXPECT_EQ(entry_b->load_progress_.latest_loaded_timestamp_, 300);   // newest loaded is v2
+    EXPECT_EQ(entry_b->load_progress_.earliest_loaded_timestamp_, 200); // earliest loaded is v1
 
     // Now Client B's cache should be valid for timestamp 250 (100 <= 250 <= 300)
     // Wait, earliest is now 200, so 200 <= 250 <= 300 is still valid
