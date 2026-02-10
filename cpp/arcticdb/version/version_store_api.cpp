@@ -1087,6 +1087,21 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
             "Lazy record batch iterator does not support recursive/composite data (multi_key)"
     );
 
+    // Re-sort slice_and_keys_ by (row_range, col_range) so that column slices
+    // for the same row group are consecutive.  The index stores entries sorted
+    // by (col_range, row_range), which means column slices for the same row
+    // group may be scattered across the vector.  Sorting by row_range first
+    // enables the Python ArcticRecordBatchReader to merge column slices
+    // incrementally (one row group at a time) instead of buffering all batches.
+    std::sort(
+            pipeline_context->slice_and_keys_.begin(),
+            pipeline_context->slice_and_keys_.end(),
+            [](const auto& a, const auto& b) {
+                return std::tie(a.slice_.row_range.first, a.slice_.col_range.first) <
+                       std::tie(b.slice_.row_range.first, b.slice_.col_range.first);
+            }
+    );
+
     // Build columns_to_decode from the pipeline context's column bitset.
     // If a FilterClause is provided, also include its required input columns
     // so that segments contain the columns needed for expression evaluation.
@@ -1115,6 +1130,15 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
         filter_root_node_name = filter_clause->root_node_name_.value;
     }
 
+    // Use the larger of the requested prefetch_size and the total number of
+    // segments, capped at 200 (matching the eager read path's batch_size).
+    // For remote storage (S3, MongoDB) the default prefetch_size=2 causes
+    // sequential reads that are 50-100x slower than the eager parallel path.
+    // Prefetching all segments fires off reads concurrently via Folly futures,
+    // hiding storage latency while still streaming decoded results one at a time.
+    const size_t effective_prefetch =
+            std::min(std::max(prefetch_size, pipeline_context->slice_and_keys_.size()), size_t{200});
+
     return std::make_shared<LazyRecordBatchIterator>(
             std::move(pipeline_context->slice_and_keys_),
             pipeline_context->descriptor(),
@@ -1123,7 +1147,7 @@ std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_
             read_query->row_filter,
             std::move(expression_context),
             std::move(filter_root_node_name),
-            prefetch_size
+            effective_prefetch
     );
 }
 

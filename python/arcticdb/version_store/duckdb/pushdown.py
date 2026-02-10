@@ -52,6 +52,11 @@ class PushdownInfo:
     # Filters that couldn't be pushed (will be applied by DuckDB)
     unpushed_filters: List[str] = field(default_factory=list)
 
+    # True when ArcticDB can handle the entire query natively (single table,
+    # no GROUP BY / ORDER BY / DISTINCT / JOINs / CTEs / LIMIT with ordering),
+    # so DuckDB is not needed and we can return the read result directly.
+    fully_pushed: bool = False
+
 
 def _extract_limit_from_ast(ast: Dict) -> Optional[int]:
     """Extract LIMIT value from parsed SQL AST."""
@@ -614,9 +619,24 @@ def _build_query_builder(parsed_filters: List[Dict]) -> Optional[QueryBuilder]:
     return None
 
 
-def _extract_date_range(parsed_filters: List[Dict]) -> Tuple[Optional[Tuple[Any, Any]], List[Dict]]:
+def _extract_date_range(
+    parsed_filters: List[Dict],
+    index_columns: Optional[List[str]] = None,
+) -> Tuple[Optional[Tuple[Any, Any]], List[Dict]]:
     """
-    Extract date_range from filters on 'index' column.
+    Extract date_range from filters on index columns.
+
+    By default, only the literal column name ``"index"`` is recognised.
+    When *index_columns* is supplied (e.g. ``["Date"]`` for a symbol whose
+    DatetimeIndex is named ``Date``), those column names are also treated as
+    index filters eligible for date_range pushdown.
+
+    Parameters
+    ----------
+    parsed_filters : list of dict
+        Filters parsed from the SQL WHERE clause.
+    index_columns : list of str, optional
+        Additional column names that should be treated as index columns.
 
     Returns
     -------
@@ -625,12 +645,18 @@ def _extract_date_range(parsed_filters: List[Dict]) -> Tuple[Optional[Tuple[Any,
     """
     import pandas as pd
 
+    # Build the set of column names (lower-cased) we treat as the row index.
+    index_names = {"index"}
+    if index_columns:
+        index_names.update(c.lower() for c in index_columns)
+
     date_range = [None, None]
     remaining = []
+    has_strict_date_op = False
 
     for f in parsed_filters:
         col = f.get("column", "").lower()
-        if col != "index":
+        if col not in index_names:
             remaining.append(f)
             continue
 
@@ -647,8 +673,12 @@ def _extract_date_range(parsed_filters: List[Dict]) -> Tuple[Optional[Tuple[Any,
                 ts = pd.Timestamp(value) if not isinstance(value, pd.Timestamp) else value
                 if op in (">=", ">"):
                     date_range[0] = ts
+                    if op == ">":
+                        has_strict_date_op = True
                 elif op in ("<=", "<"):
                     date_range[1] = ts
+                    if op == "<":
+                        has_strict_date_op = True
                 else:
                     remaining.append(f)
             else:
@@ -657,9 +687,13 @@ def _extract_date_range(parsed_filters: List[Dict]) -> Tuple[Optional[Tuple[Any,
             remaining.append(f)
 
     if date_range[0] is not None or date_range[1] is not None:
-        return tuple(date_range), remaining
+        result_range = tuple(date_range)
+        # Attach a flag indicating strict operators were used.  ArcticDB's
+        # date_range is always inclusive, so strict < / > need DuckDB to
+        # apply the final exclusion.
+        return result_range, remaining, has_strict_date_op
 
-    return None, parsed_filters
+    return None, parsed_filters, False
 
 
 _ONLY_SELECT_ERROR = "Only SELECT statements can be serialized to json!"
@@ -825,6 +859,7 @@ def is_database_discovery_query(query: str) -> bool:
 def extract_pushdown_from_sql(
     query: str,
     table_names: Optional[List[str]] = None,
+    index_columns: Optional[List[str]] = None,
 ) -> Tuple[Dict[str, PushdownInfo], List[str]]:
     """
     Parse SQL and extract pushdown information for each table using AST parsing.
@@ -840,6 +875,10 @@ def extract_pushdown_from_sql(
     table_names : list, optional
         List of table names to extract pushdown info for.
         If None, table names are extracted from the query.
+    index_columns : list of str, optional
+        Column names that correspond to the ArcticDB index (e.g. ``["Date"]``).
+        SQL filters on these columns are converted to ``date_range`` pushdown
+        instead of value filters, enabling segment-level skipping in storage.
 
     Returns
     -------
@@ -900,12 +939,16 @@ def extract_pushdown_from_sql(
     # Extract columns from SELECT list
     select_list = select_node.get("select_list", [])
 
-    # Check for SELECT *
+    # Check for SELECT * and whether the SELECT list is simple (only column refs or *)
     is_select_star = False
+    is_simple_select = True
     for item in select_list:
         if item.get("class") == "STAR":
             is_select_star = True
-            break
+        elif item.get("class") == "COLUMN_REF":
+            pass  # Simple column reference
+        else:
+            is_simple_select = False
 
     # Disable column/filter pushdown for complex queries where the outer SELECT/WHERE
     # doesn't reflect all columns needed:
@@ -946,9 +989,13 @@ def extract_pushdown_from_sql(
 
     # Parse filters from WHERE clause
     parsed_filters = _ast_to_filters(where_clause) if where_clause else []
+    # Track whether the parser could handle all WHERE conditions.
+    # _ast_to_filters silently drops unparseable nodes (OR, FUNCTION, etc.),
+    # so a non-empty WHERE with no parsed filters means some conditions were lost.
+    all_where_conditions_parsed = where_clause is None or bool(parsed_filters)
 
     # Extract date range from index filters
-    date_range, remaining_filters = _extract_date_range(parsed_filters)
+    date_range, remaining_filters, has_strict_date_op = _extract_date_range(parsed_filters, index_columns=index_columns)
 
     # Build QueryBuilder from remaining filters
     query_builder = _build_query_builder(remaining_filters) if remaining_filters else None
@@ -981,6 +1028,25 @@ def extract_pushdown_from_sql(
         if can_push_limit:
             pushdown.limit = limit
             pushdown.limit_pushed_down = limit
+
+        # Determine if the entire query can be handled by ArcticDB's eager
+        # read path (date_range + columns + query_builder), making DuckDB
+        # unnecessary.  This is only possible for simple single-table queries
+        # with no GROUP BY, ORDER BY, DISTINCT, LIMIT, JOINs, or CTEs, and
+        # where all WHERE filters were successfully pushed to the QueryBuilder.
+        # Strict date operators (< / >) also require DuckDB because ArcticDB's
+        # date_range is always inclusive.
+        all_filters_pushed = not pushdown.unpushed_filters
+        no_complex_ops = not (is_multi_table or has_ctes or has_group_by or has_distinct or _has_order_by(ast))
+        no_limit = limit is None
+        pushdown.fully_pushed = (
+            no_complex_ops
+            and all_filters_pushed
+            and no_limit
+            and not has_strict_date_op
+            and is_simple_select
+            and all_where_conditions_parsed
+        )
 
         result[table] = pushdown
 

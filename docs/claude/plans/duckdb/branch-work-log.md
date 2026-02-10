@@ -369,6 +369,112 @@ Chronological summary of work done on the `duckdb` branch.
 - Updated `docs/claude/python/DUCKDB.md`: schema discovery rewritten to cover dynamic schema, batch padding, projected columns, type refinement; added test file to test structure table; updated test count
 - Updated branch work log (entries #40-41)
 
+## 42. Named DatetimeIndex Pushdown & 100x Slowdown Fix
+
+- **Problem**: `lib.sql()` was 100x slower than QueryBuilder on the CTA production dataset (~1M rows, 407 columns, named DatetimeIndex "Date")
+- **Root cause**: `_extract_date_range()` couldn't push `WHERE Date >= '...'` as `date_range` because it didn't know "Date" was an index column. Without pushdown, ALL segments were read then DuckDB filtered — 100x overhead
+- **Fixes**:
+  - Added `_resolve_index_columns_for_sql()` to look up datetime index column names from `get_description()` or `get_info()` fallback
+  - Added `_get_datetime_index_columns_for_symbol()` with dtype-based filtering (only NANOSECONDS_UTC64/MICROS_UTC64 — numeric indexes excluded to prevent `pd.Timestamp(int)` nonsense)
+  - Fallback to `library._nvs.get_info()` for ahl.mongo NativeVersionStore wrappers that don't support `get_description()` kwargs
+  - Passed `index_columns` to `extract_pushdown_from_sql()` for correct date_range extraction
+- **Result**: CTA query dropped from 173s to 0.67s (258x speedup)
+- **Tests**: `test_numeric_index_not_pushed_as_date_range`, `test_numeric_filter_without_index_columns_stays_value_filter`, `TestNumericIndexSQL` (4 integration tests)
+- **ASV benchmark**: Added `SQLWideTableDateRange` class to `python/benchmarks/sql.py`
+
+## 43. Wide Table Column-Slice Merging for SQL
+
+- **Problem**: After date_range pushdown fix (#42), `lib.sql()` was fast but returned 0 rows for combined filters (e.g. `WHERE Date >= '...' AND SecurityClass = 'FX Fwd'`) on the CTA dataset
+- **Root cause**: ArcticDB splits wide tables (~127 columns per slice). The C++ lazy iterator yielded one batch per column slice, and `_pad_batch_to_schema()` filled missing columns with nulls instead of real data from sibling slices. A 407-column table → 4 batches per row group, each with ~127 columns + null-padded remaining columns
+- **Fix**: Added column-slice merging in `arrow_reader.py`:
+  - `_merge_column_slices()`: horizontally concatenates batches from the same row group
+  - `_is_same_row_group()`: detects column slices by checking same row count, new columns to contribute, and identical values for overlapping columns (index). This distinguishes column slicing from dynamic-schema segments
+  - `_read_next_merged_batch()`: accumulates consecutive column-slice batches and merges before yielding
+  - Index columns (e.g. "Date") appear in every slice — dropped from subsequent slices before merging
+- **query_builder removal**: WHERE filters NOT passed to C++ lazy iterator (crashes on column-sliced segments where filter column is absent). DuckDB handles all WHERE filters on the merged data.
+- **NaN/NULL semantics**: Two tests updated for correct SQL behavior — `NaN IS NOT NULL` is true in DuckDB/SQL (NaN is a valid float, not NULL)
+- **Tests**: `TestWideTableColumnSliceMerging` — 6 tests: select_all, filter_on_late_column, combined_date_and_value_filter, projection, aggregation, data_integrity
+- **Verification**: Synthetic CTA workload (100K rows, 407 cols): SQL returns correct 1436 rows matching QueryBuilder, data integrity verified across all column slices
+- **All 336 DuckDB tests pass**
+
+## 44. Fix `dynamic_schema=True` Breaking Column-Sliced Date Range Filtering
+
+- **Problem**: CTA production benchmark (997K rows × 407 cols, MongoDB) returned only 27 of 408 columns with `date_range` pushdown, and operations 3+4 (filter+agg, weighted avg) returned wrong row counts
+- **Root cause**: `dynamic_schema=True` was being passed to the C++ layer, triggering `build_bitset_for_index()` binary search optimization (`query.cpp:64`) which assumes index entries are sorted purely by timestamp. With column slicing, entries are sorted by `(col_range, row_range)`, so `set_range()` only captured one column-slice group (27 cols)
+- **Fix**: Removed `dynamic_schema=True` from all 3 call sites:
+  - `library.py:2417` (sql with pushdown)
+  - `library.py:2420` (sql without pushdown)
+  - `duckdb.py:418` (register_symbol)
+- Since `query_builder` is NOT passed to the lazy iterator (DuckDB handles WHERE filters), `dynamic_schema` was unnecessary and only caused harm
+
+## 45. C++ Slice Ordering Fix for Streaming Scalability
+
+- **Problem**: Column slices in `slice_and_keys_` were ordered by `(col_range, row_range)` (from index storage), meaning slices for the same row group were non-consecutive. The Python incremental merge path required all slices for a row group to be adjacent.
+- **Memory concern**: A Python pre-merge fallback that materialized all batches was unacceptable for billion-row datasets
+- **Fix**: Added `std::sort` of `pipeline_context->slice_and_keys_` by `(row_range.first, col_range.first)` in `version_store_api.cpp` after `setup_pipeline_context()`. This makes column slices for each row group consecutive regardless of storage backend, enabling O(1-row-group) memory incremental merge.
+- **Python cleanup**: Removed `_premerge_all_batches()`, `_premerge_all_batches_from_list()`, `_premerged_batches` and `_premerged_index` from `arrow_reader.py`. `_read_next_merged_batch()` simplified to only the incremental path.
+- **Files changed**: `version_store_api.cpp` (+14 lines), `arrow_reader.py` (-80 lines net)
+
+## 46. Exception Handling Cleanup & man.core Fix
+
+- **library.py**: Removed try/except from `_get_index_columns_for_symbol()` and `_get_datetime_index_columns_for_symbol()` — the original defensive handling was for ahl.mongo's `get_info()` not accepting `**kwargs`, now fixed at source
+- **man.core**: Added `**kwargs` to `NativeVersionStore.get_info()` in `ahl/mongo/mongoose/native_store/native_version_store.py` and forwarded to `super()` — fixes `TypeError` when ArcticDB passes `head=True` etc.
+
+## 47. Eager Read Path for SQL — 37x Speedup on Wide Tables
+
+- **Problem**: `lib.sql()` was 100x slower (175s) than QueryBuilder (4.8s) for `SELECT * WHERE filter` on wide tables (997K rows × 407 columns, CTA production dataset). Root cause: `prepare_segment_for_arrow()` costs ~2s per 128-column segment × 92 segments = 175s through the lazy iterator path
+- **Solution**: Three-layer optimization:
+  1. **Eager read path** (`_read_eager_for_sql()`): Uses `lib.read()` (fast parallel C++ path via `folly::collect()`) instead of lazy Arrow iterator, returning pandas DataFrame. Registers DataFrame directly with DuckDB
+  2. **Fast `reset_index()` replacement**: `reset_index()` took 2.17s on 407-column fragmented DataFrames. Replaced with `df.index = RangeIndex(len(df))` + `df.insert(0, name, idx_values)` (0.01s)
+  3. **Fast path bypass** (`fully_pushed`): For simple queries (`SELECT * WHERE filter` on single table, no GROUP BY/ORDER BY/DISTINCT/LIMIT/JOINs), skip DuckDB entirely and return `lib.read()` result directly
+- **`fully_pushed` detection** in `pushdown.py`:
+  - `is_simple_select`: only column refs or `*` (no SQL functions like `LENGTH()`)
+  - `all_where_conditions_parsed`: detects when WHERE clause has unparsed conditions (e.g. OR predicates)
+  - `has_strict_date_op`: `<`/`>` on dates requires DuckDB (ArcticDB `date_range` is always inclusive)
+  - Combined with existing `no_complex_ops`, `all_filters_pushed`, `no_limit`
+- **QueryBuilder forwarding**: `pushdown.query_builder` passed through to `_read_eager_for_sql()` so C++ engine handles WHERE filters natively
+- **Edge cases handled**:
+  - DDL queries (`DESCRIBE`) excluded from fast path (`SHOW_REF` detection)
+  - Column projection excluded from fast path (`pushdown.columns is None` required) — `lib.read()` always returns full index
+  - OR predicates not silently dropped (`all_where_conditions_parsed` check)
+- **Results** on CTA production data:
+  - Filter: 174.99s → **5.34s** (33x faster)
+  - Aggregate: → **0.35s**
+  - Filter+Aggregate: → **0.44s**
+  - Weighted Average: → **0.36s**
+  - All speeds competitive with QueryBuilder (4.96s/0.38s/0.38s/0.29s)
+- **Files changed**: `library.py` (+60 lines: `_read_eager_for_sql()`, fast path in `sql()`), `pushdown.py` (~30 lines: `fully_pushed`, `is_simple_select`, `all_where_conditions_parsed`, `has_strict_date_op`), `test_pushdown.py` (updated `_extract_date_range` unpacking)
+- **All 336 DuckDB tests pass**
+
+## 48. Parallel `prepare_segment_for_arrow` in LazyRecordBatchIterator
+
+- **Problem**: `prepare_segment_for_arrow()` runs synchronously in `next()`, taking ~2s per segment × 92 segments = ~200s for the CTA dataset (997K rows × 407 columns)
+- **Solution**: Move `prepare_segment_for_arrow()` + `segment_to_arrow_data()` + `RecordBatchData` conversion into the folly future chain so they run on the CPU thread pool in parallel
+- **Implementation**:
+  - Prefetch buffer changed from `Future<SegmentAndSlice>` to `Future<vector<RecordBatchData>>`
+  - New method `read_decode_and_prepare_segment()` chains CPU work via `.via(&async::cpu_executor()).thenValue(...)`
+  - `apply_truncation()` and `apply_filter_clause()` made static for thread-safety
+  - `next()` simplified — future already contains prepared `RecordBatchData`
+- **Files changed**: `arrow_output_frame.hpp` (types, method signatures), `arrow_output_frame.cpp` (parallel pipeline, static methods)
+
+## 49. Fix `dynamic_schema=True` Causing Wrong GROUP BY Results
+
+- **Problem**: `lib.sql()` hardcoded `dynamic_schema=True`, disabling the C++ column-slice filter for ALL libraries. Static-schema libraries with column slicing got all slices returned (even irrelevant ones), which were null-padded — producing spurious NULL rows in GROUP BY
+- **Fix**: Changed `library.py:sql()` to use `self.options().dynamic_schema` (the library's actual setting) instead of hardcoded `True`
+- **Tests added**: `test_sql_group_by_with_column_projection`, `test_sql_group_by_non_column_sliced_dynamic_schema` in `test_duckdb_dynamic_schema.py`
+
+## 50. Fix FilterClause Crash on Cross-Slice WHERE Filters
+
+- **Problem**: CTA benchmark Operation 3 (`WHERE SecurityClass = 'X' GROUP BY FundName`) crashed with `E_ASSERTION_FAILURE Column SecurityClass not found` because the C++ `apply_filter_clause` evaluated the filter on every column slice, but slices without the filter column don't have it
+- **Failing test first**: Added `test_cross_slice_filter_and_group_by` — WHERE on `s0` (slice 2) + GROUP BY `f0` (slice 0) with `columns_per_segment=10`
+- **Fix**: Don't push `FilterClause` to C++ when column projection is active (`columns is not None`). DuckDB applies WHERE after column-slice merging reassembles complete rows.
+- **CTA benchmark results** (997K rows × 407 cols):
+  - Filter: 4.88s (930K rows)
+  - Aggregate: 0.39s (278 rows)
+  - Filter+Aggregate: 0.46s (148 rows)
+  - Weighted Average: 0.45s (278 rows)
+- **All 350 DuckDB tests pass**
+
 ---
 
 ## Open Items

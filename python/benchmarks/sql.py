@@ -413,3 +413,124 @@ class SQLFilteringMemory:
 
     def peakmem_filter_arrow(self, threshold_pct):
         self.lib.sql(self.query, output_format="pyarrow")
+
+
+class SQLWideTableDateRange:
+    """
+    Benchmark SQL on wide tables with named DatetimeIndex and date_range filters.
+
+    This represents real-world workloads like the CTA dataset (407 columns, ~1M rows)
+    where SQL filters on a named DatetimeIndex must be pushed down as date_range
+    to avoid reading all segments.
+
+    Compares lib.sql() against lib.read() with date_range and QueryBuilder
+    to track the overhead of the SQL/Arrow/DuckDB path.
+    """
+
+    timeout = 600
+    number = 3
+
+    CONNECTION_STRING = "lmdb://sql_wide_date_range"
+    LIB_NAME = "sql_wide_date_range"
+    SYMBOL = "wide_ts"
+    NUM_ROWS = 1_000_000
+    NUM_FLOAT_COLS = 350
+    NUM_STRING_COLS = 57  # Total 407 columns, matching CTA
+    DATE_LO = "2024-11-01"
+    DATE_HI = "2024-12-01"
+    FILTER_COL = "s0"
+    FILTER_VALUE = "A"
+    GROUP_COL = "s1"
+    AGG_COL = "f0"
+
+    # Benchmark full-width, projected, filter, and filter+agg queries
+    query_types = ["select_star", "projection_3col", "filter", "filter_agg"]
+
+    params = [query_types]
+    param_names = ["query_type"]
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):
+        np.random.seed(42)
+        ac = Arctic(self.CONNECTION_STRING)
+        ac.delete_library(self.LIB_NAME)
+        lib = ac.create_library(self.LIB_NAME)
+
+        rng = np.random.default_rng(42)
+        dates = pd.date_range("2024-01-01", periods=self.NUM_ROWS, freq="min")
+        data = {}
+        for i in range(self.NUM_FLOAT_COLS):
+            data[f"f{i}"] = rng.standard_normal(self.NUM_ROWS).astype(np.float64)
+        cats = ["A", "B", "C", "D", "E"]
+        for i in range(self.NUM_STRING_COLS):
+            data[f"s{i}"] = rng.choice(cats, self.NUM_ROWS)
+
+        df = pd.DataFrame(data, index=pd.DatetimeIndex(dates, name="Date"))
+        lib.write(self.SYMBOL, df)
+
+    def setup(self, query_type):
+        from arcticdb.version_store.processing import QueryBuilder
+
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac.get_library(self.LIB_NAME)
+        self.date_range = (pd.Timestamp(self.DATE_LO), pd.Timestamp(self.DATE_HI))
+
+        if query_type == "select_star":
+            self.sql_query = f"SELECT * FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'"
+            self.read_columns = None
+            self.qb = None
+        elif query_type == "projection_3col":
+            self.sql_query = (
+                f"SELECT f0, f1, s0 FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'"
+            )
+            self.read_columns = ["f0", "f1", "s0"]
+            self.qb = None
+        elif query_type == "filter":
+            self.sql_query = (
+                f"SELECT * FROM {self.SYMBOL} "
+                f"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' "
+                f"AND \"{self.FILTER_COL}\" = '{self.FILTER_VALUE}'"
+            )
+            self.read_columns = None
+            q = QueryBuilder()
+            self.qb = q[q[self.FILTER_COL] == self.FILTER_VALUE]
+        elif query_type == "filter_agg":
+            self.sql_query = (
+                f'SELECT "{self.GROUP_COL}", SUM("{self.AGG_COL}") AS total '
+                f"FROM {self.SYMBOL} "
+                f"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' "
+                f"AND \"{self.FILTER_COL}\" = '{self.FILTER_VALUE}' "
+                f'GROUP BY "{self.GROUP_COL}"'
+            )
+            self.read_columns = None
+            q = QueryBuilder()
+            q = q[q[self.FILTER_COL] == self.FILTER_VALUE]
+            self.qb = q.groupby(self.GROUP_COL).agg({self.AGG_COL: "sum"})
+
+        # Warmup — ensure LMDB pages are cached
+        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range)
+
+    def teardown(self, *args):
+        del self.lib
+        del self.ac
+
+    def time_sql(self, query_type):
+        """SQL query via lib.sql()."""
+        self.lib.sql(self.sql_query)
+
+    def time_read_date_range(self, query_type):
+        """lib.read() with date_range — the storage-optimal path."""
+        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range, query_builder=self.qb)
+
+    def peakmem_sql(self, query_type):
+        self.lib.sql(self.sql_query)
+
+    def peakmem_read_date_range(self, query_type):
+        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range, query_builder=self.qb)

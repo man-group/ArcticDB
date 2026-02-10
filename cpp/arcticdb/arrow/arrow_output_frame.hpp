@@ -128,6 +128,10 @@ struct ArrowOutputFrame {
 // Supports optional row-level truncation (date_range/row_range) and per-segment
 // FilterClause application (WHERE pushdown from SQL). These are applied after
 // decoding but before Arrow conversion, so DuckDB only sees the filtered data.
+//
+// Arrow conversion (prepare_segment_for_arrow + segment_to_arrow_data) runs on
+// the CPU thread pool in parallel across segments. By the time next() is called,
+// the RecordBatchData is already prepared.
 class LazyRecordBatchIterator {
   public:
     LazyRecordBatchIterator(
@@ -175,27 +179,37 @@ class LazyRecordBatchIterator {
     std::shared_ptr<ExpressionContext> expression_context_;
     std::string filter_root_node_name_;
 
-    // Prefetch buffer: queue of futures for upcoming decoded segments
-    std::deque<folly::Future<pipelines::SegmentAndSlice>> prefetch_buffer_;
+    // Prefetch buffer: queue of futures for fully prepared RecordBatchData.
+    // Each future reads a segment from storage (IO thread), then runs
+    // truncation + filter + prepare_segment_for_arrow + segment_to_arrow_data
+    // on the CPU thread pool — all in parallel across segments.
+    std::deque<folly::Future<std::vector<RecordBatchData>>> prefetch_buffer_;
 
     // Buffer for extra record batches when a single segment produces multiple blocks.
     // A segment's column data can span multiple ChunkedBuffer blocks (each 64KB),
     // and segment_to_arrow_data() produces one record_batch per block.
     std::deque<RecordBatchData> pending_batches_;
 
-    // Submit a read+decode for one segment, returns a future
-    folly::Future<pipelines::SegmentAndSlice> read_and_decode_segment(size_t idx);
+    // Submit a read+decode+prepare for one segment, returns a future that completes
+    // with fully prepared RecordBatchData (Arrow conversion done on CPU thread pool).
+    folly::Future<std::vector<RecordBatchData>> read_decode_and_prepare_segment(size_t idx);
 
     // Fill the prefetch buffer up to prefetch_size_ entries
     void fill_prefetch_buffer();
 
-    // Apply row-level truncation to a decoded segment based on row_filter_.
-    // Modifies the segment in-place (truncates boundary rows).
-    void apply_truncation(SegmentInMemory& segment, const pipelines::RowRange& slice_row_range);
+    // Apply row-level truncation to a decoded segment.
+    // Static so it can be called from CPU thread pool lambdas without capturing `this`.
+    static void apply_truncation(
+            SegmentInMemory& segment, const pipelines::RowRange& slice_row_range, const FilterRange& row_filter
+    );
 
     // Apply FilterClause expression to a decoded segment.
     // Returns true if the segment has rows remaining after filtering, false if empty.
-    bool apply_filter_clause(SegmentInMemory& segment);
+    // Static so it can be called from CPU thread pool lambdas without capturing `this`.
+    static bool apply_filter_clause(
+            SegmentInMemory& segment, const std::shared_ptr<ExpressionContext>& expression_context,
+            const std::string& filter_root_node_name
+    );
 };
 
 } // namespace arcticdb

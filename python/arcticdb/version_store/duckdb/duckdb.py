@@ -415,7 +415,6 @@ class DuckDBContext(_BaseDuckDBContext):
             row_range=row_range,
             columns=resolved_columns,
             query_builder=query_builder,
-            dynamic_schema=True,
         )
 
         # Convert to native PyArrow RecordBatchReader for DuckDB compatibility.

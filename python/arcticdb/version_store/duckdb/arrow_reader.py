@@ -107,6 +107,29 @@ def _pad_batch_to_schema(batch: pa.RecordBatch, target_schema: pa.Schema) -> pa.
     return pa.RecordBatch.from_arrays(arrays, schema=target_schema)
 
 
+def _merge_column_slices(batch_list: List[pa.RecordBatch]) -> pa.RecordBatch:
+    """Merge multiple column-slice batches from the same row group into one batch.
+
+    ArcticDB splits wide tables into column slices (~127 columns each) stored as
+    separate segments. The lazy iterator yields one batch per slice, so a 407-column
+    table produces ~4 batches per row group. This function horizontally concatenates
+    them back into a single batch containing all columns.
+
+    All batches must have the same number of rows. Column names must not overlap.
+    """
+    if len(batch_list) == 1:
+        return batch_list[0]
+
+    arrays = []
+    fields = []
+    for batch in batch_list:
+        for i, field in enumerate(batch.schema):
+            fields.append(field)
+            arrays.append(batch.column(i))
+
+    return pa.RecordBatch.from_arrays(arrays, schema=pa.schema(fields))
+
+
 class ArcticRecordBatchReader:
     """
     Lazy record batch reader that streams Arrow data from ArcticDB storage.
@@ -145,15 +168,145 @@ class ArcticRecordBatchReader:
         self._first_batch_returned = False
         self._exhausted = False
         self._iteration_started = False
+        # Buffer for column-slice merging: holds the first batch of the next
+        # row group, read ahead while checking if the current group is complete.
+        self._pending_raw_batch: Optional[pa.RecordBatch] = None
+
+    def _read_next_raw_batch(self) -> Optional[pa.RecordBatch]:
+        """Read a single raw batch from the C++ iterator without column-slice merging."""
+        batch_data = self._cpp_iterator.next()
+        if batch_data is None:
+            return None
+        return pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
+
+    @staticmethod
+    def _is_same_row_group(first: pa.RecordBatch, candidate: pa.RecordBatch) -> bool:
+        """Return True if *candidate* is a column slice of the same row group as *first*.
+
+        ArcticDB column slicing produces batches with the same rows but different data
+        columns. Index columns (e.g. ``Date``) are duplicated across every slice.
+
+        A candidate belongs to the same row group when:
+        1. Same row count
+        2. It brings at least one NEW column
+        3. All overlapping columns have identical values (index columns)
+
+        Condition 3 distinguishes column slices (same rows) from dynamic-schema
+        segments (different rows that happen to share a column name like ``b``).
+        """
+        if len(candidate) != len(first):
+            return False
+
+        first_cols = set(first.schema.names)
+        cand_cols = set(candidate.schema.names)
+        new_cols = cand_cols - first_cols
+
+        if not new_cols:
+            return False
+
+        overlap = cand_cols & first_cols
+        if not overlap:
+            # Fully disjoint — same row count is sufficient
+            return True
+
+        # Verify overlapping columns have identical values (index columns)
+        for col_name in overlap:
+            if not first.column(col_name).equals(candidate.column(col_name)):
+                return False
+        return True
+
+    @staticmethod
+    def _merge_slices_for_group(slices: List[pa.RecordBatch]) -> pa.RecordBatch:
+        """Merge a list of column-slice batches into a single batch.
+
+        Drops overlapping columns (e.g. index columns duplicated across slices)
+        from all slices after the first.
+        """
+        if len(slices) == 1:
+            return slices[0]
+        merged_cols: set = set(slices[0].schema.names)
+        deduped = [slices[0]]
+        for s in slices[1:]:
+            overlap = set(s.schema.names) & merged_cols
+            if overlap:
+                keep = [i for i, f in enumerate(s.schema) if f.name not in overlap]
+                s = pa.RecordBatch.from_arrays(
+                    [s.column(i) for i in keep],
+                    schema=pa.schema([s.schema.field(i) for i in keep]),
+                )
+            deduped.append(s)
+            merged_cols.update(s.schema.names)
+        return _merge_column_slices(deduped)
+
+    def _read_next_merged_batch(self) -> Optional[pa.RecordBatch]:
+        """Read the next merged batch, combining column slices from the same row group.
+
+        ArcticDB splits wide tables into column slices (~127 columns each). The C++
+        lazy iterator yields one batch per slice, so batches from the same
+        row group must be merged horizontally before yielding.
+
+        The C++ layer sorts ``slice_and_keys_`` by ``(row_range, col_range)`` so
+        column slices for the same row group are always consecutive.  This allows
+        incremental merging — only one row group's slices are in memory at a time.
+        """
+        # Start with a pending batch from a previous call, or read a new one
+        if self._pending_raw_batch is not None:
+            current = self._pending_raw_batch
+            self._pending_raw_batch = None
+        else:
+            current = self._read_next_raw_batch()
+            if current is None:
+                return None
+
+        # Peek ahead: collect consecutive column slices for the same row group
+        next_batch = self._read_next_raw_batch()
+        if next_batch is None:
+            return current
+
+        if not self._is_same_row_group(current, next_batch):
+            # No column slicing for this row group — save next_batch for next call
+            self._pending_raw_batch = next_batch
+            return current
+
+        # Merge consecutive column slices incrementally
+        slices = [current]
+        current_cols = set(current.schema.names)
+
+        # Helper to strip overlapping (index) columns and append to slices
+        def _append_slice(batch):
+            overlap = set(batch.schema.names) & current_cols
+            if overlap:
+                keep = [i for i, f in enumerate(batch.schema) if f.name not in overlap]
+                batch = pa.RecordBatch.from_arrays(
+                    [batch.column(i) for i in keep],
+                    schema=pa.schema([batch.schema.field(i) for i in keep]),
+                )
+            slices.append(batch)
+            current_cols.update(batch.schema.names)
+
+        _append_slice(next_batch)
+
+        # Continue reading consecutive slices for this row group
+        while True:
+            nb = self._read_next_raw_batch()
+            if nb is None:
+                break
+            if self._is_same_row_group(current, nb):
+                _append_slice(nb)
+            else:
+                self._pending_raw_batch = nb
+                break
+
+        return _merge_column_slices(slices)
 
     def _ensure_schema(self) -> None:
-        """Derive schema from the merged descriptor and first batch, then cache the first batch.
+        """Derive schema from the merged descriptor and first merged batch, then cache it.
 
         The merged descriptor (from the version key's TimeseriesDescriptor) contains
-        ALL column names across ALL segments. The first batch provides the actual Arrow
-        types produced by the C++ conversion (which may differ from descriptor types,
-        e.g. dictionary-encoded strings vs large_string). For columns not in the first
-        batch, the descriptor-derived types are used as fallback.
+        ALL column names across ALL segments. The first merged batch provides the actual
+        Arrow types produced by the C++ conversion (which may differ from descriptor
+        types, e.g. dictionary-encoded strings vs large_string). For columns not in the
+        first batch, the descriptor-derived types are used as fallback.
         """
         if self._schema is not None:
             return
@@ -171,14 +324,12 @@ class ArcticRecordBatchReader:
             self._schema = descriptor_schema
             return
 
-        # Cache the first batch so iteration doesn't lose it
-        batch_data = self._cpp_iterator.next()
-        if batch_data is None:
+        # Cache the first merged batch so iteration doesn't lose it
+        self._first_batch = self._read_next_merged_batch()
+        if self._first_batch is None:
             # All segments were empty after filtering
             self._schema = descriptor_schema
             return
-
-        self._first_batch = pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
 
         # Build the final schema from the descriptor, using the first batch's actual Arrow
         # types where available (they reflect C++ conversion, e.g. dictionary-encoded strings).
@@ -207,6 +358,9 @@ class ArcticRecordBatchReader:
         """
         Read the next record batch.
 
+        Column slices from the same row group are automatically merged into a
+        single batch before being returned.
+
         Returns
         -------
         Optional[pa.RecordBatch]
@@ -225,13 +379,13 @@ class ArcticRecordBatchReader:
             self._first_batch_returned = True
             return self._first_batch
 
-        # Get next batch from C++ iterator
-        batch_data = self._cpp_iterator.next()
-        if batch_data is None:
+        # Get next merged batch (column slices combined)
+        batch = self._read_next_merged_batch()
+        if batch is None:
             self._exhausted = True
             return None
 
-        return pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
+        return batch
 
     def read_all(self, strip_idx_prefix: bool = True) -> pa.Table:
         """

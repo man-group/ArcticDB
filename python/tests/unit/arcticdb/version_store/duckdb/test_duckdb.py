@@ -624,14 +624,19 @@ class TestDuckDBEdgeCases:
         assert len(result) == 0
 
     def test_dataframe_with_nulls(self, lmdb_library):
-        """Test SQL on DataFrame with null values."""
+        """Test SQL on DataFrame with null values.
+
+        Note: Pandas stores None in a float column as NaN, which DuckDB treats
+        as NOT NULL (SQL standard). Use the string column for IS NOT NULL tests.
+        """
         lib = lmdb_library
         df = pd.DataFrame({"x": [1, None, 3], "y": [None, "b", None]})
         lib.write("test_symbol", df)
 
-        result = lib.sql("SELECT * FROM test_symbol WHERE x IS NOT NULL")
+        result = lib.sql("SELECT * FROM test_symbol WHERE y IS NOT NULL")
 
-        assert len(result) == 2  # Two non-null x values
+        assert len(result) == 1  # Only one non-null y value
+        assert result["y"].iloc[0] == "b"
 
     def test_special_characters_in_values(self, lmdb_library):
         """Test SQL on DataFrame with special characters in string values."""

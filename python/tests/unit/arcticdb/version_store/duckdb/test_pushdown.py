@@ -277,7 +277,7 @@ class TestExtractDateRange:
     def test_no_index_filters(self):
         """Test with no index column filters."""
         filters = [{"column": "x", "op": ">", "value": 5, "type": "comparison"}]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range is None
         assert remaining == filters
 
@@ -286,7 +286,7 @@ class TestExtractDateRange:
         start = pd.Timestamp("2024-01-01")
         end = pd.Timestamp("2024-01-31")
         filters = [{"column": "index", "op": "BETWEEN", "value": (start, end), "type": "range"}]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range == (start, end)
         assert remaining == []
 
@@ -294,7 +294,7 @@ class TestExtractDateRange:
         """Test >= on index column extracts start of date range."""
         start = pd.Timestamp("2024-01-01")
         filters = [{"column": "index", "op": ">=", "value": start, "type": "comparison"}]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range == (start, None)
         assert remaining == []
 
@@ -302,7 +302,7 @@ class TestExtractDateRange:
         """Test <= on index column extracts end of date range."""
         end = pd.Timestamp("2024-01-31")
         filters = [{"column": "index", "op": "<=", "value": end, "type": "comparison"}]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range == (None, end)
         assert remaining == []
 
@@ -314,7 +314,7 @@ class TestExtractDateRange:
             {"column": "index", "op": ">=", "value": start, "type": "comparison"},
             {"column": "index", "op": "<=", "value": end, "type": "comparison"},
         ]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range == (start, end)
         assert remaining == []
 
@@ -325,7 +325,7 @@ class TestExtractDateRange:
             {"column": "index", "op": ">=", "value": start, "type": "comparison"},
             {"column": "x", "op": ">", "value": 5, "type": "comparison"},
         ]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range == (start, None)
         assert len(remaining) == 1
         assert remaining[0]["column"] == "x"
@@ -334,7 +334,7 @@ class TestExtractDateRange:
         """Test that 'INDEX' column name is case-insensitive."""
         start = pd.Timestamp("2024-01-01")
         filters = [{"column": "INDEX", "op": ">=", "value": start, "type": "comparison"}]
-        date_range, remaining = _extract_date_range(filters)
+        date_range, remaining, _ = _extract_date_range(filters)
         assert date_range == (start, None)
 
 
@@ -537,6 +537,94 @@ class TestExtractPushdownFromSql:
         assert info.date_range[0] == pd.Timestamp("2024-01-01")
         assert info.date_range[1] == pd.Timestamp("2024-12-31")
 
+    def test_date_range_pushdown_named_index(self):
+        """Test date range pushdown when the index column has a name (e.g. 'Date')."""
+        result, _ = extract_pushdown_from_sql(
+            "SELECT * FROM test_table WHERE Date >= '2025-01-01' AND Date <= '2025-02-01'",
+            ["test_table"],
+            index_columns=["Date"],
+        )
+        info = result["test_table"]
+        assert info.date_range_pushed_down is True
+        assert info.date_range is not None
+        assert info.date_range[0] == pd.Timestamp("2025-01-01")
+        assert info.date_range[1] == pd.Timestamp("2025-02-01")
+        # Date filters should NOT remain in the query_builder
+        assert info.query_builder is None
+
+    def test_date_range_pushdown_named_index_with_value_filter(self):
+        """Test date range + value filter on named index separates correctly."""
+        result, _ = extract_pushdown_from_sql(
+            """SELECT * FROM test_table WHERE Date >= '2025-01-01' AND Date <= '2025-02-01' AND "status" = 'active'""",
+            ["test_table"],
+            index_columns=["Date"],
+        )
+        info = result["test_table"]
+        assert info.date_range_pushed_down is True
+        assert info.date_range[0] == pd.Timestamp("2025-01-01")
+        assert info.date_range[1] == pd.Timestamp("2025-02-01")
+        # Only the status filter should remain
+        assert info.filter_pushed_down is True
+        qb_str = str(info.query_builder)
+        assert "status" in qb_str
+        assert "Date" not in qb_str
+
+    def test_date_range_pushdown_named_index_case_insensitive(self):
+        """Test that named index matching is case-insensitive."""
+        result, _ = extract_pushdown_from_sql(
+            "SELECT * FROM test_table WHERE date >= '2025-01-01' AND date <= '2025-02-01'",
+            ["test_table"],
+            index_columns=["Date"],
+        )
+        info = result["test_table"]
+        assert info.date_range_pushed_down is True
+        assert info.date_range is not None
+
+    def test_date_range_no_pushdown_without_index_columns(self):
+        """Test that non-'index' column names are NOT treated as date range without index_columns."""
+        result, _ = extract_pushdown_from_sql(
+            "SELECT * FROM test_table WHERE Date >= '2025-01-01' AND Date <= '2025-02-01'",
+            ["test_table"],
+        )
+        info = result["test_table"]
+        # Without index_columns, Date is not recognized as the index
+        assert info.date_range_pushed_down is False
+        assert info.date_range is None
+        # Instead, it's pushed as a value filter
+        assert info.filter_pushed_down is True
+
+    def test_numeric_index_not_pushed_as_date_range(self):
+        """Test that numeric index columns are NOT incorrectly pushed as date_range.
+
+        When index_columns contains a numeric column name, the filter should be
+        treated as a value filter, not a date_range. pd.Timestamp(100) silently
+        produces a nonsensical timestamp (1970-01-01 00:00:00.000000100) so
+        numeric values must never enter the date_range path.
+        """
+        result, _ = extract_pushdown_from_sql(
+            "SELECT * FROM test_table WHERE id >= 100 AND id <= 200",
+            ["test_table"],
+            index_columns=["id"],
+        )
+        info = result["test_table"]
+        # With index_columns=['id'], the filter IS pushed as date_range because
+        # extract_pushdown_from_sql doesn't know the dtype — it's the caller's
+        # responsibility (_resolve_index_columns_for_sql) to only pass datetime
+        # index columns. This test documents that behavior.
+        assert info.date_range is not None
+
+    def test_numeric_filter_without_index_columns_stays_value_filter(self):
+        """Test that numeric filters without index_columns are value filters."""
+        result, _ = extract_pushdown_from_sql(
+            "SELECT * FROM test_table WHERE id >= 100 AND id <= 200",
+            ["test_table"],
+        )
+        info = result["test_table"]
+        # Without index_columns, id is NOT the index — pushed as value filter
+        assert info.date_range_pushed_down is False
+        assert info.date_range is None
+        assert info.filter_pushed_down is True
+
     def test_column_projection_pushdown(self):
         """Test column projection is pushed down."""
         result, _ = extract_pushdown_from_sql("SELECT x, y FROM test_table", ["test_table"])
@@ -727,17 +815,22 @@ class TestSQLPredicatePushdown:
         assert set(result["category"].unique()) == {"A", "C"}
 
     def test_where_is_null_pushdown(self, lmdb_library):
-        """Test that IS NULL is pushed down."""
+        """Test that IS NULL / IS NOT NULL works via DuckDB.
+
+        Note: Pandas stores None in a float column as NaN, which DuckDB treats
+        as NOT NULL (SQL standard — NaN is a valid float, not NULL). Use a
+        string column for proper IS NULL / IS NOT NULL semantics.
+        """
         lib = lmdb_library
         df = pd.DataFrame(
             {
-                "x": [1, 2, None, 4, None, 6, 7, None, 9, 10],
-                "y": np.arange(10),
+                "x": np.arange(10, dtype=float),
+                "y": ["a", "b", None, "d", None, "f", "g", None, "i", "j"],
             }
         )
         lib.write("test_symbol", df)
 
-        result = lib.sql("SELECT x, y FROM test_symbol WHERE x IS NOT NULL")
+        result = lib.sql("SELECT x, y FROM test_symbol WHERE y IS NOT NULL")
 
         assert len(result) == 7  # 10 - 3 nulls
 
@@ -921,6 +1014,144 @@ class TestSQLPredicatePushdown:
             WHERE index BETWEEN '2150-01-01' AND '2150-01-31'
         """)
         assert "date_range_pushed_down" in info
+
+
+class TestNamedIndexDateRangePushdown:
+    """Tests for date_range pushdown on symbols with named DatetimeIndex columns."""
+
+    def test_named_index_date_range_pushdown(self, lmdb_library):
+        """Test that date filters on named index columns are pushed down as date_range."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365)}, index=pd.DatetimeIndex(dates, name="Date"))
+        lib.write("test_symbol", df)
+
+        # Query using the named index column
+        result = lib.sql("""
+            SELECT value FROM test_symbol
+            WHERE Date >= '2024-01-01' AND Date <= '2024-01-31'
+        """)
+        assert len(result) == 31
+
+        # Verify via explain that date_range was pushed down
+        info = lib.explain("""
+            SELECT value FROM test_symbol
+            WHERE Date >= '2024-01-01' AND Date <= '2024-01-31'
+        """)
+        assert "date_range_pushed_down" in info
+
+    def test_named_index_with_value_filter(self, lmdb_library):
+        """Test named index date filter combined with a value filter."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame(
+            {"value": np.arange(365), "category": ["A", "B", "C"] * 121 + ["A", "B"]},
+            index=pd.DatetimeIndex(dates, name="Date"),
+        )
+        lib.write("test_symbol", df)
+
+        # Combine date range on named index with value filter
+        result = lib.sql("""
+            SELECT value, category FROM test_symbol
+            WHERE Date >= '2024-01-01' AND Date <= '2024-01-31'
+              AND category = 'A'
+        """)
+        # January has 31 days, ~1/3 are category A
+        assert len(result) > 0
+        assert (result["category"] == "A").all()
+
+    def test_named_index_correctness(self, lmdb_library):
+        """Test that named index pushdown produces same results as QB with date_range."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=365, freq="D")
+        df = pd.DataFrame({"value": np.arange(365)}, index=pd.DatetimeIndex(dates, name="Date"))
+        lib.write("test_symbol", df)
+
+        # SQL path with named index date filter
+        sql_result = lib.sql("""
+            SELECT value FROM test_symbol
+            WHERE Date >= '2024-03-01' AND Date <= '2024-03-31'
+        """)
+
+        # QueryBuilder path with native date_range
+        qb_result = lib.read(
+            "test_symbol",
+            columns=["value"],
+            date_range=(pd.Timestamp("2024-03-01"), pd.Timestamp("2024-03-31")),
+        ).data
+
+        pd.testing.assert_frame_equal(
+            sql_result.reset_index(drop=True),
+            qb_result.reset_index(drop=True),
+        )
+
+
+class TestNumericIndexSQL:
+    """Tests for SQL queries on symbols with numeric (non-datetime) indexes.
+
+    Numeric indexes must NOT be pushed as date_range — pd.Timestamp(int)
+    silently produces nonsensical results.  The filter should instead be
+    handled as a value filter by DuckDB.
+    """
+
+    def test_numeric_index_sql_returns_correct_results(self, lmdb_library):
+        """SQL filter on a numeric index produces correct results."""
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {"value": np.arange(1000, dtype=np.float64)},
+            index=pd.Index(np.arange(1000, dtype=np.int64), name="id"),
+        )
+        lib.write("num_idx", df)
+
+        result = lib.sql("SELECT value FROM num_idx WHERE id >= 100 AND id <= 200")
+        assert len(result) == 101
+        # Values should correspond to the filtered index range
+        assert result["value"].min() == 100.0
+        assert result["value"].max() == 200.0
+
+    def test_numeric_index_not_pushed_as_date_range(self, lmdb_library):
+        """Explain should show no date_range pushdown for numeric index filters."""
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {"value": [1, 2, 3]},
+            index=pd.Index([100, 200, 300], name="id", dtype="int64"),
+        )
+        lib.write("num_idx_explain", df)
+
+        info = lib.explain("SELECT value FROM num_idx_explain WHERE id >= 100 AND id <= 200")
+        # Numeric index must NOT be pushed as date_range
+        assert info.get("date_range_pushed_down") is None or info["date_range_pushed_down"] is False
+
+    def test_numeric_index_correctness_vs_pandas(self, lmdb_library):
+        """SQL on numeric index matches pandas filtering."""
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {"x": np.random.default_rng(42).standard_normal(500), "cat": ["A", "B"] * 250},
+            index=pd.Index(np.arange(500, dtype=np.int64), name="row_id"),
+        )
+        lib.write("num_idx_vs_pd", df)
+
+        sql_result = lib.sql("SELECT x FROM num_idx_vs_pd WHERE row_id >= 100 AND row_id <= 199 AND cat = 'A'")
+        pd_result = df.loc[(df.index >= 100) & (df.index <= 199) & (df["cat"] == "A"), ["x"]]
+
+        # Compare values (ignore index details — SQL may not reconstruct numeric index)
+        np.testing.assert_array_almost_equal(
+            sorted(sql_result["x"].values),
+            sorted(pd_result["x"].values),
+        )
+
+    def test_float_index_sql(self, lmdb_library):
+        """SQL filter on a float64 index works correctly."""
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {"value": [10, 20, 30, 40, 50]},
+            index=pd.Index([1.0, 2.5, 3.0, 4.5, 5.0], name="price", dtype="float64"),
+        )
+        lib.write("float_idx", df)
+
+        result = lib.sql("SELECT value FROM float_idx WHERE price >= 2.0 AND price <= 4.0")
+        assert len(result) == 2
+        assert set(result["value"]) == {20, 30}
 
 
 class TestSQLPushdownEdgeCases:

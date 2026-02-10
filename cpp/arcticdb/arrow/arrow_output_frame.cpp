@@ -14,6 +14,7 @@
 
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
@@ -344,26 +345,71 @@ bool LazyRecordBatchIterator::has_next() const { return !pending_batches_.empty(
 
 size_t LazyRecordBatchIterator::num_batches() const { return slice_and_keys_.size(); }
 
-folly::Future<pipelines::SegmentAndSlice> LazyRecordBatchIterator::read_and_decode_segment(size_t idx) {
+folly::Future<std::vector<RecordBatchData>> LazyRecordBatchIterator::read_decode_and_prepare_segment(size_t idx) {
     auto& sk = slice_and_keys_[idx];
+    auto slice_row_range = sk.slice_.row_range;
     pipelines::RangesAndKey ranges_and_key(sk.slice_, entity::AtomKey(sk.key()), false);
     std::vector<pipelines::RangesAndKey> ranges;
     ranges.emplace_back(std::move(ranges_and_key));
     auto futures = store_->batch_read_uncompressed(std::move(ranges), columns_to_decode_);
     util::check(!futures.empty(), "Expected at least one future from batch_read_uncompressed");
-    return std::move(futures[0]);
+
+    // Capture shared state by value/copy for the CPU task lambda.
+    // row_filter_ is cheap to copy (variant of small structs).
+    // expression_context_ is shared_ptr (immutable after construction, safe for concurrent reads).
+    auto row_filter = row_filter_;
+    auto expr_ctx = expression_context_;
+    auto filter_name = filter_root_node_name_;
+
+    // Chain CPU-intensive work (truncation, filter, Arrow conversion) onto the IO future.
+    // This runs on the CPU thread pool, enabling parallel Arrow conversion across segments.
+    return std::move(futures[0])
+            .via(&async::cpu_executor())
+            .thenValue(
+                    [slice_row_range,
+                     row_filter = std::move(row_filter),
+                     expr_ctx = std::move(expr_ctx),
+                     filter_name = std::move(filter_name)](pipelines::SegmentAndSlice&& segment_and_slice
+                    ) -> std::vector<RecordBatchData> {
+                        auto& segment = segment_and_slice.segment_in_memory_;
+
+                        apply_truncation(segment, slice_row_range, row_filter);
+
+                        if (!apply_filter_clause(segment, expr_ctx, filter_name)) {
+                            return {}; // All rows filtered out
+                        }
+
+                        prepare_segment_for_arrow(segment);
+
+                        auto arrow_batches = segment_to_arrow_data(segment);
+                        if (!arrow_batches || arrow_batches->empty()) {
+                            return {};
+                        }
+
+                        std::vector<RecordBatchData> result;
+                        result.reserve(arrow_batches->size());
+                        for (auto& batch : *arrow_batches) {
+                            auto struct_array = sparrow::array{batch.extract_struct_array()};
+                            auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
+                            result.emplace_back(arr, schema);
+                        }
+                        return result;
+                    }
+            );
 }
 
 void LazyRecordBatchIterator::fill_prefetch_buffer() {
     while (prefetch_buffer_.size() < prefetch_size_ && next_prefetch_index_ < slice_and_keys_.size()) {
-        prefetch_buffer_.emplace_back(read_and_decode_segment(next_prefetch_index_));
+        prefetch_buffer_.emplace_back(read_decode_and_prepare_segment(next_prefetch_index_));
         ++next_prefetch_index_;
     }
 }
 
-void LazyRecordBatchIterator::apply_truncation(SegmentInMemory& segment, const pipelines::RowRange& slice_row_range) {
+void LazyRecordBatchIterator::apply_truncation(
+        SegmentInMemory& segment, const pipelines::RowRange& slice_row_range, const FilterRange& row_filter
+) {
     util::variant_match(
-            row_filter_,
+            row_filter,
             [&segment, &slice_row_range](const entity::IndexRange& index_filter) {
                 // Timestamp-based truncation (date_range).
                 // The segment's index column (column 0) contains timestamps.
@@ -388,7 +434,7 @@ void LazyRecordBatchIterator::apply_truncation(SegmentInMemory& segment, const p
                     segment = segment.truncate(0, 0, false);
                 }
             },
-            [&segment, &slice_row_range](const pipelines::RowRange& row_filter) {
+            [&segment, &slice_row_range](const pipelines::RowRange& rr_filter) {
                 // Row-based truncation (row_range / LIMIT).
                 // Calculate the overlap between this segment's row range and the filter.
                 const auto num_rows = segment.row_count();
@@ -396,8 +442,8 @@ void LazyRecordBatchIterator::apply_truncation(SegmentInMemory& segment, const p
                     return;
                 }
                 auto seg_start = static_cast<int64_t>(slice_row_range.first);
-                auto filter_start = static_cast<int64_t>(row_filter.first);
-                auto filter_end = static_cast<int64_t>(row_filter.second);
+                auto filter_start = static_cast<int64_t>(rr_filter.first);
+                auto filter_end = static_cast<int64_t>(rr_filter.second);
 
                 // Local row indices within this segment
                 auto local_start = std::max(int64_t{0}, filter_start - seg_start);
@@ -417,17 +463,20 @@ void LazyRecordBatchIterator::apply_truncation(SegmentInMemory& segment, const p
     );
 }
 
-bool LazyRecordBatchIterator::apply_filter_clause(SegmentInMemory& segment) {
-    if (!expression_context_) {
+bool LazyRecordBatchIterator::apply_filter_clause(
+        SegmentInMemory& segment, const std::shared_ptr<ExpressionContext>& expression_context,
+        const std::string& filter_root_node_name
+) {
+    if (!expression_context) {
         return true; // No filter — keep all rows
     }
     if (segment.row_count() == 0) {
         return false;
     }
 
-    ExpressionName root_node_name(filter_root_node_name_);
+    ExpressionName root_node_name(filter_root_node_name);
     ProcessingUnit proc(std::move(segment));
-    proc.set_expression_context(expression_context_);
+    proc.set_expression_context(expression_context);
     auto variant_data = proc.get(root_node_name);
 
     bool has_rows = false;
@@ -461,54 +510,27 @@ std::optional<RecordBatchData> LazyRecordBatchIterator::next() {
         return batch_data;
     }
 
-    if (prefetch_buffer_.empty()) {
-        return std::nullopt;
+    // Each future already contains fully prepared RecordBatchData
+    // (truncation, filter, prepare_segment_for_arrow, segment_to_arrow_data
+    // all ran on the CPU thread pool).
+    while (!prefetch_buffer_.empty()) {
+        auto batches = std::move(prefetch_buffer_.front()).get();
+        prefetch_buffer_.pop_front();
+        ++current_index_;
+        fill_prefetch_buffer();
+
+        if (batches.empty()) {
+            continue; // Segment was empty after truncation/filtering
+        }
+
+        // Queue extra batches from multi-block segments
+        for (size_t i = 1; i < batches.size(); ++i) {
+            pending_batches_.emplace_back(std::move(batches[i]));
+        }
+        return std::move(batches[0]);
     }
 
-    // Block on the next segment (should already be ready or nearly ready due to prefetch)
-    auto segment_and_slice = std::move(prefetch_buffer_.front()).get();
-    prefetch_buffer_.pop_front();
-    ++current_index_;
-
-    // Kick off reads for the next segments
-    fill_prefetch_buffer();
-
-    auto& segment = segment_and_slice.segment_in_memory_;
-
-    // Apply row-level truncation for date_range/row_range
-    apply_truncation(segment, segment_and_slice.ranges_and_key_.row_range());
-
-    // Apply FilterClause expression (WHERE pushdown)
-    if (!apply_filter_clause(segment)) {
-        // All rows filtered out — try next segment
-        return next();
-    }
-
-    // Prepare the decoded segment for Arrow conversion:
-    // - Non-string columns: make inline blocks detachable for block.release()
-    // - String columns: resolve string pool offsets into proper Arrow dictionary/string buffers
-    prepare_segment_for_arrow(segment);
-
-    // Convert the decoded SegmentInMemory to Arrow record batches.
-    // A single segment can produce multiple record batches when column data spans
-    // multiple ChunkedBuffer blocks (each block = one batch, blocks are ~64KB).
-    auto arrow_batches = segment_to_arrow_data(segment);
-    if (!arrow_batches || arrow_batches->empty()) {
-        // Empty segment — try next
-        return next();
-    }
-
-    // Convert all batches from this segment to RecordBatchData
-    for (auto& batch : *arrow_batches) {
-        auto struct_array = sparrow::array{batch.extract_struct_array()};
-        auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
-        pending_batches_.emplace_back(arr, schema);
-    }
-
-    // Return the first, rest will be returned by subsequent next() calls
-    auto batch_data = std::move(pending_batches_.front());
-    pending_batches_.pop_front();
-    return batch_data;
+    return std::nullopt;
 }
 
 } // namespace arcticdb
