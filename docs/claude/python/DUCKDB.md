@@ -96,7 +96,6 @@ _BaseDuckDBContext
 
 - `_check_duckdb_available()` — import guard, raises `ImportError` with install instructions
 - `_parse_library_name(name)` — splits `"db.lib"` → `("db", "lib")`, top-level → `("__default__", name)`
-- `_extract_symbols_from_query(query)` — delegates to `extract_pushdown_from_sql()`
 - `_resolve_symbol(sql_name, library)` — O(1) exact match via `has_symbol()`, case-insensitive fallback via `list_symbols()`
 
 ## MultiIndex Schema in SQL
@@ -214,7 +213,13 @@ Used in both `to_pyarrow_reader()` (per-batch padding) and `read_all()` (batch l
 
 ### Dynamic Schema in SQL Paths
 
-`lib.sql()`, `lib.duckdb()`, and `DuckDBContext.register_symbol()` all pass `dynamic_schema=True` to `_read_as_record_batch_reader()`, which forwards it to the C++ `read_as_lazy_record_batch_iterator()`. This sets `ExpressionContext::dynamic_schema_` so FilterClause returns `EmptyResult` (instead of crashing) when a WHERE column is missing from a segment.
+`lib.sql()`, `lib.duckdb()`, and `DuckDBContext.register_symbol()` pass `dynamic_schema=self.options().dynamic_schema` (the **library's actual setting**) to `_read_as_record_batch_reader()`. Passing `dynamic_schema=True` when the library is static-schema disables the C++ column-slice filter, causing all column slices to be returned (even those without projected columns) and producing spurious NULL rows in GROUP BY results.
+
+For dynamic-schema libraries, `ExpressionContext::dynamic_schema_` is set so FilterClause returns `EmptyResult` (instead of crashing) when a WHERE column is missing from a segment.
+
+### Fast Path
+
+`lib.sql()` has a fast path that **bypasses DuckDB entirely** for simple queries. When `fully_pushed=True` (single table, no GROUP BY/ORDER BY/DISTINCT/LIMIT/JOINs/CTEs, all filters pushed) and `columns is None` (SELECT *), it falls back to `lib.read()` which avoids Arrow conversion overhead. This is critical for static-schema performance on wide tables where Arrow conversion dominates.
 
 ### Single-Use Constraint
 
@@ -232,16 +237,23 @@ On-demand segment reader that streams Arrow record batches from storage. This is
 LazyRecordBatchIterator
 ├── slice_and_keys_         (segment metadata from index-only read)
 ├── store_                  (StreamSource for storage I/O)
-├── prefetch_buffer_        (deque<Future<SegmentAndSlice>>, default size 2)
+├── prefetch_buffer_        (deque<Future<vector<RecordBatchData>>>, default size 2)
 ├── row_filter_             (FilterRange: date_range/row_range/none)
 ├── expression_context_     (FilterClause from WHERE pushdown)
 ├── descriptor_             (StreamDescriptor for schema discovery)
 │
 ├── next() → optional<RecordBatchData>
-│   ├── apply_truncation()       — date_range/row_range row-level filtering
-│   ├── apply_filter_clause()    — WHERE pushdown via ProcessingUnit
-│   ├── prepare_segment_for_arrow() — convert to Arrow-compatible format
-│   └── segment_to_arrow_data()  — produce sparrow::record_batch
+│   ├── drain pending_batches_ first (multi-block segments)
+│   ├── block on prefetch_buffer_.front().get() — returns prepared batches
+│   └── fill_prefetch_buffer() — kick off next reads
+│
+├── read_decode_and_prepare_segment(idx) → Future<vector<RecordBatchData>>
+│   ├── batch_read_uncompressed() — I/O (already parallel)
+│   └── .via(&cpu_executor()).thenValue() — **parallel on CPU thread pool**:
+│       ├── apply_truncation()
+│       ├── apply_filter_clause()
+│       ├── prepare_segment_for_arrow()
+│       └── segment_to_arrow_data() + RecordBatchData conversion
 │
 ├── has_next(), num_batches(), current_index()
 ├── descriptor() → StreamDescriptor (for empty symbol schema)
@@ -311,35 +323,26 @@ The cost is inherent: the pandas path returns numpy arrays referencing decoded b
 
 ### Profiling Scripts
 
-Non-ASV profiling scripts for investigating performance:
+Non-ASV profiling scripts, numbered by usefulness (most → least):
 
 ```
 python/benchmarks/non_asv/duckdb/
-├── bench_sql_vs_qb.py          # Head-to-head SQL vs QueryBuilder (1M & 10M rows)
-├── bench_sql_numeric_only.py   # Numeric-only variant isolating string overhead
-├── profile_lazy_iterator.py    # Time breakdown: C++ iterator vs DuckDB vs lib.read
-├── profile_per_step.py         # Per-segment + per-step profiling (numeric & string)
-└── profile_warm_cache.py       # Warm-cache profiling for true CPU cost
+├── 1_bench_sql_vs_querybuilder.py  # Day-to-day: SQL vs QB vs pandas (1M & 10M rows, operations)
+├── 2_bench_sql_scaling.py          # Width scaling: 6→100→400 cols, static vs dynamic schema
+├── 3_profile_sql_breakdown.py      # Step-by-step: pushdown, iterator creation, DuckDB exec
+└── 4_profile_iterator_pipeline.py  # Lowest-level: per-segment C++ timing, streaming vs materialized
 ```
 
 All scripts are self-contained (generate own data in tempdir). Run with:
 ```bash
-python python/benchmarks/non_asv/duckdb/bench_sql_vs_qb.py
+python python/benchmarks/non_asv/duckdb/1_bench_sql_vs_querybuilder.py
 ```
 
 ## Testing
 
 ```bash
-# All DuckDB tests (~317 tests)
+# All DuckDB tests (~350 tests)
 python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/
-
-# Specific test files
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_pushdown.py
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_duckdb.py
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_arrow_reader.py
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_lazy_streaming.py
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_doc_examples.py
-python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_duckdb_dynamic_schema.py
 ```
 
 ### Test Structure
@@ -352,6 +355,8 @@ python -m pytest python/tests/unit/arcticdb/version_store/duckdb/test_duckdb_dyn
 | `test_lazy_streaming.py` | Lazy iterator: basic SQL, groupby, filter, joins, versioning, multi-segment, truncation, FilterClause | Direct iterator, date_range/row_range, empty symbols, DuckDB context |
 | `test_doc_examples.py` | Tutorial code examples, as_of with dict/timestamp, explain() | End-to-end validation of documented examples |
 | `test_duckdb_dynamic_schema.py` | Dynamic schema: SELECT *, WHERE filter, aggregation, JOIN, DuckDBContext, strings | Symbols where segments have different column subsets; null padding, missing-column filters |
+| `test_schema_ddl.py` | DESCRIBE, SHOW TABLES, SHOW DATABASES, schema discovery | DDL queries, column metadata, database/library hierarchy |
+| `test_arctic_duckdb.py` | Arctic-level SQL: cross-library joins, ArcticDuckDBContext, SHOW DATABASES | Cross-library/cross-instance queries, library registration |
 
 ## Related Documentation
 

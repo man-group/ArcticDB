@@ -38,19 +38,23 @@ LazyRecordBatchIterator
 ├── descriptor_             (StreamDescriptor — schema, available even for empty symbols)
 ├── store_                  (shared_ptr<StreamSource> — storage backend)
 ├── columns_to_decode_      (shared_ptr<unordered_set<string>> — column projection)
-├── prefetch_buffer_        (deque<Future<SegmentAndSlice>>, default size 2)
+├── prefetch_buffer_        (deque<Future<vector<RecordBatchData>>>, default size 2)
 ├── row_filter_             (FilterRange variant: IndexRange | RowRange | monostate)
 ├── expression_context_     (shared_ptr<ExpressionContext> — FilterClause from WHERE)
 ├── pending_batches_        (deque<RecordBatchData> — multi-block segment buffer)
 │
 ├── next() → optional<RecordBatchData>
 │   ├── drain pending_batches_ first (multi-block segments)
-│   ├── block on prefetch_buffer_.front().get()
-│   ├── fill_prefetch_buffer() — kick off next reads
-│   ├── apply_truncation(segment, slice_row_range)
-│   ├── apply_filter_clause(segment) → bool
-│   ├── prepare_segment_for_arrow(segment)
-│   └── segment_to_arrow_data(segment) → vector<record_batch>
+│   ├── block on prefetch_buffer_.front().get() — returns prepared batches
+│   └── fill_prefetch_buffer() — kick off next reads
+│
+├── read_decode_and_prepare_segment(idx) → Future<vector<RecordBatchData>>
+│   ├── batch_read_uncompressed() — I/O future
+│   └── .via(&cpu_executor()).thenValue() — **parallel on CPU pool**:
+│       ├── apply_truncation(segment, slice_row_range, row_filter)
+│       ├── apply_filter_clause(segment, expr_ctx, filter_name)
+│       ├── prepare_segment_for_arrow(segment)
+│       └── segment_to_arrow_data() + RecordBatchData conversion
 │
 ├── has_next() → bool
 ├── num_batches() → size_t
@@ -59,11 +63,13 @@ LazyRecordBatchIterator
 └── field_count() → size_t
 ```
 
-**Prefetch**: `fill_prefetch_buffer()` maintains up to `prefetch_size_` (default 2) in-flight `folly::Future<SegmentAndSlice>` via `read_and_decode_segment()` → `store_->batch_read_uncompressed()`.
+**Prefetch + Parallel Conversion**: `fill_prefetch_buffer()` maintains up to `prefetch_size_` (default 2) in-flight `folly::Future<vector<RecordBatchData>>` via `read_decode_and_prepare_segment()`. Each future chains I/O (`batch_read_uncompressed`) with CPU-intensive work (truncation, filter, Arrow conversion) via `.via(&async::cpu_executor())`. This means `prepare_segment_for_arrow()` runs on the **CPU thread pool in parallel** across segments — critical for wide tables where Arrow conversion takes seconds per segment.
 
-**Truncation**: `apply_truncation()` handles `IndexRange` (timestamp binary search) and `RowRange` (row offset overlap) for date_range/row_range/LIMIT pushdown.
+**Truncation**: `apply_truncation()` is `static` — handles `IndexRange` (timestamp binary search) and `RowRange` (row offset overlap) for date_range/row_range/LIMIT pushdown. Called inside the future chain lambda with captured (not member) state.
 
-**Filter**: `apply_filter_clause()` evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering. For dynamic-schema symbols, `expression_context_->dynamic_schema_` must be `true` so that `ProcessingUnit::get()` returns `EmptyResult` instead of throwing when a filter column is missing from a segment.
+**Filter**: `apply_filter_clause()` is `static` — evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering. For dynamic-schema symbols, `expression_context_->dynamic_schema_` must be `true` so that `ProcessingUnit::get()` returns `EmptyResult` instead of throwing when a filter column is missing from a segment.
+
+**Thread safety**: All state needed by the CPU lambda (row_filter, expression_context, filter_name) is captured by value/move — no shared mutable state across threads. Each segment is processed independently.
 
 ### ArrowOutputFrame
 
