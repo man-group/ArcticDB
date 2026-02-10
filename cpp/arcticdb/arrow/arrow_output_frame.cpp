@@ -410,7 +410,7 @@ void LazyRecordBatchIterator::apply_truncation(
 ) {
     util::variant_match(
             row_filter,
-            [&segment, &slice_row_range](const entity::IndexRange& index_filter) {
+            [&segment](const entity::IndexRange& index_filter) {
                 // Timestamp-based truncation (date_range).
                 // The segment's index column (column 0) contains timestamps.
                 // Binary search to find the exact row boundaries within this segment.
