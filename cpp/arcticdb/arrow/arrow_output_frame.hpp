@@ -32,7 +32,7 @@ class record_batch;
 namespace arcticdb {
 
 namespace stream {
-class StreamSource;
+struct StreamSource;
 }
 
 struct ExpressionContext;
