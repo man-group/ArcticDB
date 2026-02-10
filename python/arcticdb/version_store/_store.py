@@ -3200,12 +3200,11 @@ class NativeVersionStore:
         versions = versions[1:]
         versions = filter(lambda v: v["version"] != keep_version, versions)
         keep_date = Timestamp.utcnow() - Timedelta(minutes=keep_mins)
-        delete_versions = filter(lambda v: v["date"] < keep_date, versions)
+        delete_versions = list(map(lambda v: v["version"], filter(lambda v: v["date"] < keep_date, versions)))
 
-        for v_info in delete_versions:
-            log.info("Deleting version: {}".format(str(v_info["version"])))
-            self.delete_version(symbol, v_info["version"])
-            log.info("Done deleting version: {}".format(str(v_info["version"])))
+        log.info(f"Start deleting versions: {delete_versions} for symbol {symbol}")
+        self.delete_versions(symbol, delete_versions)
+        log.info(f"Done deleting versions: {delete_versions} for symbol {symbol}")
 
     def has_symbol(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, iterate_on_failure: Optional[bool] = False
