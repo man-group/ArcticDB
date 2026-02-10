@@ -71,7 +71,9 @@ def run_test(lib, label, sql_query, qb_func):
     if pushdown:
         print(f"    1. Pushdown extraction:     {t_pushdown*1000:.1f}ms")
         print(f"       date_range={pushdown.date_range}")
-        print(f"       columns={pushdown.columns[:5] if pushdown.columns else None}{'...' if pushdown.columns and len(pushdown.columns) > 5 else ''}")
+        print(
+            f"       columns={pushdown.columns[:5] if pushdown.columns else None}{'...' if pushdown.columns and len(pushdown.columns) > 5 else ''}"
+        )
         print(f"       query_builder={pushdown.query_builder}")
 
     # 2. _read_as_record_batch_reader

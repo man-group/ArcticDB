@@ -75,9 +75,7 @@ def run_benchmarks(lib, sym, n_str, n_num):
 
     # 3. Numeric filter (1% selectivity) + 3 cols
     print("  [3/6] WHERE num_0 < 1.0 (3 cols) ...")
-    sql_t, sql_s = timeit(
-        lambda: lib.sql(f"SELECT num_0, num_1, num_2 FROM {sym} WHERE num_0 < 1.0"), "SQL filt"
-    )
+    sql_t, sql_s = timeit(lambda: lib.sql(f"SELECT num_0, num_1, num_2 FROM {sym} WHERE num_0 < 1.0"), "SQL filt")
 
     def qb_filter_3():
         q = QueryBuilder()
@@ -101,9 +99,7 @@ def run_benchmarks(lib, sym, n_str, n_num):
 
     # 5. String filter + all cols
     print("  [5/6] WHERE str_0 = 'val_0001' (all cols) ...")
-    sql_t, sql_s = timeit(
-        lambda: lib.sql(f"SELECT * FROM {sym} WHERE str_0 = 'val_0001'"), "SQL sfilt"
-    )
+    sql_t, sql_s = timeit(lambda: lib.sql(f"SELECT * FROM {sym} WHERE str_0 = 'val_0001'"), "SQL sfilt")
 
     def qb_str_filter():
         q = QueryBuilder()
@@ -115,9 +111,7 @@ def run_benchmarks(lib, sym, n_str, n_num):
 
     # 6. GROUP BY + SUM
     print("  [6/6] GROUP BY str_0, SUM(num_0) ...")
-    sql_t, sql_s = timeit(
-        lambda: lib.sql(f"SELECT str_0, SUM(num_0) as total FROM {sym} GROUP BY str_0"), "SQL gb"
-    )
+    sql_t, sql_s = timeit(lambda: lib.sql(f"SELECT str_0, SUM(num_0) as total FROM {sym} GROUP BY str_0"), "SQL gb")
 
     def qb_groupby():
         q = QueryBuilder()

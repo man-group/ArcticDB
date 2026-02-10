@@ -74,7 +74,11 @@ def measure(func, label, warmup=1, runs=3):
         times.append(elapsed)
         peak_mems.append(peak)
         if result_shape is None:
-            result_shape = result.shape if isinstance(result, pd.DataFrame) else getattr(getattr(result, "data", None), "shape", "?")
+            result_shape = (
+                result.shape
+                if isinstance(result, pd.DataFrame)
+                else getattr(getattr(result, "data", None), "shape", "?")
+            )
         del result
         gc.collect()
 
@@ -104,26 +108,61 @@ def run_mixed_comparison(lib, sym, n_label):
 
     print("  [3/8] Numeric filter (v3 < 1.0, ~1%) ...")
     results.append(measure(lambda: lib.sql(f"SELECT v3 FROM {sym} WHERE v3 < 1.0"), "SQL: WHERE v3<1"))
-    results.append(measure(lambda: lib.read(sym, columns=["v3"], query_builder=QueryBuilder()[QueryBuilder()["v3"] < 1.0]).data, "QB: filter v3<1"))
+    results.append(
+        measure(
+            lambda: lib.read(sym, columns=["v3"], query_builder=QueryBuilder()[QueryBuilder()["v3"] < 1.0]).data,
+            "QB: filter v3<1",
+        )
+    )
 
     print("  [4/8] String filter (id1 = 'id001') ...")
     results.append(measure(lambda: lib.sql(f"SELECT v1, v3 FROM {sym} WHERE id1 = 'id001'"), "SQL: WHERE id1='id001'"))
-    results.append(measure(lambda: lib.read(sym, columns=["v1", "v3"], query_builder=QueryBuilder()[QueryBuilder()["id1"] == "id001"]).data, "QB: filter id1"))
+    results.append(
+        measure(
+            lambda: lib.read(
+                sym, columns=["v1", "v3"], query_builder=QueryBuilder()[QueryBuilder()["id1"] == "id001"]
+            ).data,
+            "QB: filter id1",
+        )
+    )
 
     print("  [5/8] GROUP BY low cardinality (id6, ~10 groups) ...")
     results.append(measure(lambda: lib.sql(f"SELECT id6, SUM(v1) as total FROM {sym} GROUP BY id6"), "SQL: GB id6 SUM"))
-    results.append(measure(lambda: lib.read(sym, query_builder=QueryBuilder().groupby("id6").agg({"v1": "sum"})).data, "QB: gb(id6).sum"))
+    results.append(
+        measure(
+            lambda: lib.read(sym, query_builder=QueryBuilder().groupby("id6").agg({"v1": "sum"})).data,
+            "QB: gb(id6).sum",
+        )
+    )
 
     print("  [6/8] GROUP BY high cardinality (id1, ~N/10 groups) ...")
     results.append(measure(lambda: lib.sql(f"SELECT id1, SUM(v1) as total FROM {sym} GROUP BY id1"), "SQL: GB id1 SUM"))
-    results.append(measure(lambda: lib.read(sym, query_builder=QueryBuilder().groupby("id1").agg({"v1": "sum"})).data, "QB: gb(id1).sum"))
+    results.append(
+        measure(
+            lambda: lib.read(sym, query_builder=QueryBuilder().groupby("id1").agg({"v1": "sum"})).data,
+            "QB: gb(id1).sum",
+        )
+    )
 
     print("  [7/8] Multi-agg GROUP BY ...")
-    results.append(measure(lambda: lib.sql(f"SELECT id1, SUM(v1) as s1, SUM(v3) as s3 FROM {sym} GROUP BY id1"), "SQL: GB multi-agg"))
-    results.append(measure(lambda: lib.read(sym, query_builder=QueryBuilder().groupby("id1").agg({"v1": "sum", "v3": "sum"})).data, "QB: gb multi-agg"))
+    results.append(
+        measure(
+            lambda: lib.sql(f"SELECT id1, SUM(v1) as s1, SUM(v3) as s3 FROM {sym} GROUP BY id1"), "SQL: GB multi-agg"
+        )
+    )
+    results.append(
+        measure(
+            lambda: lib.read(sym, query_builder=QueryBuilder().groupby("id1").agg({"v1": "sum", "v3": "sum"})).data,
+            "QB: gb multi-agg",
+        )
+    )
 
     print("  [8/8] Filter + GROUP BY ...")
-    results.append(measure(lambda: lib.sql(f"SELECT id1, SUM(v3) as total FROM {sym} WHERE v3 < 10.0 GROUP BY id1"), "SQL: WHERE+GB"))
+    results.append(
+        measure(
+            lambda: lib.sql(f"SELECT id1, SUM(v3) as total FROM {sym} WHERE v3 < 10.0 GROUP BY id1"), "SQL: WHERE+GB"
+        )
+    )
 
     def qb_fg():
         q = QueryBuilder()
@@ -154,15 +193,28 @@ def run_numeric_comparison(lib, sym, n_label):
 
     print("  [3/5] Filter (c < 1.0) ...")
     results.append(measure(lambda: lib.sql(f"SELECT c FROM {sym} WHERE c < 1.0"), "SQL: WHERE c<1"))
-    results.append(measure(lambda: lib.read(sym, columns=["c"], query_builder=QueryBuilder()[QueryBuilder()["c"] < 1.0]).data, "QB: filter c<1"))
+    results.append(
+        measure(
+            lambda: lib.read(sym, columns=["c"], query_builder=QueryBuilder()[QueryBuilder()["c"] < 1.0]).data,
+            "QB: filter c<1",
+        )
+    )
 
     print("  [4/5] GROUP BY low cardinality (e, 10 groups) ...")
     results.append(measure(lambda: lib.sql(f"SELECT e, SUM(c) FROM {sym} GROUP BY e"), "SQL: GB e"))
-    results.append(measure(lambda: lib.read(sym, query_builder=QueryBuilder().groupby("e").agg({"c": "sum"})).data, "QB: gb(e).sum"))
+    results.append(
+        measure(
+            lambda: lib.read(sym, query_builder=QueryBuilder().groupby("e").agg({"c": "sum"})).data, "QB: gb(e).sum"
+        )
+    )
 
     print("  [5/5] GROUP BY high cardinality (f, 100K groups) ...")
     results.append(measure(lambda: lib.sql(f"SELECT f, SUM(c) FROM {sym} GROUP BY f"), "SQL: GB f"))
-    results.append(measure(lambda: lib.read(sym, query_builder=QueryBuilder().groupby("f").agg({"c": "sum"})).data, "QB: gb(f).sum"))
+    results.append(
+        measure(
+            lambda: lib.read(sym, query_builder=QueryBuilder().groupby("f").agg({"c": "sum"})).data, "QB: gb(f).sum"
+        )
+    )
 
     _print_comparison(results)
     return results
