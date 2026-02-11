@@ -416,7 +416,12 @@ class ArcticRecordBatchReader:
             )
 
         self._ensure_schema()
-        batches = [_pad_batch_to_schema(b, self._schema) for b in self]
+        # Use an explicit loop instead of a list comprehension to work around
+        # a CPython 3.13.1-3.13.3 bug (gh-127682) where list comprehensions
+        # call __iter__ twice, triggering our single-use iterator guard.
+        batches = []
+        for b in self:
+            batches.append(_pad_batch_to_schema(b, self._schema))
         if not batches:
             if self._schema and len(self._schema) > 0:
                 return pa.Table.from_pydict({field.name: [] for field in self._schema}, schema=self._schema)
