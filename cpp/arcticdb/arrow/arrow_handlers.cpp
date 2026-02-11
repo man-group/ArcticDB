@@ -82,18 +82,45 @@ void ArrowStringHandler::handle_type(
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
+struct PositionsAfterTruncation {
+    ssize_t first_idx_after_truncation;
+    ssize_t end_idx_after_truncation;
+    size_t extra_buffer_position;
+};
+
+PositionsAfterTruncation get_positions_after_truncation(const ColumnMapping& mapping) {
+    // If truncation is required, we need to calculate the starting index in the data we are writing after truncation.
+    // `truncate_.start_` and `truncate_.end_` are in terms of the full segment, so we need to adjust them to indices in
+    // the segment slice we are reading. For example, if we are reading rows 20-29 (mapping.offset_bytes_ = 20 *
+    // dest_size_) and truncate_.start_ = 22, we need to start writing from index 2 in our data (22 - 20 = 2).
+    ssize_t first_idx_after_truncation = 0;
+    if (mapping.truncate_.start_.has_value()) {
+        first_idx_after_truncation = mapping.truncate_.start_.value() - mapping.offset_bytes_ / mapping.dest_size_;
+    }
+    ssize_t end_idx_after_truncation = mapping.num_rows_;
+    if (mapping.truncate_.end_.has_value()) {
+        end_idx_after_truncation = mapping.truncate_.end_.value() - mapping.offset_bytes_ / mapping.dest_size_;
+    }
+    // The extra buffer position needs to correspond to the byte offset of the first index after truncation with respect
+    // to the full segment.
+    auto extra_buffer_position = mapping.offset_bytes_ + first_idx_after_truncation * mapping.dest_size_;
+    return {first_idx_after_truncation, end_idx_after_truncation, extra_buffer_position};
+}
+
 template<typename OffsetType>
 void encode_variable_length(
         const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
         const std::shared_ptr<StringPool>& string_pool
 ) {
+    auto positions = get_positions_after_truncation(mapping);
+
     int64_t bytes = 0u;
-    auto last_idx = 0u;
+    auto last_idx = positions.first_idx_after_truncation;
 
     // `mapping.dest_bytes` does not count the extra offset value we need to store in the end.
     // Thus, we request one extra value to assert that the buffer has that extra value allocated.
     auto dest_ptr = reinterpret_cast<OffsetType*>(
-            dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_ + sizeof(OffsetType))
+            dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_ + mapping.dest_size_)
     );
     util::BitSet dest_bitset;
     util::BitSet::bulk_insert_iterator inserter(dest_bitset);
@@ -108,6 +135,11 @@ void encode_variable_length(
                         for_each_enumerated<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                                    if (en.idx() < positions.first_idx_after_truncation ||
+                                        en.idx() >= positions.end_idx_after_truncation) {
+                                        // TODO: Optimize when for_each_enumarated can work with random access iterators
+                                        return;
+                                    }
                                     if (is_a_string(en.value())) {
                                         while (last_idx <= en.idx()) {
                                             // According to arrow spec offsets must be monotonic even for null values.
@@ -134,6 +166,11 @@ void encode_variable_length(
                         for_each_enumerated<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                                    if (en.idx() < positions.first_idx_after_truncation ||
+                                        en.idx() >= positions.end_idx_after_truncation) {
+                                        // TODO: Optimize when for_each_enumarated can work with random access iterators
+                                        return;
+                                    }
                                     while (last_idx <= en.idx()) {
                                         // According to arrow spec offsets must be monotonic even for null values.
                                         // Hence, we fill missing values between `last_idx` and `en.idx` so that
@@ -157,7 +194,7 @@ void encode_variable_length(
                 }
             }
     );
-    while (last_idx <= mapping.num_rows_) {
+    while (last_idx <= positions.end_idx_after_truncation) {
         dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
     }
     // The below assertion can only break for `SMALL_STRING` because `OffsetType=int32_t` and we can have more than 2^32
@@ -178,9 +215,16 @@ void encode_variable_length(
     }
     dest_bitset.resize(mapping.num_rows_);
 
+    handle_truncation(dest_bitset, mapping.truncate_);
+    handle_truncation(dest_column, mapping.truncate_);
+
+    if (dest_bitset.count() != dest_bitset.size()) {
+        create_dense_bitmap(positions.extra_buffer_position, dest_bitset, dest_column, AllocationType::DETACHABLE);
+    } // else there weren't any missing values
+
     if (dest_bitset.count() > 0) {
         auto& string_buffer = dest_column.create_extra_buffer(
-                mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE
+                positions.extra_buffer_position, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE
         );
         util::variant_match(strings, [&string_buffer](const auto& strings_or_views) {
             auto string_ptr = reinterpret_cast<char*>(string_buffer.data());
@@ -190,13 +234,6 @@ void encode_variable_length(
             }
         });
     }
-
-    // We explicitly truncate the bitset after creation of the string buffer, because in the case where the truncated
-    // bitset is all False, we still should allocate a string buffer, so that the offsets for the nulls are valid.
-    if (dest_bitset.count() != dest_bitset.size()) {
-        handle_truncation(dest_bitset, mapping.truncate_);
-        create_dense_bitmap(mapping.offset_bytes_, dest_bitset, dest_column, AllocationType::DETACHABLE);
-    } // else there weren't any missing values
 }
 
 void encode_dictionary(
@@ -219,9 +256,12 @@ void encode_dictionary(
             ankerl::unordered_dense::map<StringPool::offset_t, DictEntryView>,
             ankerl::unordered_dense::map<StringPool::offset_t, DictEntryOwning>>
             unique_offsets;
+
+    auto positions = get_positions_after_truncation(mapping);
+    auto row_count_after_truncation = positions.end_idx_after_truncation - positions.first_idx_after_truncation;
     // Trade some memory for more performance
     // TODO: Use unique count column stat in V2 encoding
-    unique_offsets_in_order.reserve(source_column.row_count());
+    unique_offsets_in_order.reserve(row_count_after_truncation);
     int64_t bytes = 0;
     int32_t unique_offset_count = 0;
     auto dest_ptr = reinterpret_cast<int32_t*>(dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_));
@@ -242,10 +282,15 @@ void encode_dictionary(
                 if constexpr (is_sequence_type(source_type_info::data_type)) {
                     if constexpr (is_dynamic_string_type(source_type_info::data_type)) {
                         ankerl::unordered_dense::map<StringPool::offset_t, DictEntryView> unique_offsets_view;
-                        unique_offsets_view.reserve(source_column.row_count());
+                        unique_offsets_view.reserve(row_count_after_truncation);
                         for_each_enumerated<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                                    if (en.idx() < positions.first_idx_after_truncation ||
+                                        en.idx() >= positions.end_idx_after_truncation) {
+                                        // TODO: Optimize when for_each_enumarated can work with random access iterators
+                                        return;
+                                    }
                                     if (is_a_string(en.value())) {
                                         if (auto it = unique_offsets_view.find(en.value());
                                             it == unique_offsets_view.end()) {
@@ -277,10 +322,15 @@ void encode_dictionary(
                         return unique_offsets_view;
                     } else { // fixed-width string type
                         ankerl::unordered_dense::map<StringPool::offset_t, DictEntryOwning> unique_offsets_owning;
-                        unique_offsets_owning.reserve(source_column.row_count());
+                        unique_offsets_owning.reserve(row_count_after_truncation);
                         for_each_enumerated<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                                    if (en.idx() < positions.first_idx_after_truncation ||
+                                        en.idx() >= positions.end_idx_after_truncation) {
+                                        // TODO: Optimize when for_each_enumarated can work with random access iterators
+                                        return;
+                                    }
                                     // Fixed-width string columns don't support None/NaN values, so is_a_string check
                                     // not required
                                     if (auto it = unique_offsets_owning.find(en.value());
@@ -321,19 +371,23 @@ void encode_dictionary(
     }
     dest_bitset.resize(mapping.num_rows_);
 
+    handle_truncation(dest_bitset, mapping.truncate_);
+    handle_truncation(dest_column, mapping);
+
     if (dest_bitset.count() != dest_bitset.size()) {
-        handle_truncation(dest_bitset, mapping.truncate_);
-        create_dense_bitmap(mapping.offset_bytes_, dest_bitset, dest_column, AllocationType::DETACHABLE);
+        create_dense_bitmap(positions.extra_buffer_position, dest_bitset, dest_column, AllocationType::DETACHABLE);
     } // else there weren't any missing values
+
     // bitset.count() == 0 is the special case where all the rows were missing. In this case, do not create
     // the extra string and offset buffers. string_dict_from_block will then do the right thing and call
     // minimal_strings_dict
     if (dest_bitset.count() > 0) {
+
         auto& string_buffer = dest_column.create_extra_buffer(
-                mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE
+                positions.extra_buffer_position, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE
         );
         auto& offsets_buffer = dest_column.create_extra_buffer(
-                mapping.offset_bytes_,
+                positions.extra_buffer_position,
                 ExtraBufferType::OFFSET,
                 (unique_offsets_in_order.size() + 1) * sizeof(int64_t),
                 AllocationType::DETACHABLE
