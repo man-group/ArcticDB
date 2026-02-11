@@ -35,18 +35,24 @@ namespace arcticdb {
 
 namespace {
 
-// Converts all inline (non-external) blocks in a column to detachable blocks.
-// This is required before calling segment_to_arrow_data(), which calls block.release()
-// to transfer ownership of memory to Arrow. release() only works on external/detachable blocks.
+// Converts a column's buffer to DETACHABLE allocation if it isn't already.
+// segment_to_arrow_data() calls block.release() to transfer memory ownership
+// to Arrow, which only works on ExternalMemBlock (DETACHABLE allocation).
+// Segments from batch_read_uncompressed() use DYNAMIC allocation (inline blocks),
+// so we must copy into a DETACHABLE buffer before Arrow conversion.
 void make_column_blocks_detachable(Column& column) {
-    for (auto* block : column.blocks()) {
-        if (!block->is_external() && block->bytes() > 0) {
-            auto* detachable_ptr = allocate_detachable_memory(block->bytes());
-            std::memcpy(detachable_ptr, block->data(), block->bytes());
-            block->external_data_ = detachable_ptr;
-            block->owns_external_data_ = true;
-        }
+    auto& buf = column.data().buffer();
+    if (buf.allocation_type() == entity::AllocationType::DETACHABLE || buf.bytes() == 0) {
+        return;
     }
+    ChunkedBuffer detachable(buf.bytes(), entity::AllocationType::DETACHABLE);
+    detachable.ensure(buf.bytes());
+    auto* dest = detachable.data();
+    for (const auto* block : buf.blocks()) {
+        block->copy_to(dest);
+        dest += block->logical_size();
+    }
+    std::swap(buf, detachable);
 }
 
 // Shared string dictionary built once per segment from the string pool.
