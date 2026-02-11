@@ -468,12 +468,12 @@ class ChunkedBufferImpl {
 
     void add_block(size_t capacity, size_t offset) { blocks_.emplace_back(create_regular_block(capacity, offset)); }
 
-    void add_external_block(const uint8_t* data, size_t size) {
+    void add_external_block(const uint8_t* data, size_t size, size_t extra_bytes = 0) {
         if (!no_blocks() && last_block()->empty())
             free_last_block();
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalMemBlock));
-        new (ptr) ExternalMemBlock(data, size, last_offset(), ts, false);
+        new (ptr) ExternalMemBlock(data, size, last_offset(), ts, false, extra_bytes);
         blocks_.emplace_back(reinterpret_cast<ExternalMemBlock*>(ptr));
         bytes_ += size;
         if (block_offsets_.empty())
