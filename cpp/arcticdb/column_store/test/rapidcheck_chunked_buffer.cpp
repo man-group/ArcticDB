@@ -116,7 +116,7 @@ RC_GTEST_PROP(ChunkedBuffer, TruncateSingleBlock, (const std::vector<uint8_t>& i
     }
     cb.truncate_single_block(start_offset, end_offset);
     RC_ASSERT(cb.num_blocks() == 1);
-    RC_ASSERT(cb.blocks().at(0)->bytes() == end_offset - start_offset);
+    RC_ASSERT(cb.blocks().at(0)->physical_bytes() == end_offset - start_offset);
     ptr = cb.data();
     for (auto idx = start_offset; idx != end_offset; ++idx, ++ptr) {
         RC_ASSERT(*ptr == input.at(idx));
@@ -152,8 +152,8 @@ RC_GTEST_PROP(
     // truncate_first_block
     cb.truncate_first_block(first_block_bytes);
     RC_ASSERT(cb.num_blocks() == 2);
-    RC_ASSERT(cb.blocks().at(0)->bytes() == n0 - first_block_bytes);
-    RC_ASSERT(cb.blocks().at(1)->bytes() == n1);
+    RC_ASSERT(cb.blocks().at(0)->physical_bytes() == n0 - first_block_bytes);
+    RC_ASSERT(cb.blocks().at(1)->physical_bytes() == n1);
     ptr1 = cb.blocks().at(0)->data();
     ptr2 = cb.blocks().at(1)->data();
     for (size_t idx = first_block_bytes; idx < n0; ++idx, ++ptr1) {
@@ -166,8 +166,8 @@ RC_GTEST_PROP(
     // truncate_last_block
     cb.truncate_last_block(last_block_bytes);
     RC_ASSERT(cb.num_blocks() == 2);
-    RC_ASSERT(cb.blocks().at(0)->bytes() == n0 - first_block_bytes);
-    RC_ASSERT(cb.blocks().at(1)->bytes() == n1 - last_block_bytes);
+    RC_ASSERT(cb.blocks().at(0)->physical_bytes() == n0 - first_block_bytes);
+    RC_ASSERT(cb.blocks().at(1)->physical_bytes() == n1 - last_block_bytes);
     ptr1 = cb.blocks().at(0)->data();
     ptr2 = cb.blocks().at(1)->data();
     for (size_t idx = first_block_bytes; idx < n0; ++idx, ++ptr1) {
