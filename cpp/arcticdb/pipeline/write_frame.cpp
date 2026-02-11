@@ -84,15 +84,48 @@ Column WriteToSegmentTask::slice_column(
 ) const {
     const auto& source_column = frame.column(col_idx);
     const auto type_size = get_type_size(source_column.type().data_type());
-    const auto first_byte = (slice_.rows().first - offset) * type_size;
-    const auto bytes = ((slice_.rows().second - offset) * type_size) - first_byte;
+    const auto first_pos = (slice_.rows().first - offset) * type_size;
+    const auto bytes = ((slice_.rows().second - offset) * type_size) - first_pos;
+
+    if (is_bool_type(source_column.type().data_type())) {
+        // Bool columns from arrow come as packed bitsets and are stored in `MemBlockType::EXTERNAL_PACKED` memory.
+        // We need special handling to unpack them because our internal representation is unpacked.
+        // We do the unpacking inside `WriteToSegmentTask` so the CPU intensive unpacking can happen in parallel.
+        Column res(
+                make_scalar_type(DataType::BOOL8),
+                slice_.rows().diff(),
+                AllocationType::PRESIZED,
+                Sparsity::NOT_PERMITTED
+        );
+        res.set_row_data(slice_.rows().diff() - 1);
+        auto dest_ptr = res.data().buffer().data();
+
+        const auto& buffer = source_column.data().buffer();
+        auto [_, offset_in_block, block_index] = buffer.block_and_offset(first_pos);
+        auto pos_in_res = 0u;
+        while (pos_in_res < bytes) {
+            const auto block = buffer.blocks()[block_index++];
+            util::check(
+                    block->get_type() == MemBlockType::EXTERNAL_PACKED,
+                    "Expected to see a packed external block but got: {}",
+                    block->get_type()
+            );
+            const auto packed_block = static_cast<ExternalPackedMemBlock*>(block);
+            auto num_bits = std::min(packed_block->logical_size() - offset_in_block, bytes - pos_in_res);
+            auto offset_in_bits = packed_block->shift() + offset_in_block;
+            packed_bits_to_buffer(packed_block->data(), num_bits, offset_in_bits, dest_ptr + pos_in_res);
+            offset_in_block = 0;
+            pos_in_res += num_bits;
+        }
+        return res;
+    }
     // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
     // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
     // multiples of the type size
-    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
+    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_pos, bytes);
     if (is_sequence_type(source_column.type().data_type())) {
         const auto& block_offsets = source_column.data().buffer().block_offsets();
-        auto first_block_offset = source_column.data().buffer().block_and_offset(first_byte).block_index_;
+        auto first_block_offset = source_column.data().buffer().block_and_offset(first_pos).block_index_;
         auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
         Column res(
                 make_scalar_type(DataType::UTF_DYNAMIC64),
@@ -119,9 +152,8 @@ Column WriteToSegmentTask::slice_column(
                     auto num_elements = offset_ptr_and_size.second / sizeof(Rawtype);
                     for (size_t idx = 0; idx < num_elements; ++idx, ++offset_ptr) {
                         auto strings_buffer_offset = *offset_ptr;
-                        // Note that in arrow_data_to_segment we omitted the last value from the offsets buffer to keep
-                        // our indexing into the chunked buffer accurate. So when idx == size - 1, (ptr + 1) is still
-                        // within the memory owned by the input Arrow structure
+                        // Note that in arrow_data_to_segment we store the last value from the offsets buffer as extra
+                        // bytes. So when idx == size - 1, (ptr + 1) is still within the ExternalMemBlock.
                         auto string_length = *(offset_ptr + 1) - strings_buffer_offset;
                         std::string_view str(&string_data[strings_buffer_offset], string_length);
                         *col_it++ = string_pool.get(str).offset();
@@ -130,14 +162,14 @@ Column WriteToSegmentTask::slice_column(
             }
         });
         return res;
-    } else { // Numeric and bool types
+    } else { // Numeric types
         ChunkedBuffer chunked_buffer;
         if (byte_blocks_at.size() == 1) {
             // All required bytes lie within a single block, so we can avoid a copy by adding an external block
             chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
         } else {
             // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
-            chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+            chunked_buffer = truncate(source_column.data().buffer(), first_pos, first_pos + bytes);
         }
         return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
     }
