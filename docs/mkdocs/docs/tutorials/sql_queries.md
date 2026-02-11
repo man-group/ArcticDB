@@ -628,6 +628,56 @@ Queries involving these types will raise an error.
     ArcticDB automatically converts them to nanosecond precision on write. After reading,
     DuckDB sees the data as `TIMESTAMP_NS` and all SQL timestamp operations work as expected.
 
+### NaN vs NULL in Float Columns
+
+ArcticDB stores `NaN` as actual IEEE 754 float values in Arrow — **not** as Arrow nulls.
+This means `IS NOT NULL` returns true for `NaN` in DuckDB, while pandas treats `NaN` as missing:
+
+| Operation | NaN rows included? |
+|---|---|
+| `lib.sql("SELECT * FROM sym WHERE x IS NOT NULL")` | **Yes** — NaN is a valid float, not null |
+| `lib.read("sym").data["x"].notna()` | **No** — pandas treats NaN as missing |
+| QueryBuilder: `q[q["x"].notnull()]` | **No** — ArcticDB follows pandas semantics |
+
+To exclude `NaN` values in SQL, use DuckDB's `isnan()` function:
+
+```python
+# IS NOT NULL includes NaN:
+result = lib.sql("SELECT * FROM sym WHERE value IS NOT NULL")  # NaN rows pass
+
+# Exclude NaN with isnan():
+result = lib.sql("SELECT * FROM sym WHERE NOT isnan(value)")
+
+# Combine with other filters:
+result = lib.sql("""
+    SELECT category, SUM(value) as total
+    FROM sym
+    WHERE NOT isnan(value)
+    GROUP BY category
+""")
+```
+
+This is particularly relevant for `GROUP BY` queries — `IS NOT NULL` will include `NaN` rows in
+aggregation groups where pandas `groupby(dropna=True)` would exclude them. Use
+`WHERE NOT isnan(col)` to match pandas behavior.
+
+**Alternative: `sparsify_floats=True`**
+
+If you write data with `sparsify_floats=True` (available on the `NativeVersionStore` API),
+`NaN` values are stored as proper Arrow nulls instead of float NaN. This makes `IS NOT NULL` and
+`IS NULL` work with standard SQL semantics — no `isnan()` workaround needed:
+
+```python
+# Write with sparsify_floats to store NaN as Arrow nulls
+lib._nvs.write("sym", df, sparsify_floats=True)
+
+# IS NOT NULL now correctly excludes missing values
+result = lib.sql("SELECT * FROM sym WHERE value IS NOT NULL")  # NaN rows excluded
+
+# IS NULL finds the missing rows
+result = lib.sql("SELECT * FROM sym WHERE value IS NULL")  # NaN rows returned
+```
+
 ### Read-Only
 
 SQL queries are read-only. To write data, use `lib.write()`, `lib.append()`, or `lib.update()`.

@@ -282,7 +282,16 @@ void prepare_segment_for_arrow(SegmentInMemory& segment) {
                 segment.descriptor().mutable_field(col_idx).mutable_type() = output_type;
             }
         } else {
-            // Non-string column: just make blocks detachable
+            // Non-string column: handle sparse columns and make blocks detachable
+            if (src_column_ptr->opt_sparse_map().has_value()) {
+                // Sparse float column (from sparsify_floats=True): create Arrow
+                // validity bitmap from the sparse map, then densify the column.
+                // Must extract bitmap BEFORE unsparsify() clears the sparse map.
+                auto& bv = src_column_ptr->sparse_map();
+                bv.resize(segment.row_count());
+                create_dense_bitmap(0, bv, *src_column_ptr, AllocationType::DETACHABLE);
+                src_column_ptr->unsparsify(segment.row_count());
+            }
             make_column_blocks_detachable(*src_column_ptr);
         }
     }

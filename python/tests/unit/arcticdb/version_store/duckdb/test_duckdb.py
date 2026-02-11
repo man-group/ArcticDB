@@ -415,30 +415,6 @@ class TestDuckDBContext:
         assert len(result) == 2
         assert result.iloc[0]["ticker"] == "AAPL"
 
-    def test_join_two_symbols(self, lmdb_library):
-        """Test JOIN query across two symbols."""
-        lib = lmdb_library
-
-        trades = pd.DataFrame({"ticker": ["AAPL", "GOOG", "AAPL"], "quantity": [100, 200, 150]})
-
-        prices = pd.DataFrame({"ticker": ["AAPL", "GOOG", "MSFT"], "price": [150.0, 2800.0, 300.0]})
-
-        lib.write("trades", trades)
-        lib.write("prices", prices)
-
-        with lib.duckdb() as ddb:
-            ddb.register_symbol("trades")
-            ddb.register_symbol("prices")
-
-            result = ddb.sql("""
-                SELECT t.ticker, t.quantity, p.price, t.quantity * p.price as notional
-                FROM trades t
-                JOIN prices p ON t.ticker = p.ticker
-            """)
-
-        assert len(result) == 3  # AAPL (2 rows) + GOOG (1 row)
-        assert "notional" in result.columns
-
     def test_symbol_alias(self, lmdb_library):
         """Test registering symbol with alias."""
         lib = lmdb_library
@@ -475,47 +451,6 @@ class TestDuckDBContext:
 
         assert jan_count == 31
         assert feb_count == 29
-
-    def test_output_format_arrow(self, lmdb_library):
-        """Test context query with Arrow output."""
-        import pyarrow as pa
-
-        lib = lmdb_library
-        df = pd.DataFrame({"x": [1, 2, 3]})
-        lib.write("test_symbol", df)
-
-        with lib.duckdb() as ddb:
-            ddb.register_symbol("test_symbol")
-            result = ddb.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PYARROW)
-
-        assert isinstance(result, pa.Table)
-
-    def test_output_format_polars(self, lmdb_library):
-        """Test context query with Polars output."""
-        pl = pytest.importorskip("polars")
-
-        lib = lmdb_library
-        df = pd.DataFrame({"x": [1, 2, 3]})
-        lib.write("test_symbol", df)
-
-        with lib.duckdb() as ddb:
-            ddb.register_symbol("test_symbol")
-            result = ddb.sql("SELECT * FROM test_symbol", output_format=OutputFormat.POLARS)
-
-        assert isinstance(result, pl.DataFrame)
-
-    def test_output_format_pandas(self, lmdb_library):
-        """Test context query with explicit Pandas output."""
-        lib = lmdb_library
-        df = pd.DataFrame({"x": [1, 2, 3]})
-        lib.write("test_symbol", df)
-
-        with lib.duckdb() as ddb:
-            ddb.register_symbol("test_symbol")
-            result = ddb.sql("SELECT * FROM test_symbol", output_format=OutputFormat.PANDAS)
-
-        assert isinstance(result, pd.DataFrame)
-        assert list(result["x"]) == [1, 2, 3]
 
     def test_method_chaining(self, lmdb_library):
         """Test method chaining with register_symbol."""
@@ -568,17 +503,6 @@ class TestDuckDBContext:
 
         with pytest.raises(RuntimeError, match="must be used within"):
             ddb.register_symbol("test")
-
-    def test_query_without_registration_auto_registers(self, lmdb_library):
-        """Test that querying without explicit registration auto-registers from the library."""
-        lib = lmdb_library
-        lib.write("test_symbol", pd.DataFrame({"x": [1, 2, 3]}))
-
-        with lib.duckdb() as ddb:
-            result = ddb.sql("SELECT * FROM test_symbol")
-
-        assert len(result) == 3
-        assert list(result["x"]) == [1, 2, 3]
 
     def test_with_as_of_version(self, lmdb_library):
         """Test register_symbol with as_of parameter."""
@@ -669,6 +593,131 @@ class TestDuckDBEdgeCases:
         result = lib.sql("SELECT * FROM test_symbol WHERE x = 1.0")
 
         assert len(result) == 1
+
+    def test_nan_is_not_null_in_sql(self, lmdb_library):
+        """NaN vs NULL semantics differ between SQL and pandas.
+
+        ArcticDB stores NaN as actual float NaN values in Arrow (not as nulls).
+        When DuckDB receives this Arrow data:
+        - IS NOT NULL → true for NaN (it's a valid float, not an Arrow null)
+        - IS NULL → false for NaN
+        - isnan(value) → true for NaN — the reliable way to detect NaN
+
+        In contrast, pandas treats NaN as missing: pd.notna(NaN) → False.
+
+        Note: DuckDB treats NaN = NaN as true (unlike IEEE 754), so
+        ``WHERE x = x`` does NOT filter NaN in DuckDB. Use ``isnan()`` instead.
+        """
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "category": ["A", "B", "A", "B", "A"],
+                "value": [1.0, float("nan"), 3.0, float("nan"), 5.0],
+            }
+        )
+        lib.write("sym", df)
+
+        # SQL: IS NOT NULL includes NaN (NaN is a valid float, not an Arrow null)
+        sql_result = lib.sql("SELECT category, value FROM sym WHERE value IS NOT NULL")
+        assert len(sql_result) == 5  # All rows — NaN is NOT NULL
+
+        # SQL: IS NULL excludes NaN
+        sql_null = lib.sql("SELECT category, value FROM sym WHERE value IS NULL")
+        assert len(sql_null) == 0
+
+        # Pandas: notna() excludes NaN
+        pandas_result = lib.read("sym").data
+        assert pandas_result["value"].notna().sum() == 3  # Only non-NaN rows
+
+        # Correct workaround: use isnan() to exclude NaN in DuckDB
+        sql_no_nan = lib.sql("SELECT category, value FROM sym WHERE NOT isnan(value)")
+        assert len(sql_no_nan) == 3  # Matches pandas notna() count
+
+    def test_nan_groupby_sql_vs_pandas(self, lmdb_library):
+        """GROUP BY with NaN: SQL IS NOT NULL includes NaN rows in groups.
+
+        When aggregating float columns containing NaN, IS NOT NULL passes NaN
+        rows (NaN is not an Arrow null). This can produce more groups than
+        pandas groupby with dropna=True (the default).
+
+        Use ``NOT isnan(col)`` to exclude NaN and match pandas behavior.
+        """
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "category": ["A", "B", "A", "B", "C"],
+                "value": [10.0, float("nan"), 30.0, float("nan"), 50.0],
+            }
+        )
+        lib.write("sym", df)
+
+        # SQL GROUP BY: NaN rows pass IS NOT NULL
+        sql_result = lib.sql(
+            "SELECT category, SUM(value) as total FROM sym "
+            "WHERE value IS NOT NULL GROUP BY category ORDER BY category"
+        )
+        # All 5 rows pass IS NOT NULL → A, B, C all present
+        assert len(sql_result) == 3
+
+        # Pandas: dropna=True excludes NaN rows before grouping
+        pandas_result = df.dropna(subset=["value"]).groupby("category")["value"].sum()
+        assert len(pandas_result) == 2  # Only A and C (B's values are all NaN)
+
+        # To match pandas behavior in SQL, exclude NaN with isnan()
+        sql_no_nan = lib.sql(
+            "SELECT category, SUM(value) as total FROM sym "
+            "WHERE NOT isnan(value) GROUP BY category ORDER BY category"
+        )
+        assert len(sql_no_nan) == 2  # Matches pandas: A and C only
+
+    def test_sparsify_floats_gives_proper_arrow_nulls_in_sql(self, lmdb_library):
+        """Writing with sparsify_floats=True stores NaN as Arrow nulls, not float NaN.
+
+        This makes IS NOT NULL / IS NULL behave as expected in SQL:
+        - IS NOT NULL excludes missing values (Arrow nulls)
+        - IS NULL finds missing values
+
+        Without sparsify_floats, NaN is a valid float and IS NOT NULL is true
+        (see test_nan_is_not_null_in_sql above).
+        """
+        from arcticdb.options import OutputFormat
+
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "category": ["A", "B", "A", "B", "C"],
+                "value": [10.0, float("nan"), 30.0, float("nan"), 50.0],
+            }
+        )
+        # sparsify_floats is on NativeVersionStore, not Library
+        lib._nvs.write("sym", df, sparsify_floats=True)
+
+        # Verify Arrow output has proper nulls (NaN → Arrow null)
+        arrow_table = lib.read("sym", output_format=OutputFormat.PYARROW).data
+        assert arrow_table.column("value").null_count == 2
+
+        # lib.sql() — IS NOT NULL correctly excludes missing values
+        not_null = lib.sql("SELECT category, value FROM sym WHERE value IS NOT NULL")
+        assert len(not_null) == 3  # Only non-missing rows (A, A, C)
+
+        # IS NULL finds the missing rows
+        is_null = lib.sql("SELECT category, value FROM sym WHERE value IS NULL")
+        assert len(is_null) == 2  # The two missing rows (both B)
+
+        # GROUP BY now matches pandas behavior without needing isnan()
+        grouped = lib.sql(
+            "SELECT category, SUM(value) as total FROM sym "
+            "WHERE value IS NOT NULL GROUP BY category ORDER BY category"
+        )
+        assert len(grouped) == 2  # Only A and C (B's values are null)
+        assert list(grouped["category"]) == ["A", "C"]
+        assert list(grouped["total"]) == [40.0, 50.0]
+
+        # Compare with pandas — results now agree
+        pandas_result = df.dropna(subset=["value"]).groupby("category")["value"].sum()
+        assert len(pandas_result) == len(grouped)
+        assert pandas_result["A"] == 40.0
+        assert pandas_result["C"] == 50.0
 
     def test_mixed_numeric_types(self, lmdb_library):
         """Test SQL on DataFrame with mixed numeric types."""

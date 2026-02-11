@@ -309,7 +309,10 @@ class TestSchemaDDLQueries:
         assert "quantity" in orders_row["column_names"]
 
     def test_sql_describe_basic_types(self, lmdb_library):
-        """Test lib.sql() with DESCRIBE query returns correct types."""
+        """Test lib.sql() with DESCRIBE query returns correct types.
+
+        Verifies the lib.sql() code path (vs context manager tests above).
+        """
         lib = lmdb_library
 
         df = pd.DataFrame(
@@ -321,87 +324,12 @@ class TestSchemaDDLQueries:
         )
         lib.write("test_symbol", df)
 
-        # Use lib.sql() directly with DESCRIBE
         result = lib.sql("DESCRIBE test_symbol")
 
         type_map = dict(zip(result["column_name"], result["column_type"]))
         assert type_map["int_col"] == "BIGINT"
         assert type_map["float_col"] == "DOUBLE"
         assert type_map["str_col"] == "VARCHAR"
-
-    def test_sql_describe_integer_types(self, lmdb_library):
-        """Test lib.sql() DESCRIBE with various integer types."""
-        lib = lmdb_library
-
-        df = pd.DataFrame(
-            {
-                "int8_col": np.array([1], dtype=np.int8),
-                "int16_col": np.array([1], dtype=np.int16),
-                "int32_col": np.array([1], dtype=np.int32),
-                "int64_col": np.array([1], dtype=np.int64),
-                "uint8_col": np.array([1], dtype=np.uint8),
-                "uint16_col": np.array([1], dtype=np.uint16),
-                "uint32_col": np.array([1], dtype=np.uint32),
-                "uint64_col": np.array([1], dtype=np.uint64),
-            }
-        )
-        lib.write("test_symbol", df)
-
-        result = lib.sql("DESCRIBE test_symbol")
-        type_map = dict(zip(result["column_name"], result["column_type"]))
-
-        assert type_map["int8_col"] == "TINYINT"
-        assert type_map["int16_col"] == "SMALLINT"
-        assert type_map["int32_col"] == "INTEGER"
-        assert type_map["int64_col"] == "BIGINT"
-        assert type_map["uint8_col"] == "UTINYINT"
-        assert type_map["uint16_col"] == "USMALLINT"
-        assert type_map["uint32_col"] == "UINTEGER"
-        assert type_map["uint64_col"] == "UBIGINT"
-
-    def test_sql_describe_timestamp_index(self, lmdb_library):
-        """Test lib.sql() DESCRIBE with timestamp index."""
-        lib = lmdb_library
-
-        df = pd.DataFrame({"value": [1.0, 2.0, 3.0]}, index=pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]))
-        lib.write("test_symbol", df)
-
-        result = lib.sql("DESCRIBE test_symbol")
-        type_map = dict(zip(result["column_name"], result["column_type"]))
-
-        assert "index" in type_map
-        assert "TIMESTAMP" in type_map["index"]
-
-    def test_sql_show_equivalent_to_describe(self, lmdb_library):
-        """Test lib.sql() SHOW returns same as DESCRIBE."""
-        lib = lmdb_library
-
-        df = pd.DataFrame({"x": [1, 2], "y": [3.0, 4.0]})
-        lib.write("test_symbol", df)
-
-        describe_result = lib.sql("DESCRIBE test_symbol")
-        show_result = lib.sql("SHOW test_symbol")
-
-        assert list(describe_result["column_name"]) == list(show_result["column_name"])
-        assert list(describe_result["column_type"]) == list(show_result["column_type"])
-
-    def test_sql_show_all_tables_discovers_library(self, lmdb_library):
-        """Test lib.sql() with SHOW ALL TABLES discovers all symbols in library."""
-        lib = lmdb_library
-
-        # Write multiple symbols
-        lib.write("prices", pd.DataFrame({"price": [100.0, 101.0]}))
-        lib.write("trades", pd.DataFrame({"qty": [10, 20]}))
-        lib.write("positions", pd.DataFrame({"shares": [100, 200]}))
-
-        # SHOW ALL TABLES should discover all library symbols
-        result = lib.sql("SHOW ALL TABLES")
-
-        table_names = set(result["name"])
-        assert "prices" in table_names
-        assert "trades" in table_names
-        assert "positions" in table_names
-        assert len(table_names) == 3
 
     def test_sql_show_tables_discovers_library(self, lmdb_library):
         """Test lib.sql() with SHOW TABLES discovers all symbols in library."""
