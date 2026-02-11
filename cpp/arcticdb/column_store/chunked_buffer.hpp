@@ -150,6 +150,9 @@ class ChunkedBufferImpl {
             if (size != DefaultBlockSize) {
                 output.handle_transition_to_irregular();
             }
+            // Presized buffers break invariant `num_irregular_blocks + 1 == block_offsets_.size()`
+            // `add_block` here does not add to `block_offsets_`
+            // TODO: Fix this by using `ensure` to call `add_block`.
             output.add_block(size, 0UL);
         }
         output.ensure(size);
@@ -284,6 +287,28 @@ class ChunkedBufferImpl {
     };
 
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
+        if (allocation_type_ == entity::AllocationType::DETACHABLE) {
+            // Some constructions of a PRESIZED ChunkedBuffer can produce a single block with only a beginning offset,
+            // so we can't unify with below upper_bound logic.
+            // TODO: Make sure all constructions of ChunkedBuffer have valid block_offsets_ and unify this if with the
+            // rest.
+            util::check(!block_offsets_.empty(), "Detachable chunked buffer has no blocks");
+            util::check(
+                    pos_bytes >= block_offsets_.front() && pos_bytes < block_offsets_.back(),
+                    "Requested position {} outside of block offset range [{}, {})",
+                    pos_bytes,
+                    block_offsets_.front(),
+                    block_offsets_.back()
+            );
+
+            // We want to get the block where block_offsets_[i] <= pos_bytes < block_offsets_[i+1]
+            auto block_offset = std::ranges::upper_bound(block_offsets_, pos_bytes);
+            --block_offset;
+
+            auto block_pos = std::distance(block_offsets_.begin(), block_offset);
+            return BlockAndOffset(blocks_[block_pos], pos_bytes - *block_offset, block_pos);
+        }
+
         if (blocks_.size() == 1u) {
             return BlockAndOffset(blocks_[0], pos_bytes, 0);
         }
@@ -500,10 +525,16 @@ class ChunkedBufferImpl {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
     }
 
-    // Note that with all the truncate_*_block methods, the bytes_ and offsets are no longer accurate after the methods
-    // are called, but downstream logic uses these values to match up blocks with record batches, so this is deliberate
+    // Note that with all truncate_*_block methods update the block_offsets in a way which allows the first offset to be
+    // > 0. E.g. if we have two blocks of size 10 and we truncate the first 5 bytes, the block_offsets_ will be {5, 10,
+    // 20}. This allows modifying only the first and last blocks without needing to update all offsets. Also the
+    // `bytes_` must not be changed. It is used to verify `pos + required <= bytes()` in several places.
     void truncate_single_block(size_t start_offset, size_t end_offset) {
         // Inclusive of start_offset, exclusive of end_offset
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "Truncate single block is only supported for detachable buffers"
+        );
         util::check(
                 end_offset >= start_offset,
                 "Truncate single block expects end ({}) >= start ({})",
@@ -523,9 +554,11 @@ class ChunkedBufferImpl {
         auto remaining_bytes_without_extra = block_bytes_without_extra - removed_bytes;
         auto remaining_bytes = remaining_bytes_without_extra + extra_bytes_per_block_;
         if (remaining_bytes_without_extra > 0) {
-            auto new_block = create_block(remaining_bytes_without_extra, 0);
+            auto new_block = create_block(remaining_bytes_without_extra, block->offset_ + start_offset);
             new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
             blocks_[0] = new_block;
+            block_offsets_[0] = start_offset;
+            block_offsets_[1] = end_offset;
         } else {
             blocks_.clear();
             block_offsets_.clear();
@@ -535,6 +568,10 @@ class ChunkedBufferImpl {
     }
 
     void truncate_first_block(size_t bytes) {
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "Truncate first block is only supported for detachable buffers"
+        );
         util::check(blocks_.size() > 0, "Truncate first block expected at least one block");
         auto block = blocks_[0];
         auto block_bytes_without_extra = block->bytes() - extra_bytes_per_block_;
@@ -552,15 +589,20 @@ class ChunkedBufferImpl {
         );
         auto remaining_bytes_without_extra = block_bytes_without_extra - bytes;
         auto remaining_bytes = remaining_bytes_without_extra + extra_bytes_per_block_;
-        auto new_block = create_block(remaining_bytes_without_extra, block->offset_);
+        auto new_block = create_block(remaining_bytes_without_extra, block->offset_ + bytes);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
+        block_offsets_[0] = bytes;
         block->abandon();
         free_block(block);
     }
 
     void truncate_last_block(size_t bytes) {
         // bytes is the number of bytes to remove, and is asserted to be in the last block of the buffer
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "Truncate last block is only supported for detachable buffers"
+        );
         auto [block, offset, ts] = block_and_offset(bytes_ - bytes);
         auto block_bytes_without_extra = block->bytes() - extra_bytes_per_block_;
         util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
@@ -575,6 +617,7 @@ class ChunkedBufferImpl {
         auto new_block = create_block(remaining_bytes_without_extra, block->offset_);
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
+        block_offsets_.back() -= bytes;
         block->abandon();
         free_block(block);
     }
