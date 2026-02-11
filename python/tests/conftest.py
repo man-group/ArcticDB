@@ -41,6 +41,7 @@ from arcticdb.storage_fixtures.s3 import (
     MotoNfsBackedS3StorageFixtureFactory,
     NfsS3Bucket,
     S3Bucket,
+    Key,
     real_gcp_from_environment_variables,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
@@ -510,11 +511,22 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
     set_config_int("S3Storage.STSTokenExpiryMin", 15)
     # monkeypatch cannot runtime update environment variables in windows as copy of environment is made at startup
     # Need to manually setup credetial beforehand if run locally
+    # CI run set the config file at .github/actions/set_s3_sts_persistent_storage_env_vars/action.yml
     if WINDOWS:
         config_file_path = os.path.expanduser(os.path.join("~", ".aws", "config"))
         f = real_s3_from_environment_variables(False, NativeVariantStorage(), "")
         f.aws_auth = AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER
         f.aws_profile = profile_name
+        f.native_config = NativeVariantStorage(
+            NativeS3Settings(
+                aws_auth=f.aws_auth,
+                aws_profile=f.aws_profile,
+                use_internal_client_wrapper_for_testing=False,
+            )
+        )
+        f.default_key = Key(
+            id="", secret="", user_name="unknown user"
+        )  # Reset to ensure client can't fallback to default key+secret auth
         yield f
     else:
         working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
