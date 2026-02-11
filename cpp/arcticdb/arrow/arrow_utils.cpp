@@ -438,22 +438,14 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
                 // Arrow bool columns are packed bitsets
-                // This is the limiting factor when writing a lot of bool data as it is serial. This should be moved to
-                // WriteToSegmentTask
-                if (record_batch == record_batches.cbegin()) {
-                    column.buffer() = ChunkedBuffer::presized(total_rows);
-                }
-                packed_bits_to_buffer(
-                        data, array.size(), array.offset(), column.buffer().bytes_at(start_row, array.size())
-                );
+                column.buffer().add_external_packed_block(data, array.size(), array.offset());
             } else { // Numeric and string types
                 data += array.offset() * get_type_size(data_type);
-                // For string columns, we deliberately omit the last value from the offsets buffer to keep our indexing
-                // into the column's ChunkedBuffer accurate. See corresponding comment in
-                // WriteToSegmentTask::slice_column
                 const auto bytes = array.size() * get_type_size(data_type);
-                column.buffer().add_external_block(data, bytes);
                 if (is_sequence_type(data_type)) {
+                    // For string columns, we add an external block with extra bytes for the last offset.
+                    // This is needed to keep our indexing into the column's ChunkedBuffer accurate.
+                    column.buffer().add_external_block(data, bytes, get_type_size(data_type));
                     // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer
                     // represents offsets into this buffer
                     ChunkedBuffer strings_buffer;
@@ -462,6 +454,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                     column.set_extra_buffer(
                             start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
                     );
+                } else {
+                    column.buffer().add_external_block(data, bytes);
                 }
             }
         }
