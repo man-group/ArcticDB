@@ -7,12 +7,18 @@ if(NOT DEFINED ENV{CMAKE_BUILD_PARALLEL_LEVEL} OR "$ENV{CMAKE_BUILD_PARALLEL_LEV
         set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} 2)
     else()
         cmake_host_system_information(RESULT _physical_mb QUERY TOTAL_PHYSICAL_MEMORY)
-        math(EXPR _needed_mb "${_proc_count} * 1500")
-        if(${_needed_mb} GREATER ${_physical_mb})
-            message(WARNING "We recommend 1500MB of physical RAM per processor core. We found ${_proc_count} cores and\
-                ${_physical_mb}MB of RAM. Use the CMAKE_BUILD_PARALLEL_LEVEL environment variable to avoid thrashing.")
+        # Some TUs (e.g. arrow_handlers.cpp with flatten) can use 2.5GB+ per compiler process.
+        math(EXPR _mem_limited_count "${_physical_mb} / 2500")
+        if(${_mem_limited_count} LESS 1)
+            set(_mem_limited_count 1)
         endif()
-        set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} ${_proc_count})
+        if(${_mem_limited_count} LESS ${_proc_count})
+            message(STATUS "Limiting parallelism to ${_mem_limited_count} (from ${_proc_count} cores) based on \
+                ${_physical_mb}MB RAM at 2500MB per process.")
+            set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} ${_mem_limited_count})
+        else()
+            set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} ${_proc_count})
+        endif()
     endif()
 endif()
 message(STATUS "CMAKE_BUILD_PARALLEL_LEVEL=$ENV{CMAKE_BUILD_PARALLEL_LEVEL}")
