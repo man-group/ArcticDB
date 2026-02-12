@@ -14,7 +14,13 @@ namespace arcticdb {
 StreamVersionData::StreamVersionData(const pipelines::VersionQuery& version_query) { react(version_query); }
 
 void StreamVersionData::react(const pipelines::VersionQuery& version_query) {
-    util::variant_match(version_query.content_, [this](const auto& query) { do_react(query); });
+    util::variant_match(
+            version_query.content_,
+            [](const std::shared_ptr<PreloadedIndexQuery>&) {
+                util::raise_rte("collect_schema() not yet supported with batch methods");
+            },
+            [this](const auto& query) { do_react(query); }
+    );
 }
 
 void StreamVersionData::do_react(std::monostate) {
@@ -40,10 +46,6 @@ void StreamVersionData::do_react(const pipelines::TimestampVersionQuery& timesta
 
 void StreamVersionData::do_react(const pipelines::SnapshotVersionQuery& snapshot_query) {
     snapshots_.push_back(snapshot_query.name_);
-}
-
-void StreamVersionData::do_react(const std::shared_ptr<PreloadedIndexQuery>&) {
-    util::raise_rte("collect_schema() note yet supported with batch methods");
 }
 
 std::optional<AtomKey> get_specific_version_from_entry(

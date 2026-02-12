@@ -1109,10 +1109,7 @@ static OutputSchema create_initial_output_schema(PipelineContext& pipeline_conte
 }
 
 static OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
-    OutputSchema output_schema = create_initial_output_schema(pipeline_context);
-    for (const auto& clause : read_query.clauses_) {
-        output_schema = clause->modify_schema(std::move(output_schema));
-    }
+    auto output_schema = modify_schema(create_initial_output_schema(pipeline_context), read_query.clauses_);
     if (read_query.columns) {
         std::unordered_set<std::string_view> selected_columns(read_query.columns->begin(), read_query.columns->end());
         FieldCollection fields_to_use;
@@ -2649,27 +2646,24 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     auto pipeline_context = std::make_shared<PipelineContext>();
 
     const bool has_active_version = !std::holds_alternative<StreamId>(version_info);
-    if (!has_active_version) {
-        pipeline_context->stream_id_ = std::get<StreamId>(version_info);
-    } else {
-        if (std::holds_alternative<VersionedItem>(version_info)) {
-            pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
-            auto maybe_isr =
-                    get_index_segment_reader(*store, pipeline_context, std::get<VersionedItem>(version_info).key_);
-            if (maybe_isr.has_value()) {
-                read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), read_query, read_options);
+    util::variant_match(
+            version_info,
+            [&](const StreamId& stream_id) { pipeline_context->stream_id_ = stream_id; },
+            [&](const VersionedItem& versioned_item) {
+                pipeline_context->stream_id_ = versioned_item.key_.id();
+                auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item.key_);
+                if (maybe_isr.has_value()) {
+                    read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), read_query, read_options);
+                }
+            },
+            [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
+                pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
+                // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
+                // dataframe, hence the clone
+                index::IndexSegmentReader isr(preloaded_index_query->index_seg_.clone());
+                read_indexed_keys_to_pipeline(pipeline_context, std::move(isr), read_query, read_options);
             }
-        } else { // std::holds_alternative<std::shared_ptr<PreloadedIndexQuery>>(version_info)
-            pipeline_context->stream_id_ =
-                    std::get<std::shared_ptr<PreloadedIndexQuery>>(version_info)->index_key_.id();
-            // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
-            // dataframe, hence the clone
-            index::IndexSegmentReader isr(
-                    std::get<std::shared_ptr<PreloadedIndexQuery>>(version_info)->index_seg_.clone()
-            );
-            read_indexed_keys_to_pipeline(pipeline_context, std::move(isr), read_query, read_options);
-        }
-    }
+    );
 
     if (pipeline_context->multi_key_) {
         return pipeline_context;
@@ -2704,23 +2698,25 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
 }
 
 VersionedItem generate_result_versioned_item(const VersionIdentifier& version_info) {
-    VersionedItem versioned_item;
-    if (std::holds_alternative<StreamId>(version_info)) {
-        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
-        // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
-        // This class is very hard to change at this point, as users do things like pickling them to pass them around.
-        // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
-        // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
-        // values are meaningless before an indexed version exists.
-        versioned_item = VersionedItem(AtomKeyBuilder()
-                                               .version_id(std::numeric_limits<VersionId>::max())
-                                               .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
-    } else if (std::holds_alternative<VersionedItem>(version_info)) {
-        versioned_item = std::get<VersionedItem>(version_info);
-    } else { // std::holds_alternative<std::shared_ptr<PreloadedIndexQuery>>(version_info)
-        versioned_item = std::get<std::shared_ptr<PreloadedIndexQuery>>(version_info)->index_key_;
-    }
-    return versioned_item;
+    return util::variant_match(
+            version_info,
+            [](const StreamId& stream_id) {
+                // This isn't ideal. It would be better if the version() and timestamp() methods on the C++
+                // VersionedItem class returned optionals, but this change would bubble up to the Python VersionedItem
+                // class defined in _store.py. This class is very hard to change at this point, as users do things like
+                // pickling them to pass them around. This at least gets the symbol attribute of VersionedItem correct.
+                // The creation timestamp will be zero, which corresponds to 1970, and so with this obviously ridiculous
+                // version ID, it should be clear to users that these values are meaningless before an indexed version
+                // exists.
+                return VersionedItem(AtomKeyBuilder()
+                                             .version_id(std::numeric_limits<VersionId>::max())
+                                             .build<KeyType::TABLE_INDEX>(stream_id));
+            },
+            [](const VersionedItem& versioned_item) { return versioned_item; },
+            [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
+                return VersionedItem(preloaded_index_query->index_key_);
+            }
+    );
 }
 
 folly::Future<ReadVersionOutput> read_frame_for_version(

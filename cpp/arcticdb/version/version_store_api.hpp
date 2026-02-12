@@ -143,7 +143,6 @@ class PythonVersionStore : public LocalVersionedEngine {
             const BatchReadOptions& batch_read_options
     );
 
-    // TODO: Memory management of returned value
     RecordBatchData _modify_schema(
             const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query,
             const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options

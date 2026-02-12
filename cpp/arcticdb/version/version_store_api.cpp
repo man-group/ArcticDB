@@ -1387,10 +1387,7 @@ RecordBatchData PythonVersionStore::_modify_schema(
             "collect_schema() not supported with recursively normalized data"
     );
     const auto& tsd = preloaded_index_query->index_seg_.index_descriptor();
-    OutputSchema schema{tsd.as_stream_descriptor().clone(), tsd.normalization()};
-    for (const auto& clause : read_query->clauses_) {
-        schema = clause->modify_schema(std::move(schema));
-    }
+    auto schema = modify_schema({tsd.as_stream_descriptor().clone(), tsd.normalization()}, read_query->clauses_);
     const auto stream_desc = [&]() {
         if (read_query->columns.has_value()) {
             ankerl::unordered_dense::set<std::string_view> cols(

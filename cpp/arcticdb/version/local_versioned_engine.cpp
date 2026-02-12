@@ -394,6 +394,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
             },
             [](const std::shared_ptr<PreloadedIndexQuery>&) {
                 util::raise_rte("get_version_to_read shouldn't be called with PreloadedIndexQuery input");
+                // Avoid control reaches end of non-void function style compilation errors
                 return std::optional<VersionedItem>();
             },
             [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); }
@@ -1427,10 +1428,7 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
 std::shared_ptr<PipelineContext> setup_join_pipeline_context(
         std::vector<OutputSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
-    auto output_schema = clauses.front()->join_schemas(std::move(input_schemas));
-    for (const auto& clause : clauses) {
-        output_schema = clause->modify_schema(std::move(output_schema));
-    }
+    auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->set_descriptor(output_schema.stream_descriptor());
     pipeline_context->norm_meta_ =
