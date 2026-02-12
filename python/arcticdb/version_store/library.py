@@ -19,13 +19,7 @@ from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented
 from numpy import datetime64
 import polars as pl
 
-from arcticdb.options import (
-    LibraryOptions,
-    EnterpriseLibraryOptions,
-    OutputFormat,
-    ArrowOutputStringFormat,
-    arrow_output_string_format_to_internal,
-)
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat, ArrowOutputStringFormat
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
@@ -45,8 +39,7 @@ from arcticdb_ext.version_store import (
     DataError,
     StageResult,
     KeyNotFoundInStageResultInfo,
-    InternalArrowOutputStringFormat,
-    PreloadedIndexQuery,
+    PreloadedIndexQuery as _PreloadedIndexQuery,
 )
 
 import pandas as pd
@@ -59,7 +52,7 @@ import arcticdb_ext as _ae
 logger = logging.getLogger(__name__)
 
 
-AsOf = Union[int, str, datetime.datetime, PreloadedIndexQuery]
+AsOf = Union[int, str, datetime.datetime, _PreloadedIndexQuery]
 
 
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
@@ -522,8 +515,7 @@ class LazyDataFrame(QueryBuilder):
             read_request = self._to_read_request()._replace(as_of=self._preloaded_index)
             return self.lib.read(**read_request._asdict())
 
-    # TODO: Add return type
-    def collect_schema(self):
+    def collect_schema(self) -> pl.Schema:
         # Considered wrapping this in an if self._preloaded_index is None statement, but this could then give
         # non-intuitive results when using as_of snapshots that are changing or negative integers when new versions
         # are being created, so to be on the safe side we will always return to storage, even though the result will
@@ -534,7 +526,7 @@ class LazyDataFrame(QueryBuilder):
             iterate_snapshots_if_tombstoned=False,
             include_index_segment=True,
         )
-        self._preloaded_index = PreloadedIndexQuery(dit.key, dit.index_segment)
+        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment)
         read_request = self._to_read_request()
         record_batch = self.lib._nvs._modify_schema(
             self._preloaded_index,

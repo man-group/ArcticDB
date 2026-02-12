@@ -60,7 +60,7 @@ from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _Python
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
-from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery
+from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery as _PreloadedIndexQuery
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction
 from arcticdb.options import (
     RuntimeOptions,
@@ -260,7 +260,7 @@ def _env_config_from_lib_config(lib_cfg, env):
     return cfg
 
 
-VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None, PreloadedIndexQuery]
+VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None, _PreloadedIndexQuery]
 
 
 def _normalize_dt_range(dtr: DateRangeInput) -> _IndexRange:
@@ -2045,7 +2045,7 @@ class NativeVersionStore:
             version_query.set_version(as_of, iterate_snapshots_if_tombstoned)
         elif isinstance(as_of, (datetime, Timestamp)):
             version_query.set_timestamp(Timestamp(as_of).value, iterate_snapshots_if_tombstoned)
-        elif isinstance(as_of, PreloadedIndexQuery):
+        elif isinstance(as_of, _PreloadedIndexQuery):
             version_query.set_preloaded_index(as_of)
         elif as_of is not None:
             raise ArcticNativeException("Unexpected combination of read parameters")
@@ -3640,7 +3640,7 @@ class NativeVersionStore:
 
     def _modify_schema(
         self,
-        preloaded_index: PreloadedIndexQuery,
+        preloaded_index: _PreloadedIndexQuery,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
         **kwargs,
