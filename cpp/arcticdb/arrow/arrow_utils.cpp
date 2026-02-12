@@ -475,6 +475,8 @@ RecordBatchData arrow_schema_from_descriptor(
         const StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
 ) {
+    // The column filtering is done here rather than in the calling function for efficiency, so we only have to iterate
+    // the fields once, and not construct an intermediate FieldCollection that would then be immediately discarded
     const auto& default_string_format = arrow_output_config.default_string_format_;
     const auto& per_column_string_format = arrow_output_config.per_column_string_format_;
     sparrow::record_batch record_batch;
