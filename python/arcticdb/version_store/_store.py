@@ -3455,8 +3455,7 @@ class NativeVersionStore:
         `bool`
             True if the symbol is pickled, False otherwise.
         """
-        version_query = self._get_version_query(as_of, **kwargs)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self._get_info(symbol, as_of, **kwargs)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
     @staticmethod
@@ -3553,8 +3552,7 @@ class NativeVersionStore:
         `Optional[int]`
             The number of rows in the specified revision of the symbol, or `None` if the symbol is pickled.
         """
-        version_query = self._get_version_query(as_of)
-        dit = self.version_store.read_descriptor(symbol, version_query)
+        dit = self._get_info(symbol, as_of, **kwargs)
         return None if self.is_pickled_descriptor(dit.timeseries_descriptor) else dit.timeseries_descriptor.total_rows
 
     def lib_cfg(self):

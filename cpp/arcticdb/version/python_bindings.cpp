@@ -869,6 +869,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Apply processing operations to a descriptor and return the resulting schema.")
             .def("read_descriptor",
                  &PythonVersionStore::read_descriptor,
+                 py::arg("stream_id"),
+                 py::arg("version_query"),
+                 py::arg("include_index_segment") = false,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Get back the descriptor for a symbol.")
             .def("batch_read_descriptor",
