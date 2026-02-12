@@ -457,3 +457,72 @@ class TestWideTableMultiSegmentGroupBy:
 
         assert len(result) == len(df)
         assert set(result.columns) >= set(df.columns)
+
+
+class TestDynamicSchemaAppendEdgeCases:
+    """Tests for dynamic schema append edge cases with DuckDB queries."""
+
+    def test_append_type_widening_float(self, lmdb_library_dynamic_schema):
+        """Append with compatible wider float type (float32 -> float64) works via SQL."""
+        lib = lmdb_library_dynamic_schema
+        idx1 = pd.date_range("2024-01-01", periods=3, freq="D")
+        df1 = pd.DataFrame({"val": np.array([1.0, 2.0, 3.0], dtype=np.float32)}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-04", periods=3, freq="D")
+        df2 = pd.DataFrame({"val": np.array([4.5, 5.5, 6.5], dtype=np.float64)}, index=idx2)
+        lib.append("sym", df2)
+
+        result = lib.sql("SELECT * FROM sym ORDER BY index")
+
+        assert len(result) == 6
+        np.testing.assert_array_almost_equal(result["val"].values, [1.0, 2.0, 3.0, 4.5, 5.5, 6.5])
+
+    def test_append_multiple_different_column_sets(self, lmdb_library_dynamic_schema):
+        """Three appends each with different column subsets -- SQL sees the union."""
+        lib = lmdb_library_dynamic_schema
+        idx1 = pd.date_range("2024-01-01", periods=3, freq="D")
+        df1 = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [10.0, 20.0, 30.0]}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-04", periods=3, freq="D")
+        df2 = pd.DataFrame({"b": [40.0, 50.0, 60.0], "c": [100.0, 200.0, 300.0]}, index=idx2)
+        lib.append("sym", df2)
+
+        idx3 = pd.date_range("2024-01-07", periods=3, freq="D")
+        df3 = pd.DataFrame({"a": [7.0, 8.0, 9.0], "c": [400.0, 500.0, 600.0]}, index=idx3)
+        lib.append("sym", df3)
+
+        result = lib.sql("SELECT * FROM sym ORDER BY index")
+
+        assert len(result) == 9
+        assert set(result.columns) >= {"a", "b", "c"}
+        # Segment 1: a,b present, c null
+        assert not result["a"].iloc[:3].isna().any()
+        assert not result["b"].iloc[:3].isna().any()
+        assert result["c"].iloc[:3].isna().all()
+        # Segment 2: b,c present, a null
+        assert result["a"].iloc[3:6].isna().all()
+        assert not result["b"].iloc[3:6].isna().any()
+        assert not result["c"].iloc[3:6].isna().any()
+        # Segment 3: a,c present, b null
+        assert not result["a"].iloc[6:].isna().any()
+        assert result["b"].iloc[6:].isna().all()
+        assert not result["c"].iloc[6:].isna().any()
+
+    def test_append_aggregation_across_sparse_segments(self, lmdb_library_dynamic_schema):
+        """SUM aggregation correctly handles nulls from sparse columns across appends."""
+        lib = lmdb_library_dynamic_schema
+        idx1 = pd.date_range("2024-01-01", periods=3, freq="D")
+        df1 = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [10.0, 20.0, 30.0]}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-04", periods=3, freq="D")
+        df2 = pd.DataFrame({"b": [40.0, 50.0, 60.0], "c": [100.0, 200.0, 300.0]}, index=idx2)
+        lib.append("sym", df2)
+
+        result = lib.sql("SELECT SUM(a) as sa, SUM(b) as sb, SUM(c) as sc FROM sym")
+
+        assert result["sa"].iloc[0] == pytest.approx(6.0)  # 1+2+3, nulls ignored
+        assert result["sb"].iloc[0] == pytest.approx(210.0)  # 10+20+30+40+50+60
+        assert result["sc"].iloc[0] == pytest.approx(600.0)  # 100+200+300, nulls ignored

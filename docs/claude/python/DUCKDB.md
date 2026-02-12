@@ -338,6 +338,46 @@ All scripts are self-contained (generate own data in tempdir). Run with:
 python python/benchmarks/non_asv/duckdb/1_bench_sql_vs_querybuilder.py
 ```
 
+## Append Handling
+
+The DuckDB path reads data via `LazyRecordBatchIterator`, which iterates over **all segments** of a symbol regardless of how they were created (`write()` vs `append()`). There is no special "append-aware" logic — the segment abstraction makes the distinction transparent to the read path.
+
+### Static Schema + Append
+
+All appended segments have identical columns. Each segment becomes a RecordBatch with the same schema — no padding needed. Covered by `TestAppendStaticSchema` in `test_duckdb.py`:
+
+| Test | What It Verifies |
+|------|-----------------|
+| `test_append_select_all` | SELECT * returns all rows from write + append |
+| `test_append_multiple_appends` | 4 chained segments, COUNT/SUM correct |
+| `test_append_date_range_spanning_segments` | WHERE on index crossing the segment boundary |
+| `test_append_column_projection` | SELECT specific columns across segments |
+| `test_append_aggregation` | GROUP BY + SUM across segments |
+| `test_append_filter_on_appended_data` | WHERE matching only the appended segment |
+| `test_append_join` | JOIN where one symbol built via append |
+| `test_append_as_of_versioning` | `as_of=0` (pre-append) vs `as_of=1` (post-append) |
+| `test_append_to_empty_symbol` | Write empty DataFrame, append data, query |
+| `test_append_duckdb_context` | DuckDB context manager with appended symbol |
+
+### Dynamic Schema + Append
+
+Appended segments can have different column subsets. `ArcticRecordBatchReader` pads each batch to the full schema (from the merged `TimeseriesDescriptor`), filling missing columns with nulls. Covered by tests in `test_duckdb_dynamic_schema.py`:
+
+| Test | What It Verifies |
+|------|-----------------|
+| `_write_dynamic_schema_symbol` helper (used by 11 tests) | Segments with cols `{a,b}` then `{b,c}` — null padding |
+| `test_sql_group_by_non_column_sliced_dynamic_schema` | GROUP BY with extra columns varying per segment |
+| `test_sql_string_columns` | String columns varying across append segments |
+| `test_append_type_widening_float` | float32 → float64 type promotion works |
+| `test_append_multiple_different_column_sets` | 3 appends with disjoint column sets, null verification per segment |
+| `test_append_aggregation_across_sparse_segments` | SUM correctly ignores nulls from sparse columns |
+
+### Known Limitation: int → float Type Widening
+
+When the first segment has an integer column and a later append promotes it to float (e.g. `int64` → `float64`), the DuckDB path fails. `_ensure_schema()` (`arrow_reader.py:337-345`) uses the **first batch's** Arrow type for columns present in that batch, so the schema is set to `int64`. When a later batch arrives with `float64`, `_pad_batch_to_schema()` attempts a lossy downcast (`float64` → `int64`) and raises `ArrowInvalid`. The merged descriptor has the correct promoted type, but the first-batch override takes precedence.
+
+**Workaround**: Use float types from the start, or ensure all segments share the same numeric type.
+
 ## Testing
 
 ```bash
@@ -350,11 +390,11 @@ python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_pushdown.py` | AST parsing, filter conversion, QueryBuilder generation, end-to-end pushdown | Column, filter, date range, limit pushdown; edge cases for types, OR, LIKE, functions |
-| `test_duckdb.py` | Context managers, sql(), external connections, MultiIndex joins, index reconstruction | Simple queries, JOINs, MultiIndex schema, output formats, case sensitivity |
+| `test_duckdb.py` | Context managers, sql(), external connections, MultiIndex joins, index reconstruction, **static-schema append** | Simple queries, JOINs, MultiIndex schema, output formats, case sensitivity; write+append SELECT/filter/aggregation/JOIN/versioning |
 | `test_arrow_reader.py` | RecordBatchReader iteration, exhaustion, DuckDB integration | Streaming, single-use enforcement, schema |
 | `test_lazy_streaming.py` | Lazy iterator: basic SQL, groupby, filter, joins, versioning, multi-segment, truncation, FilterClause | Direct iterator, date_range/row_range, empty symbols, DuckDB context |
 | `test_doc_examples.py` | Tutorial code examples, as_of with dict/timestamp, explain() | End-to-end validation of documented examples |
-| `test_duckdb_dynamic_schema.py` | Dynamic schema: SELECT *, WHERE filter, aggregation, JOIN, DuckDBContext, strings | Symbols where segments have different column subsets; null padding, missing-column filters |
+| `test_duckdb_dynamic_schema.py` | Dynamic schema: SELECT *, WHERE filter, aggregation, JOIN, DuckDBContext, strings, **append edge cases** | Symbols where segments have different column subsets; null padding, missing-column filters; type widening, multi-append with disjoint columns, sparse aggregation |
 | `test_schema_ddl.py` | DESCRIBE, SHOW TABLES, SHOW DATABASES, schema discovery | DDL queries, column metadata, database/library hierarchy |
 | `test_arctic_duckdb.py` | Arctic-level SQL: cross-library joins, ArcticDuckDBContext, SHOW DATABASES | Cross-library/cross-instance queries, library registration |
 

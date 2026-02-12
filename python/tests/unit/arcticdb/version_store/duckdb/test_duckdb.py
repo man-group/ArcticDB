@@ -1476,3 +1476,197 @@ class TestIndexReconstruction:
         assert isinstance(result.index, pd.MultiIndex)
         assert result.index.names == ["date", "security_id"]
         assert list(result.columns) == ["momentum", "value"]
+
+
+class TestAppendStaticSchema:
+    """Tests for SQL queries on symbols built up via lib.append() with static schema.
+
+    Verifies that the DuckDB lazy streaming path correctly reads data spanning
+    multiple segments created by write() + append() operations.
+    """
+
+    def test_append_select_all(self, lmdb_library):
+        """SELECT * on an appended symbol returns all rows from both segments."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=5, freq="D")
+        df1 = pd.DataFrame({"x": np.arange(5, dtype=np.float64), "y": np.arange(10, 15, dtype=np.float64)}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-06", periods=5, freq="D")
+        df2 = pd.DataFrame(
+            {"x": np.arange(5, 10, dtype=np.float64), "y": np.arange(15, 20, dtype=np.float64)}, index=idx2
+        )
+        lib.append("sym", df2)
+
+        result = lib.sql("SELECT * FROM sym ORDER BY index")
+
+        expected = pd.concat([df1, df2])
+        assert len(result) == 10
+        np.testing.assert_array_equal(result["x"].values, expected["x"].values)
+        np.testing.assert_array_equal(result["y"].values, expected["y"].values)
+
+    def test_append_multiple_appends(self, lmdb_library):
+        """Chaining multiple appends; SQL sees all rows across all segments."""
+        lib = lmdb_library
+        dfs = []
+        for i in range(4):
+            idx = pd.date_range(f"2024-0{i + 1}-01", periods=10, freq="D")
+            df = pd.DataFrame({"val": np.arange(i * 10, (i + 1) * 10, dtype=np.float64)}, index=idx)
+            if i == 0:
+                lib.write("sym", df)
+            else:
+                lib.append("sym", df)
+            dfs.append(df)
+
+        result = lib.sql("SELECT COUNT(*) as cnt, SUM(val) as total FROM sym")
+
+        expected = pd.concat(dfs)
+        assert result["cnt"].iloc[0] == len(expected)
+        assert result["total"].iloc[0] == pytest.approx(expected["val"].sum())
+
+    def test_append_date_range_spanning_segments(self, lmdb_library):
+        """Date range filter spanning the boundary between original write and append."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=31, freq="D")
+        df1 = pd.DataFrame({"val": np.arange(31, dtype=np.float64)}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-02-01", periods=29, freq="D")
+        df2 = pd.DataFrame({"val": np.arange(31, 60, dtype=np.float64)}, index=idx2)
+        lib.append("sym", df2)
+
+        # Query spanning the segment boundary: last 10 days of Jan + first 10 of Feb
+        result = lib.sql("SELECT * FROM sym WHERE index >= '2024-01-22' AND index <= '2024-02-10' ORDER BY index")
+
+        full = pd.concat([df1, df2])
+        expected = full[(full.index >= "2024-01-22") & (full.index <= "2024-02-10")]
+        assert len(result) == len(expected)
+        np.testing.assert_array_equal(result["val"].values, expected["val"].values)
+
+    def test_append_column_projection(self, lmdb_library):
+        """Column projection works correctly across appended segments."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=5, freq="D")
+        df1 = pd.DataFrame({"a": np.arange(1.0, 6.0), "b": np.arange(10.0, 60.0, 10.0)}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-06", periods=5, freq="D")
+        df2 = pd.DataFrame({"a": np.arange(6.0, 11.0), "b": np.arange(60.0, 110.0, 10.0)}, index=idx2)
+        lib.append("sym", df2)
+
+        result = lib.sql("SELECT index, a FROM sym ORDER BY index")
+
+        assert "a" in result.columns
+        assert len(result) == 10
+        np.testing.assert_array_equal(result["a"].values, np.arange(1.0, 11.0))
+
+    def test_append_aggregation(self, lmdb_library):
+        """GROUP BY aggregation works across appended segments."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=4, freq="D")
+        df1 = pd.DataFrame({"cat": ["A", "B", "A", "B"], "val": [10.0, 20.0, 30.0, 40.0]}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-05", periods=4, freq="D")
+        df2 = pd.DataFrame({"cat": ["A", "B", "A", "B"], "val": [50.0, 60.0, 70.0, 80.0]}, index=idx2)
+        lib.append("sym", df2)
+
+        result = lib.sql("SELECT cat, SUM(val) as total FROM sym GROUP BY cat ORDER BY cat")
+
+        assert len(result) == 2
+        assert list(result["cat"]) == ["A", "B"]
+        assert result["total"].iloc[0] == pytest.approx(160.0)  # 10+30+50+70
+        assert result["total"].iloc[1] == pytest.approx(200.0)  # 20+40+60+80
+
+    def test_append_filter_on_appended_data(self, lmdb_library):
+        """WHERE filter matching only rows in the appended segment."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=5, freq="D")
+        df1 = pd.DataFrame({"val": np.arange(5, dtype=np.float64)}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-06", periods=5, freq="D")
+        df2 = pd.DataFrame({"val": np.arange(100, 105, dtype=np.float64)}, index=idx2)
+        lib.append("sym", df2)
+
+        result = lib.sql("SELECT * FROM sym WHERE val >= 100 ORDER BY index")
+
+        assert len(result) == 5
+        np.testing.assert_array_equal(result["val"].values, np.arange(100.0, 105.0))
+
+    def test_append_join(self, lmdb_library):
+        """JOIN where one symbol was built via write + append."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=5, freq="D", name="ts")
+
+        lib.write("prices", pd.DataFrame({"price": [100.0, 101.0, 102.0]}, index=dates[:3]))
+        lib.append("prices", pd.DataFrame({"price": [103.0, 104.0]}, index=dates[3:]))
+
+        lib.write("volumes", pd.DataFrame({"volume": [1000, 2000, 3000, 4000, 5000]}, index=dates))
+
+        result = lib.sql("""
+            SELECT p.ts, p.price, v.volume, p.price * v.volume as notional
+            FROM prices p
+            JOIN volumes v ON p.ts = v.ts
+            ORDER BY p.ts
+        """)
+
+        assert len(result) == 5
+        assert result["notional"].iloc[0] == pytest.approx(100000.0)
+        assert result["notional"].iloc[4] == pytest.approx(520000.0)
+
+    def test_append_as_of_versioning(self, lmdb_library):
+        """SQL with as_of reads the symbol state before and after an append."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=3, freq="D")
+        df1 = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx1)
+        lib.write("sym", df1)  # version 0
+
+        idx2 = pd.date_range("2024-01-04", periods=3, freq="D")
+        df2 = pd.DataFrame({"val": [4.0, 5.0, 6.0]}, index=idx2)
+        lib.append("sym", df2)  # version 1
+
+        result_v0 = lib.sql("SELECT COUNT(*) as cnt, SUM(val) as total FROM sym", as_of=0)
+        result_v1 = lib.sql("SELECT COUNT(*) as cnt, SUM(val) as total FROM sym", as_of=1)
+        result_latest = lib.sql("SELECT COUNT(*) as cnt, SUM(val) as total FROM sym")
+
+        assert result_v0["cnt"].iloc[0] == 3
+        assert result_v0["total"].iloc[0] == pytest.approx(6.0)
+        assert result_v1["cnt"].iloc[0] == 6
+        assert result_v1["total"].iloc[0] == pytest.approx(21.0)
+        assert result_latest["cnt"].iloc[0] == result_v1["cnt"].iloc[0]
+
+    def test_append_to_empty_symbol(self, lmdb_library):
+        """Write an empty DataFrame, append real data, query via SQL."""
+        lib = lmdb_library
+        empty = pd.DataFrame(
+            {"val": pd.array([], dtype="float64")},
+            index=pd.DatetimeIndex([], name="ts"),
+        )
+        lib.write("sym", empty)
+
+        idx = pd.date_range("2024-01-01", periods=5, freq="D", name="ts")
+        df = pd.DataFrame({"val": np.arange(5, dtype=np.float64)}, index=idx)
+        lib.append("sym", df)
+
+        result = lib.sql("SELECT * FROM sym ORDER BY ts")
+
+        assert len(result) == 5
+        np.testing.assert_array_equal(result["val"].values, np.arange(5, dtype=np.float64))
+
+    def test_append_duckdb_context(self, lmdb_library):
+        """DuckDB context manager works with appended symbols."""
+        lib = lmdb_library
+        idx1 = pd.date_range("2024-01-01", periods=5, freq="D")
+        df1 = pd.DataFrame({"val": np.arange(5, dtype=np.float64)}, index=idx1)
+        lib.write("sym", df1)
+
+        idx2 = pd.date_range("2024-01-06", periods=5, freq="D")
+        df2 = pd.DataFrame({"val": np.arange(5, 10, dtype=np.float64)}, index=idx2)
+        lib.append("sym", df2)
+
+        with lib.duckdb() as ctx:
+            ctx.register_symbol("sym")
+            result = ctx.sql("SELECT SUM(val) as total FROM sym")
+
+        assert result["total"].iloc[0] == pytest.approx(45.0)  # sum(0..9)
