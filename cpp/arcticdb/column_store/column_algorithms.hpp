@@ -32,7 +32,25 @@ ARCTICDB_FLATTEN static void for_each_flattened(Iterator begin, Iterator end, fu
 template<typename input_tdt, typename functor>
 requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
          std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
-static void for_each_enumerated(
+static void for_each_enumerated(const Column& input_column, functor&& f) {
+    auto input_data = input_column.data();
+    if (input_column.is_sparse()) {
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        std::for_each(begin, end, std::forward<functor>(f));
+    } else {
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        std::for_each(begin, end, std::forward<functor>(f));
+    }
+}
+
+// Variant of for_each_enumerated that uses for_each_flattened to force-inline all callees in the loop body.
+// This increases compile-time memory usage, so only use in performance-critical hot paths.
+template<typename input_tdt, typename functor>
+requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
+         std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+static void for_each_enumerated_flattened(
         const Column& input_column, functor&& f, std::optional<size_t> start_idx = std::nullopt,
         std::optional<size_t> end_idx = std::nullopt
 ) {
@@ -47,15 +65,17 @@ static void for_each_enumerated(
     if (input_column.is_sparse()) {
         auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         if (start_idx.has_value()) {
-            // We need to get the `physical_offset` to know how many physical values to advance when column is sparse.
-            auto physical_offset = input_column.get_physical_offset(*start_idx);
-            std::advance(begin, physical_offset);
+            // We need to advance the iterator to the first physical position where `begin->idx() >= *start_idx`
+            while (begin->idx() < static_cast<ssize_t>(*start_idx)) {
+                ++begin;
+            }
         }
         auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         if (end_idx.has_value()) {
             end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-            auto physical_offset = input_column.get_physical_offset(*end_idx);
-            std::advance(end, physical_offset);
+            while (end->idx() < static_cast<ssize_t>(*end_idx)) {
+                ++end;
+            }
         }
         for_each_flattened(begin, end, std::forward<functor>(f));
     } else {
