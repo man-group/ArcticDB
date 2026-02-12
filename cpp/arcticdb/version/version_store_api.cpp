@@ -1388,23 +1388,16 @@ RecordBatchData PythonVersionStore::_modify_schema(
     );
     const auto& tsd = preloaded_index_query->index_seg_.index_descriptor();
     auto schema = modify_schema({tsd.as_stream_descriptor().clone(), tsd.normalization()}, read_query->clauses_);
-    const auto stream_desc = [&]() {
+    const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
         if (read_query->columns.has_value()) {
-            ankerl::unordered_dense::set<std::string_view> cols(
+            return ankerl::unordered_dense::set<std::string_view>{
                     read_query->columns->cbegin(), read_query->columns->cend()
-            );
-            StreamDescriptor filtered_desc;
-            for (const auto& field : schema.stream_descriptor().fields()) {
-                if (cols.contains(field.name())) {
-                    filtered_desc.add_field(field);
-                }
-            }
-            return filtered_desc;
+            };
         } else {
-            return std::get<0>(schema.release());
+            return std::nullopt;
         }
     }();
-    return arrow_schema_from_descriptor(stream_desc, read_options.arrow_output_config());
+    return arrow_schema_from_descriptor(schema.stream_descriptor(), read_options.arrow_output_config(), columns);
 }
 
 DescriptorItem PythonVersionStore::read_descriptor(

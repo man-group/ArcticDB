@@ -13,6 +13,8 @@
 #include <string_view>
 #include <vector>
 
+#include <ankerl/unordered_dense.h>
+
 // Anything that transitively includes sparrow.array.hpp takes ages to build the (unused by us) std::format impl
 // So avoid including sparrow in headers where possible until this is resolved
 namespace sparrow {
@@ -43,7 +45,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
 );
 
 RecordBatchData arrow_schema_from_descriptor(
-        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config
+        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
+        const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
 );
 
 } // namespace arcticdb
