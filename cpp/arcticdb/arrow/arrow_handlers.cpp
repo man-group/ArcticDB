@@ -132,7 +132,7 @@ void encode_variable_length(
                 if constexpr (is_sequence_type(source_type_info::data_type)) {
                     if constexpr (is_dynamic_string_type(source_type_info::data_type)) {
                         std::vector<std::string_view> strings;
-                        for_each_enumerated<typename source_type_info::TDT>(
+                        for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                                     if (is_a_string(en.value())) {
@@ -160,7 +160,7 @@ void encode_variable_length(
                         std::vector<std::string> strings;
                         // Experimented with storing a hash map from stringpool offset to UTF-8 strings. Speeds up the
                         // "1 unique string" case by ~40%, but makes the "all strings unique" case ~x3 slower
-                        for_each_enumerated<typename source_type_info::TDT>(
+                        for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                                     while (last_idx <= en.idx()) {
@@ -278,7 +278,7 @@ void encode_dictionary(
                     if constexpr (is_dynamic_string_type(source_type_info::data_type)) {
                         ankerl::unordered_dense::map<StringPool::offset_t, DictEntryView> unique_offsets_view;
                         unique_offsets_view.reserve(row_count_after_truncation);
-                        for_each_enumerated<typename source_type_info::TDT>(
+                        for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                                     if (is_a_string(en.value())) {
@@ -315,7 +315,7 @@ void encode_dictionary(
                     } else { // fixed-width string type
                         ankerl::unordered_dense::map<StringPool::offset_t, DictEntryOwning> unique_offsets_owning;
                         unique_offsets_owning.reserve(row_count_after_truncation);
-                        for_each_enumerated<typename source_type_info::TDT>(
+                        for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                                     // Fixed-width string columns don't support None/NaN values, so is_a_string check
