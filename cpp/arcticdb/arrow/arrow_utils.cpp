@@ -497,7 +497,10 @@ RecordBatchData arrow_schema_from_descriptor(
                     return minimal_strings_array<int32_t>();
                 case ArrowOutputStringFormat::LARGE_STRING:
                     return minimal_strings_array<int64_t>();
-                case ArrowOutputStringFormat::CATEGORICAL: {
+                case ArrowOutputStringFormat::CATEGORICAL:
+                // Not all compilers can tell that these are all of the cases, so complain of control reaching end of
+                // non-void function
+                default: {
                     sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
                     auto dict_values_array = minimal_strings_for_dict();
                     return sparrow::array{create_dict_array<int32_t>(
