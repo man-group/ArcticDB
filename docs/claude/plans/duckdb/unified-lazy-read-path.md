@@ -77,7 +77,7 @@ The **only** capabilities the eager path has that the lazy path lacks:
 
 The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` in its prefetch buffer (`arrow_output_frame.hpp:186`). The entire chain — I/O, decode, truncation, filter, `prepare_segment_for_arrow()`, and `segment_to_arrow_data()` — runs inside a Folly future on the CPU thread pool (`arrow_output_frame.cpp:363-413`). The consumer's `next()` call merely does `.get()` on the already-resolved future.
 
-**This means a naive `LazySegmentIterator` yielding `SegmentInMemory` would REGRESS throughput** by moving Arrow conversion out of the prefetch pipeline and into the consumer thread, serializing the dominant cost (`prepare_segment_for_arrow()`).
+**This means a naive segment-yielding iterator (without Arrow conversion in the prefetch) would REGRESS throughput** by moving Arrow conversion out of the prefetch pipeline and into the consumer thread, serializing the dominant cost (`prepare_segment_for_arrow()`).
 
 The architecture must preserve this property: Arrow conversion stays inside the prefetch future.
 
@@ -147,9 +147,7 @@ When the first segment has `int64` and a later append promotes to `float64`:
 │  ├── apply_truncation()           // date_range / row_range     │
 │  └── apply_filter_clause()        // WHERE filter               │
 │                                                                 │
-│  Sibling iterators (each owns its own prefetch buffer):         │
-│                                                                 │
-│  ├── LazyRecordBatchIterator (refactored, Steps 1+3+4)         │
+│  LazyRecordBatchIterator (refactored, Steps 1+3+4)             │
 │  │   ├─ setup_pipeline_context() [shared, unchanged]            │
 │  │   ├─ SINGLE prefetch: I/O → decode → truncate → filter →    │
 │  │   │   Arrow convert — all in one Folly future (same as today)│
@@ -158,14 +156,8 @@ When the first segment has `int64` and a later append promotes to `float64`:
 │  │   ├─ yields: RecordBatchData with uniform schema             │
 │  │   └─ Used by: DuckDB, Polars (via Arrow), lib.read(pyarrow) │
 │  │                                                              │
-│  ├── LazySegmentIterator (new, Step 1)                          │
-│  │   ├─ prefetch: I/O → decode → truncate → filter              │
-│  │   ├─ yields: SegmentInMemory (no Arrow conversion)           │
-│  │   └─ Used by: future Polars SegmentInMemory path, eager      │
-│  │       frame collector                                        │
-│  │                                                              │
 │  Other consumers (unchanged):                                   │
-│  ├── EagerFrameCollector (refactored from do_direct_read)       │
+│  ├── Eager path (do_direct_read_or_process, unchanged)          │
 │  │   └─ Assembles all segments into single SegmentInMemory      │
 │  │   └─ Returns PandasOutputFrame (numpy zero-copy)             │
 │  │   └─ Used by: lib.read(format=pandas) without clauses        │
@@ -176,55 +168,49 @@ When the first segment has `int64` and a later append promotes to `float64`:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Key Design Decision: Sibling Iterators, Not Composition
+### Key Design Decision: Extract Shared Helpers, Preserve Monolithic Pipeline
 
-The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` — the entire pipeline (I/O → decode → truncate → filter → Arrow convert) runs inside a single prefetch future with count cap=200. This plan adds a byte-based cap (4GB default) alongside the count cap to prevent OOM with wide tables.
+The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` — the entire pipeline (I/O → decode → truncate → filter → Arrow convert) runs inside a single prefetch future with count cap=200. This plan extracts the reusable stages (I/O, truncation, filtering) as shared free functions and adds a byte-based cap (4GB default) alongside the count cap to prevent OOM with wide tables.
 
-**Why not composition (wrapping)?** An earlier version of this plan had `LazyRecordBatchIterator` wrap `LazySegmentIterator`, pulling `SegmentInMemory` from the inner iterator and dispatching Arrow conversion into a second prefetch queue. This introduces a **two-queue pipeline with a serialization point**: the Arrow conversion future can only be kicked off after the segment future resolves and `next()` is called. Today, Arrow conversion runs inside the same 200-deep prefetch pipeline as I/O, fully overlapping with storage latency. A wrapping architecture would either:
+**Why not a two-stage pipeline?** An earlier version of this plan considered splitting the pipeline into a segment-yielding stage and a separate Arrow conversion stage. This introduces a **two-queue pipeline with a serialization point**: the Arrow conversion future can only be kicked off after the segment future resolves and `next()` is called. Today, Arrow conversion runs inside the same 200-deep prefetch pipeline as I/O, fully overlapping with storage latency. A two-stage architecture would either:
 
 1. **Regress throughput** — if the Arrow lookahead is shallow, `prepare_segment_for_arrow()` (the dominant CPU cost: `make_column_blocks_detachable()` memcpy, `SharedStringDictionary` construction) becomes a serial bottleneck between I/O completion and consumer delivery.
-2. **Increase memory** — if the Arrow lookahead is deep to compensate, you're holding decoded `SegmentInMemory` objects in the segment prefetch buffer AND `RecordBatchData` in the Arrow prefetch buffer simultaneously.
+2. **Increase memory** — if the Arrow lookahead is deep to compensate, you're holding decoded `SegmentInMemory` objects in the segment buffer AND `RecordBatchData` in the Arrow buffer simultaneously.
 
-**Chosen approach: sibling iterators with shared helpers.** `LazyRecordBatchIterator` and `LazySegmentIterator` are independent classes that each own their own prefetch buffer. They share code via extracted free functions (`read_and_decode_segment()`, `apply_truncation()`, `apply_filter_clause()`), not via composition. This preserves the monolithic pipeline for the Arrow path — zero regression — while enabling a separate `SegmentInMemory`-yielding iterator for non-Arrow consumers.
-
-**Architecture:**
+**Chosen approach: refactor in place with shared helpers.** `LazyRecordBatchIterator` keeps its monolithic prefetch pipeline. The I/O, truncation, and filter stages are extracted as free functions for testability and potential future reuse, but Arrow conversion remains inside the same future — zero regression.
 
 ```
-LazySegmentIterator                    LazyRecordBatchIterator
-┌──────────────────────┐               ┌──────────────────────────────┐
-│ prefetch_buffer_:    │               │ prefetch_buffer_:            │
-│   deque<Future<      │               │   deque<Future<              │
-│     optional<        │               │     vector<RecordBatchData>>>│
-│       SegmentInMem>>>│               │                              │
-│                      │               │ SINGLE future pipeline:      │
-│ Future pipeline:     │               │   I/O → decode → truncate →  │
-│   I/O → decode →     │               │   filter → Arrow convert     │
-│   truncate → filter  │               │                              │
-│                      │               │ Dual-cap backpressure:       │
-│ Dual-cap:            │               │   count ≤ 200                │
-│   count ≤ 200        │               │   bytes ≤ 4 GB (default)     │
-│   bytes ≤ 4 GB       │               │                              │
-│                      │               │ next() does:                 │
-│ For: future Polars   │               │   .get() on resolved future  │
-│ SegmentInMemory path,│               │   + column-slice merge       │
-│ eager frame collector│               │   + schema padding           │
-└──────────────────────┘               └──────────────────────────────┘
+LazyRecordBatchIterator (refactored)
+┌──────────────────────────────┐
+│ prefetch_buffer_:            │
+│   deque<Future<              │
+│     vector<RecordBatchData>>>│
+│                              │
+│ SINGLE future pipeline:      │
+│   I/O → decode → truncate →  │
+│   filter → Arrow convert     │
+│                              │
+│ Dual-cap backpressure:       │
+│   count ≤ 200                │
+│   bytes ≤ 4 GB (default)     │
+│                              │
+│ next() does:                 │
+│   .get() on resolved future  │
+│   + column-slice merge       │
+│   + schema padding           │
+└──────────────────────────────┘
 
-Shared free functions (used by both):
+Shared free functions (extracted from arrow_output_frame.cpp):
   read_and_decode_segment(store, slice_and_key, columns_to_decode)
   apply_truncation(segment, row_filter)
   apply_filter_clause(segment, expression_context, filter_root_node_name)
 ```
 
-**Trade-off**: The sibling approach duplicates prefetch buffer management (both classes have `deque<Future<...>>`, `fill_prefetch_buffer()`, same dual-cap logic). This is ~50 lines of structural duplication. The alternative — composition — would eliminate this duplication but at the cost of a measurable performance regression on the Arrow hot path. Given that Arrow read throughput is a primary goal of this plan, the duplication is the right trade-off.
-
-**Code sharing surface**: The shared free functions contain the actual logic (I/O dispatch, truncation binary search, filter evaluation). The prefetch buffer management is boilerplate (`fill_prefetch_buffer` loop, `next()` drain loop) that is structurally similar but differs in the future's return type (`optional<SegmentInMemory>` vs `vector<RecordBatchData>`). A template or CRTP base class could eliminate this duplication, but adds abstraction complexity for minimal gain — prefer keeping both classes concrete and simple.
-
 ---
 
 ## Memory Model (Summary)
 
-**Prefetch**: Dual-cap backpressure — `count_cap = min(max(prefetch_size, num_segments), 200)` AND `byte_cap = max_prefetch_bytes` (default 4GB). Whichever limit is reached first stops prefetching. Both `LazyRecordBatchIterator` and `LazySegmentIterator` use this same dual-cap sizing for their respective prefetch buffers. `LazyRecordBatchIterator` runs the full pipeline (including Arrow conversion) inside each prefetch future — same as today, no two-tier change. See "Memory Model (Detailed)" section below for analysis including column-slice merging memory, DETACHABLE optimization, and null-array caching.
+**Prefetch**: Dual-cap backpressure — `count_cap = min(max(prefetch_size, num_segments), 200)` AND `byte_cap = max_prefetch_bytes` (default 4GB). Whichever limit is reached first stops prefetching. `LazyRecordBatchIterator` runs the full pipeline (including Arrow conversion) inside each prefetch future — same as today, no two-tier change. See "Memory Model (Detailed)" section below for analysis including column-slice merging memory, DETACHABLE optimization, and null-array caching.
 
 **Peak memory** ≈ `min(count_cap × segment_size, byte_cap) × 2` (DETACHABLE copy factor). For typical segments (≤40MB), the count cap dominates as before. For wide tables (400MB+ segments), the byte cap limits memory to ~8GB instead of 160GB.
 
@@ -234,13 +220,13 @@ Shared free functions (used by both):
 
 ## Refactoring Steps
 
-### Step 1: Extract Shared Helpers and Create `LazySegmentIterator`
+### Step 1: Extract Shared Helpers and Refactor `LazyRecordBatchIterator`
 
-The current `LazyRecordBatchIterator` (`arrow_output_frame.hpp:135-213`, `arrow_output_frame.cpp:340-549`) contains both reusable segment-reading logic and Arrow-specific conversion. The goal is to extract the reusable parts as shared free functions, create a new `LazySegmentIterator` for non-Arrow consumers, and **leave `LazyRecordBatchIterator`'s prefetch pipeline intact**.
+The current `LazyRecordBatchIterator` (`arrow_output_frame.hpp:135-213`, `arrow_output_frame.cpp:340-549`) contains both reusable segment-reading logic and Arrow-specific conversion. The goal is to extract the reusable parts as shared free functions for testability, add dual-cap backpressure, and **leave `LazyRecordBatchIterator`'s prefetch pipeline structure intact**.
 
 #### Shared free functions (new file: `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp`)
 
-These are extracted from `arrow_output_frame.cpp` and used by both iterator classes:
+These are extracted from `arrow_output_frame.cpp` and used by `LazyRecordBatchIterator`:
 
 ```cpp
 // I/O + decode for a single segment. Returns a Future that resolves to the decoded segment.
@@ -269,75 +255,9 @@ bool apply_filter_clause(
 );
 ```
 
-#### New class: `LazySegmentIterator`
+#### Refactored `LazyRecordBatchIterator`
 
-For non-Arrow consumers (future Polars `SegmentInMemory` path, eager frame collector). Owns its own prefetch buffer. Uses the shared helpers.
-
-```cpp
-// cpp/arcticdb/version/lazy_segment_iterator.hpp
-class LazySegmentIterator {
-public:
-    LazySegmentIterator(
-        std::vector<pipelines::SliceAndKey> slice_and_keys,
-        StreamDescriptor descriptor,
-        std::shared_ptr<stream::StreamSource> store,
-        std::shared_ptr<std::unordered_set<std::string>> columns_to_decode,
-        FilterRange row_filter,
-        std::shared_ptr<ExpressionContext> expression_context,
-        std::string filter_root_node_name,
-        size_t prefetch_size,          // count cap: min(max(prefetch_size, num_segments), 200)
-        size_t max_prefetch_bytes = 4ULL << 30  // byte cap: 4 GB default
-    );
-
-    // Returns the next decoded+filtered segment, or nullopt if exhausted.
-    // Segments filtered to zero rows are SKIPPED (not returned).
-    std::optional<SegmentInMemory> next();
-    bool has_next() const;
-    size_t num_segments() const;
-    size_t current_index() const;
-    const StreamDescriptor& descriptor() const;
-
-    // Expose slice metadata for consumers that need row_range info.
-    const pipelines::SliceAndKey& current_slice_and_key() const;
-    const pipelines::SliceAndKey* peek_next_slice_and_key() const;
-
-private:
-    std::vector<pipelines::SliceAndKey> slice_and_keys_;
-    StreamDescriptor descriptor_;
-    std::shared_ptr<stream::StreamSource> store_;
-    std::shared_ptr<std::unordered_set<std::string>> columns_to_decode_;
-    FilterRange row_filter_;
-    std::shared_ptr<ExpressionContext> expression_context_;
-    std::string filter_root_node_name_;
-    size_t prefetch_size_;
-    size_t max_prefetch_bytes_;
-
-    // Prefetch buffer: I/O + decode + truncate + filter only (no Arrow)
-    std::deque<folly::Future<std::optional<SegmentInMemory>>> prefetch_buffer_;
-    size_t next_prefetch_index_ = 0;
-    size_t current_index_ = 0;
-    size_t current_prefetch_bytes_ = 0;  // sum of estimated uncompressed bytes in flight
-    const pipelines::SliceAndKey* current_sak_ = nullptr;
-
-    // Pipeline: read_and_decode_segment → apply_truncation → apply_filter_clause
-    folly::Future<std::optional<SegmentInMemory>>
-    read_decode_and_filter_segment(size_t idx);
-    void fill_prefetch_buffer();  // dual-cap: stops when count OR bytes exceeded
-};
-```
-
-**Prefetch pipeline** (what runs inside the Folly future):
-```
-read_and_decode_segment()           // shared helper — I/O + decode
-  .via(&cpu_executor()).thenValue()  // CPU thread pool:
-    → apply_truncation()             //   shared helper — row/date range
-    → apply_filter_clause()          //   shared helper — WHERE filter
-    → return optional<SegmentInMemory>  // nullopt if filter removed all rows
-```
-
-#### Refactored `LazyRecordBatchIterator` (sibling, not wrapper)
-
-`LazyRecordBatchIterator` keeps its own prefetch buffer with the **full monolithic pipeline** — same as today. It uses the shared helpers for the I/O/truncation/filter stages, then appends Arrow conversion within the same future. **No second queue. No composition. No serialization point.**
+`LazyRecordBatchIterator` keeps its own prefetch buffer with the **full monolithic pipeline** — same as today. It uses the shared helpers for the I/O/truncation/filter stages, then appends Arrow conversion within the same future. **No second queue. No serialization point.**
 
 ```cpp
 // cpp/arcticdb/arrow/arrow_output_frame.hpp
@@ -368,7 +288,6 @@ public:
     std::pair<ArrowArray, ArrowSchema> arrow_schema() const;
 
     // Expose slice metadata for column-slice merging (Step 3).
-    // Uses this iterator's own slice_and_keys_ vector (NOT via LazySegmentIterator).
     const pipelines::SliceAndKey& current_slice_and_key() const;
     const pipelines::SliceAndKey* peek_next_slice_and_key() const;
 
@@ -427,39 +346,26 @@ read_and_decode_segment()                  // shared helper — I/O + decode
 
 **Key files to modify:**
 - New: `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp` — shared free functions extracted from `arrow_output_frame.cpp`
-- New: `cpp/arcticdb/version/lazy_segment_iterator.hpp/cpp` — new iterator for non-Arrow consumers
 - `cpp/arcticdb/arrow/arrow_output_frame.hpp/cpp` — refactor `LazyRecordBatchIterator` to use shared helpers (prefetch structure unchanged)
-- `cpp/arcticdb/version/version_store_api.cpp:1061-1152` — constructor calls updated (same parameters, no wrapping)
-- `cpp/arcticdb/version/python_bindings.cpp:247-279` — expose `LazySegmentIterator` if needed for Polars
+- `cpp/arcticdb/version/version_store_api.cpp:1061-1152` — constructor calls updated (same parameters)
 
 ### Step 2: Add C++ Tests for the Lazy Path
 
 The current test suite has **zero C++ tests** for `LazyRecordBatchIterator` or the streaming read path. All testing is via Python. This is a risk.
 
-**Unit tests (`cpp/arcticdb/version/test/test_lazy_segment_iterator.cpp`):**
+**Shared helper unit tests (`cpp/arcticdb/version/test/test_lazy_read_helpers.cpp`):**
 
 | Test | What It Verifies |
 |------|-----------------|
-| `BasicIteration` | Write 5 segments via InMemoryStore, iterator returns all 5 |
-| `PrefetchBehavior` | prefetch_size controls concurrent reads (instrument store) |
-| `DateRangeTruncation` | Segments spanning [0,100), date_range=[25,75) truncates boundary segments |
-| `RowRangeTruncation` | row_range limits rows across segment boundaries |
-| `FilterClauseApplication` | WHERE clause filters rows within segments |
-| `EmptyAfterFilter` | All rows filtered out → segments skipped, returns nullopt |
-| `FilterOnMissingColumn_DynamicSchema` | Filter references column not in segment, `dynamic_schema_=true` → EmptyResult → skip |
-| `ColumnPruning` | 10 columns, decode only 3, verify others not materialized |
-| `EmptySymbol` | Symbol with 0 segments → has_next()=false immediately, descriptor still valid |
-| `SingleSegment` | Degenerate case: 1 segment, prefetch_size > 1 |
-| `ZeroRowAfterTruncation` | date_range outside segment range → segment skipped |
-| `EmptyvalColumns` | Segment with EMPTYVAL-typed field → decoded without crash |
+| `ReadAndDecode_Basic` | Write segment via InMemoryStore, `read_and_decode_segment()` returns decoded segment |
+| `ApplyTruncation_DateRange` | Segments spanning [0,100), date_range=[25,75) truncates boundary segments |
+| `ApplyTruncation_RowRange` | row_range limits rows across segment boundaries |
+| `ApplyTruncation_ZeroRow` | date_range outside segment range → zero-row segment |
+| `ApplyFilterClause_Basic` | WHERE clause filters rows within segments |
+| `ApplyFilterClause_EmptyResult` | All rows filtered out → returns false |
+| `ApplyFilterClause_MissingColumn_DynamicSchema` | Filter references column not in segment, `dynamic_schema_=true` → EmptyResult |
+| `ApplyFilterClause_FullResult` | All rows match → no filtering applied |
 | `SparseFloatWithTruncation` | Sparse column truncated mid-segment → bitmap and data consistent |
-
-**Memory behavior tests:**
-
-| Test | What It Verifies |
-|------|-----------------|
-| `BoundedMemory` | 100 segments, prefetch=5 → peak alloc ≈ O(prefetch × segment_size), not O(100 × segment_size) |
-| `SegmentLifetime` | Segments from earlier iterations freed when no longer referenced |
 
 **Arrow round-trip tests (`cpp/arcticdb/arrow/test/test_lazy_record_batch_iterator.cpp`):**
 
@@ -471,6 +377,15 @@ The current test suite has **zero C++ tests** for `LazyRecordBatchIterator` or t
 | `SparseFloatColumns` | Sparse columns produce correct Arrow validity bitmaps |
 | `ZeroRowStringSegment` | Zero-row segment with string columns → empty dict workaround triggers correctly |
 | `PrefetchOverlap` | Verify segment I/O overlaps with Arrow conversion (timing-based) |
+| `BasicIteration` | Write 5 segments via InMemoryStore, iterator returns all 5 in order |
+| `EmptySymbol` | 0 segments → has_next()=false immediately, descriptor still valid |
+| `SingleSegment` | Degenerate case: 1 segment, prefetch_size > 1 |
+| `ColumnPruning` | 10 columns, decode only 3, verify others not in output |
+| `PrefetchBehavior` | prefetch_size controls concurrent reads (instrument store) |
+| `BoundedMemory` | 100 segments, prefetch=5 → peak alloc ≈ O(prefetch × segment_size) |
+| `DateRangeTruncation_EndToEnd` | Segments spanning [0,100), date_range=[25,75) → correct Arrow output |
+| `FilterClause_EndToEnd` | WHERE clause filters rows, correct Arrow output |
+| `EmptyAfterFilter` | All rows filtered out → segments skipped, iterator exhausted |
 
 **Edge case tests that must exist before Steps 3–5:**
 
@@ -537,7 +452,7 @@ Peak memory during merge: `2 × row_group_arrow_size` (current merged + one inco
 
 **Index column deduplication**: The index column (column 0) appears in every slice. During merge, skip columns from subsequent slices that already exist in the merged batch. Match by column name. The eager path does this via `mark_index_slices()` / `fetch_index_` bitset; the Arrow merge uses name-based deduplication matching `_merge_slices_for_group()`'s approach.
 
-**Column ordering**: After merge, columns must match the merged descriptor's field order. The merged descriptor (`LazySegmentIterator::descriptor()`) defines the authoritative field ordering. Reorder the merged batch's columns to match.
+**Column ordering**: After merge, columns must match the merged descriptor's field order. The merged descriptor (`LazyRecordBatchIterator::descriptor()`) defines the authoritative field ordering. Reorder the merged batch's columns to match.
 
 **Same-row-group detection**: Must be more robust than Python's `_is_same_row_group()` which compares actual index column values (expensive for large batches). In C++, use `SliceAndKey` metadata directly:
 
@@ -595,7 +510,6 @@ Row group with 3 slices, each producing 2 blocks:
 **Key files:**
 - `cpp/arcticdb/arrow/arrow_output_frame.cpp` — merging logic in `LazyRecordBatchIterator::next()`
 - `cpp/arcticdb/arrow/arrow_utils.hpp` — helper `horizontal_merge_arrow_batches()`
-- `cpp/arcticdb/version/lazy_segment_iterator.hpp` — add `peek_next_slice_and_key()` for look-ahead
 
 ### Step 4: Schema Padding in C++ (Dynamic Schema)
 
@@ -605,7 +519,7 @@ With dynamic schema, different segments have different column subsets. Without p
 
 Currently solved in Python by `_pad_batch_to_schema()` (`arrow_reader.py:81-108`) which adds null columns for missing fields.
 
-**Approach:** Add schema padding to `LazyRecordBatchIterator` after Arrow conversion and column-slice merging. The iterator holds the merged `StreamDescriptor` (from `LazySegmentIterator::descriptor()`), which is the authoritative superset schema.
+**Approach:** Add schema padding to `LazyRecordBatchIterator` after Arrow conversion and column-slice merging. The iterator holds the merged `StreamDescriptor` (from its own `descriptor()` method, populated by `setup_pipeline_context()`), which is the authoritative superset schema.
 
 For each `RecordBatchData` produced (post-merge if column-sliced):
 1. Compare its schema against the target schema (derived from merged descriptor)
@@ -737,19 +651,19 @@ Deep analysis of every edge case in both read paths, whether the unified plan ha
 | 4 | **Sparse floats / validity bitmaps** | `backfill_all_zero_validity_bitmaps_up_to()` in `NullValueReducer` | `prepare_segment_for_arrow():292-300` extracts bitmap BEFORE `unsparsify()` | Stays in `LazyRecordBatchIterator` Arrow prefetch — no change needed |
 | 5 | **String dictionary encoding** | N/A (eager path doesn't use `SharedStringDictionary`) | `SharedStringDictionary` + `ArrowStringHandler` in `arrow_output_frame.cpp:62-202` | Stays in Arrow prefetch layer — no change needed |
 | 6 | **Multi-block segments (>64KB)** | Single frame, no blocks | `pending_batches_` deque drains blocks | Stays in `LazyRecordBatchIterator` — no change needed |
-| 7 | **Date range / row range truncation** | Via `ColumnMapping::set_truncate()` + `get_truncate_range()` | `apply_truncation()` binary search in prefetch future | Moves to `LazySegmentIterator` — no change in semantics |
-| 8 | **Filter → empty result** | N/A for lazy path | `bitset.count() == 0` → `EmptyResult` → skip segment | Moves to `LazySegmentIterator` — `next()` returns `nullopt` |
-| 9 | **Filter → full result** | N/A | `FullResult` variant → no filtering | Same — `LazySegmentIterator` passes segment through |
+| 7 | **Date range / row range truncation** | Via `ColumnMapping::set_truncate()` + `get_truncate_range()` | `apply_truncation()` binary search in prefetch future | Extracted to shared helper — no change in semantics |
+| 8 | **Filter → empty result** | N/A for lazy path | `bitset.count() == 0` → `EmptyResult` → skip segment | Extracted to shared helper — `next()` skips empty segments |
+| 9 | **Filter → full result** | N/A | `FullResult` variant → no filtering | Same — shared helper passes segment through |
 | 10 | **Empty symbols (0 segments)** | `frame.empty()` early return | `has_next()=false` immediately | No change — 0 slices → exhausted |
 | 11 | **Pickled data** | Handled in eager path | `!pipeline_context->multi_key_` rejection | No change — rejected before iterator |
-| 12 | **Column projection / pruning** | `overall_column_bitset_` | `columns_to_decode` set | Moves to `LazySegmentIterator` — same mechanism |
+| 12 | **Column projection / pruning** | `overall_column_bitset_` | `columns_to_decode` set | Same mechanism, passed to shared helpers |
 | 13 | **MultiIndex `__idx__` prefix** | Python `_denormalize()` | Python `_strip_idx_prefix_from_names()` | **Must preserve** in Step 6 cleanup |
 | 14 | **CPython 3.13 double `__iter__`** | N/A | `_iteration_started` flag | **Must preserve** in Step 6 cleanup |
 | 15 | **Boolean dense packing** | Handled by Sparrow | `arrow_utils.cpp:45-58` bool → bitset | Stays in Arrow conversion layer |
 | 16 | **Empty string dictionary** | N/A | `minimal_strings_for_dict()` adds dummy `"a"` | Stays in Arrow conversion layer |
 | 17 | **Appends** | Transparent — segments indistinguishable | Same | No change |
 | 18 | **Index deduplication across slices** | `mark_index_slices()` + `fetch_index_` bitset | Python name-based dedup in `_merge_slices_for_group()` | **Step 3** — C++ dedup by name during horizontal merge |
-| 19 | **Prefetch I/O parallelism** | N/A (eager is all-at-once) | Folly futures with prefetch buffer | `LazySegmentIterator` preserves this |
+| 19 | **Prefetch I/O parallelism** | N/A (eager is all-at-once) | Folly futures with prefetch buffer | Preserved — same prefetch pipeline in `LazyRecordBatchIterator` |
 | 20 | **GIL release** | `py::gil_scoped_release` before read | Same | No change |
 
 ### Edge Cases Requiring Plan Amendments
@@ -1026,7 +940,7 @@ reader = self._read_as_record_batch_reader(
 
 **Problem**: Count-based cap alone can OOM on wide tables. 200 segments × 400MB (wide table with many columns) = 80GB in prefetch, before Arrow conversion doubles it via `make_column_blocks_detachable()`.
 
-**Solution (Phase 1)**: Dual-cap backpressure. Both iterators use:
+**Solution (Phase 1)**: Dual-cap backpressure. `LazyRecordBatchIterator` uses:
 - `count_cap = min(max(prefetch_size, num_segments), 200)` — existing count limit
 - `byte_cap = max_prefetch_bytes` (default 4GB, configurable via constructor) — new byte limit
 - `fill_prefetch_buffer()` stops when EITHER cap is reached
@@ -1035,20 +949,17 @@ reader = self._read_as_record_batch_reader(
 
 ### Prefetch Memory Model
 
-Both iterators use the same dual-cap sizing for their independent prefetch buffers:
+`LazyRecordBatchIterator` uses dual-cap sizing for its prefetch buffer:
 
-| Iterator | Future Contents | Memory per Future |
-|----------|----------------|-------------------|
-| `LazySegmentIterator` | I/O + decode + truncate + filter → `SegmentInMemory` | `segment_size` |
-| `LazyRecordBatchIterator` | I/O + decode + truncate + filter + Arrow convert → `vector<RecordBatchData>` | `segment_size × ~2` (DETACHABLE copy) |
+| Future Contents | Memory per Future |
+|----------------|-------------------|
+| I/O + decode + truncate + filter + Arrow convert → `vector<RecordBatchData>` | `segment_size × ~2` (DETACHABLE copy) |
 
 **Peak memory formula**: `min(count_cap × segment_size, byte_cap) × detachable_factor`.
 
 For typical segments (≤40MB): count cap dominates, `min(num_segments, 200) × segment_size × 2` — same as today.
 For wide tables (400MB+ segments): byte cap dominates, `4GB × 2 = 8GB` — prevents OOM.
 Post-filter segments may be much smaller or empty.
-
-Note: Only one iterator is active per read operation. `LazyRecordBatchIterator` for Arrow consumers, `LazySegmentIterator` for non-Arrow consumers. They are never both prefetching the same data.
 
 ### Column-Slice Merging Memory
 
@@ -1079,22 +990,22 @@ Step 4 creates null arrays for missing columns in dynamic schema. Without cachin
 ## Dependency Graph and Priority
 
 ```
-Step 1 (extract LazySegmentIterator from LazyRecordBatchIterator)  ─┐
-                                                                │
-Step 2 (C++ tests for lazy path)  ─── independent ────────────┤
-                                                                │
-Step 3 (column-slice merging in C++) ── depends on 1 ─────────┤
-                                                                │
-Step 4 (schema padding in C++) ──────── depends on 1 ─────────┤
-                                                                │
-Step 5 (route Arrow/Polars reads) ───── depends on 3+4 ───────┤
-                                                                │
-Step 6 (simplify ArcticRecordBatchReader) ─ depends on 5 ─────┘
+Step 1 (extract helpers, refactor LazyRecordBatchIterator)  ───┐
+                                                               │
+Step 2 (C++ tests for lazy path)  ─── independent ───────────┤
+                                                               │
+Step 3 (column-slice merging in C++) ── depends on 1 ────────┤
+                                                               │
+Step 4 (schema padding in C++) ──────── depends on 1 ────────┤
+                                                               │
+Step 5 (route Arrow/Polars reads) ───── depends on 3+4 ──────┤
+                                                               │
+Step 6 (simplify ArcticRecordBatchReader) ─ depends on 5 ────┘
 ```
 
 | Priority | Step | Effort | Impact |
 |----------|------|--------|--------|
-| **P0** | Step 1: Extract `LazySegmentIterator` from `LazyRecordBatchIterator` | Medium-High | Architectural foundation; decouples I/O from Arrow; enables non-Arrow consumers |
+| **P0** | Step 1: Extract shared helpers, refactor `LazyRecordBatchIterator` + dual-cap backpressure | Medium | Architectural foundation; testable helpers; OOM protection for wide tables |
 | **P0** | Step 2: C++ tests for lazy path | Medium | Fills critical test gap; no C++ tests exist for this code path; required before any refactoring |
 | **P1** | Step 3: Column-slice merging in C++ | Medium | Prerequisite for unified Arrow output; eliminates Python merging |
 | **P1** | Step 4: Schema padding in C++ | Medium | Prerequisite for unified Arrow output; fixes type-widening bug |
@@ -1127,11 +1038,11 @@ These are details discovered during review that the implementer must handle:
 
 1. **`batch_read_uncompressed` returns `SegmentAndSlice`**, not `SegmentInMemory`. The segment is at `segment_and_slice.segment_in_memory_`. See `arrow_output_frame.cpp:389`.
 
-2. **`columns_to_decode` is already augmented** with filter input columns by `version_store_api.cpp:1117-1120` before the iterator is constructed. `LazySegmentIterator` receives the complete set and passes it through unchanged.
+2. **`columns_to_decode` is already augmented** with filter input columns by `version_store_api.cpp:1117-1120` before the iterator is constructed. `LazyRecordBatchIterator` receives the complete set and passes it through unchanged.
 
 3. **`RecordBatchData` wraps Arrow C Data Interface** (`ArrowArray` + `ArrowSchema`) via Sparrow. Constructed at `arrow_output_frame.cpp:407-411` from `sparrow::extract_arrow_structures()`. Move-only semantics.
 
-4. **`has_next()` in sibling architecture**: `LazyRecordBatchIterator` checks `!prefetch_buffer_.empty() || !pending_batches_.empty()` — same as today (no inner iterator to check). `LazySegmentIterator` checks `!prefetch_buffer_.empty()`.
+4. **`has_next()`**: `LazyRecordBatchIterator` checks `!prefetch_buffer_.empty() || !pending_batches_.empty()` — same as today.
 
 5. **Existing C++ test coverage for lazy path is ZERO**: 5 Arrow read tests exist (all for low-level `segment_to_arrow_data` / string handlers). No tests for `LazyRecordBatchIterator`, `apply_truncation`, `apply_filter_clause`, or `prepare_segment_for_arrow`. All lazy path testing is via Python. Phase 2 tests are critical safety net before any refactoring.
 
@@ -1214,7 +1125,7 @@ All results are saved to `docs/claude/plans/duckdb/benchmarks/` (committed to th
 
 ---
 
-### Phase 1: Extract Shared Helpers and Create `LazySegmentIterator` (Step 1)
+### Phase 1: Extract Shared Helpers and Refactor `LazyRecordBatchIterator` (Step 1)
 
 Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRecordBatchIterator` behaviour is preserved exactly. The Arrow path's prefetch pipeline structure is untouched except for adding dual-cap backpressure (count + bytes) to prevent OOM with wide tables.
 
@@ -1238,24 +1149,14 @@ Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRec
     - For typical segments (≤40MB), the count cap (200) triggers first — no behaviour change vs today
     - For wide tables (400MB+ segments), the byte cap prevents 200 × 400MB = 80GB OOM
 
-- [ ] **1.3 Create `LazySegmentIterator` class (header + implementation)**
-  - New files: `cpp/arcticdb/version/lazy_segment_iterator.hpp`, `cpp/arcticdb/version/lazy_segment_iterator.cpp`
-  - Uses the same shared helpers for its prefetch pipeline: `read_and_decode_segment → apply_truncation → apply_filter_clause`
-  - Own prefetch buffer: `deque<Future<optional<SegmentInMemory>>>`, same dual-cap sizing
-  - API: `next() → optional<SegmentInMemory>`, `has_next()`, `descriptor()`, `current_slice_and_key()`, `peek_next_slice_and_key()`, `num_segments()`
-  - Zero-row segments (filter removed all rows) return `nullopt`, caller skips
-  - Same dual-cap backpressure as `LazyRecordBatchIterator` (constructor takes `max_prefetch_bytes`, `fill_prefetch_buffer()` uses both caps)
-  - No new Python bindings yet — `LazySegmentIterator` is an internal C++ detail
-  - Register new `.cpp` in `CMakeLists.txt`
-
-- [ ] **1.4 Verify all existing tests pass**
+- [ ] **1.3 Verify all existing tests pass**
   - Run: `python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/`
   - Run: `cmake --build ... --target test_unit_arcticdb && ./test_unit_arcticdb --gtest_filter="Arrow*"`
   - This is a pure refactor — zero behaviour change. Any test failure means the extraction introduced a bug.
   - **Critical**: verify no throughput regression on the Arrow path. The monolithic prefetch pipeline in `LazyRecordBatchIterator` must be identical to before — same future depth, same overlap between I/O and `prepare_segment_for_arrow()`. For typical segments the dual-cap should behave identically to the old count-only cap.
 
-- [ ] **1.5 Update documentation**
-  - Update `docs/claude/cpp/ARROW.md`: document `lazy_read_helpers.hpp/cpp` shared helpers, `LazySegmentIterator` class
+- [ ] **1.4 Update documentation**
+  - Update `docs/claude/cpp/ARROW.md`: document `lazy_read_helpers.hpp/cpp` shared helpers
   - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 1 summary
 
 ---
@@ -1264,20 +1165,18 @@ Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRec
 
 Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These tests exercise the *existing* behaviour, serving as a regression safety net for later steps.
 
-- [ ] **2.1 `LazySegmentIterator` unit tests**
-  - New file: `cpp/arcticdb/version/test/test_lazy_segment_iterator.cpp`
+- [ ] **2.1 Shared helper unit tests**
+  - New file: `cpp/arcticdb/version/test/test_lazy_read_helpers.cpp`
   - Add to `CMakeLists.txt` under `test_unit_arcticdb` target
-  - Tests (each writes segments via InMemoryStore, reads back via iterator):
-    - `BasicIteration` — 5 segments, all returned in order
-    - `DateRangeTruncation` — segments spanning [0,100), date_range=[25,75)
-    - `RowRangeTruncation` — row_range limits across segment boundaries
-    - `FilterClauseApplication` — WHERE clause filters rows
-    - `EmptyAfterFilter` — all rows filtered → segments skipped
-    - `FilterOnMissingColumn_DynamicSchema` — filter column absent, `dynamic_schema_=true` → EmptyResult → skip
-    - `ColumnPruning` — 10 columns, decode only 3
-    - `EmptySymbol` — 0 segments → `has_next()=false`, descriptor valid
+  - Tests (each writes segments via InMemoryStore, exercises helpers directly):
+    - `ReadAndDecode_Basic` — write segment, decode via `read_and_decode_segment()`
+    - `ApplyTruncation_DateRange` — segments spanning [0,100), date_range=[25,75)
+    - `ApplyTruncation_RowRange` — row_range limits across segment boundaries
+    - `ApplyTruncation_ZeroRow` — date_range outside segment → zero-row segment
+    - `ApplyFilterClause_Basic` — WHERE clause filters rows
+    - `ApplyFilterClause_EmptyResult` — all rows filtered → returns false
+    - `ApplyFilterClause_MissingColumn_DynamicSchema` — filter column absent, `dynamic_schema_=true` → EmptyResult
     - `SparseFloatWithTruncation` — sparse column truncated mid-segment, verify bitmap correct
-    - `ZeroRowAfterTruncation` — date_range outside segment → skipped
 
 - [ ] **2.2 `LazyRecordBatchIterator` Arrow round-trip tests**
   - New file: `cpp/arcticdb/arrow/test/test_lazy_record_batch_iterator.cpp`
@@ -1291,7 +1190,7 @@ Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These 
     - `TypeWidening_IntToFloat` — int64 first segment, float64 second → both readable without crash (pre-Step 4: batches have their ORIGINAL types, not unified types — unification happens in Step 4)
 
 - [ ] **2.3 Verify all tests pass including new ones**
-  - `./test_unit_arcticdb --gtest_filter="LazySegment*:LazyRecordBatch*"`
+  - `./test_unit_arcticdb --gtest_filter="LazyReadHelpers*:LazyRecordBatch*"`
 
 - [ ] **2.4 Python integration: lazy-vs-eager comparison test**
   - New file: `python/tests/unit/arcticdb/version_store/duckdb/test_lazy_vs_eager.py`
@@ -1306,7 +1205,7 @@ Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These 
 After this commit, `LazyRecordBatchIterator` yields one merged batch per row group for column-sliced tables. Python `_merge_slices_for_group()` is still present but no longer exercised for the common path.
 
 - [ ] **3.1 Verify `peek_next_slice_and_key()` on `LazyRecordBatchIterator`**
-  - Already added in Step 1.2 — uses `LazyRecordBatchIterator`'s own `slice_and_keys_` vector (NOT via `LazySegmentIterator`)
+  - Already added in Step 1.2 — uses `LazyRecordBatchIterator`'s own `slice_and_keys_` vector
   - Verify it correctly peeks at the next unconsumed slice without advancing the iterator state
   - Column-slice merging in `next()` uses this to detect same-row-group slices
 
@@ -1619,11 +1518,13 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
 
 ### Open Questions — All Resolved
 
-1. ~~**Polars LazyFrame exposure**~~ — **DECIDED: defer.** `pl.from_arrow()` is already zero-copy from Arrow RecordBatches. A `SegmentInMemory` path would require `pl.from_numpy()` which *clones* data — strictly worse. `LazySegmentIterator` remains internal-only; the architecture diagram's "future Polars SegmentInMemory path" is aspirational and not needed for correctness or performance.
+1. ~~**Polars LazyFrame exposure**~~ — **DECIDED: defer.** `pl.from_arrow()` is already zero-copy from Arrow RecordBatches. A `SegmentInMemory` path would require `pl.from_numpy()` which *clones* data — strictly worse. Not needed for correctness or performance.
 
-2. ~~**`max_prefetch_bytes` backpressure**~~ — **DECIDED: implement in Phase 1.** Count-based cap alone is insufficient — 200 segments × 400MB (wide tables) = 80GB. Added dual-cap design to Phase 1 (Step 1.3): byte-based cap (default 4GB) alongside existing count-based cap (200). Whichever limit is reached first stops prefetching. Segment size estimated from `SliceAndKey` descriptor metadata. ~20 lines of C++. See Phase 1, Step 1.3 for details.
+2. ~~**`max_prefetch_bytes` backpressure**~~ — **DECIDED: implement in Phase 1.** Count-based cap alone is insufficient — 200 segments × 400MB (wide tables) = 80GB. Added dual-cap design to Phase 1 (Step 1.2): byte-based cap (default 4GB) alongside existing count-based cap (200). Whichever limit is reached first stops prefetching. Segment size estimated from `SliceAndKey` descriptor metadata. ~20 lines of C++. See Phase 1, Step 1.2 for details.
 
-3. ~~**`__idx__` stripping in C++**~~ — **DECIDED: keep in Python.** Measured cost: <1ms for 400 columns. PyArrow `rename_columns()` is a zero-copy metadata update. Moving to C++ adds complexity for no measurable gain.
+3. ~~**Separate `LazySegmentIterator`**~~ — **DECIDED: not needed.** Originally planned as a sibling iterator yielding `SegmentInMemory` for non-Arrow consumers. No consumer exists in this plan (Polars deferred, eager path untouched). The shared free functions (`read_and_decode_segment`, `apply_truncation`, `apply_filter_clause`) provide the reusable building blocks; a `LazySegmentIterator` can be trivially built from them if a consumer materializes later.
+
+4. ~~**`__idx__` stripping in C++**~~ — **DECIDED: keep in Python.** Measured cost: <1ms for 400 columns. PyArrow `rename_columns()` is a zero-copy metadata update. Moving to C++ adds complexity for no measurable gain.
 
 ---
 
