@@ -189,6 +189,31 @@ The Arrow conversion path has an inherent overhead vs the pandas path:
 
 At 10M rows (100 segments, 100K rows each), `prepare_segment_for_arrow()` accounts for ~90% of `lib.sql()` wall time. See profiling scripts in `python/benchmarks/non_asv/duckdb/` for detailed measurements.
 
+## Planned: Unified Lazy Read Path
+
+See `docs/claude/plans/duckdb/unified-lazy-read-path.md` for the full plan. Key architectural changes:
+
+### LazySegmentIterator (new sibling class)
+
+A new `LazySegmentIterator` yielding `SegmentInMemory` (not Arrow) will share prefetch/decode infrastructure with `LazyRecordBatchIterator` via extracted shared helpers:
+- `read_and_decode_segment()` → `folly::Future<SegmentAndSlice>`
+- `apply_truncation()` → modifies segment in place
+- `apply_filter_clause()` → returns false if all rows filtered
+
+These will be extracted to `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp`.
+
+### C++ Column-Slice Merging
+
+`LazyRecordBatchIterator::next()` will merge column slices for the same row group at the Arrow level, using Sparrow's zero-copy extraction chain: `record_batch::extract_struct_array()` → `arrow_proxy::children()` → `extract_array()`/`extract_schema()`. Note: uses `detail::array_access::get_arrow_proxy()` (Sparrow internal API).
+
+### C++ Schema Padding
+
+Schema padding (null arrays for missing columns in dynamic schema) will move from Python `_pad_batch_to_schema()` to C++, using the merged descriptor as the authoritative type source (fixing the type-widening bug where Python used first-batch types).
+
+### arrow_schema() Method
+
+`LazyRecordBatchIterator::arrow_schema()` will return the target Arrow schema (built from merged descriptor) via Arrow C Data Interface, enabling `ArcticRecordBatchReader.schema` to get the schema from C++ directly.
+
 ## Related Documentation
 
 - [PYTHON_BINDINGS.md](PYTHON_BINDINGS.md) — pybind11 binding details

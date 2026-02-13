@@ -475,6 +475,23 @@ Chronological summary of work done on the `duckdb` branch.
   - Weighted Average: 0.45s (278 rows)
 - **All 350 DuckDB tests pass**
 
+## 51. Unified Lazy Read Path — Plan Review & Amendments
+
+- Thorough review of `docs/claude/plans/duckdb/unified-lazy-read-path.md` — verified 19+ line-number claims against source code (18/19 accurate)
+- **Multi-key investigation**: Confirmed multi-key (recursive normalizer) is completely orthogonal to lazy reads; `setup_pipeline_context()` detects `MULTI_KEY` early, lazy iterator rejects with explicit error
+- **Filter+column projection correction**: Rewrote Amendment A — per-segment filtering runs BEFORE column-slice merging, so filter column only exists in one slice; workaround (`qb = None if columns is not None`) is structurally necessary and MUST be kept. Updated all contradictory references (sql() simplifications, Phase 6.2, performance table)
+- **Benchmark gaps fixed**:
+  - Added Phase 0.5 (baseline capture BEFORE refactoring) — all results saved to `docs/claude/plans/duckdb/benchmarks/` (committed to branch)
+  - Added Phase 7 C++ microbenchmarks: throughput (7 benchmarks), memory leak detection (5 benchmarks), CPU utilization (4 benchmarks) in new `benchmark_lazy_read.cpp`
+  - Added Phase 7 Python microbenchmarks: ASV `lazy_read.py` (3 benchmark classes) + stress tests `test_stress_lazy_read.py` (5 memory leak tests)
+- Fixed ASan build instructions (NOT enabled by default in `linux-debug` — needs `-DARCTICDB_USING_ADDRESS_SANITIZER=ON`)
+- Clarified `read_and_decode_segment()` returns `SegmentAndSlice` (with `RangesAndKey` metadata), not just `SegmentInMemory`; fixed `apply_truncation()` signature to include `slice_row_range`
+- Added `arrow_schema()` to `LazyRecordBatchIterator` class definition; added error handling guards for Step 5
+- Added Sparrow internal API risk note for `detail::array_access::get_arrow_proxy()`
+- Fixed `_DATATYPE_TO_ARROW` count (14, not 12), Key File References table
+- Updated `DUCKDB.md`: added Known Limitation sections for filter+column projection and multi-key
+- Updated `ARROW.md`: added Planned Unified Lazy Read Path section
+
 ---
 
 ## Open Items

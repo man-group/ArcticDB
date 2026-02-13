@@ -378,6 +378,18 @@ When the first segment has an integer column and a later append promotes it to f
 
 **Workaround**: Use float types from the start, or ensure all segments share the same numeric type.
 
+**Planned fix**: Phase 0.1 of `docs/claude/plans/duckdb/unified-lazy-read-path.md` — use descriptor type instead of first-batch type in `_ensure_schema()`. Phase 4 moves schema padding to C++ entirely, eliminating this class of bug.
+
+### Known Limitation: Filter Pushdown with Column Projection
+
+`library.py:2409-2415` disables `FilterClause` pushdown when `columns is not None`. This is **structurally necessary** (not a workaround): per-segment filtering in `apply_filter_clause()` runs BEFORE column-slice merging. The filter column exists in only one column slice per row group. Static schema raises `E_ASSERTION_FAILURE` on slices missing the filter column; dynamic schema silently returns `EmptyResult`, dropping all data from that slice.
+
+DuckDB handles the WHERE filter after column-slice merging reassembles complete rows, so correctness is preserved. This workaround must be kept even after C++ column-slice merging (Step 3 of the unified lazy read path plan) because merging happens at the Arrow level AFTER the per-segment prefetch pipeline.
+
+### Multi-Key (Recursive Normalizer) Data
+
+Multi-key data (nested dicts/lists written with `recursive_normalizers=True`) is **completely orthogonal** to the lazy read path. `setup_pipeline_context()` detects `KeyType::MULTI_KEY` at `version_core.cpp:1263-1265`, sets `pipeline_context->multi_key_`, and returns without populating `slice_and_keys_`. The lazy iterator rejects multi-key with an explicit error at `version_store_api.cpp:1085-1088`. Multi-key reads follow a separate eager path via `read_multi_key()` + Python-side `Flattener` reconstruction.
+
 ## Testing
 
 ```bash
