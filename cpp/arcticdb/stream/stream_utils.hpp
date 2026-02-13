@@ -157,11 +157,16 @@ inline entity::AtomKey read_key_row_impl(const SegmentInMemory& seg, ssize_t i) 
 
 inline entity::AtomKey read_key_row(const SegmentInMemory& seg, ssize_t i) {
     // TODO remove backwards compat after a decent interval
-    try {
+    // We differentiate between new and legacy fields based on the column with position 4:
+    // 4 = Fields::creation_ts = LegacyFields::index_type
+    // where creation_ts is 8 bytes but index_type is a single byte
+    constexpr auto pos = static_cast<uint32_t>(pipelines::index::Fields::creation_ts);
+    static_assert(pos == static_cast<uint32_t>(pipelines::index::LegacyFields::index_type));
+    if (ARCTICDB_LIKELY(get_type_size(seg.column(pos).type().data_type()) == 8)) {
         auto k = read_key_row_impl<pipelines::index::Fields>(seg, i);
         ARCTICDB_DEBUG(log::storage(), "Read key from row '{}: {}'", k.type(), k.view());
         return k;
-    } catch (const std::invalid_argument&) {
+    } else {
         auto k = read_key_row_impl<pipelines::index::LegacyFields>(seg, i);
         ARCTICDB_DEBUG(log::storage(), "Read legacy key from row '{}: {}'", k.type(), k.view());
         return k;
