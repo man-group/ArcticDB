@@ -178,7 +178,7 @@ When the first segment has `int64` and a later append promotes to `float64`:
 
 ### Key Design Decision: Sibling Iterators, Not Composition
 
-The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` — the entire pipeline (I/O → decode → truncate → filter → Arrow convert) runs inside a single prefetch future with cap=200.
+The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` — the entire pipeline (I/O → decode → truncate → filter → Arrow convert) runs inside a single prefetch future with count cap=200. This plan adds a byte-based cap (4GB default) alongside the count cap to prevent OOM with wide tables.
 
 **Why not composition (wrapping)?** An earlier version of this plan had `LazyRecordBatchIterator` wrap `LazySegmentIterator`, pulling `SegmentInMemory` from the inner iterator and dispatching Arrow conversion into a second prefetch queue. This introduces a **two-queue pipeline with a serialization point**: the Arrow conversion future can only be kicked off after the segment future resolves and `next()` is called. Today, Arrow conversion runs inside the same 200-deep prefetch pipeline as I/O, fully overlapping with storage latency. A wrapping architecture would either:
 
@@ -199,8 +199,11 @@ LazySegmentIterator                    LazyRecordBatchIterator
 │                      │               │ SINGLE future pipeline:      │
 │ Future pipeline:     │               │   I/O → decode → truncate →  │
 │   I/O → decode →     │               │   filter → Arrow convert     │
-│   truncate → filter  │               │   (same as today, cap=200)   │
-│   (cap=200)          │               │                              │
+│   truncate → filter  │               │                              │
+│                      │               │ Dual-cap backpressure:       │
+│ Dual-cap:            │               │   count ≤ 200                │
+│   count ≤ 200        │               │   bytes ≤ 4 GB (default)     │
+│   bytes ≤ 4 GB       │               │                              │
 │                      │               │ next() does:                 │
 │ For: future Polars   │               │   .get() on resolved future  │
 │ SegmentInMemory path,│               │   + column-slice merge       │
@@ -213,7 +216,7 @@ Shared free functions (used by both):
   apply_filter_clause(segment, expression_context, filter_root_node_name)
 ```
 
-**Trade-off**: The sibling approach duplicates prefetch buffer management (both classes have `deque<Future<...>>`, `fill_prefetch_buffer()`, same sizing logic). This is ~50 lines of structural duplication. The alternative — composition — would eliminate this duplication but at the cost of a measurable performance regression on the Arrow hot path. Given that Arrow read throughput is a primary goal of this plan, the duplication is the right trade-off.
+**Trade-off**: The sibling approach duplicates prefetch buffer management (both classes have `deque<Future<...>>`, `fill_prefetch_buffer()`, same dual-cap logic). This is ~50 lines of structural duplication. The alternative — composition — would eliminate this duplication but at the cost of a measurable performance regression on the Arrow hot path. Given that Arrow read throughput is a primary goal of this plan, the duplication is the right trade-off.
 
 **Code sharing surface**: The shared free functions contain the actual logic (I/O dispatch, truncation binary search, filter evaluation). The prefetch buffer management is boilerplate (`fill_prefetch_buffer` loop, `next()` drain loop) that is structurally similar but differs in the future's return type (`optional<SegmentInMemory>` vs `vector<RecordBatchData>`). A template or CRTP base class could eliminate this duplication, but adds abstraction complexity for minimal gain — prefer keeping both classes concrete and simple.
 
@@ -221,9 +224,9 @@ Shared free functions (used by both):
 
 ## Memory Model (Summary)
 
-**Prefetch**: Keep existing behavior — `effective_prefetch = min(max(prefetch_size, num_segments), 200)`. Both `LazyRecordBatchIterator` and `LazySegmentIterator` use this same sizing for their respective prefetch buffers. `LazyRecordBatchIterator` runs the full pipeline (including Arrow conversion) inside each prefetch future — same as today, no two-tier change. See "Memory Model (Detailed)" section below for analysis including column-slice merging memory, DETACHABLE optimization, and null-array caching.
+**Prefetch**: Dual-cap backpressure — `count_cap = min(max(prefetch_size, num_segments), 200)` AND `byte_cap = max_prefetch_bytes` (default 4GB). Whichever limit is reached first stops prefetching. Both `LazyRecordBatchIterator` and `LazySegmentIterator` use this same dual-cap sizing for their respective prefetch buffers. `LazyRecordBatchIterator` runs the full pipeline (including Arrow conversion) inside each prefetch future — same as today, no two-tier change. See "Memory Model (Detailed)" section below for analysis including column-slice merging memory, DETACHABLE optimization, and null-array caching.
 
-**Peak memory** ≈ `prefetch_size × segment_size × 2` (DETACHABLE copy factor) — same as today.
+**Peak memory** ≈ `min(count_cap × segment_size, byte_cap) × 2` (DETACHABLE copy factor). For typical segments (≤40MB), the count cap dominates as before. For wide tables (400MB+ segments), the byte cap limits memory to ~8GB instead of 160GB.
 
 **Column-slice merging**: Arrow-level incremental merge in `next()` on consumer thread. Peak = `2 × row_group_arrow_size` (current merged + one incoming slice). Avoids string pool merging entirely.
 
@@ -282,7 +285,8 @@ public:
         FilterRange row_filter,
         std::shared_ptr<ExpressionContext> expression_context,
         std::string filter_root_node_name,
-        size_t prefetch_size  // same cap: min(max(prefetch_size, num_segments), 200)
+        size_t prefetch_size,          // count cap: min(max(prefetch_size, num_segments), 200)
+        size_t max_prefetch_bytes = 4ULL << 30  // byte cap: 4 GB default
     );
 
     // Returns the next decoded+filtered segment, or nullopt if exhausted.
@@ -306,17 +310,19 @@ private:
     std::shared_ptr<ExpressionContext> expression_context_;
     std::string filter_root_node_name_;
     size_t prefetch_size_;
+    size_t max_prefetch_bytes_;
 
     // Prefetch buffer: I/O + decode + truncate + filter only (no Arrow)
     std::deque<folly::Future<std::optional<SegmentInMemory>>> prefetch_buffer_;
     size_t next_prefetch_index_ = 0;
     size_t current_index_ = 0;
+    size_t current_prefetch_bytes_ = 0;  // sum of estimated uncompressed bytes in flight
     const pipelines::SliceAndKey* current_sak_ = nullptr;
 
     // Pipeline: read_and_decode_segment → apply_truncation → apply_filter_clause
     folly::Future<std::optional<SegmentInMemory>>
     read_decode_and_filter_segment(size_t idx);
-    void fill_prefetch_buffer();
+    void fill_prefetch_buffer();  // dual-cap: stops when count OR bytes exceeded
 };
 ```
 
@@ -345,7 +351,8 @@ public:
         FilterRange row_filter,
         std::shared_ptr<ExpressionContext> expression_context,
         std::string filter_root_node_name,
-        size_t prefetch_size  // same cap: min(max(prefetch_size, num_segments), 200)
+        size_t prefetch_size,          // count cap: min(max(prefetch_size, num_segments), 200)
+        size_t max_prefetch_bytes = 4ULL << 30  // byte cap: 4 GB default
     );
 
     std::optional<RecordBatchData> next();
@@ -374,18 +381,20 @@ private:
     std::shared_ptr<ExpressionContext> expression_context_;
     std::string filter_root_node_name_;
     size_t prefetch_size_;
+    size_t max_prefetch_bytes_;
 
     // SINGLE prefetch buffer: full pipeline in each future (same as today)
     std::deque<folly::Future<std::vector<RecordBatchData>>> prefetch_buffer_;
     std::deque<RecordBatchData> pending_batches_;  // multi-block drain
     size_t next_prefetch_index_ = 0;
     size_t current_index_ = 0;
+    size_t current_prefetch_bytes_ = 0;  // sum of estimated uncompressed bytes in flight
     const pipelines::SliceAndKey* current_sak_ = nullptr;
 
     // Full pipeline: read_and_decode → truncate → filter → Arrow convert
     folly::Future<std::vector<RecordBatchData>>
     read_decode_filter_and_convert_segment(size_t idx);
-    void fill_prefetch_buffer();
+    void fill_prefetch_buffer();  // dual-cap: stops when count OR bytes exceeded
 };
 ```
 
@@ -401,7 +410,7 @@ read_and_decode_segment()                  // shared helper — I/O + decode
     → return vector<RecordBatchData>
 ```
 
-**Why this preserves throughput**: The Arrow path's prefetch pipeline is unchanged — same monolithic future, same depth (cap=200), same overlap between I/O and `prepare_segment_for_arrow()`. The consumer's `next()` does `.get()` on an already-resolved future, exactly as today. Steps 3 and 4 add column-slice merging and schema padding to `next()`, but these are zero-copy pointer operations (see Step 3).
+**Why this preserves throughput**: The Arrow path's prefetch pipeline is unchanged — same monolithic future, same overlap between I/O and `prepare_segment_for_arrow()`. The consumer's `next()` does `.get()` on an already-resolved future, exactly as today. Steps 3 and 4 add column-slice merging and schema padding to `next()`, but these are zero-copy pointer operations (see Step 3). The dual-cap (count=200, bytes=4GB) replaces the old count-only cap — for typical segment sizes (≤40MB) the count cap dominates as before; for wide tables with large segments, the byte cap prevents OOM.
 
 **Edge cases handled correctly:**
 - String handling, sparse floats, multi-block segments: inside prefetch future (unchanged)
@@ -1015,22 +1024,29 @@ reader = self._read_as_record_batch_reader(
 
 **Current behavior**: `version_store_api.cpp:1133-1140` sets `effective_prefetch = min(max(prefetch_size, num_segments), 200)`. This fires up to 200 concurrent reads to hide storage latency.
 
-**Problem**: 200 decoded segments in flight can OOM on large symbols. A 100K-row segment with 50 float64 columns ≈ 40MB. 200 segments = 8GB in prefetch alone, before Arrow conversion doubles it via `make_column_blocks_detachable()`.
+**Problem**: Count-based cap alone can OOM on wide tables. 200 segments × 400MB (wide table with many columns) = 80GB in prefetch, before Arrow conversion doubles it via `make_column_blocks_detachable()`.
+
+**Solution (Phase 1)**: Dual-cap backpressure. Both iterators use:
+- `count_cap = min(max(prefetch_size, num_segments), 200)` — existing count limit
+- `byte_cap = max_prefetch_bytes` (default 4GB, configurable via constructor) — new byte limit
+- `fill_prefetch_buffer()` stops when EITHER cap is reached
+- Segment size estimated from `SliceAndKey` descriptor metadata
+- `next()` decrements `current_prefetch_bytes_` when consuming a resolved future
 
 ### Prefetch Memory Model
 
-Uses existing prefetch sizing unchanged: `effective_prefetch = min(max(prefetch_size, num_segments), 200)`.
-
-Both iterators use the same sizing for their independent prefetch buffers:
+Both iterators use the same dual-cap sizing for their independent prefetch buffers:
 
 | Iterator | Future Contents | Memory per Future |
 |----------|----------------|-------------------|
 | `LazySegmentIterator` | I/O + decode + truncate + filter → `SegmentInMemory` | `segment_size` |
 | `LazyRecordBatchIterator` | I/O + decode + truncate + filter + Arrow convert → `vector<RecordBatchData>` | `segment_size × ~2` (DETACHABLE copy) |
 
-**Peak memory formula**: `prefetch_size × segment_size × detachable_factor` — same as today.
+**Peak memory formula**: `min(count_cap × segment_size, byte_cap) × detachable_factor`.
 
-For LMDB with small symbol: `min(num_segments, 200) × segment_size × 2`. Post-filter segments may be much smaller or empty.
+For typical segments (≤40MB): count cap dominates, `min(num_segments, 200) × segment_size × 2` — same as today.
+For wide tables (400MB+ segments): byte cap dominates, `4GB × 2 = 8GB` — prevents OOM.
+Post-filter segments may be much smaller or empty.
 
 Note: Only one iterator is active per read operation. `LazyRecordBatchIterator` for Arrow consumers, `LazySegmentIterator` for non-Arrow consumers. They are never both prefetching the same data.
 
@@ -1200,7 +1216,7 @@ All results are saved to `docs/claude/plans/duckdb/benchmarks/` (committed to th
 
 ### Phase 1: Extract Shared Helpers and Create `LazySegmentIterator` (Step 1)
 
-Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRecordBatchIterator` behaviour is preserved exactly. The Arrow path's prefetch pipeline is untouched.
+Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRecordBatchIterator` behaviour is preserved exactly. The Arrow path's prefetch pipeline structure is untouched except for adding dual-cap backpressure (count + bytes) to prevent OOM with wide tables.
 
 - [ ] **1.1 Extract shared free functions into `lazy_read_helpers.hpp/cpp`**
   - New files: `cpp/arcticdb/version/lazy_read_helpers.hpp`, `cpp/arcticdb/version/lazy_read_helpers.cpp`
@@ -1208,19 +1224,27 @@ Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRec
   - These are pure functions with no iterator state — they take a segment/store/params and return a result
   - Register new `.cpp` in `CMakeLists.txt`
 
-- [ ] **1.2 Refactor `LazyRecordBatchIterator` to use shared helpers**
+- [ ] **1.2 Refactor `LazyRecordBatchIterator` to use shared helpers + dual-cap backpressure**
   - `arrow_output_frame.hpp/cpp` — replace inline I/O + decode + truncate + filter code with calls to the shared helpers
-  - **Prefetch pipeline structure is UNCHANGED** — same `deque<Future<vector<RecordBatchData>>>`, same monolithic future (I/O → decode → truncate → filter → Arrow convert), same cap=200 sizing
+  - **Prefetch pipeline structure is UNCHANGED** — same `deque<Future<vector<RecordBatchData>>>`, same monolithic future (I/O → decode → truncate → filter → Arrow convert)
   - `pending_batches_` deque for multi-block segments stays as-is
   - Add `current_slice_and_key()` and `peek_next_slice_and_key()` methods (needed for Step 3 column-slice merging)
-  - This is a pure extraction refactor — the code runs identically, just calls helpers instead of inline logic
+  - **Add dual-cap backpressure** to `fill_prefetch_buffer()`:
+    - New constructor param: `max_prefetch_bytes` (default 4GB)
+    - New member: `current_prefetch_bytes_` — tracks estimated uncompressed bytes in flight
+    - `fill_prefetch_buffer()` stops when EITHER `prefetch_buffer_.size() >= prefetch_size_` OR `current_prefetch_bytes_ >= max_prefetch_bytes_`
+    - Segment size estimate from `slice_and_keys_[idx]` descriptor metadata (row_count × col_count × avg_type_size)
+    - `next()` decrements `current_prefetch_bytes_` when consuming a resolved future
+    - For typical segments (≤40MB), the count cap (200) triggers first — no behaviour change vs today
+    - For wide tables (400MB+ segments), the byte cap prevents 200 × 400MB = 80GB OOM
 
 - [ ] **1.3 Create `LazySegmentIterator` class (header + implementation)**
   - New files: `cpp/arcticdb/version/lazy_segment_iterator.hpp`, `cpp/arcticdb/version/lazy_segment_iterator.cpp`
   - Uses the same shared helpers for its prefetch pipeline: `read_and_decode_segment → apply_truncation → apply_filter_clause`
-  - Own prefetch buffer: `deque<Future<optional<SegmentInMemory>>>`, same sizing (cap=200)
+  - Own prefetch buffer: `deque<Future<optional<SegmentInMemory>>>`, same dual-cap sizing
   - API: `next() → optional<SegmentInMemory>`, `has_next()`, `descriptor()`, `current_slice_and_key()`, `peek_next_slice_and_key()`, `num_segments()`
   - Zero-row segments (filter removed all rows) return `nullopt`, caller skips
+  - Same dual-cap backpressure as `LazyRecordBatchIterator` (constructor takes `max_prefetch_bytes`, `fill_prefetch_buffer()` uses both caps)
   - No new Python bindings yet — `LazySegmentIterator` is an internal C++ detail
   - Register new `.cpp` in `CMakeLists.txt`
 
@@ -1228,7 +1252,7 @@ Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRec
   - Run: `python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/`
   - Run: `cmake --build ... --target test_unit_arcticdb && ./test_unit_arcticdb --gtest_filter="Arrow*"`
   - This is a pure refactor — zero behaviour change. Any test failure means the extraction introduced a bug.
-  - **Critical**: verify no throughput regression on the Arrow path. The monolithic prefetch pipeline in `LazyRecordBatchIterator` must be identical to before — same future depth, same overlap between I/O and `prepare_segment_for_arrow()`.
+  - **Critical**: verify no throughput regression on the Arrow path. The monolithic prefetch pipeline in `LazyRecordBatchIterator` must be identical to before — same future depth, same overlap between I/O and `prepare_segment_for_arrow()`. For typical segments the dual-cap should behave identically to the old count-only cap.
 
 - [ ] **1.5 Update documentation**
   - Update `docs/claude/cpp/ARROW.md`: document `lazy_read_helpers.hpp/cpp` shared helpers, `LazySegmentIterator` class
@@ -1593,13 +1617,13 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
 
 ---
 
-### Open Questions (resolve before starting Phase 1)
+### Open Questions — All Resolved
 
-1. **Polars LazyFrame exposure**: Should `LazySegmentIterator` be exposed via Python bindings for direct Polars consumption (bypassing Arrow), or defer to a future step? *Recommendation: defer — Polars can consume Arrow via the unified `LazyRecordBatchIterator`. `LazySegmentIterator` is internal-only for now (not exposed via Python bindings); the architecture diagram's "future Polars SegmentInMemory path" remains aspirational.*
+1. ~~**Polars LazyFrame exposure**~~ — **DECIDED: defer.** `pl.from_arrow()` is already zero-copy from Arrow RecordBatches. A `SegmentInMemory` path would require `pl.from_numpy()` which *clones* data — strictly worse. `LazySegmentIterator` remains internal-only; the architecture diagram's "future Polars SegmentInMemory path" is aspirational and not needed for correctness or performance.
 
-2. ~~**`max_prefetch_bytes` backpressure**~~ — **DECIDED: defer.** Keep existing count-based cap (200). Add byte-based backpressure later if OOM reports come in.
+2. ~~**`max_prefetch_bytes` backpressure**~~ — **DECIDED: implement in Phase 1.** Count-based cap alone is insufficient — 200 segments × 400MB (wide tables) = 80GB. Added dual-cap design to Phase 1 (Step 1.3): byte-based cap (default 4GB) alongside existing count-based cap (200). Whichever limit is reached first stops prefetching. Segment size estimated from `SliceAndKey` descriptor metadata. ~20 lines of C++. See Phase 1, Step 1.3 for details.
 
-3. **`__idx__` stripping in C++**: Should Step 6 move `__idx__` prefix stripping from Python to C++? *Recommendation: no — it's a naming convention, Python is the right place. Moving it to C++ adds complexity for no performance gain.*
+3. ~~**`__idx__` stripping in C++**~~ — **DECIDED: keep in Python.** Measured cost: <1ms for 400 columns. PyArrow `rename_columns()` is a zero-copy metadata update. Moving to C++ adds complexity for no measurable gain.
 
 ---
 
@@ -1618,7 +1642,7 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
 | `cpp/arcticdb/arrow/arrow_utils.cpp` | 103–105 | `minimal_strings_for_dict()` — empty dict workaround |
 | `cpp/arcticdb/arrow/arrow_utils.cpp` | 295–310 | `segment_to_arrow_data()` — zero-row handling |
 | `cpp/arcticdb/version/version_store_api.cpp` | 1061–1152 | `create_lazy_record_batch_iterator()` — lazy path setup |
-| `cpp/arcticdb/version/version_store_api.cpp` | 1133–1140 | prefetch size calculation (cap=200) |
+| `cpp/arcticdb/version/version_store_api.cpp` | 1133–1140 | prefetch size calculation (count cap=200; byte cap added in Phase 1) |
 | `cpp/arcticdb/version/version_store_api.cpp` | 1045–1059 | `read_dataframe_version()` — eager path entry |
 | `cpp/arcticdb/version/version_core.cpp` | 2061–2088 | `do_direct_read_or_process()` — eager read/process fork |
 | `cpp/arcticdb/version/version_core.cpp` | 2647–2694 | `setup_pipeline_context()` — shared setup |

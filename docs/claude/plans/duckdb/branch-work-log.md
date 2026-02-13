@@ -492,6 +492,16 @@ Chronological summary of work done on the `duckdb` branch.
 - Updated `DUCKDB.md`: added Known Limitation sections for filter+column projection and multi-key
 - Updated `ARROW.md`: added Planned Unified Lazy Read Path section
 
+## 52. Resolve Open Questions & Add Dual-Cap Backpressure
+
+- Resolved all 3 open questions in the unified lazy read path plan:
+  - **Polars**: DECIDED defer — `pl.from_arrow()` is already zero-copy; a `SegmentInMemory` path would use `pl.from_numpy()` which clones data (strictly worse)
+  - **`__idx__` stripping**: DECIDED keep in Python — <1ms cost for 400 columns, `rename_columns()` is zero-copy metadata update
+  - **Byte-based backpressure**: DECIDED implement in Phase 1 — count-based cap alone insufficient for wide tables (200 × 400MB = 80GB OOM)
+- Added dual-cap backpressure design to both `LazySegmentIterator` and `LazyRecordBatchIterator` class definitions: `max_prefetch_bytes` constructor param (default 4GB), `current_prefetch_bytes_` tracking, `fill_prefetch_buffer()` dual-cap logic
+- Updated architecture diagram, Memory Model (Summary + Detailed), Phase 1 Steps 1.2 and 1.3
+- Updated `ARROW.md` with new "Dual-Cap Prefetch Backpressure" section
+
 ---
 
 ## Open Items

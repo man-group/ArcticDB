@@ -202,6 +202,15 @@ A new `LazySegmentIterator` yielding `SegmentInMemory` (not Arrow) will share pr
 
 These will be extracted to `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp`.
 
+### Dual-Cap Prefetch Backpressure
+
+Both iterators use dual-cap backpressure to prevent OOM with wide tables:
+- Count cap: `min(max(prefetch_size, num_segments), 200)` (existing)
+- Byte cap: `max_prefetch_bytes` (default 4GB, new)
+- `fill_prefetch_buffer()` stops when EITHER cap is reached
+- For typical segments (≤40MB), the count cap dominates — no behaviour change
+- For wide tables (400MB+ segments), the byte cap prevents 200 × 400MB = 80GB OOM
+
 ### C++ Column-Slice Merging
 
 `LazyRecordBatchIterator::next()` will merge column slices for the same row group at the Arrow level, using Sparrow's zero-copy extraction chain: `record_batch::extract_struct_array()` → `arrow_proxy::children()` → `extract_array()`/`extract_schema()`. Note: uses `detail::array_access::get_arrow_proxy()` (Sparrow internal API).
