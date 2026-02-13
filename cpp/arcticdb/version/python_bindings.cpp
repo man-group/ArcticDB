@@ -1141,7 +1141,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         ankerl::unordered_dense::set<std::string_view> cols{
                                 read_query->columns->cbegin(), read_query->columns->cend()
                         };
-                        // Add in index columns
+                        // Always include index columns, so that the invariant:
+                        // lazy_df.collect_schema() == lazy_df.collect().data.schema
+                        // is maintained. In polarctic we can drop index columns if they are not in with_columns.
                         auto num_index_levels =
                                 pipelines::index::required_fields_count(stream_desc, schema.norm_metadata_);
                         for (size_t idx = 0; idx < num_index_levels; ++idx) {
