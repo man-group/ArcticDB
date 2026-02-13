@@ -1378,28 +1378,6 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
     return results;
 }
 
-RecordBatchData PythonVersionStore::_modify_schema(
-        const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options
-) const {
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
-            preloaded_index_query->index_key_.type() == KeyType::TABLE_INDEX,
-            "collect_schema() not supported with recursively normalized data"
-    );
-    const auto& tsd = preloaded_index_query->index_seg_.index_descriptor();
-    auto schema = modify_schema({tsd.as_stream_descriptor().clone(), tsd.normalization()}, read_query->clauses_);
-    const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
-        if (read_query->columns.has_value()) {
-            return ankerl::unordered_dense::set<std::string_view>{
-                    read_query->columns->cbegin(), read_query->columns->cend()
-            };
-        } else {
-            return std::nullopt;
-        }
-    }();
-    return arrow_schema_from_descriptor(schema.stream_descriptor(), read_options.arrow_output_config(), columns);
-}
-
 DescriptorItem PythonVersionStore::read_descriptor(
         const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
 ) {

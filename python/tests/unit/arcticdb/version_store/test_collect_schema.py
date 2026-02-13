@@ -45,6 +45,32 @@ def test_collect_schema_basic(lmdb_library):
     assert schema == pl.from_arrow(table).schema
 
 
+def test_collect_schema_multiindex(lmdb_library):
+    lib = lmdb_library
+    lib._nvs.set_output_format(OutputFormat.POLARS)
+    sym = "test_collect_schema_multiindex"
+    # Unnamed, no column selection
+    idx = pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=2), np.arange(2, dtype=np.int32)])
+    df = pd.DataFrame(
+        {"col1": np.arange(len(idx), dtype=np.int8), "col2": np.arange(len(idx), dtype=np.uint16)}, index=idx
+    )
+    lib.write(sym, df)
+    assert lib.read(sym, lazy=True).collect_schema() == lib.read(sym).data.schema
+    # Unnamed with column selection
+    assert lib.read(sym, columns=["col2"], lazy=True).collect_schema() == lib.read(sym, columns=["col2"]).data.schema
+    # Named, no column selection
+    idx = pd.MultiIndex.from_product(
+        [pd.date_range("2025-01-01", periods=2), np.arange(2, dtype=np.int32)], names=["ts", "ints"]
+    )
+    df = pd.DataFrame(
+        {"col1": np.arange(len(idx), dtype=np.int8), "col2": np.arange(len(idx), dtype=np.uint16)}, index=idx
+    )
+    lib.write(sym, df)
+    assert lib.read(sym, lazy=True).collect_schema() == lib.read(sym).data.schema
+    # Named with column selection
+    assert lib.read(sym, columns=["col2"], lazy=True).collect_schema() == lib.read(sym, columns=["col2"]).data.schema
+
+
 def test_collect_schema_string_types(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
@@ -85,12 +111,20 @@ def test_collect_schema_column_filtering(lmdb_library):
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_basic"
-    table = pa.table({"col1": pa.array([0], pa.int64()), "col2": pa.array([1], pa.float32())})
+    table = pa.table(
+        {
+            "col1": pa.array([0], pa.int64()),
+            "col2": pa.array([1], pa.float32()),
+            "col3": pa.array([2], pa.int8()),
+            "col4": pa.array([3], pa.uint16()),
+            "col5": pa.array([4], pa.float64()),
+        }
+    )
     lib.write(sym, table)
 
-    lazy_df = lib.read(sym, columns=["col2"], lazy=True)
+    lazy_df = lib.read(sym, columns=["col2", "col4", "col5"], lazy=True)
     schema = lazy_df.collect_schema()
-    expected_schema = pl.from_arrow(table).select(pl.col("col2")).schema
+    expected_schema = pl.from_arrow(table).select(["col2", "col4", "col5"]).schema
     assert schema == expected_schema
 
 
@@ -105,15 +139,15 @@ def test_collect_schema_timeseries(lmdb_library):
     # Unnamed, no column selection
     lib.write(sym, df)
     schema = lib.read(sym, lazy=True).collect_schema()
-    assert schema == pl.Schema([("index", pl.Datetime("ns")), ("col1", pl.Int64), ("col2", pl.Float32)])
+    assert schema == pl.Schema([("__index__", pl.Datetime("ns")), ("col1", pl.Int64), ("col2", pl.Float32)])
     # Named, no column selection
     df.index.name = "ts"
     lib.write(sym, df)
     schema = lib.read(sym, lazy=True).collect_schema()
     assert schema == pl.Schema([("ts", pl.Datetime("ns")), ("col1", pl.Int64), ("col2", pl.Float32)])
-    # With column selection. Note the index column is dropped, as this will be the behaviour Polars expects
+    # With column selection
     schema = lib.read(sym, columns=["col2"], lazy=True).collect_schema()
-    assert schema == pl.Schema([("col2", pl.Float32)])
+    assert schema == pl.Schema([("ts", pl.Datetime("ns")), ("col2", pl.Float32)])
 
 
 def test_collect_schema_with_query(lmdb_library):
@@ -197,10 +231,10 @@ def test_collect_schema_and_collect_multiple_times(s3_library):
         assert_frame_equal_with_arrow(df, received_df)
 
 
-def test_collect_schema_multiindex(lmdb_library):
+def test_collect_schema_recursive_normalizers(lmdb_library):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
-    sym = "test_collect_schema_multiindex"
+    sym = "test_collect_schema_recursive_normalizers"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.float32)},
     )

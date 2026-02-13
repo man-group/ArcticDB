@@ -528,15 +528,13 @@ class LazyDataFrame(QueryBuilder):
         )
         self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment)
         read_request = self._to_read_request()
-        record_batch = self.lib._nvs._modify_schema(
+        return self.lib._nvs._modify_schema(
             self._preloaded_index,
             columns=read_request.columns,
             query_builder=read_request.query_builder,
             arrow_string_format_default=read_request.arrow_string_format_default,
             arrow_string_format_per_column=read_request.arrow_string_format_per_column,
         )
-        record_batch = pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema())
-        return pl.Schema(record_batch.schema)
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()

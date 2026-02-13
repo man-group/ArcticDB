@@ -475,12 +475,15 @@ RecordBatchData arrow_schema_from_descriptor(
         const StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
 ) {
-    // The column filtering is done here rather than in the calling function for efficiency, so we only have to iterate
-    // the fields once, and not construct an intermediate FieldCollection that would then be immediately discarded
+    // The logic here is similar to empty_arrow_array_for_column, but there the string format is dictated by the
+    // column's buffers, whereas here we rely on the ArrowOutputConfig
     const auto& default_string_format = arrow_output_config.default_string_format_;
     const auto& per_column_string_format = arrow_output_config.per_column_string_format_;
     sparrow::record_batch record_batch;
     for (const auto& field : stream_desc.fields()) {
+        // The column filtering is done here rather than in the calling function for efficiency, so we only have to
+        // iterate the fields once, and not construct an intermediate FieldCollection that would then be immediately
+        // discarded
         if (!columns.has_value() || columns->contains(field.name())) {
             auto arr = details::visit_scalar(field.type(), [&](auto&& tdt) {
                 using TagType = std::decay_t<decltype(tdt)>;

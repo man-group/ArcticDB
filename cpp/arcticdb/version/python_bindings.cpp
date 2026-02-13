@@ -862,11 +862,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::flush_version_map,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Flush the version cache")
-            // TODO: Put this somewhere else
-            .def("_modify_schema",
-                 &PythonVersionStore::_modify_schema,
-                 py::call_guard<SingleThreadMutexHolder>(),
-                 "Apply processing operations to a descriptor and return the resulting schema.")
             .def("read_descriptor",
                  &PythonVersionStore::read_descriptor,
                  py::arg("stream_id"),
@@ -1127,6 +1122,41 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
 
     version.def("read_dataframe_from_file", &read_dataframe_from_file);
+
+    version.def(
+            "_modify_schema",
+            [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query,
+               const std::shared_ptr<ReadQuery>& read_query,
+               const ReadOptions& read_options) -> std::pair<RecordBatchData, py::object> {
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                        preloaded_index_query->index_key_.type() == KeyType::TABLE_INDEX,
+                        "collect_schema() not supported with recursively normalized data"
+                );
+                const auto& tsd = preloaded_index_query->index_seg_.index_descriptor();
+                auto schema =
+                        modify_schema({tsd.as_stream_descriptor().clone(), tsd.normalization()}, read_query->clauses_);
+                const auto& stream_desc = schema.stream_descriptor();
+                const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
+                    if (read_query->columns.has_value()) {
+                        ankerl::unordered_dense::set<std::string_view> cols{
+                                read_query->columns->cbegin(), read_query->columns->cend()
+                        };
+                        // Add in index columns
+                        auto num_index_levels =
+                                pipelines::index::required_fields_count(stream_desc, schema.norm_metadata_);
+                        for (size_t idx = 0; idx < num_index_levels; ++idx) {
+                            cols.insert(stream_desc.field(idx).name());
+                        }
+                        return cols;
+                    } else {
+                        return std::nullopt;
+                    }
+                }();
+                auto record_batch =
+                        arrow_schema_from_descriptor(stream_desc, read_options.arrow_output_config(), columns);
+                return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
+            }
+    );
 }
 
 } // namespace arcticdb::version_store

@@ -61,7 +61,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name, PreloadedIndexQuery as _PreloadedIndexQuery
-from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction
+from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat, MergeAction, _modify_schema
 from arcticdb.options import (
     RuntimeOptions,
     OutputFormat,
@@ -3649,7 +3649,10 @@ class NativeVersionStore:
         # Take a copy as _get_read_query can modify the input argument, which makes reusing the input counter-intuitive
         query_builder = copy.deepcopy(query_builder)
         read_query = self._get_read_query(date_range=None, row_range=None, columns=columns, query_builder=query_builder)
-        return self.version_store._modify_schema(preloaded_index, read_query, read_options)
+        record_batch, norm = _modify_schema(preloaded_index, read_query, read_options)
+        record_batch = pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema())
+        data = self._normalizer.denormalize(pa.Table.from_batches([record_batch]), norm)
+        return pl.Schema(data.schema)
 
     def _get_info(self, symbol: str, version: Optional[VersionQueryInput] = None, **kwargs):
         version_query = self._get_version_query(version, **kwargs)

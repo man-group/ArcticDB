@@ -143,11 +143,6 @@ class PythonVersionStore : public LocalVersionedEngine {
             const BatchReadOptions& batch_read_options
     );
 
-    RecordBatchData _modify_schema(
-            const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query,
-            const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
-    ) const;
-
     DescriptorItem read_descriptor(
             const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
     );
