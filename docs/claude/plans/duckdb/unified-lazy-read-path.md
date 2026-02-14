@@ -1309,13 +1309,14 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
 
 - [ ] **3.4 C++ tests for column-slice merging**
   - Add to `test_lazy_record_batch_iterator.cpp`:
-    - `ColumnSliceMerge_TwoSlices` — 200 columns → 2 slices merged into 1 batch
-    - `ColumnSliceMerge_FourSlices` — 500 columns → 4 slices merged
+  - **Use small segment sizes** to trigger column slicing without large data: `columns_per_segment=5` with 12-15 columns and `rows_per_segment=20` with 40-60 rows. This gives 2-3 column slices × 2-3 row groups — enough to exercise merging while keeping tests fast (~microseconds).
+    - `ColumnSliceMerge_TwoSlices` — 12 columns, `columns_per_segment=5` → 2 data slices + index, merged into 1 batch (20 rows)
+    - `ColumnSliceMerge_FourSlices` — 22 columns, `columns_per_segment=5` → 4 data slices + index, merged (20 rows)
     - `ColumnSliceMerge_IndexDeduplication` — index column not duplicated in output
-    - `ColumnSliceMerge_SingleSlice` — narrow table → no merging, passthrough
+    - `ColumnSliceMerge_SingleSlice` — 4 columns, `columns_per_segment=5` → no merging, passthrough
     - `ColumnSliceMerge_ColumnOrdering` — output column order matches descriptor
-    - `ColumnSliceMerge_WithProjection` — projected subset of wide table
-    - `ColumnSliceMerge_MixedTypes` — numeric + string + timestamp columns
+    - `ColumnSliceMerge_WithProjection` — projected subset selecting columns from different slices
+    - `ColumnSliceMerge_MixedTypes` — numeric + string + timestamp columns across slices
 
 - [ ] **3.4b Sparrow zero-copy validation and memory safety tests**
   - **Must run under ASan** (`-fsanitize=address`). The `linux-debug` preset should already include ASan. If not, add a CMake option or use a dedicated ASan preset.
@@ -1333,8 +1334,9 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
     - `HorizontalMerge_ReleaseIdempotent` — Call release on merged batch, verify calling release again is safe (release sets itself to `nullptr`, second call is a no-op per Arrow C Data Interface spec).
 
   **End-to-end memory correctness through the full pipeline:**
-    - `ColumnSliceMerge_ASan_FullPipeline` — Write a wide table (200+ cols), read back through `LazyRecordBatchIterator` with merging enabled, consume all batches, destroy iterator. Run under ASan. This is the most important test: exercises the real code path, not a unit-test mock.
-    - `ColumnSliceMerge_PartialConsume_NoLeak` — Create iterator over wide table, consume only 2 of 10 row groups, destroy iterator. Remaining prefetched/merged batches must be released cleanly. ASan detects leaks.
+  Use small segment sizes (`columns_per_segment=5`, `rows_per_segment=10`) to create multiple column slices and row groups with minimal data.
+    - `ColumnSliceMerge_ASan_FullPipeline` — Write table with 15 columns and 50 rows (`columns_per_segment=5, rows_per_segment=10` → 3 column slices × 5 row groups), read back through `LazyRecordBatchIterator` with merging enabled, consume all batches, destroy iterator. Run under ASan.
+    - `ColumnSliceMerge_PartialConsume_NoLeak` — Same table, consume only 2 of 5 row groups, destroy iterator. Remaining prefetched/merged batches must be released cleanly. ASan detects leaks.
 
   **How to run under ASan:**
   ```bash
@@ -1348,8 +1350,9 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
 
 - [ ] **3.5 Python integration test for wide table via sql()**
   - Add to `test_arctic_duckdb.py`:
-    - Write 400-column table, `lib.sql("SELECT * FROM sym")` — verify all columns present, correct values
-    - Write 400-column table with column projection, `lib.sql("SELECT col1, col200, col399 FROM sym")` — verify correct
+  - Use `columns_per_segment=10` with 30 columns and 40 rows (`rows_per_segment=20`) to create 3 column slices × 2 row groups — exercises C++ merging without large data.
+    - Write 30-column table (`columns_per_segment=10`), `lib.sql("SELECT * FROM sym")` — verify all columns present, correct values across slice boundaries
+    - Same table with column projection, `lib.sql("SELECT f0, f15, f28 FROM sym")` — columns from different slices, verify correct
   - Existing Python tests must still pass (Python merging code is still present but now redundant for this path)
 
 - [ ] **3.6 Verify all tests pass**
@@ -1428,14 +1431,15 @@ After this commit, `lib.read(output_format='pyarrow')` uses streaming instead of
   - Ensure `py::gil_scoped_release` is held during iterator construction (already the case)
 
 - [ ] **5.4 Test: `lib.read(output_format='pyarrow')` functional correctness**
-  - Numeric, string, dynamic schema, wide table, date_range, empty symbol
+  - Numeric, string, dynamic schema, wide table (`columns_per_segment=10`, 30 cols, 40 rows), date_range, empty symbol
   - Compare output to eager path result for each case
   - Add to `python/tests/unit/arcticdb/version_store/duckdb/test_lazy_streaming.py`
 
 - [ ] **5.5 Test: memory bounded**
-  - Write 100-segment symbol (100K rows × 10 float64 cols each = ~80MB per segment)
-  - `lib.read(output_format='pyarrow')` — peak RSS should be ≤ `8 × segment_size` (~640MB), NOT `100 × segment_size` (~8GB)
+  - Use `rows_per_segment=50` with 500 rows × 10 float64 cols → 10 segments. Small per-segment size (~4KB) but enough segments to verify peak memory is O(prefetch) not O(total_segments).
+  - `lib.read(output_format='pyarrow')` — peak RSS growth should be proportional to prefetch window, not total symbol size
   - Can use `/proc/self/status` VmRSS tracking or `tracemalloc` for the Python side
+  - Note: this is a functional correctness test for memory bounding, not a stress test. Phase 7 benchmarks use larger data for actual memory profiling.
 
 - [ ] **5.6 Test: pandas path NOT regressed**
   - `lib.read()` (default pandas format) throughput benchmark before/after
@@ -1483,6 +1487,8 @@ Cleanup commit. Removes ~258 lines of dead Python code. Note: the filter pushdow
 ### Phase 7: Benchmarks and Validation
 
 Verification that performance invariants hold. Includes C++ microbenchmarks, Python microbenchmarks, and ASV regression tests.
+
+**Note on data sizes**: Unlike correctness tests (Phases 2-6) which use small `rows_per_segment`/`columns_per_segment` to trigger segmentation cheaply, benchmarks intentionally use large data to measure real-world throughput and memory profiles. The sizes below are appropriate for benchmarking only.
 
 #### 7A. C++ Microbenchmarks for Memory and CPU
 
