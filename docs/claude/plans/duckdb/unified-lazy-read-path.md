@@ -4,6 +4,8 @@
 
 The C++ read path has two parallel flows that share `setup_pipeline_context()` then diverge completely. The lazy iterator built for DuckDB is strictly more general than the eager path for Arrow output, and is exactly what Polars LazyFrame needs. Unifying these paths would reduce duplication, simplify the Python `sql()` interface, and give Polars/Arrow reads streaming (bounded-memory) semantics for free.
 
+> **Design rationale**: See [lazy-vs-eager-analysis.md](lazy-vs-eager-analysis.md) for a detailed analysis of why a dual-path approach (eager for pandas, lazy iterator for Arrow/DuckDB) is preferred over making the existing eager pipeline lazy. Key finding: the eager path's pre-allocated scatter-write pattern provides 2-4x performance advantage for pandas that cannot be preserved in a streaming model.
+
 ---
 
 ## Current Architecture: Two Divergent Paths
