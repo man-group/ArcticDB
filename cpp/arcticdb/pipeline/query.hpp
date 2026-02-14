@@ -39,9 +39,19 @@ struct SpecificVersionQuery {
     bool iterate_snapshots_if_tombstoned;
 };
 
+struct PreloadedIndexQuery {
+    PreloadedIndexQuery(AtomKey index_key, SegmentInMemory index_seg) :
+        index_key_(std::move(index_key)),
+        index_seg_(std::move(index_seg)) {}
+
+    // Key is just needed for constructing the VersionedItem to return
+    entity::AtomKey index_key_;
+    SegmentInMemory index_seg_;
+};
+
 using VersionQueryType = std::variant<
         std::monostate, // Represents "latest"
-        SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery>;
+        SnapshotVersionQuery, TimestampVersionQuery, SpecificVersionQuery, std::shared_ptr<PreloadedIndexQuery>>;
 
 struct VersionQuery {
     VersionQueryType content_;
@@ -54,6 +64,10 @@ struct VersionQuery {
 
     void set_version(SignedVersionId version, bool iterate_snapshots_if_tombstoned) {
         content_ = SpecificVersionQuery{version, iterate_snapshots_if_tombstoned};
+    }
+
+    void set_preloaded_index(std::shared_ptr<PreloadedIndexQuery> preloaded_index_query) {
+        content_ = preloaded_index_query;
     }
 };
 
@@ -428,6 +442,9 @@ struct formatter<VersionQuery> {
                 },
                 [&ctx](const SnapshotVersionQuery& s) { return fmt::format_to(ctx.out(), "snapshot '{}'", s.name_); },
                 [&ctx](const TimestampVersionQuery& t) { return fmt::format_to(ctx.out(), "{}", t.timestamp_); },
+                [&ctx](const std::shared_ptr<arcticdb::PreloadedIndexQuery>& p) {
+                    return fmt::format_to(ctx.out(), "PreloadedIndexQuery({})", p->index_key_);
+                },
                 [&ctx](const std::monostate&) { return fmt::format_to(ctx.out(), "latest"); }
         );
     }

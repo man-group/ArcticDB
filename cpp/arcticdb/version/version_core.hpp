@@ -23,6 +23,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/version/version_tasks.hpp>
 #include <string>
 
 namespace arcticdb::version_store {
@@ -141,12 +142,12 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc);
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 );
 
 folly::Future<SymbolProcessingResult> read_and_process(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 );
@@ -191,15 +192,14 @@ folly::Future<VersionedItem> read_modify_write_impl(
 );
 
 folly::Future<VersionedItem> merge_update_impl(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        const ReadOptions& read_options, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, std::vector<std::string>&& on, const MergeStrategy& strategy,
-        std::shared_ptr<InputFrame> source
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        ReadQuery& read_query, const ReadOptions& read_options
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
+        const ReadOptions& read_options
 );
 } // namespace arcticdb::version_store
 

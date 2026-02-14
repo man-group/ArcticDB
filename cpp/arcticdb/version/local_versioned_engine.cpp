@@ -392,6 +392,11 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
             [&stream_id, &version_query, this](const TimestampVersionQuery& timestamp) {
                 return get_version_at_time(stream_id, timestamp.timestamp_, version_query);
             },
+            [](const std::shared_ptr<PreloadedIndexQuery>&) {
+                util::raise_rte("get_version_to_read shouldn't be called with PreloadedIndexQuery input");
+                // Avoid control reaches end of non-void function style compilation errors
+                return std::optional<VersionedItem>();
+            },
             [&stream_id, this](const std::monostate&) { return get_latest_version(stream_id); }
     );
 }
@@ -404,7 +409,7 @@ IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, cons
     return index::get_index_segment_range(version->key_, store());
 }
 
-std::variant<VersionedItem, StreamId> get_version_identifier(
+VersionIdentifier get_version_identifier(
         const StreamId& stream_id, const VersionQuery& version_query, const ReadOptions& read_options,
         const std::optional<VersionedItem>& version
 ) {
@@ -428,8 +433,16 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         const ReadOptions& read_options, std::any& handler_data
 ) {
     py::gil_scoped_release release_gil;
-    auto version = get_version_to_read(stream_id, version_query);
-    const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
+    const auto identifier = util::variant_match(
+            version_query.content_,
+            [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
+                return {preloaded_index_query};
+            },
+            [&](const auto&) -> VersionIdentifier {
+                auto version = get_version_to_read(stream_id, version_query);
+                return get_version_identifier(stream_id, version_query, read_options, version);
+            }
+    );
 
     auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
     auto& keys = root_result.frame_and_descriptor_.keys_;
@@ -491,9 +504,9 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     return versioned_item;
 }
 
-folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
+folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, bool include_index_segment) {
     const auto key = std::move(k);
-    return store()->read(key).thenValue([](auto&& key_seg_pair) -> DescriptorItem {
+    return store()->read(key).thenValue([include_index_segment](auto&& key_seg_pair) -> DescriptorItem {
         auto key = to_atom(std::move(key_seg_pair.first));
         auto seg = std::move(key_seg_pair.second);
         std::optional<TimeseriesDescriptor> timeseries_descriptor;
@@ -527,7 +540,11 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) 
                     }
             );
         }
-        return DescriptorItem{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
+        DescriptorItem descriptor_item{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
+        if (include_index_segment) {
+            descriptor_item.index_segment_ = std::move(seg);
+        }
+        return descriptor_item;
     });
 }
 
@@ -549,7 +566,7 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
 }
 
 DescriptorItem LocalVersionedEngine::read_descriptor_internal(
-        const StreamId& stream_id, const VersionQuery& version_query
+        const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
 ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
     auto version = get_version_to_read(stream_id, version_query);
@@ -559,7 +576,7 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
             stream_id,
             version_query
     );
-    return get_descriptor(std::move(version->key_)).get();
+    return get_descriptor(std::move(version->key_), include_index_segment).get();
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(
@@ -1411,10 +1428,7 @@ auto unpack_symbol_processing_results(std::vector<SymbolProcessingResult>&& symb
 std::shared_ptr<PipelineContext> setup_join_pipeline_context(
         std::vector<OutputSchema>&& input_schemas, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
-    auto output_schema = clauses.front()->join_schemas(std::move(input_schemas));
-    for (const auto& clause : clauses) {
-        output_schema = clause->modify_schema(std::move(output_schema));
-    }
+    auto output_schema = modify_schema(clauses.front()->join_schemas(std::move(input_schemas)), clauses);
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->set_descriptor(output_schema.stream_descriptor());
     pipeline_context->norm_meta_ =
