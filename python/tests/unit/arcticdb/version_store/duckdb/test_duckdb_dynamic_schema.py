@@ -231,8 +231,12 @@ class TestWideTableColumnSliceMerging:
     """
 
     @staticmethod
-    def _write_wide_symbol(lib, n_rows=1000, n_cols=200, symbol="wide"):
-        """Write a wide table that will be split into multiple column slices."""
+    def _write_wide_symbol(lib, n_rows=20, n_cols=140, symbol="wide"):
+        """Write a wide table that will be split into multiple column slices.
+
+        Defaults produce 140 columns (>127 per-slice default) → 2 column slices,
+        with only 20 rows to keep test execution fast.
+        """
         rng = np.random.default_rng(42)
         dates = pd.date_range("2024-01-01", periods=n_rows, freq="min")
         data = {f"f{i}": rng.standard_normal(n_rows) for i in range(n_cols - 5)}
@@ -256,7 +260,7 @@ class TestWideTableColumnSliceMerging:
     def test_filter_on_late_column(self, lmdb_library):
         """WHERE filter on a column in a later slice works correctly.
 
-        With 200 columns and 127 per slice, columns s0-s4 (indices 195-199)
+        With 140 columns and 127 per slice, columns s0-s4 (indices 135-139)
         are in the second slice. The filter must still see the real data.
         """
         lib = lmdb_library
@@ -305,12 +309,12 @@ class TestWideTableColumnSliceMerging:
     def test_wide_table_data_integrity(self, lmdb_library):
         """Verify that column data is not corrupted by slice merging."""
         lib = lmdb_library
-        df = self._write_wide_symbol(lib, n_rows=100, n_cols=200)
+        df = self._write_wide_symbol(lib)
 
         result = lib.sql("SELECT * FROM wide ORDER BY Date")
 
-        # Check several columns from different slices
-        for col in ["f0", "f50", "f126", "f127", "f150", "s0", "s4"]:
+        # Check columns from both slices: f0-f126 are in slice 0, f127+ and s* are in slice 1
+        for col in ["f0", "f50", "f126", "f127", "f130", "s0", "s4"]:
             pd.testing.assert_series_equal(
                 result[col].reset_index(drop=True),
                 df[col].reset_index(drop=True),

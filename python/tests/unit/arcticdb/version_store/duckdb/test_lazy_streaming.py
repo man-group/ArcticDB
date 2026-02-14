@@ -147,23 +147,26 @@ class TestLazyRecordBatchIterator:
         assert list(result_latest["x"]) == [10, 20, 30]
         assert list(result_v0["x"]) == [1, 2, 3]
 
-    def test_lazy_multiple_segments(self, lmdb_library):
+    def test_lazy_multiple_segments(self, lmdb_library_factory):
         """Lazy streaming works correctly when data spans multiple storage segments."""
-        lib = lmdb_library
+        from arcticdb.options import LibraryOptions
 
-        # Write a larger DataFrame that should span multiple segments
-        n_rows = 100_000
+        lib = lmdb_library_factory(LibraryOptions(rows_per_segment=50))
+
+        # 200 rows with rows_per_segment=50 → 4 segments
+        n_rows = 200
+        rng = np.random.default_rng(42)
         df = pd.DataFrame(
             {
                 "id": np.arange(n_rows),
-                "value": np.random.default_rng(42).standard_normal(n_rows),
-                "category": np.random.default_rng(42).choice(["A", "B", "C", "D"], n_rows),
+                "value": rng.standard_normal(n_rows),
+                "category": rng.choice(["A", "B", "C", "D"], n_rows),
             }
         )
-        lib.write("large_sym", df)
+        lib.write("sym", df)
 
         result = lib.sql(
-            "SELECT category, COUNT(*) as cnt, AVG(value) as avg_val FROM large_sym GROUP BY category ORDER BY category"
+            "SELECT category, COUNT(*) as cnt, AVG(value) as avg_val FROM sym GROUP BY category ORDER BY category"
         )
 
         assert len(result) == 4
