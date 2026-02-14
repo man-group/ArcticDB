@@ -216,7 +216,7 @@ Shared free functions (extracted from arrow_output_frame.cpp):
 
 **Prefetch**: Dual-cap backpressure — `count_cap = min(max(prefetch_size, num_segments), 200)` AND `byte_cap = max_prefetch_bytes` (default 4GB). Whichever limit is reached first stops prefetching. `LazyRecordBatchIterator` runs the full pipeline (including Arrow conversion) inside each prefetch future — same as today, no two-tier change. See "Memory Model (Detailed)" section below for analysis including column-slice merging memory, DETACHABLE optimization, and null-array caching.
 
-**Peak memory** ≈ `min(count_cap × segment_size, byte_cap) × 2` (DETACHABLE copy factor). For typical segments (≤40MB), the count cap dominates as before. For wide tables (400MB+ segments), the byte cap limits memory to ~8GB instead of 160GB.
+**Peak memory** ≈ `min(count_cap × segment_size, byte_cap) × 1` (after Phase 2 DETACHABLE optimization; currently `× 2` due to DYNAMIC → DETACHABLE copy). For typical segments (≤40MB), the count cap dominates as before. For wide tables (400MB+ segments), the byte cap limits memory to ~4GB instead of 160GB.
 
 **Column-slice merging**: Arrow-level incremental merge in `next()` on consumer thread. Peak = `2 × row_group_arrow_size` (current merged + one incoming slice). Avoids string pool merging entirely.
 
@@ -288,7 +288,7 @@ If the lazy path passes `AllocationType::DETACHABLE`, decompression writes direc
 | Column-slice merging | **Yes** | Struct-level composition, no buffer copies |
 | Schema padding (existing cols) | **Yes** | Reference counted |
 
-The lazy path is well aligned with Arrow's zero-copy benefits. After decompression (which is unavoidable for any compressed storage system), data flows to the consumer without copies — provided the DETACHABLE optimization is applied.
+The lazy path is well aligned with Arrow's zero-copy benefits. After decompression (which is unavoidable for any compressed storage system), data flows to the consumer without copies — once Phase 2 (DETACHABLE optimization) is applied.
 
 ---
 
@@ -1016,7 +1016,7 @@ reader = self._read_as_record_batch_reader(
 
 **Problem**: Count-based cap alone can OOM on wide tables. 200 segments × 400MB (wide table with many columns) = 80GB in prefetch, before Arrow conversion doubles it via `make_column_blocks_detachable()`.
 
-**Solution (Phase 1)**: Dual-cap backpressure. `LazyRecordBatchIterator` uses:
+**Solution (Phase 3)**: Dual-cap backpressure. `LazyRecordBatchIterator` uses:
 - `count_cap = min(max(prefetch_size, num_segments), 200)` — existing count limit
 - `byte_cap = max_prefetch_bytes` (default 4GB, configurable via constructor) — new byte limit
 - `fill_prefetch_buffer()` stops when EITHER cap is reached
@@ -1049,11 +1049,23 @@ For a 400-column table with 4 column slices per row group:
 
 This is better than holding all 4 slices simultaneously (`4 × row_group_arrow_size`).
 
-### DETACHABLE Block Optimization (Future)
+### DETACHABLE Block Optimization (Phase 2)
 
 `make_column_blocks_detachable()` copies every column buffer DYNAMIC → DETACHABLE, costing 1 memcpy per column per segment (~2x peak memory per segment during conversion).
 
-**Optimization** (orthogonal to this plan): Pass `AllocationType::DETACHABLE` through `DecodeSliceTask` so decompression targets externally-allocated blocks directly. Eliminates the copy entirely. See [Zero-Copy Analysis](#zero-copy-analysis-lazy-path-data-flow) for the full copy trace and implementation details.
+**This optimization is included in Phase 2** because:
+
+1. **Trivially small change** — add `AllocationType` parameter to `DecodeSliceTask`, pass `DETACHABLE` when caller is `LazyRecordBatchIterator`. The decode path (`codec.cpp:553`) already accepts `AllocationType`. ~10 lines of C++ changed.
+2. **Eliminates the only avoidable copy** in the lazy path data flow (see [Zero-Copy Analysis](#zero-copy-analysis-lazy-path-data-flow)). After this, the path from decompression to DuckDB/Polars/PyArrow is fully zero-copy.
+3. **Halves peak memory per prefetch future** — from `segment_size × 2` to `segment_size × 1`, because the intermediate DYNAMIC buffer is never allocated.
+4. **Performance impact is workload-dependent**:
+   - **Numeric-heavy data**: ~8x speedup for Arrow conversion (`make_column_blocks_detachable` is 87% of wall time for numeric — eliminated entirely)
+   - **String-heavy data (CTA-like)**: ~25% speedup (memcpy is ~0.5s of ~2s per segment; string dictionary encoding dominates the remainder)
+   - **Narrow tables**: Smaller absolute gains but same relative improvement
+5. **Zero risk to eager path** — the eager path continues using `DYNAMIC` allocation (it decodes into a pre-allocated frame via `allocate_frame()`, not individual segments). Only the lazy iterator's `DecodeSliceTask` changes.
+6. **Orthogonal to other phases** — can land independently before or after any refactoring step. No dependency on Steps 1-6.
+
+See [Zero-Copy Analysis](#zero-copy-analysis-lazy-path-data-flow) for the full copy trace and implementation details.
 
 ### Schema Padding Null Array Caching
 
@@ -1081,6 +1093,7 @@ Step 6 (simplify ArcticRecordBatchReader) ─ depends on 5 ────┘
 
 | Priority | Step | Effort | Impact |
 |----------|------|--------|--------|
+| **P0** | Phase 2: DETACHABLE block optimization | Low | Eliminates only avoidable copy; halves peak memory; up to 8x speedup for numeric Arrow reads |
 | **P0** | Step 1: Extract shared helpers, refactor `LazyRecordBatchIterator` + dual-cap backpressure | Medium | Architectural foundation; testable helpers; OOM protection for wide tables |
 | **P0** | Step 2: C++ tests for lazy path | Medium | Fills critical test gap; no C++ tests exist for this code path; required before any refactoring |
 | **P1** | Step 3: Column-slice merging in C++ | Medium | Prerequisite for unified Arrow output; eliminates Python merging |
@@ -1092,12 +1105,14 @@ Step 6 (simplify ArcticRecordBatchReader) ─ depends on 5 ────┘
 
 ## Performance Invariants
 
-These must hold after each step. Benchmark against the Phase 0.5 baseline (captured before any refactoring).
+These must hold after each step. Benchmark against the Phase 0 baseline (captured before any refactoring).
 
 | Invariant | Metric | Acceptable Threshold |
 |-----------|--------|---------------------|
 | Pandas read not regressed | `lib.read(format='pandas')` throughput | ≤ 2% regression |
 | Arrow throughput preserved | `lib.sql("SELECT * ...")` throughput | ≤ 5% regression (Step 1), improvement (Steps 3-5) |
+| DETACHABLE speedup (numeric) | `lib.read(format='pyarrow')` on numeric data | ≥ 3x improvement (Phase 2) |
+| DETACHABLE memory halved | `lib.read(format='pyarrow')` peak RSS per segment | ≤ `1 × segment_size` (vs current `2 × segment_size`) |
 | Memory bounded | `lib.read(format='pyarrow')` peak RSS | ≤ `8 × segment_size` (vs current `symbol_size`) |
 | Wide table improved | `lib.sql()` on 400-column table | ≥ 2x improvement (Steps 3-5 vs Python merging) |
 | DuckDB string queries | `lib.sql()` with string-heavy data | No regression (SharedStringDictionary preserved) |
@@ -1106,7 +1121,7 @@ These must hold after each step. Benchmark against the Phase 0.5 baseline (captu
 
 ## Implementation Checklist
 
-Ordered, commit-sized work items. Each item is self-consistent: existing tests pass at every commit boundary. Phase ordering: **0 → 0.5 → 1 → 2 → 3 → 4 → 5 → 6 → 7**. Phase 0.5 (baseline benchmarks) MUST run before Phase 1 begins.
+Ordered, commit-sized work items. Each item is self-consistent: existing tests pass at every commit boundary. Phase ordering: **0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9**. Phase 0 (baseline benchmarks) runs first — before any code changes — to establish the true pre-optimization baseline.
 
 ### Implementation Notes (from code review)
 
@@ -1120,9 +1135,9 @@ These are details discovered during review that the implementer must handle:
 
 4. **`has_next()`**: `LazyRecordBatchIterator` checks `!prefetch_buffer_.empty() || !pending_batches_.empty()` — same as today.
 
-5. **Existing C++ test coverage for lazy path is ZERO**: 5 Arrow read tests exist (all for low-level `segment_to_arrow_data` / string handlers). No tests for `LazyRecordBatchIterator`, `apply_truncation`, `apply_filter_clause`, or `prepare_segment_for_arrow`. All lazy path testing is via Python. Phase 2 tests are critical safety net before any refactoring.
+5. **Existing C++ test coverage for lazy path is ZERO**: 5 Arrow read tests exist (all for low-level `segment_to_arrow_data` / string handlers). No tests for `LazyRecordBatchIterator`, `apply_truncation`, `apply_filter_clause`, or `prepare_segment_for_arrow`. All lazy path testing is via Python. Phase 4 tests are critical safety net before any refactoring.
 
-6. **Python test gaps to fill in Phase 0/2**: No tests for integer type widening (int32→int64) via SQL, sparse columns created via append + SQL, or wide tables (>127 cols) with append. These should be added alongside the C++ tests.
+6. **Python test gaps to fill in Phase 1/2**: No tests for integer type widening (int32→int64) via SQL, sparse columns created via append + SQL, or wide tables (>127 cols) with append. These should be added alongside the C++ tests.
 
 7. **`segment_to_arrow_data` returns `shared_ptr<vector<sparrow::record_batch>>`** (see [`arrow_utils.hpp:30`](../../../../cpp/arcticdb/arrow/arrow_utils.hpp#L30)). The conversion to `RecordBatchData` happens via `sparrow::extract_arrow_structures()` on each record batch. This is where the Arrow C Data Interface ownership transfer occurs.
 
@@ -1136,7 +1151,7 @@ These are details discovered during review that the implementer must handle:
          → child_proxy.extract_array()           // extracts ArrowArray by value (ownership transfer, O(1))
          → child_proxy.extract_schema()          // extracts ArrowSchema by value (ownership transfer, O(1))
    ```
-   Reconstruction via `record_batch(ArrowArray&&, ArrowSchema&&)` constructor. Each step is a move — column data buffers stay in place. **Risk**: the parent `ArrowArray`'s `release` callback must only free the `children` pointer array, not recurse into children (which own their own release callbacks). Getting this wrong causes double-frees. Must be validated under ASan. See Phase 3 tests for required assertions.
+   Reconstruction via `record_batch(ArrowArray&&, ArrowSchema&&)` constructor. Each step is a move — column data buffers stay in place. **Risk**: the parent `ArrowArray`'s `release` callback must only free the `children` pointer array, not recurse into children (which own their own release callbacks). Getting this wrong causes double-frees. Must be validated under ASan. See Phase 5 tests for required assertions.
 
 10. **Multi-key data is orthogonal to lazy reads**: The read pipeline detects `KeyType::MULTI_KEY` at [`version_core.cpp:1263-1265`](../../../../cpp/arcticdb/version/version_core.cpp#L1263-L1265) (in `read_indexed_keys_to_pipeline`), sets `pipeline_context->multi_key_`, and `setup_pipeline_context()` returns early at [`version_core.cpp:2664-2666`](../../../../cpp/arcticdb/version/version_core.cpp#L2664-L2666) without populating `slice_and_keys_`. The lazy iterator rejects multi-key at [`version_store_api.cpp:1085-1088`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1085-L1088). Multi-key data (from recursive normalizer) stores a `MULTI_KEY` index referencing leaf sub-symbols and requires Python-side reconstruction via `Flattener`. This plan does not change multi-key handling.
 
@@ -1144,44 +1159,24 @@ These are details discovered during review that the implementer must handle:
 
 ---
 
-### Phase 0: Standalone Bug Fixes (independent of refactor)
+### Phase 0: Capture Baseline Benchmarks (before any code changes)
 
-These can land on `master` immediately. No architectural changes.
+**Critical**: Baseline measurements must be captured before any code changes (including Phase 1 bug fixes and Phase 2 DETACHABLE optimization). These become the regression threshold for every subsequent phase. Run on the current `duckdb` branch tip.
 
-- [ ] **0.1 Fix type-widening bug in `_ensure_schema()`**
-  - [`arrow_reader.py:302-346`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L302-L346) — when a descriptor field type is wider than the first batch's type, use the descriptor type instead of the first batch type
-  - Change: ~5 lines in `_ensure_schema()`, prefer descriptor type when `_is_wider_type(desc_type, batch_type)`
-  - Test: write `int64` segment, append `float64` segment, `lib.sql("SELECT * FROM sym")` — currently crashes, should return `float64`
-  - Additional test: write `int32` segment, append `int64` segment, verify `lib.sql()` returns int64 (integer widening, currently untested)
-  - Additional test: type-widened column + WHERE filter + GROUP BY on that column
-  - Test file: `python/tests/unit/arcticdb/version_store/duckdb/test_arrow_reader.py`
+All results are saved to `docs/claude/plans/duckdb/benchmarks/` (committed to the branch) so they survive across sessions and can be compared in Phase 9.
 
-- [ ] **0.2 Expand fast-path to allow column projection**
-  - [`library.py:2350`](../../../../python/arcticdb/version_store/library.py#L2350) — change `pushdown.columns is None` to just check `pushdown.fully_pushed`
-  - Verify `fully_pushed` is never True when column projection would break semantics (audit `pushdown.py`)
-  - Test: `lib.sql("SELECT a, b FROM sym")` where query is fully pushable — should skip DuckDB
-  - Test file: `python/tests/unit/arcticdb/version_store/duckdb/test_pushdown.py`
-
----
-
-### Phase 0.5: Capture Baseline Benchmarks (BEFORE Phase 1)
-
-**Critical**: Baseline measurements must be captured before any refactoring begins. These become the regression threshold for every subsequent phase. Run on the current `duckdb` branch tip.
-
-All results are saved to `docs/claude/plans/duckdb/benchmarks/` (committed to the branch) so they survive across sessions and can be compared in Phase 7.
-
-- [ ] **0.5.1 ASV baseline**
+- [ ] **0.1 ASV baseline**
   - Run from repo root with active venv: `asv run --python=$(which python) -v --show-stderr --bench "BasicFunctions|Arrow|SQLQueries"`
   - Copy results out of `python/.asv/results/` (git-ignored) into `docs/claude/plans/duckdb/benchmarks/baseline_asv.json`
   - Key metrics to capture: `time_read` (pandas), `time_read` (arrow), `peakmem_read` (arrow), `time_select_all` (SQL)
   - Commit baseline file to the branch
 
-- [ ] **0.5.2 C++ benchmark baseline**
+- [ ] **0.2 C++ benchmark baseline**
   - Build: `cmake -DTEST=ON --preset linux-debug cpp && cmake --build cpp/out/linux-debug-build --target benchmarks`
   - Run: `cpp/out/linux-debug-build/arcticdb/benchmarks --benchmark_filter="BM_arrow_string_handler" --benchmark_time_unit=ms --benchmark_min_time=5x --benchmark_out=docs/claude/plans/duckdb/benchmarks/baseline_cpp_arrow.json --benchmark_out_format=json`
   - Commit baseline file to the branch
 
-- [ ] **0.5.3 Memory baseline**
+- [ ] **0.3 Memory baseline**
   - Run: `python -m pytest python/tests/stress/arcticdb/version_store/test_stress_write_peakmem.py -v -s 2>&1 | tee docs/claude/plans/duckdb/benchmarks/baseline_memory.txt`
   - Also capture RSS during a representative Arrow read:
     ```python
@@ -1201,17 +1196,56 @@ All results are saved to `docs/claude/plans/duckdb/benchmarks/` (committed to th
 
 ---
 
-### Phase 1: Extract Shared Helpers and Refactor `LazyRecordBatchIterator` (Step 1)
+### Phase 1: Standalone Bug Fixes (independent of refactor)
+
+These can land on `master` immediately. No architectural changes.
+
+- [ ] **1.1 Fix type-widening bug in `_ensure_schema()`**
+  - [`arrow_reader.py:302-346`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L302-L346) — when a descriptor field type is wider than the first batch's type, use the descriptor type instead of the first batch type
+  - Change: ~5 lines in `_ensure_schema()`, prefer descriptor type when `_is_wider_type(desc_type, batch_type)`
+  - Test: write `int64` segment, append `float64` segment, `lib.sql("SELECT * FROM sym")` — currently crashes, should return `float64`
+  - Additional test: write `int32` segment, append `int64` segment, verify `lib.sql()` returns int64 (integer widening, currently untested)
+  - Additional test: type-widened column + WHERE filter + GROUP BY on that column
+  - Test file: `python/tests/unit/arcticdb/version_store/duckdb/test_arrow_reader.py`
+
+- [ ] **1.2 Expand fast-path to allow column projection**
+  - [`library.py:2350`](../../../../python/arcticdb/version_store/library.py#L2350) — change `pushdown.columns is None` to just check `pushdown.fully_pushed`
+  - Verify `fully_pushed` is never True when column projection would break semantics (audit `pushdown.py`)
+  - Test: `lib.sql("SELECT a, b FROM sym")` where query is fully pushable — should skip DuckDB
+  - Test file: `python/tests/unit/arcticdb/version_store/duckdb/test_pushdown.py`
+
+---
+
+### Phase 2: Eliminate DYNAMIC → DETACHABLE memcpy in lazy path
+
+- [ ] **2.1 Implement DETACHABLE allocation in DecodeSliceTask**
+  - **What**: Pass `AllocationType::DETACHABLE` through `DecodeSliceTask` so decompression writes directly into externally-allocated blocks, eliminating the memcpy in `make_column_blocks_detachable()`.
+  - **Why**: This is the only avoidable copy in the lazy path (see [Zero-Copy Analysis](#zero-copy-analysis-lazy-path-data-flow)). It halves peak memory per prefetch future and provides up to 8x speedup for numeric Arrow conversion. For string-heavy data (CTA-like), expect ~25% speedup.
+  - **C++ changes** (~10 lines):
+    - [`tasks.hpp`](../../../../cpp/arcticdb/async/tasks.hpp) / [`tasks.cpp`](../../../../cpp/arcticdb/async/tasks.cpp) — add `AllocationType allocation_type = AllocationType::DYNAMIC` parameter to `DecodeSliceTask` constructor; pass it to `SegmentInMemory` construction at `tasks.cpp:50`
+    - [`arrow_output_frame.cpp:363-413`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L363-L413) — when constructing `DecodeSliceTask` inside the prefetch future, pass `AllocationType::DETACHABLE`
+    - Verify `make_column_blocks_detachable()` early return at [`arrow_output_frame.cpp:45`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L45) triggers correctly (`if buf.allocation_type() == DETACHABLE → return`)
+  - **Eager path is untouched** — it decodes into a pre-allocated frame via `allocate_frame()`, never hits `DecodeSliceTask` with DETACHABLE
+  - **Tests**:
+    - C++ unit test: decode a segment with `AllocationType::DETACHABLE`, verify `make_column_blocks_detachable()` is a no-op (allocation type check)
+    - Python integration test: `lib.read(format='pyarrow')` round-trip with numeric, string, and mixed data — verify identical results
+    - Python integration test: `lib.sql("SELECT * FROM sym")` round-trip — verify identical results
+    - Memory test: compare peak RSS before/after for a large numeric symbol via Arrow read (expect ~50% reduction)
+  - Test file: `cpp/arcticdb/arrow/test/test_arrow_output.cpp` (C++), `python/tests/unit/arcticdb/version_store/duckdb/test_duckdb.py` (Python)
+
+---
+
+### Phase 3: Extract Shared Helpers and Refactor `LazyRecordBatchIterator` (Step 1)
 
 Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRecordBatchIterator` behaviour is preserved exactly. The Arrow path's prefetch pipeline structure is untouched except for adding dual-cap backpressure (count + bytes) to prevent OOM with wide tables.
 
-- [ ] **1.1 Extract shared free functions into `lazy_read_helpers.hpp/cpp`**
+- [ ] **3.1 Extract shared free functions into `lazy_read_helpers.hpp/cpp`**
   - New files: `cpp/arcticdb/version/lazy_read_helpers.hpp`, `cpp/arcticdb/version/lazy_read_helpers.cpp`
   - Extract from `arrow_output_frame.cpp`: `read_and_decode_segment()`, `apply_truncation()`, `apply_filter_clause()`
   - These are pure functions with no iterator state — they take a segment/store/params and return a result
   - Register new `.cpp` in `CMakeLists.txt`
 
-- [ ] **1.2 Refactor `LazyRecordBatchIterator` to use shared helpers + dual-cap backpressure**
+- [ ] **3.2 Refactor `LazyRecordBatchIterator` to use shared helpers + dual-cap backpressure**
   - `arrow_output_frame.hpp/cpp` — replace inline I/O + decode + truncate + filter code with calls to the shared helpers
   - **Prefetch pipeline structure is UNCHANGED** — same `deque<Future<vector<RecordBatchData>>>`, same monolithic future (I/O → decode → truncate → filter → Arrow convert)
   - `pending_batches_` deque for multi-block segments stays as-is
@@ -1225,23 +1259,23 @@ Foundation commit. Refactors C++ only. Python is unchanged — existing `LazyRec
     - For typical segments (≤40MB), the count cap (200) triggers first — no behaviour change vs today
     - For wide tables (400MB+ segments), the byte cap prevents 200 × 400MB = 80GB OOM
 
-- [ ] **1.3 Verify all existing tests pass**
+- [ ] **3.3 Verify all existing tests pass**
   - Run: `python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/`
   - Run: `cmake --build ... --target test_unit_arcticdb && ./test_unit_arcticdb --gtest_filter="Arrow*"`
   - This is a pure refactor — zero behaviour change. Any test failure means the extraction introduced a bug.
   - **Critical**: verify no throughput regression on the Arrow path. The monolithic prefetch pipeline in `LazyRecordBatchIterator` must be identical to before — same future depth, same overlap between I/O and `prepare_segment_for_arrow()`. For typical segments the dual-cap should behave identically to the old count-only cap.
 
-- [ ] **1.4 Update documentation**
+- [ ] **3.4 Update documentation**
   - Update `docs/claude/cpp/ARROW.md`: document `lazy_read_helpers.hpp/cpp` shared helpers
-  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 1 summary
+  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 3 summary
 
 ---
 
-### Phase 2: C++ Tests for Lazy Path (Step 2)
+### Phase 4: C++ Tests for Lazy Path (Step 2)
 
 Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These tests exercise the *existing* behaviour, serving as a regression safety net for later steps.
 
-- [ ] **2.1 Shared helper unit tests**
+- [ ] **4.1 Shared helper unit tests**
   - New file: `cpp/arcticdb/version/test/test_lazy_read_helpers.cpp`
   - Add to `CMakeLists.txt` under `test_unit_arcticdb` target
   - Tests (each writes segments via InMemoryStore, exercises helpers directly):
@@ -1254,7 +1288,7 @@ Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These 
     - `ApplyFilterClause_MissingColumn_DynamicSchema` — filter column absent, `dynamic_schema_=true` → EmptyResult
     - `SparseFloatWithTruncation` — sparse column truncated mid-segment, verify bitmap correct
 
-- [ ] **2.2 `LazyRecordBatchIterator` Arrow round-trip tests**
+- [ ] **4.2 `LazyRecordBatchIterator` Arrow round-trip tests**
   - New file: `cpp/arcticdb/arrow/test/test_lazy_record_batch_iterator.cpp`
   - Add to `CMakeLists.txt` under `test_unit_arcticdb` target
   - Tests:
@@ -1265,10 +1299,10 @@ Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These 
     - `ZeroRowStringSegment` — `minimal_strings_for_dict()` workaround triggers
     - `TypeWidening_IntToFloat` — int64 first segment, float64 second → both readable without crash (pre-Step 4: batches have their ORIGINAL types, not unified types — unification happens in Step 4)
 
-- [ ] **2.3 Verify all tests pass including new ones**
+- [ ] **4.3 Verify all tests pass including new ones**
   - `./test_unit_arcticdb --gtest_filter="LazyReadHelpers*:LazyRecordBatch*"`
 
-- [ ] **2.4 Python integration: lazy-vs-eager comparison test**
+- [ ] **4.4 Python integration: lazy-vs-eager comparison test**
   - New file: `python/tests/unit/arcticdb/version_store/duckdb/test_lazy_vs_eager.py`
   - For each test scenario, read via `lib.read(output_format='pyarrow')` (eager) and via `lib.sql("SELECT * ...")` (lazy), compare results
   - Scenarios: numeric, string, sparse floats, date_range, row_range, column projection, dynamic schema, append-with-widening (int64 → float64)
@@ -1276,16 +1310,16 @@ Fills the critical gap: no C++ tests exist for `LazyRecordBatchIterator`. These 
 
 ---
 
-### Phase 3: Column-Slice Merging in C++ (Step 3)
+### Phase 5: Column-Slice Merging in C++ (Step 3)
 
 After this commit, `LazyRecordBatchIterator` yields one merged batch per row group for column-sliced tables. Python `_merge_slices_for_group()` is still present but no longer exercised for the common path.
 
-- [ ] **3.1 Verify `peek_next_slice_and_key()` on `LazyRecordBatchIterator`**
+- [ ] **5.1 Verify `peek_next_slice_and_key()` on `LazyRecordBatchIterator`**
   - Already added in Step 1.2 — uses `LazyRecordBatchIterator`'s own `slice_and_keys_` vector
   - Verify it correctly peeks at the next unconsumed slice without advancing the iterator state
   - Column-slice merging in `next()` uses this to detect same-row-group slices
 
-- [ ] **3.2 Implement `horizontal_merge_arrow_batches()` helper**
+- [ ] **5.2 Implement `horizontal_merge_arrow_batches()` helper**
   - New function in `cpp/arcticdb/arrow/arrow_utils.hpp/cpp`
   - Takes two `RecordBatchData`, returns merged `RecordBatchData`
   - Deduplicates columns by name (skip columns from batch B that already exist in batch A — handles index column)
@@ -1297,9 +1331,9 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
     3. NOT assume children are contiguous in memory — each was independently extracted
     4. Handle the case where a child's `release` is already `nullptr` (already released)
   - The safest pattern: store extracted children in a `vector<ArrowArray>` + `vector<ArrowSchema>` owned by the parent's release callback closure. The parent `ArrowArray.children[i]` points into this vector. On release, iterate the vector and call each child's release. This avoids manual `malloc`/`free` of the pointer array.
-  - **Must be validated under ASan** (AddressSanitizer) — see Phase 3.4 tests
+  - **Must be validated under ASan** (AddressSanitizer) — see Phase 5.4b tests
 
-- [ ] **3.3 Add merging logic to `LazyRecordBatchIterator::next()`**
+- [ ] **5.3 Add merging logic to `LazyRecordBatchIterator::next()`**
   - After pulling a batch from Arrow prefetch, check `peek_next_slice_and_key()` — same `row_range`?
   - If yes: pull all consecutive same-row-range slices, convert each to Arrow, merge incrementally
   - If no: return batch as-is (single-slice fast path)
@@ -1307,7 +1341,7 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
 
   **DECIDED — Merging in `next()` on consumer thread.** Merge is fast (pointer concatenation of Arrow arrays). I/O and Arrow conversion are the expensive parts and already run in prefetch futures. No third prefetch layer.
 
-- [ ] **3.4 C++ tests for column-slice merging**
+- [ ] **5.4 C++ tests for column-slice merging**
   - Add to `test_lazy_record_batch_iterator.cpp`:
   - **Use small segment sizes** to trigger column slicing without large data: `columns_per_segment=5` with 12-15 columns and `rows_per_segment=20` with 40-60 rows. This gives 2-3 column slices × 2-3 row groups — enough to exercise merging while keeping tests fast (~microseconds).
     - `ColumnSliceMerge_TwoSlices` — 12 columns, `columns_per_segment=5` → 2 data slices + index, merged into 1 batch (20 rows)
@@ -1318,7 +1352,7 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
     - `ColumnSliceMerge_WithProjection` — projected subset selecting columns from different slices
     - `ColumnSliceMerge_MixedTypes` — numeric + string + timestamp columns across slices
 
-- [ ] **3.4b Sparrow zero-copy validation and memory safety tests**
+- [ ] **5.4b Sparrow zero-copy validation and memory safety tests**
   - **Must run under ASan** (`-fsanitize=address`). The `linux-debug` preset should already include ASan. If not, add a CMake option or use a dedicated ASan preset.
   - Add to `test_lazy_record_batch_iterator.cpp` (or a dedicated `test_horizontal_merge.cpp`):
 
@@ -1348,33 +1382,33 @@ After this commit, `LazyRecordBatchIterator` yields one merged batch per row gro
   ```
   Note: ASan build is controlled by `cpp/CMake/sanitizers.cmake` via the `ARCTICDB_USING_ADDRESS_SANITIZER` CMake option. There are also `ARCTICDB_USING_THREAD_SANITIZER` and `ARCTICDB_USING_UB_SANITIZER` options available.
 
-- [ ] **3.5 Python integration test for wide table via sql()**
+- [ ] **5.5 Python integration test for wide table via sql()**
   - Add to `test_arctic_duckdb.py`:
   - Use `columns_per_segment=10` with 30 columns and 40 rows (`rows_per_segment=20`) to create 3 column slices × 2 row groups — exercises C++ merging without large data.
     - Write 30-column table (`columns_per_segment=10`), `lib.sql("SELECT * FROM sym")` — verify all columns present, correct values across slice boundaries
     - Same table with column projection, `lib.sql("SELECT f0, f15, f28 FROM sym")` — columns from different slices, verify correct
   - Existing Python tests must still pass (Python merging code is still present but now redundant for this path)
 
-- [ ] **3.6 Verify all tests pass**
+- [ ] **5.6 Verify all tests pass**
 
-- [ ] **3.7 Update documentation**
+- [ ] **5.7 Update documentation**
   - Update `docs/claude/cpp/ARROW.md`: document `horizontal_merge_arrow_batches()`, Sparrow extraction chain usage, column-slice merging in `next()`
   - Update `docs/claude/python/DUCKDB.md`: note that column-slice merging now happens in C++ (Python `_merge_slices_for_group()` still present but bypassed)
-  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 3 summary
+  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 5 summary
 
 ---
 
-### Phase 4: Schema Padding in C++ (Step 4)
+### Phase 6: Schema Padding in C++ (Step 4)
 
 After this commit, `LazyRecordBatchIterator` yields uniform-schema batches for dynamic schema symbols. Fixes the type-widening bug.
 
-- [ ] **4.1 Build target schema from merged descriptor in C++**
+- [ ] **6.1 Build target schema from merged descriptor in C++**
   - At `LazyRecordBatchIterator` construction, build `target_schema` (Arrow schema) from the merged `StreamDescriptor`
   - Map each `DataType` → Arrow type using the *C++ type system* (not the incomplete Python mapping)
   - Handle: all numeric types, `NANOSECONDS_UTC64`, `UTF_DYNAMIC64`/`ASCII_DYNAMIC64` → `dictionary(int32, large_string)`, `UTF_FIXED64`/`ASCII_FIXED64` → `large_string`, `BOOL8` → `bool`, `EMPTYVAL` → `large_string` (matching Python fallback)
   - When `columns_to_decode` is set (column projection), restrict target schema to projected columns only
 
-- [ ] **4.2 Implement schema padding in `LazyRecordBatchIterator::next()`**
+- [ ] **6.2 Implement schema padding in `LazyRecordBatchIterator::next()`**
   - After merge (Step 3), compare batch schema to target schema
   - **Static schema fast path**: if `batch.schema == target_schema` (pointer or field-by-field compare), return as-is — zero overhead for the common case
   - For mismatched batches:
@@ -1383,7 +1417,7 @@ After this commit, `LazyRecordBatchIterator` yields uniform-schema batches for d
     - Reorder columns to match target field order
   - Null array cache: `unordered_map<pair<ArrowTypeId, size_t>, RecordBatchData::array_ptr>` — cache by `(type, row_count)` for reuse across batches
 
-- [ ] **4.3 C++ tests for schema padding**
+- [ ] **6.3 C++ tests for schema padding**
   - Add to `test_lazy_record_batch_iterator.cpp`:
     - `SchemaPadding_MissingNumericColumn` — segment lacks float64 col → null added
     - `SchemaPadding_MissingStringColumn` — segment lacks string col → null dictionary added
@@ -1393,26 +1427,26 @@ After this commit, `LazyRecordBatchIterator` yields uniform-schema batches for d
     - `SchemaPadding_WithColumnProjection` — only projected columns padded
     - `SchemaPadding_NullArrayCaching` — verify cache hit (second batch same size → no new allocation)
 
-- [ ] **4.4 Python integration tests for dynamic schema**
+- [ ] **6.4 Python integration tests for dynamic schema**
   - Add to `test_duckdb_dynamic_schema.py`:
     - Write segment 1 with cols `{a, b}`, segment 2 with cols `{a, c}` → `lib.sql("SELECT * FROM sym")` returns `{a, b, c}` with nulls
     - Write int64 segment, append float64 segment → `lib.sql("SELECT * FROM sym")` returns float64 (verifies Bug 1 fix)
   - Existing dynamic schema tests must still pass
 
-- [ ] **4.5 Verify all tests pass**
+- [ ] **6.5 Verify all tests pass**
 
-- [ ] **4.6 Update documentation**
+- [ ] **6.6 Update documentation**
   - Update `docs/claude/cpp/ARROW.md`: document `arrow_schema()` method, target schema construction from descriptor, schema padding logic, null array caching
   - Update `docs/claude/python/DUCKDB.md`: update "Schema Discovery" section — schema now comes from C++ descriptor (remove first-batch type refinement), update "Known Limitation: int → float Type Widening" to mark as FIXED
-  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 4 summary
+  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 6 summary
 
 ---
 
-### Phase 5: Route `lib.read(format='pyarrow')` Through Lazy Path (Step 5)
+### Phase 7: Route `lib.read(format='pyarrow')` Through Lazy Path (Step 5)
 
 After this commit, `lib.read(output_format='pyarrow')` uses streaming instead of full materialization. Memory = O(prefetch × segment_size) instead of O(symbol_size).
 
-- [ ] **5.1 Add `OutputFormat::ARROW` branch in `read_dataframe_version()`**
+- [ ] **7.1 Add `OutputFormat::ARROW` branch in `read_dataframe_version()`**
   - `version_store_api.cpp` — for `OutputFormat::ARROW` without processing clauses, construct `LazyRecordBatchIterator` and return it instead of calling `do_direct_read_or_process()`
   - Keep eager path for: `OutputFormat::PANDAS`, any read with processing clauses (GROUP BY, resample)
   - **Error handling guards** (must check before constructing lazy iterator):
@@ -1421,82 +1455,82 @@ After this commit, `lib.read(output_format='pyarrow')` uses streaming instead of
     - Type handler assertion: if any column uses a Pandas-only type handler (`BOOL_OBJECT8`, `PythonEmptyHandler`, `PythonArrayHandler`), raise `"Type X requires pandas output format"` — these types have no `ArrowStringHandler` equivalent
     - Pickled data: already rejected by existing multi_key_ check (pickled uses MULTI_KEY storage)
 
-- [ ] **5.2 Update `_adapt_frame_data()` to accept lazy iterator**
+- [ ] **7.2 Update `_adapt_frame_data()` to accept lazy iterator**
   - [`_store.py:2821-2845`](../../../../python/arcticdb/version_store/_store.py#L2821-L2845) — detect if return type is lazy iterator
   - Iterate `next()`, import each `RecordBatchData` via `pa.RecordBatch._import_from_c()`, collect into `pa.Table`
   - Schemas are uniform (Steps 3+4), so `pa.Table.from_batches()` works directly
 
-- [ ] **5.3 Update Python bindings**
+- [ ] **7.3 Update Python bindings**
   - `python_bindings.cpp` — return type for Arrow reads changes to lazy iterator when appropriate
   - Ensure `py::gil_scoped_release` is held during iterator construction (already the case)
 
-- [ ] **5.4 Test: `lib.read(output_format='pyarrow')` functional correctness**
+- [ ] **7.4 Test: `lib.read(output_format='pyarrow')` functional correctness**
   - Numeric, string, dynamic schema, wide table (`columns_per_segment=10`, 30 cols, 40 rows), date_range, empty symbol
   - Compare output to eager path result for each case
   - Add to `python/tests/unit/arcticdb/version_store/duckdb/test_lazy_streaming.py`
 
-- [ ] **5.5 Test: memory bounded**
+- [ ] **7.5 Test: memory bounded**
   - Use `rows_per_segment=50` with 500 rows × 10 float64 cols → 10 segments. Small per-segment size (~4KB) but enough segments to verify peak memory is O(prefetch) not O(total_segments).
   - `lib.read(output_format='pyarrow')` — peak RSS growth should be proportional to prefetch window, not total symbol size
   - Can use `/proc/self/status` VmRSS tracking or `tracemalloc` for the Python side
-  - Note: this is a functional correctness test for memory bounding, not a stress test. Phase 7 benchmarks use larger data for actual memory profiling.
+  - Note: this is a functional correctness test for memory bounding, not a stress test. Phase 9 benchmarks use larger data for actual memory profiling.
 
-- [ ] **5.6 Test: pandas path NOT regressed**
+- [ ] **7.6 Test: pandas path NOT regressed**
   - `lib.read()` (default pandas format) throughput benchmark before/after
   - Must use eager path, NOT the new lazy path
   - ≤ 2% regression threshold
 
-- [ ] **5.7 Verify all tests pass**
+- [ ] **7.7 Verify all tests pass**
 
-- [ ] **5.8 Update documentation**
+- [ ] **7.8 Update documentation**
   - Update `docs/claude/cpp/ARROW.md`: document `OutputFormat::ARROW` routing in `read_dataframe_version()`, error handling guards
   - Update `docs/claude/python/DUCKDB.md`: update "ArrowOutputFrame" section to note it's bypassed for `lib.read(format='pyarrow')`, add note about streaming memory profile
   - Update `docs/mkdocs/docs/api/` or docstrings: document `output_format='pyarrow'` memory characteristics (streaming, bounded by prefetch window)
-  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 5 summary
+  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 7 summary
 
 ---
 
-### Phase 6: Simplify Python `ArcticRecordBatchReader` (Step 6)
+### Phase 8: Simplify Python `ArcticRecordBatchReader` (Step 6)
 
 Cleanup commit. Removes ~258 lines of dead Python code. Note: the filter pushdown workaround (`qb = None if columns is not None`) is KEPT — see Amendment A.
 
-- [ ] **6.1 Remove dead code from `arrow_reader.py`**
+- [ ] **8.1 Remove dead code from `arrow_reader.py`**
   - Delete: `_descriptor_to_arrow_schema()`, `_is_same_row_group()`, `_merge_slices_for_group()`, `_merge_column_slices()`, `_pad_batch_to_schema()`, `_ensure_schema()`, `_read_next_merged_batch()`, `_pending_raw_batch` state
   - Keep: `_strip_idx_prefix_from_names()`, `_iteration_started`/`_exhausted` guards, `to_pyarrow_reader()` (simplified), `read_all()`
   - Add `schema` property that gets Arrow schema from C++ iterator (new C++ method `arrow_schema()`)
 
-- [ ] **6.2 Remove workarounds from `library.py:sql()`**
+- [ ] **8.2 Remove workarounds from `library.py:sql()`**
   - **KEEP** `qb = pushdown.query_builder if columns is None else None` — per-segment filtering runs before column-slice merging; filter column is only in one slice per row group; static schema would crash on missing column (see Amendment A)
   - Remove `lib_dynamic_schema` workaround — C++ merging prevents spurious NULL rows
   - Keep `__idx__` prefix expansion (storage-level concern)
 
-- [ ] **6.3 Update tests that relied on Python-side merging/padding**
+- [ ] **8.3 Update tests that relied on Python-side merging/padding**
   - Any test mocking or patching `_merge_slices_for_group`, `_pad_batch_to_schema`, `_ensure_schema` → update or remove
   - Integration tests should be unchanged (same external behaviour)
 
-- [ ] **6.4 Verify all tests pass**
+- [ ] **8.4 Verify all tests pass**
   - `python -m pytest -n 8 python/tests/unit/arcticdb/version_store/duckdb/`
   - Full test suite to catch any regressions
 
-- [ ] **6.5 Update documentation**
+- [ ] **8.5 Update documentation**
   - Rewrite `docs/claude/python/DUCKDB.md` "Module: arrow_reader.py" section: remove references to deleted functions (`_pad_batch_to_schema`, `_ensure_schema`, `_is_same_row_group`, `_merge_slices_for_group`, `_descriptor_to_arrow_schema`), update "Key Properties" and "Schema Discovery" sections to reflect simplified `ArcticRecordBatchReader`
-  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 6 summary
+  - Update `docs/claude/plans/duckdb/branch-work-log.md` with Phase 8 summary
 
 ---
 
-### Phase 7: Benchmarks and Validation
+### Phase 9: Benchmarks and Validation
 
 Verification that performance invariants hold. Includes C++ microbenchmarks, Python microbenchmarks, and ASV regression tests.
 
 **Note on data sizes**: Unlike correctness tests (Phases 2-6) which use small `rows_per_segment`/`columns_per_segment` to trigger segmentation cheaply, benchmarks intentionally use large data to measure real-world throughput and memory profiles. The sizes below are appropriate for benchmarking only.
 
-#### 7A. C++ Microbenchmarks for Memory and CPU
+#### 9A. C++ Microbenchmarks for Memory and CPU
 
 New file: `cpp/arcticdb/arrow/test/benchmark_lazy_read.cpp`
 
 These are Google Benchmark tests that measure the lazy read path directly, complementing the higher-level ASV benchmarks.
 
-- [ ] **7.1 C++ throughput benchmarks (Google Benchmark)**
+- [ ] **9.1 C++ throughput benchmarks (Google Benchmark)**
 
   | Benchmark | What It Measures |
   |-----------|-----------------|
@@ -1508,7 +1542,7 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
   | `BM_SchemaPadding` | Dynamic schema (500 cols, 50% missing per segment): padding overhead per batch |
   | `BM_LazyVsEagerOverall` | End-to-end: lazy path → collect all batches vs eager path → single frame, same data |
 
-- [ ] **7.2 C++ memory leak detection benchmarks (Google Benchmark)**
+- [ ] **9.2 C++ memory leak detection benchmarks (Google Benchmark)**
 
   | Benchmark | What It Measures |
   |-----------|-----------------|
@@ -1518,7 +1552,7 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
   | `BM_HorizontalMerge_AllocationCount` | Merge N column slices (N=2,4,8). Count total heap allocations. Should be O(N), not O(N²). |
   | `BM_PartialConsume_NoLeak` | Create iterator over 100 segments. Consume only 10. Destroy. Measure RSS before/after — must not leak prefetched-but-unconsumed segments. |
 
-- [ ] **7.3 C++ CPU utilization benchmarks (Google Benchmark)**
+- [ ] **9.3 C++ CPU utilization benchmarks (Google Benchmark)**
 
   | Benchmark | What It Measures |
   |-----------|-----------------|
@@ -1527,9 +1561,9 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
   | `BM_ColumnSliceMerge_CPUCost` | Given N pre-converted Arrow batches, measure CPU cost of `horizontal_merge_arrow_batches()` alone. Verify dominated by pointer manipulation (O(cols)), not memcpy (O(data)). |
   | `BM_SchemaPadding_CPUCost` | Measure CPU cost of null array creation + column reordering. Verify caching eliminates repeated allocation (second invocation with same row_count should be ~0 cost). |
 
-#### 7B. Python Microbenchmarks for Memory and CPU
+#### 9B. Python Microbenchmarks for Memory and CPU
 
-- [ ] **7.4 Python ASV benchmark suite for lazy read path**
+- [ ] **9.4 Python ASV benchmark suite for lazy read path**
   New file: `python/benchmarks/lazy_read.py`
 
   ```
@@ -1563,7 +1597,7 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
       - peakmem_sql_dynamic_schema: peak RSS
   ```
 
-- [ ] **7.5 Python stress tests for memory leak detection**
+- [ ] **9.5 Python stress tests for memory leak detection**
   New file: `python/tests/stress/arcticdb/version_store/test_stress_lazy_read.py`
 
   | Test | What It Measures |
@@ -1574,24 +1608,24 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
   | `test_sql_repeated_no_memory_growth` | Call `lib.sql("SELECT * FROM sym")` 500 times. Assert RSS growth < 5%. Catches DuckDB-side or Arrow-side leaks in the integration. |
   | `test_lazy_read_mixed_types_no_leak` | Symbol with int, float, string, timestamp, bool columns. Read 500 times. Assert no RSS growth. Catches type-handler-specific leaks. |
 
-#### 7C. ASV Regression Tests (Before/After Comparison)
+#### 9C. ASV Regression Tests (Before/After Comparison)
 
-- [ ] **7.6 ASV benchmarks: before/after comparison**
-  - Compare against Phase 0.5 baseline
+- [ ] **9.6 ASV benchmarks: before/after comparison**
+  - Compare against Phase 0 baseline
   - Run `BasicFunctions`, `Arrow`, `SQLQueries` suites on the branch vs baseline
   - `lib.read(format='pandas')` throughput: ≤ 2% regression
   - `lib.sql("SELECT * ...")` throughput: ≤ 5% regression (Steps 1-2), improvement (Steps 3-6)
 
-- [ ] **7.7 Wide table benchmark**
+- [ ] **9.7 Wide table benchmark**
   - 400-column table, 1M rows, `lib.sql("SELECT * FROM sym")` and `lib.sql("SELECT col1 FROM sym WHERE col200 > 0")`
   - Target: ≥ 2x improvement over Python merging
 
-- [ ] **7.8 Memory profiling**
+- [ ] **9.8 Memory profiling**
   - `lib.read(format='pyarrow')` on 100-segment symbol
   - Verify peak RSS ≈ `prefetch_size × segment_size × 2` (same as current behavior)
 
-- [ ] **7.9 C++ benchmark comparison**
-  - Compare `benchmark_lazy_read.cpp` results against Phase 0.5.2 baseline
+- [ ] **9.9 C++ benchmark comparison**
+  - Compare `benchmark_lazy_read.cpp` results against Phase 0.2 baseline
   - Verify: `BM_LazyVsEagerRead_Numeric` throughput ≤ 5% regression vs eager
   - Verify: `BM_LazyIterator_PeakRSS` is O(prefetch) not O(total_segments)
   - Verify: `BM_LazyIterator_RepeatedRead` shows no RSS growth over 1000 iterations
@@ -1602,7 +1636,7 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
 
 1. ~~**Polars LazyFrame exposure**~~ — **DECIDED: defer.** `pl.from_arrow()` is already zero-copy from Arrow RecordBatches. A `SegmentInMemory` path would require `pl.from_numpy()` which *clones* data — strictly worse. Not needed for correctness or performance.
 
-2. ~~**`max_prefetch_bytes` backpressure**~~ — **DECIDED: implement in Phase 1.** Count-based cap alone is insufficient — 200 segments × 400MB (wide tables) = 80GB. Added dual-cap design to Phase 1 (Step 1.2): byte-based cap (default 4GB) alongside existing count-based cap (200). Whichever limit is reached first stops prefetching. Segment size estimated from `SliceAndKey` descriptor metadata. ~20 lines of C++. See Phase 1, Step 1.2 for details.
+2. ~~**`max_prefetch_bytes` backpressure**~~ — **DECIDED: implement in Phase 3.** Count-based cap alone is insufficient — 200 segments × 400MB (wide tables) = 80GB. Added dual-cap design to Phase 3 (Step 1.2): byte-based cap (default 4GB) alongside existing count-based cap (200). Whichever limit is reached first stops prefetching. Segment size estimated from `SliceAndKey` descriptor metadata. ~20 lines of C++. See Phase 3, Step 1.2 for details.
 
 3. ~~**Separate `LazySegmentIterator`**~~ — **DECIDED: not needed.** Originally planned as a sibling iterator yielding `SegmentInMemory` for non-Arrow consumers. No consumer exists in this plan (Polars deferred, eager path untouched). The shared free functions (`read_and_decode_segment`, `apply_truncation`, `apply_filter_clause`) provide the reusable building blocks; a `LazySegmentIterator` can be trivially built from them if a consumer materializes later.
 
@@ -1625,7 +1659,7 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
 | [`cpp/arcticdb/arrow/arrow_utils.cpp`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L103-L105) | 103–105 | `minimal_strings_for_dict()` — empty dict workaround |
 | [`cpp/arcticdb/arrow/arrow_utils.cpp`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L295-L310) | 295–310 | `segment_to_arrow_data()` — zero-row handling |
 | [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1061-L1152) | 1061–1152 | `create_lazy_record_batch_iterator()` — lazy path setup |
-| [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1133-L1140) | 1133–1140 | prefetch size calculation (count cap=200; byte cap added in Phase 1) |
+| [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1133-L1140) | 1133–1140 | prefetch size calculation (count cap=200; byte cap added in Phase 3) |
 | [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1045-L1059) | 1045–1059 | `read_dataframe_version()` — eager path entry |
 | [`cpp/arcticdb/version/version_core.cpp`](../../../../cpp/arcticdb/version/version_core.cpp#L2061-L2088) | 2061–2088 | `do_direct_read_or_process()` — eager read/process fork |
 | [`cpp/arcticdb/version/version_core.cpp`](../../../../cpp/arcticdb/version/version_core.cpp#L2647-L2694) | 2647–2694 | `setup_pipeline_context()` — shared setup |
