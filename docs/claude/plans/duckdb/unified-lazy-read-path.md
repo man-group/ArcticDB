@@ -222,6 +222,76 @@ Shared free functions (extracted from arrow_output_frame.cpp):
 
 ---
 
+## Zero-Copy Analysis: Lazy Path Data Flow
+
+Traces every allocation and copy from storage bytes to DuckDB consumption. Per-segment, for a typical 100k-row segment with 10 float64 columns (~8MB uncompressed, ~2MB compressed).
+
+### Copy Map
+
+| Step | Function | Copy? | Size | Location |
+|------|----------|-------|------|----------|
+| 1. Storage read | Storage backend → `Buffer` | **Yes** | ~2MB (compressed) | Network/disk I/O, unavoidable |
+| 2. Decompress | `decode_into_memory_segment()` → DYNAMIC `ChunkedBuffer` | **Yes** | ~8MB (uncompressed) | [`codec.cpp:544`](../../../../cpp/arcticdb/codec/codec.cpp#L544) — decompresses per-column into small inline `DynamicMemBlock`s (~4KB each) |
+| 3. DYNAMIC → DETACHABLE | `make_column_blocks_detachable()` | **Yes** | ~8MB | [`arrow_output_frame.cpp:43-56`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L43) — copies all inline blocks into one contiguous `ExternalMemBlock` per column |
+| 4. Arrow wrapping | `segment_to_arrow_data()` → `block.release()` | **No** | 0 | [`block.hpp:111`](../../../../cpp/arcticdb/column_store/block.hpp#L111) — pointer ownership transfer to sparrow `u8_buffer` |
+| 5. Column-slice merge | `_merge_slices_for_group()` / C++ horizontal merge | **No** | 0 | PyArrow reference counting / Arrow struct composition |
+| 6. Schema padding | `_pad_batch_to_schema()` / C++ null-array padding | **No**\* | ~0 | Existing columns zero-copy; only missing columns allocate null arrays |
+| 7. DuckDB scan | Arrow C Data Interface | **No** | 0 | DuckDB reads Arrow buffers in-place |
+
+\* Null padding allocates small null arrays for missing columns only. With caching (see Memory Model Detailed), these are shared across segments.
+
+**Total: 2 unavoidable copies + 1 avoidable copy, then zero-copy to consumer.**
+
+### String Column Variant
+
+String columns have additional work in step 3 inside `prepare_segment_for_arrow()`:
+
+| Sub-step | Operation | Copy? | Size |
+|----------|-----------|-------|------|
+| 3a. Build `SharedStringDictionary` | Walk string pool once → dictionary buffers + offset→index map | **Yes** | dictionary size (unique strings) |
+| 3b. Encode keys | Scan column, write int32 dictionary indices | **Yes** | `num_rows × 4` bytes |
+| 3c. DETACHABLE for keys | Keys column created as DETACHABLE directly | **No** | 0 (already correct allocation type) |
+
+Net: string columns have ~2 extra copies (dictionary + keys), but these are typically much smaller than the raw string data they replace.
+
+### The Avoidable Copy: DYNAMIC → DETACHABLE
+
+The lazy path currently decodes into DYNAMIC allocation because `DecodeSliceTask` (`tasks.cpp:50`) constructs `SegmentInMemory` with the default allocator:
+
+```
+SegmentInMemory segment_in_memory(std::move(descriptor));          // DYNAMIC (default)
+decode_into_memory_segment(seg, hdr, segment_in_memory, desc);     // decompresses into DYNAMIC blocks
+```
+
+But `decode_segment()` (`codec.cpp:553`) already accepts `AllocationType`:
+
+```
+SegmentInMemory res(std::move(descriptor), 0, allocation_type);    // can be DETACHABLE
+decode_into_memory_segment(segment, hdr, res, res.descriptor());   // decompresses into DETACHABLE blocks
+```
+
+If the lazy path passes `AllocationType::DETACHABLE`, decompression writes directly into externally-allocated blocks. `make_column_blocks_detachable()` then hits its early return (`arrow_output_frame.cpp:45`: `if buf.allocation_type() == DETACHABLE → return`) and the copy is eliminated.
+
+**Impact**: Eliminates ~8MB memcpy per segment, reduces peak memory per prefetch future by ~50% (from `segment_size × 2` to `segment_size × 1`), and halves the DETACHABLE multiplier in the memory model formula.
+
+**Implementation**: Add an `AllocationType` parameter to `DecodeSliceTask` constructor, set to `DETACHABLE` when the caller is `LazyRecordBatchIterator`. The eager path continues using `DYNAMIC` (it decodes into a pre-allocated frame, not individual segments). This is orthogonal to the main refactoring steps and can be done independently.
+
+### Zero-Copy Alignment Summary
+
+| Segment of data flow | Zero-copy? | Notes |
+|----------------------|------------|-------|
+| Storage → C++ | No (unavoidable) | Must decompress |
+| C++ → Arrow arrays | **Yes** (after DETACHABLE fix) | `block.release()` pointer handoff |
+| Arrow → Python (PyArrow) | **Yes** | Arrow C Data Interface, reference counted |
+| Arrow → DuckDB | **Yes** | Arrow C Data Interface scan |
+| Arrow → Polars | **Yes** | Polars reads Arrow natively |
+| Column-slice merging | **Yes** | Struct-level composition, no buffer copies |
+| Schema padding (existing cols) | **Yes** | Reference counted |
+
+The lazy path is well aligned with Arrow's zero-copy benefits. After decompression (which is unavoidable for any compressed storage system), data flows to the consumer without copies — provided the DETACHABLE optimization is applied.
+
+---
+
 ## Refactoring Steps
 
 ### Step 1: Extract Shared Helpers and Refactor `LazyRecordBatchIterator`
@@ -983,7 +1053,7 @@ This is better than holding all 4 slices simultaneously (`4 × row_group_arrow_s
 
 `make_column_blocks_detachable()` copies every column buffer DYNAMIC → DETACHABLE, costing 1 memcpy per column per segment (~2x peak memory per segment during conversion).
 
-**Optimization** (orthogonal to this plan): Modify `batch_read_uncompressed()` to allocate DETACHABLE directly when caller is the Arrow path. This eliminates the copy entirely. Requires threading `AllocationType` through the decode pipeline.
+**Optimization** (orthogonal to this plan): Pass `AllocationType::DETACHABLE` through `DecodeSliceTask` so decompression targets externally-allocated blocks directly. Eliminates the copy entirely. See [Zero-Copy Analysis](#zero-copy-analysis-lazy-path-data-flow) for the full copy trace and implementation details.
 
 ### Schema Padding Null Array Caching
 
