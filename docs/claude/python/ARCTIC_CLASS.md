@@ -187,6 +187,21 @@ except ArcticException:
 
 The `Arctic` class uses lazy initialization for the adapter (created on first access). Libraries may be cached to avoid repeated lookups.
 
+## DuckDB SQL Integration
+
+```python
+# Database discovery
+result = arctic.sql("SHOW DATABASES")
+
+# Cross-library context manager
+with arctic.duckdb() as ddb:
+    ddb.register_symbol("market_data", "trades")
+    ddb.register_symbol("reference_data", "securities")
+    result = ddb.sql("SELECT ... FROM trades JOIN securities ...")
+```
+
+See [DUCKDB.md](DUCKDB.md) for full details.
+
 ## Key Files
 
 | File | Purpose |
@@ -199,5 +214,6 @@ The `Arctic` class uses lazy initialization for the adapter (created on first ac
 ## Related Documentation
 
 - [LIBRARY_API.md](LIBRARY_API.md) - Library class returned by Arctic
+- [DUCKDB.md](DUCKDB.md) - DuckDB SQL integration details
 - [ADAPTERS.md](ADAPTERS.md) - Storage adapter details
 - [../cpp/STORAGE_BACKENDS.md](../cpp/STORAGE_BACKENDS.md) - Backend configurations

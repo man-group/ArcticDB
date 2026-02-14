@@ -1058,6 +1058,99 @@ ReadResult PythonVersionStore::read_dataframe_version(
     );
 }
 
+std::shared_ptr<LazyRecordBatchIterator> PythonVersionStore::create_lazy_record_batch_iterator(
+        const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, std::shared_ptr<FilterClause> filter_clause, size_t prefetch_size
+) {
+    py::gil_scoped_release release_gil;
+
+    // Resolve version
+    auto version = get_version_to_read(stream_id, version_query);
+    std::variant<VersionedItem, StreamId> version_info;
+    if (version) {
+        version_info = *version;
+    } else if (opt_false(read_options.incompletes())) {
+        version_info = stream_id;
+    } else {
+        missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                "create_lazy_record_batch_iterator: version matching query '{}' not found for symbol '{}'",
+                version_query,
+                stream_id
+        );
+    }
+
+    // Read only the index — populates slice_and_keys_ (cheap metadata I/O, no segment data)
+    auto pipeline_context = version_store::setup_pipeline_context(store(), version_info, *read_query, read_options);
+
+    util::check(
+            !pipeline_context->multi_key_,
+            "Lazy record batch iterator does not support recursive/composite data (multi_key)"
+    );
+
+    // Re-sort slice_and_keys_ by (row_range, col_range) so that column slices
+    // for the same row group are consecutive.  The index stores entries sorted
+    // by (col_range, row_range), which means column slices for the same row
+    // group may be scattered across the vector.  Sorting by row_range first
+    // enables the Python ArcticRecordBatchReader to merge column slices
+    // incrementally (one row group at a time) instead of buffering all batches.
+    std::sort(
+            pipeline_context->slice_and_keys_.begin(),
+            pipeline_context->slice_and_keys_.end(),
+            [](const auto& a, const auto& b) {
+                return std::tie(a.slice_.row_range.first, a.slice_.col_range.first) <
+                       std::tie(b.slice_.row_range.first, b.slice_.col_range.first);
+            }
+    );
+
+    // Build columns_to_decode from the pipeline context's column bitset.
+    // If a FilterClause is provided, also include its required input columns
+    // so that segments contain the columns needed for expression evaluation.
+    std::shared_ptr<std::unordered_set<std::string>> cols_to_decode;
+    if (pipeline_context->overall_column_bitset_) {
+        cols_to_decode = std::make_shared<std::unordered_set<std::string>>();
+        auto en = pipeline_context->overall_column_bitset_->first();
+        auto en_end = pipeline_context->overall_column_bitset_->end();
+        while (en < en_end) {
+            cols_to_decode->insert(std::string(pipeline_context->desc_->field(*en++).name()));
+        }
+        // Ensure filter clause input columns are decoded even if not in the user's column selection
+        if (filter_clause && filter_clause->clause_info().input_columns_) {
+            for (const auto& col : *filter_clause->clause_info().input_columns_) {
+                cols_to_decode->insert(col);
+            }
+        }
+    }
+
+    // Extract filter expression context and root node name from the FilterClause
+    std::shared_ptr<ExpressionContext> expression_context;
+    std::string filter_root_node_name;
+    if (filter_clause) {
+        expression_context = filter_clause->expression_context_;
+        expression_context->dynamic_schema_ = opt_false(read_options.dynamic_schema());
+        filter_root_node_name = filter_clause->root_node_name_.value;
+    }
+
+    // Use the larger of the requested prefetch_size and the total number of
+    // segments, capped at 200 (matching the eager read path's batch_size).
+    // For remote storage (S3, MongoDB) the default prefetch_size=2 causes
+    // sequential reads that are 50-100x slower than the eager parallel path.
+    // Prefetching all segments fires off reads concurrently via Folly futures,
+    // hiding storage latency while still streaming decoded results one at a time.
+    const size_t effective_prefetch =
+            std::min(std::max(prefetch_size, pipeline_context->slice_and_keys_.size()), size_t{200});
+
+    return std::make_shared<LazyRecordBatchIterator>(
+            std::move(pipeline_context->slice_and_keys_),
+            pipeline_context->descriptor(),
+            store(),
+            std::move(cols_to_decode),
+            read_query->row_filter,
+            std::move(expression_context),
+            std::move(filter_root_node_name),
+            effective_prefetch
+    );
+}
+
 VersionedItem PythonVersionStore::read_modify_write(
         const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
         const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
