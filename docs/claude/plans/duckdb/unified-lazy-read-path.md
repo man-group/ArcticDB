@@ -8,7 +8,7 @@ The C++ read path has two parallel flows that share `setup_pipeline_context()` t
 
 ## Current Architecture: Two Divergent Paths
 
-### Eager Path (`read_dataframe_version` → `version_core.cpp:2714`)
+### Eager Path (`read_dataframe_version` → [`version_core.cpp:2714`](../../../../cpp/arcticdb/version/version_core.cpp#L2714))
 
 ```
 setup_pipeline_context()
@@ -25,7 +25,7 @@ Loads **all segments into a single `SegmentInMemory`**, then converts in one sho
 
 The eager path avoids column-slice and dynamic-schema problems because `reduce_and_fix_columns()` + `allocate_frame()` assemble all column slices into one unified `SegmentInMemory` with a single schema before `segment_to_arrow_data()` ever runs.
 
-### Lazy Path (`create_lazy_record_batch_iterator` → `version_store_api.cpp:1061`)
+### Lazy Path (`create_lazy_record_batch_iterator` → [`version_store_api.cpp:1061`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1061))
 
 ```
 setup_pipeline_context()
@@ -75,7 +75,7 @@ The **only** capabilities the eager path has that the lazy path lacks:
 
 ### Critical Architecture Finding: Prefetch Runs the Full Pipeline
 
-The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` in its prefetch buffer (`arrow_output_frame.hpp:186`). The entire chain — I/O, decode, truncation, filter, `prepare_segment_for_arrow()`, and `segment_to_arrow_data()` — runs inside a Folly future on the CPU thread pool (`arrow_output_frame.cpp:363-413`). The consumer's `next()` call merely does `.get()` on the already-resolved future.
+The current `LazyRecordBatchIterator` stores `Future<vector<RecordBatchData>>` in its prefetch buffer ([`arrow_output_frame.hpp:186`](../../../../cpp/arcticdb/arrow/arrow_output_frame.hpp#L186)). The entire chain — I/O, decode, truncation, filter, `prepare_segment_for_arrow()`, and `segment_to_arrow_data()` — runs inside a Folly future on the CPU thread pool ([`arrow_output_frame.cpp:363-413`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L363-L413)). The consumer's `next()` call merely does `.get()` on the already-resolved future.
 
 **This means a naive segment-yielding iterator (without Arrow conversion in the prefetch) would REGRESS throughput** by moving Arrow conversion out of the prefetch pipeline and into the consumer thread, serializing the dominant cost (`prepare_segment_for_arrow()`).
 
@@ -85,7 +85,7 @@ The architecture must preserve this property: Arrow conversion stays inside the 
 
 | Edge Case | Current Location | Why It's Safe |
 |-----------|-----------------|---------------|
-| **String handling** (SharedStringDictionary, CATEGORICAL, LARGE/SMALL_STRING, UTF-32→UTF-8) | `prepare_segment_for_arrow()` (`arrow_output_frame.cpp:204-304`) | Runs inside prefetch future; Arrow string handlers (`ArrowStringHandler`) registered for all string types |
+| **String handling** (SharedStringDictionary, CATEGORICAL, LARGE/SMALL_STRING, UTF-32→UTF-8) | `prepare_segment_for_arrow()` ([`arrow_output_frame.cpp:204-304`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L204-L304)) | Runs inside prefetch future; Arrow string handlers (`ArrowStringHandler`) registered for all string types |
 | **Sparse floats / missing values** | `prepare_segment_for_arrow():292-300` — validity bitmap + `unsparsify()` | Bitmap extracted BEFORE `unsparsify()` clears sparse map; runs inside future |
 | **Multi-block segments** | `pending_batches_` deque in `LazyRecordBatchIterator::next()` | `segment_to_arrow_data()` can produce multiple 64KB blocks per segment; deque drains them before pulling next future |
 | **Filter clause + dynamic schema** | `apply_filter_clause()` uses `ExpressionContext::dynamic_schema_` → `EmptyResult` on missing column | Returns empty vector; `next()` skips to next future |
@@ -96,42 +96,44 @@ The architecture must preserve this property: Arrow conversion stays inside the 
 | **Empty symbols** | `has_next()=false` immediately, `descriptor()` still valid | 0 `slice_and_keys_` → iterator exhausted; descriptor from pipeline context |
 | **MultiIndex (`__idx__` prefix)** | `_strip_idx_prefix_from_names()` in Python `ArcticRecordBatchReader` | Python layer, unaffected by C++ changes |
 | **Pickled data** | `!pipeline_context->multi_key_` check in `create_lazy_record_batch_iterator` | Rejected before iterator construction |
-| **Multi-key (recursive normalizer) data** | `pipeline_context->multi_key_` check at `version_store_api.cpp:1085-1088` | Multi-key stores a `MULTI_KEY` index referencing leaf sub-symbols; `setup_pipeline_context()` detects this at `version_core.cpp:1263-1265`, sets `multi_key_` and returns without populating `slice_and_keys_`. The lazy iterator rejects multi-key with an explicit error. Multi-key data is structurally incompatible with lazy iteration (no row/column slice metadata, requires Python-side reconstruction via `Flattener`). The eager path handles it via `read_multi_key()` (`version_core.cpp:634-660`). **Completely orthogonal to this plan.** |
+| **Multi-key (recursive normalizer) data** | `pipeline_context->multi_key_` check at [`version_store_api.cpp:1085-1088`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1085-L1088) | Multi-key stores a `MULTI_KEY` index referencing leaf sub-symbols; the read pipeline detects this at [`version_core.cpp:1263-1265`](../../../../cpp/arcticdb/version/version_core.cpp#L1263-L1265) (in `read_indexed_keys_to_pipeline`), sets `multi_key_`, and `setup_pipeline_context()` returns early at [`version_core.cpp:2664-2666`](../../../../cpp/arcticdb/version/version_core.cpp#L2664-L2666) without populating `slice_and_keys_`. The lazy iterator rejects multi-key with an explicit error. Multi-key data is structurally incompatible with lazy iteration (no row/column slice metadata, requires Python-side reconstruction via `Flattener`). The eager path handles it via `read_multi_key()` ([`version_core.cpp:634-660`](../../../../cpp/arcticdb/version/version_core.cpp#L634-L660)). **Completely orthogonal to this plan.** |
 | **EMPTYVAL type fields** | Decoder handles transparently; zero bytes stored, type handler reconstructs | `batch_read_uncompressed()` encounters zero-byte fields, decoder skips them |
 | **RangeIndex backward compat (step=0 patch)** | `create_python_read_result()` in eager path only | Arrow/Polars don't use pandas normalization metadata; patch not needed |
-| **Boolean dense packing** | `arrow_utils.cpp:46-58` — 1 bool/byte → 8 bools/byte | Runs inside `segment_to_arrow_data()` in prefetch future |
-| **Empty string dictionary** | `minimal_strings_for_dict()` inserts dummy `"a"` (`arrow_utils.cpp:103-105`) | Workaround for Sparrow requiring ≥1 dictionary entry; only triggered for zero-row or all-null string columns |
+| **Boolean dense packing** | [`arrow_utils.cpp:46-58`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L46-L58) — 1 bool/byte → 8 bools/byte | Runs inside `segment_to_arrow_data()` in prefetch future |
+| **Empty string dictionary** | `minimal_strings_for_dict()` inserts dummy `"a"` ([`arrow_utils.cpp:103-105`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L103-L105)) | Workaround for Sparrow requiring ≥1 dictionary entry; only triggered for zero-row or all-null string columns |
 | **Zero-row segments (after truncation)** | `segment_to_arrow_data()` returns 1 empty RecordBatch when `column_blocks == 0` | Schema preserved for DuckDB schema inference |
 | **Old data with incorrect end_index** | `apply_truncation()` binary search handles `time_filter.first > last_ts` → `truncate(0, 0)` | Produces zero-row segment, not crash |
 | **CPython 3.13 double `__iter__`** | `ArcticRecordBatchReader._iteration_started` flag | Python layer, must be preserved in Step 6 cleanup |
-| **Filter + column projection** | `library.py:2415` sets `qb = None` when `columns is not None` | Filter and columns are **never both set** — filter deferred to DuckDB when columns projected |
+| **Filter + column projection** | [`library.py:2415`](../../../../python/arcticdb/version_store/library.py#L2415) sets `qb = None` when `columns is not None` | Filter and columns are **never both set** — filter deferred to DuckDB when columns projected |
 
 ### Edge cases that block routing `lib.read(format=Arrow)` through the lazy path
 
-These are currently solved by Python `ArcticRecordBatchReader` for DuckDB but would break `_adapt_frame_data()` (`_store.py:2821-2845`) which calls `pa.Table.from_batches(record_batches)` — requiring **all batches to have identical schemas**.
+These are currently solved by Python `ArcticRecordBatchReader` for DuckDB but would break `_adapt_frame_data()` ([`_store.py:2821-2845`](../../../../python/arcticdb/version_store/_store.py#L2821-L2845)) which calls `pa.Table.from_batches(record_batches)` — requiring **all batches to have identical schemas**.
 
-**1. Column slicing (wide tables)**
+**1. Column slicing (wide tables, static schema only)**
 
-A 400-column table is tiled into ~4 column slices per row group. The lazy iterator yields one `RecordBatchData` per slice, each with a different ~100-column schema. `pa.Table.from_batches()` raises because schemas don't match.
+Column slicing is controlled by `columns_per_segment` (default 127, set in `options.py`). A 400-column table is tiled into ~4 column slices per row group. The lazy iterator yields one `RecordBatchData` per slice, each with a different ~100-column schema. `pa.Table.from_batches()` raises because schemas don't match.
+
+**Column slicing only applies to static schema libraries.** Dynamic schema libraries always use a single column slice (`columns_per_segment` is effectively infinite — see `options.py:121-122`). This is a critical distinction for Amendment A (filter pushdown).
 
 - **Eager path avoids this**: `reduce_and_fix_columns()` + `allocate_frame()` assemble all slices into one `SegmentInMemory` before `segment_to_arrow_data()`.
-- **DuckDB path avoids this**: `ArcticRecordBatchReader._merge_slices_for_group()` (`arrow_reader.py:219-239`) horizontally concatenates consecutive slices in Python. Detection via `_is_same_row_group()` checks: same row count, at least one new column, overlapping columns (index) have identical values.
+- **DuckDB path avoids this**: `ArcticRecordBatchReader._merge_slices_for_group()` ([`arrow_reader.py:219-239`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L219-L239)) horizontally concatenates consecutive slices in Python. Detection via `_is_same_row_group()` checks: same row count, at least one new column, overlapping columns (index) have identical values.
 - **Resolution**: Must be solved in C++ before `lib.read` can use the lazy path. See Step 3.
 
 **2. Dynamic schema (different columns per segment)**
 
 With dynamic schema, different segments have different column subsets. The lazy iterator yields batches with heterogeneous schemas. `pa.Table.from_batches()` fails.
 
-- **Eager path avoids this**: `allocate_frame()` pre-allocates the full merged schema, `fetch_data()` fills in only the columns present per segment (rest stays zero/null). `NullValueReducer` (`read_frame.cpp:821-929`) backfills gaps with null arrays and all-zero validity bitmaps.
-- **DuckDB path avoids this**: `_pad_batch_to_schema()` (`arrow_reader.py:81-108`) adds null columns per batch to match the full schema.
+- **Eager path avoids this**: `allocate_frame()` pre-allocates the full merged schema, `fetch_data()` fills in only the columns present per segment (rest stays zero/null). `NullValueReducer` ([`read_frame.cpp:821-929`](../../../../cpp/arcticdb/pipeline/read_frame.cpp#L821-L929)) backfills gaps with null arrays and all-zero validity bitmaps.
+- **DuckDB path avoids this**: `_pad_batch_to_schema()` ([`arrow_reader.py:81-108`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L81-L108)) adds null columns per batch to match the full schema.
 - **Resolution**: Must be solved in C++ before `lib.read` can use the lazy path. See Step 4.
 
 **3. Type widening (int→float across appends)**
 
 When the first segment has `int64` and a later append promotes to `float64`:
 
-- **Current bug in DuckDB path**: `_ensure_schema()` (`arrow_reader.py:302-346`) uses first batch's Arrow type (`int64`), overriding the merged descriptor's correct promoted type (`float64`). Later `float64` batches cause `ArrowInvalid` on downcast in `_pad_batch_to_schema`.
-- **Eager path avoids this**: `allocate_frame()` uses the merged descriptor type (correct). `promote_integral_type()` (`read_frame.cpp:676-716`) iterates backwards through values, casting in-place.
+- **Current bug in DuckDB path**: `_ensure_schema()` ([`arrow_reader.py:302-346`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L302-L346)) uses first batch's Arrow type (`int64`), overriding the merged descriptor's correct promoted type (`float64`). Later `float64` batches cause `ArrowInvalid` on downcast in `_pad_batch_to_schema`.
+- **Eager path avoids this**: `allocate_frame()` uses the merged descriptor type (correct). `promote_integral_type()` ([`read_frame.cpp:676-716`](../../../../cpp/arcticdb/pipeline/read_frame.cpp#L676-L716)) iterates backwards through values, casting in-place.
 - **Resolution**: C++ schema padding (Step 4) should use the merged descriptor type as the source of truth, which fixes this bug as a side effect. See Step 4.
 
 ---
@@ -222,7 +224,7 @@ Shared free functions (extracted from arrow_output_frame.cpp):
 
 ### Step 1: Extract Shared Helpers and Refactor `LazyRecordBatchIterator`
 
-The current `LazyRecordBatchIterator` (`arrow_output_frame.hpp:135-213`, `arrow_output_frame.cpp:340-549`) contains both reusable segment-reading logic and Arrow-specific conversion. The goal is to extract the reusable parts as shared free functions for testability, add dual-cap backpressure, and **leave `LazyRecordBatchIterator`'s prefetch pipeline structure intact**.
+The current `LazyRecordBatchIterator` ([`arrow_output_frame.hpp:135-213`](../../../../cpp/arcticdb/arrow/arrow_output_frame.hpp#L135-L213), [`arrow_output_frame.cpp:340-549`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L340-L549)) contains both reusable segment-reading logic and Arrow-specific conversion. The goal is to extract the reusable parts as shared free functions for testability, add dual-cap backpressure, and **leave `LazyRecordBatchIterator`'s prefetch pipeline structure intact**.
 
 #### Shared free functions (new file: `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp`)
 
@@ -415,7 +417,7 @@ The current test suite has **zero C++ tests** for `LazyRecordBatchIterator` or t
 
 ArcticDB tiles wide tables into ~127-column slices. The lazy iterator yields one batch per slice. Without merging, a 400-column table produces ~4 batches per row group, each with a different schema. `pa.Table.from_batches()` requires uniform schemas and would fail.
 
-Currently solved in Python by `ArcticRecordBatchReader._merge_slices_for_group()` (`arrow_reader.py:219-239`).
+Currently solved in Python by `ArcticRecordBatchReader._merge_slices_for_group()` ([`arrow_reader.py:219-239`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L219-L239)).
 
 #### Approach: Arrow-Level Incremental Merge in Prefetch
 
@@ -508,8 +510,8 @@ Row group with 3 slices, each producing 2 blocks:
 - `ColumnSliceMerge_PartialConsume_NoLeak` — consume partial iterator, destroy, ASan leak check
 
 **Key files:**
-- `cpp/arcticdb/arrow/arrow_output_frame.cpp` — merging logic in `LazyRecordBatchIterator::next()`
-- `cpp/arcticdb/arrow/arrow_utils.hpp` — helper `horizontal_merge_arrow_batches()`
+- [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp) — merging logic in `LazyRecordBatchIterator::next()`
+- [`cpp/arcticdb/arrow/arrow_utils.hpp`](../../../../cpp/arcticdb/arrow/arrow_utils.hpp) — helper `horizontal_merge_arrow_batches()`
 
 ### Step 4: Schema Padding in C++ (Dynamic Schema)
 
@@ -517,7 +519,7 @@ Row group with 3 slices, each producing 2 blocks:
 
 With dynamic schema, different segments have different column subsets. Without padding, batches have heterogeneous schemas. `pa.Table.from_batches()` fails.
 
-Currently solved in Python by `_pad_batch_to_schema()` (`arrow_reader.py:81-108`) which adds null columns for missing fields.
+Currently solved in Python by `_pad_batch_to_schema()` ([`arrow_reader.py:81-108`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L81-L108)) which adds null columns for missing fields.
 
 **Approach:** Add schema padding to `LazyRecordBatchIterator` after Arrow conversion and column-slice merging. The iterator holds the merged `StreamDescriptor` (from its own `descriptor()` method, populated by `setup_pipeline_context()`), which is the authoritative superset schema.
 
@@ -566,14 +568,14 @@ For each `RecordBatchData` produced (post-merge if column-sliced):
 - `SchemaPadding_NullArrayCaching` — verify null arrays reused across same-size segments
 
 **Key files:**
-- `cpp/arcticdb/arrow/arrow_output_frame.cpp` — padding logic in `LazyRecordBatchIterator::next()` (after merge, before returning)
-- `cpp/arcticdb/arrow/arrow_utils.hpp` — helpers for null array creation, type casting, and target schema construction
+- [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp) — padding logic in `LazyRecordBatchIterator::next()` (after merge, before returning)
+- [`cpp/arcticdb/arrow/arrow_utils.hpp`](../../../../cpp/arcticdb/arrow/arrow_utils.hpp) — helpers for null array creation, type casting, and target schema construction
 
 ### Step 5: Route `lib.read(output_format='pyarrow')` Through `LazyRecordBatchIterator`
 
 **Depends on:** Steps 3 (column-slice merging) and 4 (schema padding). Without these, `_adapt_frame_data()` would receive batches with heterogeneous schemas and fail on `pa.Table.from_batches()`.
 
-Currently, `create_python_read_result()` (`pipeline_utils.hpp:84-90`) handles Arrow output by calling `segment_to_arrow_data(full_frame)` on the entire assembled `SegmentInMemory`. This means `lib.read(output_format='pyarrow')` materializes the entire symbol in memory even though the consumer gets Arrow batches.
+Currently, `create_python_read_result()` ([`pipeline_utils.hpp:84-90`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L84-L90)) handles Arrow output by calling `segment_to_arrow_data(full_frame)` on the entire assembled `SegmentInMemory`. This means `lib.read(output_format='pyarrow')` materializes the entire symbol in memory even though the consumer gets Arrow batches.
 
 **Change:** For `OutputFormat::ARROW` without processing clauses (direct reads), skip the eager `do_direct_read_or_process()` path and return a `LazyRecordBatchIterator` instead. With Steps 3 and 4 complete, all batches have uniform schemas, so `_adapt_frame_data()` works unchanged.
 
@@ -583,7 +585,7 @@ Currently, `create_python_read_result()` (`pipeline_utils.hpp:84-90`) handles Ar
 - No change to `lib.read(output_format='pandas')` — keeps the zero-copy fast path
 - No change to reads with processing clauses (GROUP BY, resample) — keeps eager path
 
-**Python-side changes to `_adapt_frame_data()` (`_store.py:2821-2845`):**
+**Python-side changes to `_adapt_frame_data()` ([`_store.py:2821-2845`](../../../../python/arcticdb/version_store/_store.py#L2821-L2845)):**
 - Accept either `ArrowOutputFrame` (eager, existing) or `LazyRecordBatchIterator` (lazy, new)
 - For lazy: iterate `next()`, import each `RecordBatchData` via `pa.RecordBatch._import_from_c()`, collect into `pa.Table`
 - Schemas are already uniform (Steps 3+4), so `pa.Table.from_batches()` works
@@ -597,13 +599,13 @@ def to_polars_lazy(self, symbol, **read_kwargs):
     return pl.from_arrow(reader.to_pyarrow_reader())  # Polars consumes lazily
 ```
 
-**Note on type handlers**: `pipeline_utils.hpp:30-35` asserts `output_format == PANDAS` for type-handler-based reads. The Arrow path does NOT use this code — Arrow string handlers are registered separately (`ArrowStringHandler` for `UTF_DYNAMIC64`, `ASCII_DYNAMIC64`, etc.) and invoked by `prepare_segment_for_arrow()`. Pandas-only types (`BOOL_OBJECT8`, `PythonEmptyHandler`, `PythonArrayHandler`) don't have Arrow handlers, but these are rare edge-case types. If encountered in Arrow output, they should raise a clear error message: "Type X requires pandas output format".
+**Note on type handlers**: [`pipeline_utils.hpp:30-35`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L30-L35) asserts `output_format == PANDAS` for type-handler-based reads. The Arrow path does NOT use this code — Arrow string handlers are registered separately (`ArrowStringHandler` for `UTF_DYNAMIC64`, `ASCII_DYNAMIC64`, etc.) and invoked by `prepare_segment_for_arrow()`. Pandas-only types (`BOOL_OBJECT8`, `PythonEmptyHandler`, `PythonArrayHandler`) don't have Arrow handlers, but these are rare edge-case types. If encountered in Arrow output, they should raise a clear error message: "Type X requires pandas output format".
 
 **Key files:**
-- `cpp/arcticdb/version/version_store_api.cpp` — `read_dataframe_version()` branches on output_format for clause-free reads
-- `cpp/arcticdb/pipeline/pipeline_utils.hpp` — `create_python_read_result()` for ARROW path
-- `python/arcticdb/version_store/_store.py` — `_adapt_frame_data()` handles iterator case
-- `cpp/arcticdb/version/python_bindings.cpp` — return type for Arrow reads changes to lazy iterator
+- [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp) — `read_dataframe_version()` branches on output_format for clause-free reads
+- [`cpp/arcticdb/pipeline/pipeline_utils.hpp`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp) — `create_python_read_result()` for ARROW path
+- [`python/arcticdb/version_store/_store.py`](../../../../python/arcticdb/version_store/_store.py) — `_adapt_frame_data()` handles iterator case
+- [`cpp/arcticdb/version/python_bindings.cpp`](../../../../cpp/arcticdb/version/python_bindings.cpp) — return type for Arrow reads changes to lazy iterator
 
 ### Step 6: Simplify Python `ArcticRecordBatchReader` (Cleanup)
 
@@ -631,9 +633,9 @@ With Steps 3 and 4 complete, the C++ `LazyRecordBatchIterator` produces batches 
 
 3. **Don't change `lib.read(output_format='pandas')` with clauses.** The eager path + clause system handles this correctly. Only the Arrow output path benefits from the lazy iterator.
 
-4. **Don't change the filter+column-projection interaction (until Step 3).** Currently `query_builder` is set to `None` when columns are projected (`library.py:2415`). After Step 3 merges column slices in C++, this workaround can be **removed** — filters can be pushed even with column projection because all columns are available in the merged batch. See "sql() Simplifications" section.
+4. **Don't change the filter+column-projection interaction (until Step 3).** Currently `query_builder` is set to `None` when columns are projected ([`library.py:2415`](../../../../python/arcticdb/version_store/library.py#L2415)). After Step 3 merges column slices in C++, this workaround can be **removed** — filters can be pushed even with column projection because all columns are available in the merged batch. See "sql() Simplifications" section.
 
-5. **Don't apply the RangeIndex step=0 backward compatibility patch in the lazy path.** This patch (`pipeline_utils.hpp:64-80`) only applies to Pandas normalization metadata and runs in `create_python_read_result()`. Arrow and Polars don't need it.
+5. **Don't apply the RangeIndex step=0 backward compatibility patch in the lazy path.** This patch ([`pipeline_utils.hpp:64-80`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L64-L80)) only applies to Pandas normalization metadata and runs in `create_python_read_result()`. Arrow and Polars don't need it.
 
 ---
 
@@ -645,7 +647,7 @@ Deep analysis of every edge case in both read paths, whether the unified plan ha
 
 | # | Edge Case | Eager Path Handling | Lazy Path Handling | Unified Plan Coverage |
 |---|-----------|--------------------|--------------------|----------------------|
-| 1 | **Column slicing (wide tables)** | `reduce_and_fix_columns()` + `FrameSliceMap` in C++ | Python `_merge_slices_for_group()` | **Step 3** — C++ horizontal Arrow merge |
+| 1 | **Column slicing (wide tables, static schema only)** | `reduce_and_fix_columns()` + `FrameSliceMap` in C++ | Python `_merge_slices_for_group()` | **Step 3** — C++ horizontal Arrow merge. Note: column slicing only applies to static schema; dynamic schema uses a single column slice (`options.py:121-122`). |
 | 2 | **Dynamic schema (heterogeneous cols)** | `NullValueReducer` backfills nulls in C++ | Python `_pad_batch_to_schema()` | **Step 4** — C++ schema padding to merged descriptor |
 | 3 | **Type widening (int→float)** | `promote_integral_type()` backward iteration in C++ | **BUG**: `_ensure_schema()` uses first batch types | **Step 4** — fixed by using descriptor as source of truth |
 | 4 | **Sparse floats / validity bitmaps** | `backfill_all_zero_validity_bitmaps_up_to()` in `NullValueReducer` | `prepare_segment_for_arrow():292-300` extracts bitmap BEFORE `unsparsify()` | Stays in `LazyRecordBatchIterator` Arrow prefetch — no change needed |
@@ -670,14 +672,16 @@ Deep analysis of every edge case in both read paths, whether the unified plan ha
 
 #### A. Filter Pushdown with Column Projection (BLOCKER — cannot remove workaround)
 
-**Current state**: `library.py:2409-2415` disables `FilterClause` pushdown when `columns is not None` because the filter column may be in a different column slice than the data being processed.
+**Current state**: [`library.py:2409-2415`](../../../../python/arcticdb/version_store/library.py#L2409-L2415) disables `FilterClause` pushdown when `columns is not None` because the filter column may be in a different column slice than the data being processed.
 
-**Root cause (verified)**: With column slicing (static schema), a 400-column table is tiled into ~4 column slices per row group. Filters are applied **per-segment** in `apply_filter_clause()` (`arrow_output_frame.cpp:481-518`). Each segment is a single column slice. When the filter references column `b` but the current segment is a slice that doesn't contain `b`:
+**Root cause (verified)**: Column slicing (controlled by `columns_per_segment`, default 127) tiles wide static-schema tables into multiple column slices per row group. **Column slicing only applies to static schema libraries** — dynamic schema libraries always use a single column slice ([`options.py:121-122`](../../../../python/arcticdb/options.py#L121-L122)), so this issue is exclusive to static schema.
 
-- **Static schema** (`dynamic_schema_=false`): `ProcessingUnit::get()` (`processing_unit.cpp:59-63`) raises `E_ASSERTION_FAILURE` — **crash**.
-- **Dynamic schema** (`dynamic_schema_=true`): Returns `EmptyResult{}` — treats missing column as if all rows match nothing, **silently drops all data from that slice**.
+With a 400-column static-schema table tiled into ~4 column slices per row group, filters are applied **per-segment** in `apply_filter_clause()` ([`arrow_output_frame.cpp:481-518`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L481-L518)). Each segment is a single column slice. When the filter references column `b` but the current segment is a slice that doesn't contain `b`:
 
-Neither outcome is correct. Although `columns_to_decode` is augmented with filter input columns (`version_store_api.cpp:1117-1120`), this only controls which columns are decoded from storage. It does NOT change which columns are physically present in a given column slice's segment. The filter column is stored in exactly one column slice per row group.
+- **Static schema** (`dynamic_schema_=false`): `ProcessingUnit::get()` ([`processing_unit.cpp:59-63`](../../../../cpp/arcticdb/processing/processing_unit.cpp#L59-L63)) raises `E_ASSERTION_FAILURE` — **crash**. This is the real concern because static schema is the only mode that column-slices.
+- **Dynamic schema** (`dynamic_schema_=true`): Would return `EmptyResult{}`, silently dropping data. However, this path is **not a practical concern** for column slicing because dynamic schema doesn't column-slice. It could only be hit via Bug 4 (passing the wrong `dynamic_schema` flag for a static-schema library), which is already mitigated.
+
+Although `columns_to_decode` is augmented with filter input columns ([`version_store_api.cpp:1117-1120`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1117-L1120)), this only controls which columns are decoded from storage. It does NOT change which columns are physically present in a given column slice's segment. The filter column is stored in exactly one column slice per row group.
 
 **After Step 3**: Column-slice merging (Step 3) happens in `LazyRecordBatchIterator::next()` at the **Arrow level**, AFTER the per-segment prefetch pipeline (I/O → decode → truncate → filter → Arrow convert). Since filtering runs inside the prefetch future BEFORE merging, Step 3 does NOT fix this problem.
 
@@ -691,7 +695,7 @@ Neither outcome is correct. Although `columns_to_decode` is augmented with filte
 
 #### B. EMPTYVAL Type Handling in Arrow Output
 
-**Eager path**: `PythonEmptyHandler` (`python_handlers_common.hpp:18`) converts EMPTYVAL to Python `None` objects, but only for `OutputFormat::PANDAS` (assertion at `pipeline_utils.hpp:32-35`).
+**Eager path**: `PythonEmptyHandler` ([`python_handlers_common.hpp:18`](../../../../cpp/arcticdb/python/python_handlers_common.hpp#L18)) converts EMPTYVAL to Python `None` objects, but only for `OutputFormat::PANDAS` (assertion at [`pipeline_utils.hpp:32-35`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L32-L35)).
 
 **Lazy path**: `batch_read_uncompressed()` encounters zero-byte EMPTYVAL fields. The decoder handles them transparently (zero bytes stored, type handler reconstructs). But for Arrow output, there is no `ArrowEmptyHandler` registered.
 
@@ -703,7 +707,7 @@ Neither outcome is correct. Although `columns_to_decode` is augmented with filte
 
 #### C. `_descriptor_to_arrow_schema()` Type Mapping Gaps
 
-**Current issue** (`arrow_reader.py:27-47`): The `_DATATYPE_TO_ARROW` mapping only covers 14 types (UINT8–UINT64, INT8–INT64, FLOAT32, FLOAT64, BOOL8, NANOSECONDS_UTC64, ASCII_DYNAMIC64, UTF_DYNAMIC64). Missing types fall back to `pa.string()`, which is wrong for:
+**Current issue** ([`arrow_reader.py:27-47`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L27-L47)): The `_DATATYPE_TO_ARROW` mapping only covers 14 types (UINT8–UINT64, INT8–INT64, FLOAT32, FLOAT64, BOOL8, NANOSECONDS_UTC64, ASCII_DYNAMIC64, UTF_DYNAMIC64). Missing types fall back to `pa.string()`, which is wrong for:
 - `NANOSECONDS_UTC64` variants (different timezones) — mapped correctly
 - `UTF_FIXED64` / `ASCII_FIXED64` — not mapped, falls to `pa.string()` (should be `pa.large_string()`)
 - `EMPTYVAL` — falls to `pa.string()` (acceptable for null columns)
@@ -715,13 +719,13 @@ Neither outcome is correct. Although `columns_to_decode` is augmented with filte
 
 #### D. Sparse Bitmap + Truncation Interaction
 
-**Eager path**: `handle_truncation()` (`read_frame.cpp:326-335`) modifies column metadata for the truncated range. Sparse bitmaps are handled by `NullValueReducer::backfill_all_zero_validity_bitmaps_up_to()`.
+**Eager path**: `handle_truncation()` ([`read_frame.cpp:326-335`](../../../../cpp/arcticdb/pipeline/read_frame.cpp#L326-L335)) modifies column metadata for the truncated range. Sparse bitmaps are handled by `NullValueReducer::backfill_all_zero_validity_bitmaps_up_to()`.
 
 **Lazy path**: `apply_truncation()` truncates the `SegmentInMemory`. Then `prepare_segment_for_arrow()` extracts the sparse bitmap from the truncated segment. The bitmap must reflect only the truncated rows.
 
 **Risk**: If `sparse_map()` is not truncated in sync with the data, the bitmap has wrong length.
 
-**Validation**: `segment.row_count()` after truncation returns the truncated count. `bv.resize(segment.row_count())` at `arrow_output_frame.cpp:297` uses this count. The sparse map itself is a `util::BitMagic` bitset keyed by row index — after truncation, indices beyond the new row_count are simply ignored by `resize()`. **This is correct.**
+**Validation**: `segment.row_count()` after truncation returns the truncated count. `bv.resize(segment.row_count())` at [`arrow_output_frame.cpp:297`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L297) uses this count. The sparse map itself is a `util::BitMagic` bitset keyed by row index — after truncation, indices beyond the new row_count are simply ignored by `resize()`. **This is correct.**
 
 **Amendment**: Add test case to Step 2: sparse float column truncated mid-segment, verify validity bitmap matches truncated data.
 
@@ -729,7 +733,7 @@ Neither outcome is correct. Although `columns_to_decode` is augmented with filte
 
 **Eager path**: Binary search in `apply_truncation()` handles `time_filter.first > last_ts` by returning `truncate(0, 0)`.
 
-**Lazy path**: Same `apply_truncation()` code (`arrow_output_frame.cpp:448-449`).
+**Lazy path**: Same `apply_truncation()` code ([`arrow_output_frame.cpp:448-449`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L448-L449)).
 
 **Amendment**: Already handled. Add regression test.
 
@@ -739,7 +743,7 @@ Neither outcome is correct. Although `columns_to_decode` is augmented with filte
 
 **Lazy path (current)**: Python `_merge_slices_for_group()` produces columns in slice encounter order, which happens to match because slices are sorted by `col_range`.
 
-**After Step 3**: C++ merge must reorder columns to match the merged descriptor's field order. The sort by `(row_range, col_range)` in `version_store_api.cpp:1096-1103` ensures slices arrive in col_range order, so incremental merging naturally produces correct column order. BUT: index column deduplication (removing duplicates from slices 2+) could shift column positions.
+**After Step 3**: C++ merge must reorder columns to match the merged descriptor's field order. The sort by `(row_range, col_range)` in [`version_store_api.cpp:1096-1103`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1096-L1103) ensures slices arrive in col_range order, so incremental merging naturally produces correct column order. BUT: index column deduplication (removing duplicates from slices 2+) could shift column positions.
 
 **Amendment**: Step 3's horizontal merge must:
 1. Skip duplicate index columns from subsequent slices
@@ -750,7 +754,7 @@ Add test: write 400-column table, read back, verify `batch.schema.names == descr
 
 #### G. Validity Bitmap Size Limit
 
-**Current code** (`arrow_utils.cpp:22-25`): Asserts `bitmap_buffer.blocks().size() == 1` — bitmap must fit in a single block.
+**Current code** ([`arrow_utils.cpp:22-25`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L22-L25)): Asserts `bitmap_buffer.blocks().size() == 1` — bitmap must fit in a single block.
 
 **When violated**: A segment with >512K rows (64KB bitmap = 512K bits) would exceed one block.
 
@@ -762,7 +766,7 @@ Add test: write 400-column table, read back, verify `batch.schema.names == descr
 
 #### Bug 1: Type Widening in `_ensure_schema()` (CONFIRMED)
 
-**Location**: `arrow_reader.py:302-346`
+**Location**: [`arrow_reader.py:302-346`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L302-L346)
 
 **Description**: `_ensure_schema()` builds the output schema using the first batch's actual Arrow types (line 341-342). For type-widened columns (e.g., `int64` first segment, `float64` after append promotion), the first batch's type (`int64`) is used as the schema type. Later `float64` batches are cast to `int64` in `_pad_batch_to_schema()` (line 101-102), causing either:
 - `ArrowInvalid` on incompatible downcast (float64 → int64 with fractional values)
@@ -776,7 +780,7 @@ Add test: write 400-column table, read back, verify `batch.schema.names == descr
 
 #### Bug 2: Dictionary vs Plain String Type Mismatch in Schema Padding
 
-**Location**: `arrow_reader.py:81-108`, `arrow_reader.py:27-42`
+**Location**: [`arrow_reader.py:81-108`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L81-L108), [`arrow_reader.py:27-42`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L27-L42)
 
 **Description**: `_descriptor_to_arrow_schema()` maps `UTF_DYNAMIC64` → `pa.large_string()`. But C++ Arrow conversion produces `pa.dictionary(pa.int32(), pa.large_string())` for dictionary-encoded string columns. When `_ensure_schema()` uses the first batch's actual type (dictionary-encoded), but a later batch has a different dictionary encoding or plain string, `_pad_batch_to_schema()` must cast between string representations.
 
@@ -786,7 +790,7 @@ Add test: write 400-column table, read back, verify `batch.schema.names == descr
 
 #### Bug 3: Fast-Path Column Projection Opportunity (NOT a bug, but optimization)
 
-**Location**: `library.py:2350`
+**Location**: [`library.py:2350`](../../../../python/arcticdb/version_store/library.py#L2350)
 
 **Description**: The fast-path check `pushdown.columns is None` prevents `self.read()` from being used when columns are projected. Since `self.read()` handles column projection correctly, this could be relaxed to also fast-path queries with column projection (bypassing DuckDB when fully pushed).
 
@@ -800,7 +804,7 @@ This is safe because `self.read(columns=pushdown.columns, ...)` handles projecti
 
 #### Bug 4: `dynamic_schema` Flag Misuse Risk
 
-**Location**: `library.py:2370-2374`
+**Location**: [`library.py:2370-2374`](../../../../python/arcticdb/version_store/library.py#L2370-L2374)
 
 **Description**: Passing `dynamic_schema=True` for a static-schema library disables the C++ column-slice filter, causing all column slices to be returned (even those without projected columns). Extra slices are null-padded, producing spurious NULL rows in GROUP BY.
 
@@ -831,7 +835,7 @@ With the unified lazy path producing uniform-schema Arrow batches, the following
 
 | File | Section | Lines | Reason |
 |------|---------|-------|--------|
-| `library.py` | Filter pushdown workaround (lines 2409-2415) | ~7 | **MUST KEEP**: Per-segment filtering runs BEFORE column-slice merging; filter column is only in one slice per row group. Static schema would crash on missing column. See Amendment A. |
+| `library.py` | Filter pushdown workaround (lines 2409-2415) | ~7 | **MUST KEEP**: Per-segment filtering runs BEFORE column-slice merging; filter column is only in one slice per row group. Static schema (the only mode that column-slices) would crash with `E_ASSERTION_FAILURE` on the missing column. See Amendment A. |
 
 ### Code Retained (Correctly, ~100 lines)
 
@@ -885,7 +889,7 @@ class ArcticRecordBatchReader:
 
 ### sql() Method Simplifications
 
-**Current** `library.py:2395-2425` (per-symbol registration):
+**Current** [`library.py:2395-2425`](../../../../python/arcticdb/version_store/library.py#L2395-L2425) (per-symbol registration):
 ```python
 # Current: 30+ lines of workarounds
 if columns is not None:
@@ -925,7 +929,7 @@ reader = self._read_as_record_batch_reader(
 | Scenario | Current | After Unification | Improvement |
 |----------|---------|-------------------|-------------|
 | **Wide table (400 cols) `SELECT *`** | 4 Python merges/row-group + value comparison | C++ merge in prefetch future | ~2-3x throughput (no GIL, no intermediate allocations) |
-| **Wide table with `WHERE` + column projection** | Filter NOT pushed, DuckDB applies WHERE to all rows | Same — filter pushdown with column projection requires post-merge evaluation (future work, see Amendment A) | No change |
+| **Wide static-schema table with `WHERE` + column projection** | Filter NOT pushed, DuckDB applies WHERE to all rows | Same — filter pushdown with column projection requires post-merge evaluation (future work, see Amendment A). Only affects static schema (dynamic schema doesn't column-slice). | No change |
 | **Dynamic schema `GROUP BY`** | Python padding per batch (null array creation, no caching) | C++ padding with null array caching | ~1.5x throughput |
 | **Type-widened columns** | **Broken** (ArrowInvalid or precision loss) | Correct (descriptor types used) | Correctness fix |
 | **Narrow table (< 127 cols) `SELECT *`** | No merging needed, direct passthrough | Same — single slice, no merging | No change |
@@ -936,7 +940,7 @@ reader = self._read_as_record_batch_reader(
 
 ### Prefetch Sizing and Bounds
 
-**Current behavior**: `version_store_api.cpp:1133-1140` sets `effective_prefetch = min(max(prefetch_size, num_segments), 200)`. This fires up to 200 concurrent reads to hide storage latency.
+**Current behavior**: [`version_store_api.cpp:1133-1140`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1133-L1140) sets `effective_prefetch = min(max(prefetch_size, num_segments), 200)`. This fires up to 200 concurrent reads to hide storage latency.
 
 **Problem**: Count-based cap alone can OOM on wide tables. 200 segments × 400MB (wide table with many columns) = 80GB in prefetch, before Arrow conversion doubles it via `make_column_blocks_detachable()`.
 
@@ -1036,11 +1040,11 @@ Ordered, commit-sized work items. Each item is self-consistent: existing tests p
 
 These are details discovered during review that the implementer must handle:
 
-1. **`batch_read_uncompressed` returns `SegmentAndSlice`**, not `SegmentInMemory`. The segment is at `segment_and_slice.segment_in_memory_`. See `arrow_output_frame.cpp:389`.
+1. **`batch_read_uncompressed` returns `SegmentAndSlice`**, not `SegmentInMemory`. The segment is at `segment_and_slice.segment_in_memory_`. See [`arrow_output_frame.cpp:389`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L389).
 
-2. **`columns_to_decode` is already augmented** with filter input columns by `version_store_api.cpp:1117-1120` before the iterator is constructed. `LazyRecordBatchIterator` receives the complete set and passes it through unchanged.
+2. **`columns_to_decode` is already augmented** with filter input columns by [`version_store_api.cpp:1117-1120`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1117-L1120) before the iterator is constructed. `LazyRecordBatchIterator` receives the complete set and passes it through unchanged.
 
-3. **`RecordBatchData` wraps Arrow C Data Interface** (`ArrowArray` + `ArrowSchema`) via Sparrow. Constructed at `arrow_output_frame.cpp:407-411` from `sparrow::extract_arrow_structures()`. Move-only semantics.
+3. **`RecordBatchData` wraps Arrow C Data Interface** (`ArrowArray` + `ArrowSchema`) via Sparrow. Constructed at [`arrow_output_frame.cpp:407-411`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L407-L411) from `sparrow::extract_arrow_structures()`. Move-only semantics.
 
 4. **`has_next()`**: `LazyRecordBatchIterator` checks `!prefetch_buffer_.empty() || !pending_batches_.empty()` — same as today.
 
@@ -1048,11 +1052,11 @@ These are details discovered during review that the implementer must handle:
 
 6. **Python test gaps to fill in Phase 0/2**: No tests for integer type widening (int32→int64) via SQL, sparse columns created via append + SQL, or wide tables (>127 cols) with append. These should be added alongside the C++ tests.
 
-7. **`segment_to_arrow_data` returns `shared_ptr<vector<sparrow::record_batch>>`** (see `arrow_utils.hpp:30`). The conversion to `RecordBatchData` happens via `sparrow::extract_arrow_structures()` on each record batch. This is where the Arrow C Data Interface ownership transfer occurs.
+7. **`segment_to_arrow_data` returns `shared_ptr<vector<sparrow::record_batch>>`** (see [`arrow_utils.hpp:30`](../../../../cpp/arcticdb/arrow/arrow_utils.hpp#L30)). The conversion to `RecordBatchData` happens via `sparrow::extract_arrow_structures()` on each record batch. This is where the Arrow C Data Interface ownership transfer occurs.
 
-8. **`FilterRange` type**: `std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>` (defined at `arrow_output_frame.hpp:45`). `std::monostate` means no truncation.
+8. **`FilterRange` type**: `std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>` (defined at [`arrow_output_frame.hpp:45`](../../../../cpp/arcticdb/arrow/arrow_output_frame.hpp#L45)). `std::monostate` means no truncation.
 
-9. **Sparrow zero-copy child extraction chain (verified)**: Horizontal merging of `RecordBatchData` can be done without copying data buffers, but requires manual C struct manipulation. **Risk**: the extraction chain uses `detail::array_access::get_arrow_proxy()` which is Sparrow's **internal/detail API**, not part of the public API surface. ArcticDB already uses it (`arrow_output_frame.cpp:331`), but it may break across Sparrow upgrades. If Sparrow's internal API changes, consider requesting a public `record_batch::extract_column(size_t idx)` API from the Sparrow maintainers. The verified extraction path:
+9. **Sparrow zero-copy child extraction chain (verified)**: Horizontal merging of `RecordBatchData` can be done without copying data buffers, but requires manual C struct manipulation. **Risk**: the extraction chain uses `detail::array_access::get_arrow_proxy()` which is Sparrow's **internal/detail API**, not part of the public API surface. ArcticDB already uses it ([`arrow_output_frame.cpp:331`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L331)), but it may break across Sparrow upgrades. If Sparrow's internal API changes, consider requesting a public `record_batch::extract_column(size_t idx)` API from the Sparrow maintainers. The verified extraction path:
    ```
    record_batch::extract_struct_array()          // empties record_batch, moves struct_array out
      → detail::array_access::get_arrow_proxy()   // mutable access to arrow_proxy
@@ -1062,9 +1066,9 @@ These are details discovered during review that the implementer must handle:
    ```
    Reconstruction via `record_batch(ArrowArray&&, ArrowSchema&&)` constructor. Each step is a move — column data buffers stay in place. **Risk**: the parent `ArrowArray`'s `release` callback must only free the `children` pointer array, not recurse into children (which own their own release callbacks). Getting this wrong causes double-frees. Must be validated under ASan. See Phase 3 tests for required assertions.
 
-10. **Multi-key data is orthogonal to lazy reads**: `setup_pipeline_context()` detects `KeyType::MULTI_KEY` at `version_core.cpp:1263-1265`, sets `pipeline_context->multi_key_` and returns without populating `slice_and_keys_`. The lazy iterator rejects multi-key at `version_store_api.cpp:1085-1088`. Multi-key data (from recursive normalizer) stores a `MULTI_KEY` index referencing leaf sub-symbols and requires Python-side reconstruction via `Flattener`. This plan does not change multi-key handling.
+10. **Multi-key data is orthogonal to lazy reads**: The read pipeline detects `KeyType::MULTI_KEY` at [`version_core.cpp:1263-1265`](../../../../cpp/arcticdb/version/version_core.cpp#L1263-L1265) (in `read_indexed_keys_to_pipeline`), sets `pipeline_context->multi_key_`, and `setup_pipeline_context()` returns early at [`version_core.cpp:2664-2666`](../../../../cpp/arcticdb/version/version_core.cpp#L2664-L2666) without populating `slice_and_keys_`. The lazy iterator rejects multi-key at [`version_store_api.cpp:1085-1088`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1085-L1088). Multi-key data (from recursive normalizer) stores a `MULTI_KEY` index referencing leaf sub-symbols and requires Python-side reconstruction via `Flattener`. This plan does not change multi-key handling.
 
-11. **`prepare_output_frame()` is related tech debt** (out of scope): `version_core.cpp:1893-1912` bridges between the processing clause path and direct reads. It duplicates `allocate_frame()`, `mark_index_slices()`, and segment copy logic also found in the eager direct-read path. While related to the lazy path's frame assembly, it's used by the processing clauses path (`read_process_and_collect()`), which this plan deliberately leaves unchanged.
+11. **`prepare_output_frame()` is related tech debt** (out of scope): [`version_core.cpp:1893-1912`](../../../../cpp/arcticdb/version/version_core.cpp#L1893-L1912) bridges between the processing clause path and direct reads. It duplicates `allocate_frame()`, `mark_index_slices()`, and segment copy logic also found in the eager direct-read path. While related to the lazy path's frame assembly, it's used by the processing clauses path (`read_process_and_collect()`), which this plan deliberately leaves unchanged.
 
 ---
 
@@ -1073,7 +1077,7 @@ These are details discovered during review that the implementer must handle:
 These can land on `master` immediately. No architectural changes.
 
 - [ ] **0.1 Fix type-widening bug in `_ensure_schema()`**
-  - `arrow_reader.py:302-346` — when a descriptor field type is wider than the first batch's type, use the descriptor type instead of the first batch type
+  - [`arrow_reader.py:302-346`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L302-L346) — when a descriptor field type is wider than the first batch's type, use the descriptor type instead of the first batch type
   - Change: ~5 lines in `_ensure_schema()`, prefer descriptor type when `_is_wider_type(desc_type, batch_type)`
   - Test: write `int64` segment, append `float64` segment, `lib.sql("SELECT * FROM sym")` — currently crashes, should return `float64`
   - Additional test: write `int32` segment, append `int64` segment, verify `lib.sql()` returns int64 (integer widening, currently untested)
@@ -1081,7 +1085,7 @@ These can land on `master` immediately. No architectural changes.
   - Test file: `python/tests/unit/arcticdb/version_store/duckdb/test_arrow_reader.py`
 
 - [ ] **0.2 Expand fast-path to allow column projection**
-  - `library.py:2350` — change `pushdown.columns is None` to just check `pushdown.fully_pushed`
+  - [`library.py:2350`](../../../../python/arcticdb/version_store/library.py#L2350) — change `pushdown.columns is None` to just check `pushdown.fully_pushed`
   - Verify `fully_pushed` is never True when column projection would break semantics (audit `pushdown.py`)
   - Test: `lib.sql("SELECT a, b FROM sym")` where query is fully pushable — should skip DuckDB
   - Test file: `python/tests/unit/arcticdb/version_store/duckdb/test_pushdown.py`
@@ -1343,7 +1347,7 @@ After this commit, `lib.read(output_format='pyarrow')` uses streaming instead of
     - Pickled data: already rejected by existing multi_key_ check (pickled uses MULTI_KEY storage)
 
 - [ ] **5.2 Update `_adapt_frame_data()` to accept lazy iterator**
-  - `_store.py:2821-2845` — detect if return type is lazy iterator
+  - [`_store.py:2821-2845`](../../../../python/arcticdb/version_store/_store.py#L2821-L2845) — detect if return type is lazy iterator
   - Iterate `next()`, import each `RecordBatchData` via `pa.RecordBatch._import_from_c()`, collect into `pa.Table`
   - Schemas are uniform (Steps 3+4), so `pa.Table.from_batches()` works directly
 
@@ -1532,35 +1536,35 @@ These are Google Benchmark tests that measure the lazy read path directly, compl
 
 | File | Relevant Lines | Content |
 |------|---------------|---------|
-| `cpp/arcticdb/arrow/arrow_output_frame.hpp` | 135–213 | `LazyRecordBatchIterator` class definition |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 340–549 | `LazyRecordBatchIterator` implementation |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 363–413 | `read_decode_and_prepare_segment()` — **full pipeline runs in future** |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 38–56 | `make_column_blocks_detachable()` — DYNAMIC→DETACHABLE copy |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 62–202 | `SharedStringDictionary` struct + `build_shared_dictionary()` + `encode_dictionary_with_shared_dict()` |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 204–304 | `prepare_segment_for_arrow()` — string handling, sparse floats, detachable blocks |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 481–518 | `apply_filter_clause()` — EmptyResult/FullResult/BitSet |
-| `cpp/arcticdb/arrow/arrow_output_frame.cpp` | 423–478 | `apply_truncation()` — date_range/row_range |
-| `cpp/arcticdb/arrow/arrow_utils.cpp` | 103–105 | `minimal_strings_for_dict()` — empty dict workaround |
-| `cpp/arcticdb/arrow/arrow_utils.cpp` | 295–310 | `segment_to_arrow_data()` — zero-row handling |
-| `cpp/arcticdb/version/version_store_api.cpp` | 1061–1152 | `create_lazy_record_batch_iterator()` — lazy path setup |
-| `cpp/arcticdb/version/version_store_api.cpp` | 1133–1140 | prefetch size calculation (count cap=200; byte cap added in Phase 1) |
-| `cpp/arcticdb/version/version_store_api.cpp` | 1045–1059 | `read_dataframe_version()` — eager path entry |
-| `cpp/arcticdb/version/version_core.cpp` | 2061–2088 | `do_direct_read_or_process()` — eager read/process fork |
-| `cpp/arcticdb/version/version_core.cpp` | 2647–2694 | `setup_pipeline_context()` — shared setup |
-| `cpp/arcticdb/version/version_core.cpp` | 2714–2765 | `read_frame_for_version()` — eager path orchestration |
-| `cpp/arcticdb/pipeline/pipeline_utils.hpp` | 30–35 | Type handler assertion (PANDAS-only) |
-| `cpp/arcticdb/pipeline/pipeline_utils.hpp` | 64–80 | RangeIndex step=0 backward compatibility patch |
-| `cpp/arcticdb/pipeline/pipeline_utils.hpp` | 84–90 | `create_python_read_result()` — output format branching |
-| `cpp/arcticdb/pipeline/read_frame.cpp` | 821–929 | `NullValueReducer` — dynamic schema null backfill (eager path) |
-| `cpp/arcticdb/pipeline/read_frame.cpp` | 676–716 | `promote_integral_type()` — type widening (eager path) |
-| `cpp/arcticdb/pipeline/read_frame.cpp` | 1033–1069 | `reduce_and_fix_columns()` — column-slice merging (eager path) |
-| `cpp/arcticdb/python/python_handlers_common.hpp` | 15–31 | Type handler registration (PANDAS and ARROW) |
-| `cpp/arcticdb/arrow/arrow_handlers.hpp` | 50–65 | `ArrowStringHandler` registration |
-| `python/arcticdb/version_store/duckdb/arrow_reader.py` | 81–108 | `_pad_batch_to_schema()` — Python schema padding |
-| `python/arcticdb/version_store/duckdb/arrow_reader.py` | 183–216 | `_is_same_row_group()` — Python same-row-group detection |
-| `python/arcticdb/version_store/duckdb/arrow_reader.py` | 219–239 | `_merge_slices_for_group()` — Python column-slice merging |
-| `python/arcticdb/version_store/duckdb/arrow_reader.py` | 302–346 | `_ensure_schema()` — Python schema discovery |
-| `python/arcticdb/version_store/library.py` | 2409–2415 | Filter pushdown disabled when columns projected |
-| `python/arcticdb/version_store/_store.py` | 2304–2365 | `NativeVersionStore.read()` — Python read entry point |
-| `python/arcticdb/version_store/_store.py` | 2821–2845 | `_adapt_frame_data()` — output format conversion |
-| `python/arcticdb/version_store/library.py` | 2226–2460 | `Library.sql()` — SQL orchestration |
+| [`cpp/arcticdb/arrow/arrow_output_frame.hpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.hpp#L135-L213) | 135–213 | `LazyRecordBatchIterator` class definition |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L340-L549) | 340–549 | `LazyRecordBatchIterator` implementation |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L363-L413) | 363–413 | `read_decode_and_prepare_segment()` — **full pipeline runs in future** |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L38-L56) | 38–56 | `make_column_blocks_detachable()` — DYNAMIC→DETACHABLE copy |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L62-L202) | 62–202 | `SharedStringDictionary` struct + `build_shared_dictionary()` + `encode_dictionary_with_shared_dict()` |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L204-L304) | 204–304 | `prepare_segment_for_arrow()` — string handling, sparse floats, detachable blocks |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L481-L518) | 481–518 | `apply_filter_clause()` — EmptyResult/FullResult/BitSet |
+| [`cpp/arcticdb/arrow/arrow_output_frame.cpp`](../../../../cpp/arcticdb/arrow/arrow_output_frame.cpp#L423-L478) | 423–478 | `apply_truncation()` — date_range/row_range |
+| [`cpp/arcticdb/arrow/arrow_utils.cpp`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L103-L105) | 103–105 | `minimal_strings_for_dict()` — empty dict workaround |
+| [`cpp/arcticdb/arrow/arrow_utils.cpp`](../../../../cpp/arcticdb/arrow/arrow_utils.cpp#L295-L310) | 295–310 | `segment_to_arrow_data()` — zero-row handling |
+| [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1061-L1152) | 1061–1152 | `create_lazy_record_batch_iterator()` — lazy path setup |
+| [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1133-L1140) | 1133–1140 | prefetch size calculation (count cap=200; byte cap added in Phase 1) |
+| [`cpp/arcticdb/version/version_store_api.cpp`](../../../../cpp/arcticdb/version/version_store_api.cpp#L1045-L1059) | 1045–1059 | `read_dataframe_version()` — eager path entry |
+| [`cpp/arcticdb/version/version_core.cpp`](../../../../cpp/arcticdb/version/version_core.cpp#L2061-L2088) | 2061–2088 | `do_direct_read_or_process()` — eager read/process fork |
+| [`cpp/arcticdb/version/version_core.cpp`](../../../../cpp/arcticdb/version/version_core.cpp#L2647-L2694) | 2647–2694 | `setup_pipeline_context()` — shared setup |
+| [`cpp/arcticdb/version/version_core.cpp`](../../../../cpp/arcticdb/version/version_core.cpp#L2714-L2765) | 2714–2765 | `read_frame_for_version()` — eager path orchestration |
+| [`cpp/arcticdb/pipeline/pipeline_utils.hpp`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L30-L35) | 30–35 | Type handler assertion (PANDAS-only) |
+| [`cpp/arcticdb/pipeline/pipeline_utils.hpp`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L64-L80) | 64–80 | RangeIndex step=0 backward compatibility patch |
+| [`cpp/arcticdb/pipeline/pipeline_utils.hpp`](../../../../cpp/arcticdb/pipeline/pipeline_utils.hpp#L84-L90) | 84–90 | `create_python_read_result()` — output format branching |
+| [`cpp/arcticdb/pipeline/read_frame.cpp`](../../../../cpp/arcticdb/pipeline/read_frame.cpp#L821-L929) | 821–929 | `NullValueReducer` — dynamic schema null backfill (eager path) |
+| [`cpp/arcticdb/pipeline/read_frame.cpp`](../../../../cpp/arcticdb/pipeline/read_frame.cpp#L676-L716) | 676–716 | `promote_integral_type()` — type widening (eager path) |
+| [`cpp/arcticdb/pipeline/read_frame.cpp`](../../../../cpp/arcticdb/pipeline/read_frame.cpp#L1033-L1069) | 1033–1069 | `reduce_and_fix_columns()` — column-slice merging (eager path) |
+| [`cpp/arcticdb/python/python_handlers_common.hpp`](../../../../cpp/arcticdb/python/python_handlers_common.hpp#L15-L31) | 15–31 | Type handler registration (PANDAS and ARROW) |
+| [`cpp/arcticdb/arrow/arrow_handlers.hpp`](../../../../cpp/arcticdb/arrow/arrow_handlers.hpp#L50-L65) | 50–65 | `ArrowStringHandler` registration |
+| [`python/arcticdb/version_store/duckdb/arrow_reader.py`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L81-L108) | 81–108 | `_pad_batch_to_schema()` — Python schema padding |
+| [`python/arcticdb/version_store/duckdb/arrow_reader.py`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L183-L216) | 183–216 | `_is_same_row_group()` — Python same-row-group detection |
+| [`python/arcticdb/version_store/duckdb/arrow_reader.py`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L219-L239) | 219–239 | `_merge_slices_for_group()` — Python column-slice merging |
+| [`python/arcticdb/version_store/duckdb/arrow_reader.py`](../../../../python/arcticdb/version_store/duckdb/arrow_reader.py#L302-L346) | 302–346 | `_ensure_schema()` — Python schema discovery |
+| [`python/arcticdb/version_store/library.py`](../../../../python/arcticdb/version_store/library.py#L2409-L2415) | 2409–2415 | Filter pushdown disabled when columns projected |
+| [`python/arcticdb/version_store/_store.py`](../../../../python/arcticdb/version_store/_store.py#L2304-L2365) | 2304–2365 | `NativeVersionStore.read()` — Python read entry point |
+| [`python/arcticdb/version_store/_store.py`](../../../../python/arcticdb/version_store/_store.py#L2821-L2845) | 2821–2845 | `_adapt_frame_data()` — output format conversion |
+| [`python/arcticdb/version_store/library.py`](../../../../python/arcticdb/version_store/library.py#L2226-L2460) | 2226–2460 | `Library.sql()` — SQL orchestration |
