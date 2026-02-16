@@ -27,7 +27,9 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
     // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
     // applied during normalization in python layer.
     sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
-            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr), data_size
+            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
+            data_size,
+            get_detachable_allocator()
     );
     if (validity_bitmap) {
         return sparrow::timestamp_without_timezone_nanoseconds_array{

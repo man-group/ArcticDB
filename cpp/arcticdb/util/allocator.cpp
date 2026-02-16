@@ -18,9 +18,11 @@
 
 namespace arcticdb {
 
-uint8_t* allocate_detachable_memory(size_t size) { return std::allocator<uint8_t>().allocate(size); }
+uint8_t* allocate_detachable_memory(size_t size) { return get_detachable_allocator().allocate(size); }
 
-void free_detachable_memory(uint8_t* ptr, size_t size) { std::allocator<uint8_t>().deallocate(ptr, size); }
+void free_detachable_memory(uint8_t* ptr, size_t size) { get_detachable_allocator().deallocate(ptr, size); }
+
+std::allocator<uint8_t> get_detachable_allocator() { return std::allocator<uint8_t>(); }
 
 bool use_slab_allocator() {
     static const bool use_it = ConfigsMap::instance()->get_int("Allocator.UseSlabAllocator", 1);
