@@ -131,7 +131,9 @@ sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t o
             strings.blocks().size()
     );
     const auto strings_buffer_size = strings.block(0)->physical_bytes();
-    return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size, get_detachable_allocator());
+    return sparrow::u8_buffer<char>(
+            reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size, get_detachable_allocator()
+    );
 }
 
 template<typename TagType>
@@ -153,7 +155,9 @@ sparrow::array string_array_from_block(
             (block_size + 1) * sizeof(SignedType),
             block.mem_block()->physical_bytes()
     );
-    sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1, get_detachable_allocator());
+    sparrow::u8_buffer<SignedType> offset_buffer(
+            reinterpret_cast<SignedType*>(block.release()), block_size + 1, get_detachable_allocator()
+    );
     auto strings_buffer = strings_buffer_at_offset(column, offset);
     auto arr = [&]() {
         if (maybe_bitmap.has_value()) {
