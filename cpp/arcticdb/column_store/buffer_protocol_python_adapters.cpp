@@ -16,7 +16,7 @@ py::buffer_info string_pool_as_buffer_info(const StringPool& pool) {
             (void*)pool.data().blocks().at(0)->data(),
             1,
             py::format_descriptor<char>::format(),
-            ssize_t(pool.data().blocks().at(0)->bytes())
+            ssize_t(pool.data().blocks().at(0)->physical_bytes())
     };
 }
 
