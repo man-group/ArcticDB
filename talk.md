@@ -95,6 +95,8 @@ Consider rewriting
 
 ### Plan
 
+Epic in Monday is the living document for the plan https://man312219.monday.com/boards/7852509420/pulses/7855219121 
+
 #### Step 1
 
 - Get the column stats keys right + PR
