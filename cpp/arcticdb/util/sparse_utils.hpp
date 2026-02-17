@@ -109,7 +109,7 @@ requires util::instantiation_of<TagType, TypeDescriptorTag>
 void initialize(uint8_t* data, const size_t bytes, const std::optional<Value>& default_value) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     if (default_value) {
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 default_value->descriptor() == TagType::type_descriptor(),
                 "Mismatched default value type"

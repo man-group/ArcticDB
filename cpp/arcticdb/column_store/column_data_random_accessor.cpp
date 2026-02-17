@@ -61,7 +61,7 @@ class ChunkedBufferRegularBlocksAccessor {
     RawType at(size_t idx) const {
         // quot is the block index, rem is the offset within the block
         auto div = std::div(static_cast<long long>(idx), values_per_block_);
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 div.quot < static_cast<long long>(base_ptrs_.size()),
                 "ColumnData::at called with out of bounds index"
@@ -110,17 +110,17 @@ class ColumnDataRandomAccessorSparse {
         }
     }
     RawType at(size_t idx) const {
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 parent_->bit_vector(),
                 "ColumnData::at called with sparse true, but bit_vector_ == nullptr"
         );
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 parent_->bit_vector()->size() > idx,
                 "ColumnData::at called with sparse true, but index is out of range"
         );
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 parent_->bit_vector()->get_bit(idx),
                 "ColumnData::at called with sparse true, but selected bit is false"

@@ -279,7 +279,7 @@ class FirstAggregatorSorted {
         } else if constexpr (std::is_same_v<T, timestamp> && TimeType) {
             res = first_.value_or(NaT);
         } else {
-            DEBUG_CHECK(
+            ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
                     first_.has_value(),
                     "FirstBucketAggregator::finalize called with no values pushed"
@@ -322,7 +322,7 @@ class LastAggregatorSorted {
         } else if constexpr (std::is_same_v<T, timestamp> && TimeType) {
             res = last_.value_or(NaT);
         } else {
-            DEBUG_CHECK(
+            ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
                     last_.has_value(),
                     "LastBucketAggregator::finalize called with no values pushed"

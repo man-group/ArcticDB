@@ -55,7 +55,7 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
 
     switch (symbol_structure_) {
     case SymbolStructure::SAME:
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 check_symbols_all_same(),
                 "Expected all symbols to be identical in KeySegment"
@@ -69,7 +69,7 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
         }
         break;
     case SymbolStructure::UNIQUE:
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 check_symbols_all_unique(),
                 "Expected all symbols to be unique in KeySegment"

@@ -76,7 +76,7 @@ struct Value {
 
     template<typename T>
     void set(T t) {
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 details::visit_type(
                         data_type_,

@@ -88,9 +88,9 @@ constexpr auto raise = check<code>.raise;
 namespace debug {
 #ifdef DEBUG_BUILD
 
-#define DEBUG_CHECK(error_code, condition, ...) internal::check<error_code>(condition, __VA_ARGS__)
+#define ARCTICDB_DEBUG_CHECK(error_code, condition, ...) internal::check<error_code>(condition, __VA_ARGS__)
 #else
-#define DEBUG_CHECK(error_code, condition, message, ...)
+#define ARCTICDB_DEBUG_CHECK(error_code, condition, message, ...)
 #endif
 } // namespace debug
 

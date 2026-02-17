@@ -132,7 +132,7 @@ struct ColumnData {
         [[nodiscard]] inline ssize_t idx() const { return idx_; }
 
         inline RawType& value() {
-            DEBUG_CHECK(
+            ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
                     ptr_ != nullptr,
                     "Dereferencing nullptr in enumerating ColumnDataIterator"
@@ -141,7 +141,7 @@ struct ColumnData {
         };
 
         inline const RawType& value() const {
-            DEBUG_CHECK(
+            ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
                     ptr_ != nullptr,
                     "Dereferencing nullptr in enumerating ColumnDataIterator"
@@ -232,7 +232,7 @@ struct ColumnData {
 
         template<bool OtherConst>
         bool equal(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other) const {
-            DEBUG_CHECK(
+            ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
                     parent_ == other.parent_,
                     "ColumnDataIterator::equal called with different parent ColumnData*"
@@ -246,7 +246,7 @@ struct ColumnData {
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 return data_;
             } else {
-                DEBUG_CHECK(
+                ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
                         data_.ptr_ != nullptr,
                         "Dereferencing nullptr in ColumnDataIterator"
@@ -261,7 +261,7 @@ struct ColumnData {
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 return *const_cast<typename base_type::value_type*>(&data_);
             } else {
-                DEBUG_CHECK(
+                ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
                         data_.ptr_ != nullptr,
                         "Dereferencing nullptr in ColumnDataIterator"

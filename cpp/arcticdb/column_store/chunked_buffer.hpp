@@ -367,7 +367,7 @@ class ChunkedBufferImpl {
 
     uint8_t* bytes_at(size_t pos_bytes, [[maybe_unused]] size_t required) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 pos + required <= block->physical_bytes(),
                 "Block overflow, position {} is greater than block capacity {}",
@@ -383,7 +383,7 @@ class ChunkedBufferImpl {
 
     uint8_t& operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 pos < block->physical_bytes(),
                 "Block overflow, position {} is greater than block capacity {}",
@@ -417,7 +417,7 @@ class ChunkedBufferImpl {
     [[nodiscard]] uint8_t* data() { return const_cast<uint8_t*>(const_cast<const ChunkedBufferImpl*>(this)->data()); }
 
     void check_bytes([[maybe_unused]] size_t pos_bytes, [[maybe_unused]] size_t required_bytes) const {
-        DEBUG_CHECK(
+        ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 pos_bytes + required_bytes <= bytes(),
                 "Cursor overflow in chunked_buffer ptr_cast, cannot read {} bytes from a buffer of size {} with "

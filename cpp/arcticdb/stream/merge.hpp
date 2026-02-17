@@ -126,7 +126,7 @@ void do_merge(QueueType& input_streams, AggregatorType& agg, bool add_symbol_col
                             using TDT = decltype(row_field_descriptor_tag);
                             using RawType = typename TDT::DataTypeTag::raw_type;
                             const RawType& raw_value = val->template value<RawType>();
-                            DEBUG_CHECK(
+                            ARCTICDB_DEBUG_CHECK(
                                     ErrorCode::E_ASSERTION_FAILURE,
                                     nan_placeholder() == raw_value || not_a_string() == raw_value,
                                     "Expected NaN or None placeholders to represent missing value."
