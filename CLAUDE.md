@@ -34,7 +34,8 @@ Keep documentation **high-level and terse**:
 
 ## User-Specific Settings
 
-Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
+**Always read `CLAUDE_USER_SETTINGS.md` at the start of a session.** This file is git-ignored and may be a symlink — use the `Read` tool (not Glob) to access it, as Glob does not follow symlinks. It contains critical environment-specific configuration:
+- Network/proxy settings (e.g., `withproxy` prefix for external downloads)
 - Python virtual environment paths (Claude should use its own venvs, not user's)
 - Preferred CMake presets for debug/release/profiling builds
 
