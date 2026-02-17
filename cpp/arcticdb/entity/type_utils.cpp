@@ -83,7 +83,8 @@ static bool is_valid_int_to_float_conversion(
         const entity::TypeDescriptor& source, const entity::TypeDescriptor& target,
         IntToFloatConversion int_to_to_float_conversion
 ) {
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             is_integer_type(source.data_type()) && is_floating_point_type(target.data_type()),
             "Expected source to be int and target to be float got: {} {}",
             source,

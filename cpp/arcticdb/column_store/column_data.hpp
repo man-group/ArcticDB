@@ -132,15 +132,19 @@ struct ColumnData {
         [[nodiscard]] inline ssize_t idx() const { return idx_; }
 
         inline RawType& value() {
-            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    ptr_ != nullptr, "Dereferencing nullptr in enumerating ColumnDataIterator"
+            DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    ptr_ != nullptr,
+                    "Dereferencing nullptr in enumerating ColumnDataIterator"
             );
             return *ptr_;
         };
 
         inline const RawType& value() const {
-            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    ptr_ != nullptr, "Dereferencing nullptr in enumerating ColumnDataIterator"
+            DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    ptr_ != nullptr,
+                    "Dereferencing nullptr in enumerating ColumnDataIterator"
             );
             return *ptr_;
         };
@@ -228,8 +232,10 @@ struct ColumnData {
 
         template<bool OtherConst>
         bool equal(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other) const {
-            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    parent_ == other.parent_, "ColumnDataIterator::equal called with different parent ColumnData*"
+            DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    parent_ == other.parent_,
+                    "ColumnDataIterator::equal called with different parent ColumnData*"
             );
             return data_.ptr_ == other.data_.ptr_;
         }
@@ -240,8 +246,10 @@ struct ColumnData {
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 return data_;
             } else {
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        data_.ptr_ != nullptr, "Dereferencing nullptr in ColumnDataIterator"
+                DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
+                        data_.ptr_ != nullptr,
+                        "Dereferencing nullptr in ColumnDataIterator"
                 );
                 return *data_.ptr_;
             }
@@ -253,8 +261,10 @@ struct ColumnData {
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 return *const_cast<typename base_type::value_type*>(&data_);
             } else {
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        data_.ptr_ != nullptr, "Dereferencing nullptr in ColumnDataIterator"
+                DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
+                        data_.ptr_ != nullptr,
+                        "Dereferencing nullptr in ColumnDataIterator"
                 );
                 return *data_.ptr_;
             }

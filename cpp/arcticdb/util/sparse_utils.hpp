@@ -109,8 +109,10 @@ requires util::instantiation_of<TagType, TypeDescriptorTag>
 void initialize(uint8_t* data, const size_t bytes, const std::optional<Value>& default_value) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     if (default_value) {
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                default_value->descriptor() == TagType::type_descriptor(), "Mismatched default value type"
+        DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                default_value->descriptor() == TagType::type_descriptor(),
+                "Mismatched default value type"
         );
         const auto num_rows = bytes / sizeof(RawType);
         std::fill_n(reinterpret_cast<RawType*>(data), num_rows, default_value->get<RawType>());

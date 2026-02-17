@@ -76,7 +76,8 @@ struct Value {
 
     template<typename T>
     void set(T t) {
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+        DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
                 details::visit_type(
                         data_type_,
                         []<typename TypeTag>(TypeTag) {

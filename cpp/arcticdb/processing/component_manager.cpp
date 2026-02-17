@@ -28,7 +28,8 @@ void ComponentManager::decrement_entity_fetch_count(EntityId id) {
         // goes out of scope in the calling function, the memory is freed
         registry_.get<std::shared_ptr<SegmentInMemory>>(id).reset();
         ARCTICDB_DEBUG(log::memory(), "Releasing entity {}", id);
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+        DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
                 !registry_.get<std::shared_ptr<SegmentInMemory>>(id),
                 "SegmentInMemory memory retained in ComponentManager"
         );

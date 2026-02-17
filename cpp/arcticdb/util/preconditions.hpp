@@ -87,16 +87,10 @@ constexpr auto raise = check<code>.raise;
 
 namespace debug {
 #ifdef DEBUG_BUILD
-template<ErrorCode code>
-constexpr auto check = internal::check<code>;
-#else
-template<ErrorCode code, typename... Args>
-inline void check(
-        ARCTICDB_UNUSED bool cond, ARCTICDB_UNUSED fmt::format_string<Args...> format, ARCTICDB_UNUSED Args&&... args
-) {}
 
-template<ErrorCode code, typename FormatString, typename... Args>
-inline void check(ARCTICDB_UNUSED bool cond, ARCTICDB_UNUSED FormatString format, ARCTICDB_UNUSED Args&&... args) {}
+#define DEBUG_CHECK(error_code, condition, ...) internal::check<error_code>(condition, __VA_ARGS__)
+#else
+#define DEBUG_CHECK(error_code, condition, message, ...)
 #endif
 } // namespace debug
 
