@@ -145,6 +145,8 @@ cpp/out/<preset>-build/arcticdb/test_unit_arcticdb --gtest_filter="TestSuite.Tes
 
 ## Running Python Tests
 
+If you have changed the C++ code you must rebuild the project before you run the tests.
+
 ```bash
 # Run all tests
 python -m pytest python/tests
@@ -188,6 +190,18 @@ See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-B
 When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
 
 ## Key Development Guidelines
+
+Stop and ask clarifying questions when you are confused.
+
+It is unlikely you need to catch `std::exception`. Handle less broad exceptions, like `KeyNotFoundException`.
+
+It is important that you do not submit tasks to the threadpools from within a task that is already executing within the
+same threadpool, as this can deadlock. This means you might need to use synchronous APIs like `read_sync` from within tasks.
+
+Do not write comments except where they are very valuable. Keep them as brief as possible. Do not delete existing comments
+unless they are incorrect.
+
+Prefer writing pytests as standalone functions rather than wrapping them in a class.
 
 ### Backwards Compatibility
 
