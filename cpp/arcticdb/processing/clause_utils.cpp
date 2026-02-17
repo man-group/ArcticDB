@@ -127,7 +127,8 @@ std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
             res[idx]++;
         }
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             ranges::none_of(res, [](const size_t val) { return val == 0; }),
             "All segments should be needed by at least one ProcessingUnit"
     );

@@ -287,7 +287,8 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
 ///     adjust_slice_ranges will change the column slices, making the first slice start from 0 even for timestamp-index
 ///     dataframes (which should have column range starting from 1 when being written to disk).
 void compact_row_slices(std::span<SliceAndKey> slices) {
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             ranges::adjacent_find(
                     slices,
                     [](const SliceAndKey& a, const SliceAndKey& b) {
@@ -1425,7 +1426,9 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
     // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE, !incomplete_segments.empty(), "Incomplete segments must be non-empty"
+    );
     const auto first_non_empty_seg = ranges::find_if(incomplete_segments, [&](auto& slice) {
         auto res = slice.segment(store).row_count() > 0;
         ARCTICDB_DEBUG(log::version(), "Testing for non-empty seg {} res={}", slice.key(), res);
@@ -2806,7 +2809,8 @@ folly::Future<VersionedItem> read_modify_write_impl(
                    store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
     )
             .thenValue([&](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                ARCTICDB_DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
                         std::ranges::all_of(
                                 data_keys_and_slices,
                                 [](const SliceAndKey& slice_and_key) {

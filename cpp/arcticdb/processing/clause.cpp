@@ -40,7 +40,8 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
         const std::span<const size_t> row_slices_to_keep, std::vector<std::vector<size_t>>& offsets,
         std::vector<RangesAndKey>& ranges_and_keys
 ) {
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             std::ranges::adjacent_find(row_slices_to_keep, std::ranges::greater_equal{}) == row_slices_to_keep.end(),
             "Elements of rows slices to keep must be sorted and unique"
     );
@@ -905,7 +906,8 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         ranges_and_keys.clear();
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             ranges::is_sorted(bucket_boundaries_),
             "Resampling expects provided bucket boundaries to be strictly monotonically increasing"
     );
@@ -946,7 +948,8 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             ranges::is_sorted(bucket_boundaries_),
             "Resampling expects provided bucket boundaries to be strictly monotonically increasing"
     );
