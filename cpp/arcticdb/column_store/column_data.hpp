@@ -180,7 +180,7 @@ struct ColumnData {
         ColumnDataIterator() = delete;
 
         // Used to construct [c]begin iterators
-        explicit ColumnDataIterator(ColumnData* parent) : parent_(parent) {
+        explicit ColumnDataIterator(const ColumnData* parent) : parent_(parent) {
             increment_block();
             if constexpr (iterator_type == IteratorType::ENUMERATED && iterator_density == IteratorDensity::SPARSE) {
                 // idx_ default-constructs to 0, which is correct for dense case
@@ -189,11 +189,14 @@ struct ColumnData {
         }
 
         // Used to construct [c]end iterators
-        explicit ColumnDataIterator(ColumnData* parent, RawType* end_ptr) : parent_(parent) { data_.ptr_ = end_ptr; }
+        explicit ColumnDataIterator(const ColumnData* parent, RawType* end_ptr) : parent_(parent) {
+            data_.ptr_ = end_ptr;
+        }
 
         template<bool OtherConst>
         explicit ColumnDataIterator(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other) :
             parent_(other.parent_),
+            block_pos_(other.block_pos_),
             opt_block_(other.opt_block_),
             remaining_values_in_block_(other.remaining_values_in_block_),
             data_(other.data_) {}
@@ -216,7 +219,7 @@ struct ColumnData {
         }
 
         void increment_block() {
-            opt_block_ = parent_->next<TDT>();
+            opt_block_ = parent_->typed_block_at_position<TDT>(block_pos_++);
             if (ARCTICDB_LIKELY(opt_block_.has_value())) {
                 remaining_values_in_block_ = opt_block_->row_count();
                 data_.ptr_ = const_cast<typename TDT::DataTypeTag::raw_type*>(opt_block_->data());
@@ -257,7 +260,8 @@ struct ColumnData {
             }
         }
 
-        ColumnData* parent_{nullptr};
+        const ColumnData* parent_{nullptr};
+        size_t block_pos_{0};
         std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
         std::size_t remaining_values_in_block_{0};
         typename base_type::value_type data_;
@@ -294,7 +298,7 @@ struct ColumnData {
     template<
             typename TDT, IteratorType iterator_type = IteratorType::REGULAR,
             IteratorDensity iterator_density = IteratorDensity::DENSE>
-    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() {
+    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() const {
         return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this);
     }
 
@@ -306,7 +310,7 @@ struct ColumnData {
         RawType* end_ptr{nullptr};
         if (!data_->blocks().empty()) {
             auto block = data_->blocks().at(num_blocks() - 1);
-            auto typed_block_data = next_typed_block<TDT>(block);
+            auto typed_block_data = make_typed_block<TDT>(block);
             end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
         return ColumnDataIterator<TDT, iterator_type, iterator_density, false>(this, end_ptr);
@@ -315,12 +319,12 @@ struct ColumnData {
     template<
             typename TDT, IteratorType iterator_type = IteratorType::REGULAR,
             IteratorDensity iterator_density = IteratorDensity::DENSE>
-    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cend() {
+    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cend() const {
         using RawType = typename TDT::DataTypeTag::raw_type;
         RawType* end_ptr{nullptr};
         if (!data_->blocks().empty()) {
             auto block = data_->blocks().at(num_blocks() - 1);
-            auto typed_block_data = next_typed_block<TDT>(block);
+            auto typed_block_data = make_typed_block<TDT>(block);
             end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
         return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this, end_ptr);
@@ -361,6 +365,16 @@ struct ColumnData {
     }
 
     template<typename TDT>
+    std::optional<TypedBlockData<TDT>> typed_block_at_position(size_t pos) const {
+        if (pos == num_blocks())
+            return std::nullopt;
+
+        auto block = data_->blocks().at(pos);
+        util::check(block != nullptr, "Null block at position {} in typed_block_at_position", pos);
+        return make_typed_block<TDT>(block);
+    }
+
+    template<typename TDT>
     std::optional<TypedBlockData<TDT>> last() {
         if (data_->blocks().empty())
             return std::nullopt;
@@ -380,7 +394,7 @@ struct ColumnData {
                 reinterpret_cast<const typename TDT::DataTypeTag::raw_type*>(block->data()),
                 nullptr,
                 block->physical_bytes(),
-                block->physical_bytes() / get_type_size(TDT::DataTypeTag::data_type),
+                block->logical_size() / get_type_size(TDT::DataTypeTag::data_type),
                 block
         };
     }

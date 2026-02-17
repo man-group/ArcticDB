@@ -22,23 +22,73 @@ static void for_each(const Column& input_column, functor&& f) {
     std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
 }
 
+// Thin wrapper around std::for_each that is marked flatten to force-inline callees.
+// Useful when running hot lambdas over large data.
+template<typename Iterator, typename functor>
+ARCTICDB_FLATTEN static void for_each_flattened(Iterator begin, Iterator end, functor&& f) {
+    std::for_each(begin, end, std::forward<functor>(f));
+}
+
 template<typename input_tdt, typename functor>
 requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
          std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
 static void for_each_enumerated(const Column& input_column, functor&& f) {
     auto input_data = input_column.data();
     if (input_column.is_sparse()) {
-        std::for_each(
-                input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(),
-                input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>(),
-                std::forward<functor>(f)
-        );
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        std::for_each(begin, end, std::forward<functor>(f));
     } else {
-        std::for_each(
-                input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
-                input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
-                std::forward<functor>(f)
-        );
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        std::for_each(begin, end, std::forward<functor>(f));
+    }
+}
+
+// Variant of for_each_enumerated that uses for_each_flattened to force-inline all callees in the loop body.
+// This increases compile-time memory usage, so only use in performance-critical hot paths.
+template<typename input_tdt, typename functor>
+requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
+         std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+static void for_each_enumerated_flattened(
+        const Column& input_column, functor&& f, std::optional<size_t> start_idx = std::nullopt,
+        std::optional<size_t> end_idx = std::nullopt
+) {
+    auto input_data = input_column.data();
+    // When `start_idx` or `end_idx` are set we use `std::advance` to get the `begin` and `end` iterators to the correct
+    // locations. This is inefficient because `ColumnDataIterator` is not random access
+    // TODO: Prove a random access `ColumnData::iterator_at(position)`.
+    // Alternatively we could make `ColumnDataIterator` random access but this can be tricky because random access in a
+    // `ChunkedBuffer` is `O(log(n))`, but according to standard an iterator `+=` should be `O(1)` to be marked as
+    // random access. Otherwise something like `std::for_each` might turn out `O(n*log(n))` if implemented with `it+=1`
+    // instead of `it++`.
+    if (input_column.is_sparse()) {
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        if (start_idx.has_value()) {
+            // We need to advance the iterator to the first physical position where `begin->idx() >= *start_idx`
+            while (begin->idx() < static_cast<ssize_t>(*start_idx)) {
+                ++begin;
+            }
+        }
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        if (end_idx.has_value()) {
+            end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            while (end->idx() < static_cast<ssize_t>(*end_idx)) {
+                ++end;
+            }
+        }
+        for_each_flattened(begin, end, std::forward<functor>(f));
+    } else {
+        auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        if (start_idx.has_value()) {
+            std::advance(begin, *start_idx);
+        }
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+        if (end_idx.has_value()) {
+            end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+            std::advance(end, *end_idx);
+        }
+        for_each_flattened(begin, end, std::forward<functor>(f));
     }
 }
 
