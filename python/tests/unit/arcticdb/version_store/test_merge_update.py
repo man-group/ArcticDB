@@ -528,8 +528,11 @@ class TestMergeTimeseriesUpdate:
         with pytest.raises(StorageException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
-    def test_two_segments_with_same_index_value(self, lmdb_version_store_v1):
-        lib = lmdb_version_store_v1
+    def test_two_segments_with_same_index_value(self, s3_version_store_v1):
+        # The merge operation will write two segments with the same index range and the same content in parallel,
+        # occasionally both data keys will end up with the same ID. LMDB throws in that case while S3 will overwrite
+        # the key.
+        lib = s3_version_store_v1
         target = [
             pd.DataFrame({"a": [1]}, index=[pd.Timestamp(0)]),
             pd.DataFrame({"a": [2]}, index=[pd.Timestamp(0)]),
