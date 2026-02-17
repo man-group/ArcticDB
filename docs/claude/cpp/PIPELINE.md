@@ -93,6 +93,7 @@ Read Request
 ┌─────────────────────────┐
 │   Segment filtering     │  ← Determine required segments
 │                         │     Based on row range, columns
+│                         │     + column stats pruning
 └───────────┬─────────────┘
             │
             ▼
@@ -114,6 +115,45 @@ In `cpp/arcticdb/pipeline/read_frame.hpp`:
 - `read_frame()` - Main entry point taking stream_id, version_query, and read_query
 - `fetch_data()` - Fetch and decode data from keys
 - `decode_into_frame()` - Decode segment into SegmentInMemory
+
+## Column Stats Filtering
+
+### Location
+
+`cpp/arcticdb/pipeline/column_stats_filter.hpp`, `column_stats_filter.cpp`, `column_stats_dispatch.hpp`, `column_stats_dispatch.cpp`
+
+### Purpose
+
+Column stats store per-segment min/max values for selected columns. At read time, if a `FilterClause` is present, the column stats are evaluated against the filter expression to prune segments that cannot contain matching rows. This avoids fetching data segments from storage unnecessarily.
+
+### Gating
+
+Controlled by the `ColumnStats.UseForQueries` config flag (checked in `is_column_stats_enabled()`). The function `should_try_column_stats_read()` returns true only when the flag is on and the query's first non-range clause is a `FilterClause`.
+
+### Data Model
+
+Column stats are stored as a separate `COLUMN_STATS` key derived from the index key (see `index_key_to_column_stats_key()` in `version_core.cpp`). The stats segment has `start_index` and `end_index` columns identifying each row-slice, plus columns like `v1.0_MIN(col)` and `v1.0_MAX(col)` for each tracked column.
+
+Key types:
+
+| Type | Location | Purpose |
+|------|----------|---------|
+| `ColumnStatsData` | `column_stats_filter.hpp` | Parsed stats segment, indexed by `(start_index, end_index)` |
+| `ColumnStatsRow` | `column_stats_filter.hpp` | Stats for a single row-slice: start/end index + per-column min/max |
+| `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice |
+| `ColumnStatElement` | `column_stats.hpp` | `MIN` or `MAX` — the individual stat within a `MINMAX` stat type |
+
+### Evaluation
+
+The filter expression AST is walked by `compute_stats()` / `evaluate_ast_node_against_stats()` in `column_stats_filter.cpp`. Leaf `ColumnName` nodes produce `ColumnStatsValues` vectors; leaf `ValueName` nodes produce `Value` pointers. Binary comparison operators (in `column_stats_dispatch.hpp`) apply three-valued logic (`StatsComparison`: `ALL_MATCH`, `NONE_MATCH`, `UNKNOWN`) using `ValueRange<T>` overloads on the existing comparison operator structs. Boolean operators (`AND`, `OR`, `XOR`, `NOT`) compose these results.
+
+If all filter clauses AND together to `NONE_MATCH` for a row-slice, that slice is excluded from the read via `create_column_stats_filter()`, which returns a `FilterQuery` lambda passed to `filter_index()`.
+
+### Integration with Read Path
+
+In `version_core.cpp`, `fetch_index_and_column_stats()` issues parallel async reads for the index key and the column stats key. The result is bundled into `IndexInformation` (index segment + optional stats segment). `read_indexed_keys_to_pipeline()` then calls `create_column_stats_filter()` if stats are present, adding the filter to the index query list before `filter_index()`.
+
+When multiple filter clauses exist, their `ExpressionContext` objects are combined with `and_filter_expression_contexts()` (in `query_planner.cpp`).
 
 ## Slicing
 
@@ -230,6 +270,9 @@ Multiple segments are fetched and decoded in parallel using Folly futures. Encod
 | `query.hpp` | Query types |
 | `frame_slice.hpp` | Slice data structures |
 | `input_frame.hpp` | Input data format |
+| `column_stats.hpp` | Column stats creation and segment column name parsing |
+| `column_stats_filter.hpp` | Column stats read-time filter construction |
+| `column_stats_dispatch.hpp` | Three-valued logic evaluation of expressions against stats |
 
 ## Usage
 

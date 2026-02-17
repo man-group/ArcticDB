@@ -82,6 +82,8 @@ Represents: (a > 5) AND (b < 10)
 
 Expressions are evaluated via `compute()` on `ExpressionContext` which holds the expression tree.
 
+`ExpressionContext` (`expression_context.hpp`) also supports `merge_from()` to combine multiple contexts (used when AND-ing together filter clause expressions for column stats evaluation). `ConstantMap::contains()` checks whether a name is present.
+
 ## Operation Dispatch
 
 ### Location
@@ -101,6 +103,20 @@ Dispatches operations based on data types at runtime.
 | Logical | `AND`, `OR`, `NOT` |
 | Aggregation | `SUM`, `MEAN`, `MIN`, `MAX`, `COUNT`, `FIRST`, `LAST` |
 | String | `ISIN`, `ISNOTIN`, `STARTSWITH`, `ENDSWITH` |
+
+### Column Stats Evaluation
+
+The comparison operator structs (`LessThanOperator`, `GreaterThanOperator`, `EqualsOperator`, etc.) in `operation_types.hpp` have `ValueRange<T>` overloads that return `StatsComparison` instead of `bool`. These determine whether a min/max range satisfies a comparison against a constant value, using three-valued logic:
+
+| Value | Meaning |
+|-------|---------|
+| `ALL_MATCH` | Every row in the segment must satisfy the predicate |
+| `NONE_MATCH` | No row can satisfy — segment can be skipped |
+| `UNKNOWN` | Some rows may match — segment must be fetched |
+
+`ValueRange<T>` holds `min` and `max` fields. The `FlippedComparator` trait (in `column_stats_dispatch.hpp`) handles reversed operand order (e.g. `5 < col` becomes `col > 5`).
+
+See [PIPELINE.md - Column Stats Filtering](PIPELINE.md#column-stats-filtering) for the full read-path integration.
 
 ### Type Dispatch
 
@@ -205,6 +221,8 @@ Build filters using `ExpressionNode` with `ExpressionNodeType::BINARY_OP` and co
 | `processing_unit.hpp` | Processing unit structure |
 | `component_manager.hpp` | Component lifecycle |
 | `aggregation_utils.cpp` | Aggregation helpers |
+| `operation_types.hpp` | Operator structs, `StatsComparison`, `ValueRange` |
+| `query_planner.cpp` | `plan_query()`, `and_filter_expression_contexts()` |
 
 ## Python Integration
 

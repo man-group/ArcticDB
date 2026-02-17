@@ -59,12 +59,6 @@ If `VIRTUAL_ENV` is not set:
 
 Do not warn the user that it will take a while - it's usually fast.
 
-**The venv must be activated before running any make target or command that uses `python`** (protoc, lint, lint-check, test-py, bench-py, wheel). Prefix every such command with activation:
-
-```bash
-source $(make activate NAME=<name>) && make test-py
-```
-
 ### Makefile Targets
 
 A root `Makefile` provides shortcuts for common tasks. User-specific overrides (presets, proxy, TMPDIR) go in `Makefile.local` (gitignored; see `Makefile.local.example`).
@@ -89,6 +83,8 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make bench-cpp` | Build and run C++ benchmarks | `FILTER=` |
 | `make install-editable` | Install arcticdb in editable mode (no C++ rebuild) | |
 | `make bench-py` | Run ASV Python benchmarks (runs `install-editable` first) | `BENCH=` |
+
+Prefer the `-debug` targets over the release mode targets unless told otherwise.
 
 ### CMake Presets
 
@@ -150,9 +146,21 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ## Key Development Guidelines
 
+Stop and ask clarifying questions when you are confused.
+
+It is unlikely you need to catch `std::exception`. Handle less broad exceptions, like `KeyNotFoundException`.
+
+It is important that you do not submit tasks to the threadpools from within a task that is already executing within the
+same threadpool, as this can deadlock. This means you might need to use synchronous APIs like `read_sync` from within tasks.
+
+Do not write comments except where they are very valuable. Keep them as brief as possible. Do not delete existing comments
+unless they are incorrect.
+
+Prefer writing pytests as standalone functions rather than wrapping them in a class.
+
 ### Test-Driven Development
 
-**Every code change must be accompanied by a failing test that the change fixes.** 
+**Every code change must be accompanied by a failing test that the change fixes.**
 
 When fixing a bug or adding a feature:
 1. Write a test that demonstrates the bug or missing functionality
@@ -162,7 +170,7 @@ When fixing a bug or adding a feature:
 
 ### Git Workflow
 
-**Always confirm with the developer before committing and pushing changes upstream.** 
+**Always confirm with the developer before committing and pushing changes upstream.**
 
 Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
 

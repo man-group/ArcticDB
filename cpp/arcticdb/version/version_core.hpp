@@ -23,6 +23,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <string>
 
@@ -70,6 +71,8 @@ VersionedItem delete_range_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
         const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
 );
+
+IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key);
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 
@@ -203,7 +206,7 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
+        const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
         const ReadOptions& read_options
 );
 } // namespace arcticdb::version_store

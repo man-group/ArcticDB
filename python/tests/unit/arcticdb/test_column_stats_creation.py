@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException, InternalException
-from arcticdb_ext.storage import KeyType, NoDataFoundException
+from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 
 pytestmark = pytest.mark.pipeline
@@ -101,6 +101,83 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment, any_output_forma
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2]]
     expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]
     expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]
+    column_stats_dict = {"col_1": {"MINMAX"}}
+
+    lib.create_column_stats(sym, column_stats_dict)
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
+def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_values"
+    df0 = pd.DataFrame({"col_1": [1.0, 3.0]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [np.nan, 5.0]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5.0, np.nan]}, index=pd.date_range("2000-01-05", periods=2))
+    df3 = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
+    df4 = pd.DataFrame({"col_1": [1.0, np.nan, 2.0]}, index=pd.date_range("2000-01-09", periods=3))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    lib.append(sym, df3)
+    lib.append(sym, df4)
+    expected_column_stats = lib.read_index(sym)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
+
+    # Note that for df4 we have min=1.0 max=2.0 even though the values include np.nan
+    expected_column_stats["v1.0_MIN(col_1)"] = [1.0, np.nan, 5.0, np.nan, 1.0]
+    expected_column_stats["v1.0_MAX(col_1)"] = [3.0, np.nan, 5.0, np.nan, 2.0]
+    column_stats_dict = {"col_1": {"MINMAX"}}
+
+    lib.create_column_stats(sym, column_stats_dict)
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
+def test_column_stats_nat_values(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nat_values"
+    df0 = pd.DataFrame(
+        {"col_1": [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-06-01")]},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"col_1": [pd.NaT, pd.Timestamp("2025-01-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+    df2 = pd.DataFrame(
+        {"col_1": [pd.Timestamp("2025-01-01"), pd.NaT]},
+        index=pd.date_range("2000-01-05", periods=2),
+    )
+    df3 = pd.DataFrame(
+        {"col_1": [pd.Timestamp("2025-02-01"), pd.NaT, pd.Timestamp("2025-01-01")]},
+        index=pd.date_range("2000-01-07", periods=3),
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    lib.append(sym, df3)
+    expected_column_stats = lib.read_index(sym)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
+    expected_column_stats["v1.0_MIN(col_1)"] = [pd.Timestamp("2020-01-01"), pd.NaT, pd.NaT, pd.NaT]
+    expected_column_stats["v1.0_MAX(col_1)"] = [
+        pd.Timestamp("2020-06-01"),
+        pd.Timestamp("2025-01-01"),
+        pd.Timestamp("2025-01-01"),
+        pd.Timestamp("2025-02-01"),
+    ]
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -630,6 +707,17 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             assert_column_stats_key_count()
             clear()
 
+    def test_prune_previous_kwarg_batch_methods():
+        nonlocal expected_count
+        for operation in ["batch_write", "batch_append", "batch_write_metadata"]:
+            lib.write(sym, df0)
+            create_stats()
+            assert_column_stats_key_count()
+            getattr(lib, operation)([sym], [df1], prune_previous_version=True)
+            expected_count = 0
+            assert_column_stats_key_count()
+            clear()
+
     def test_prune_previous_api():
         nonlocal expected_count
         lib.write(sym, df0)
@@ -657,50 +745,8 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
         test_add_to_snapshot,
         test_remove_from_snapshot,
         test_prune_previous_kwarg,
+        test_prune_previous_kwarg_batch_methods,
         test_prune_previous_api,
     ]:
-        test()
-        clear()
-
-
-@pytest.mark.xfail(
-    reason=(
-        "ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the"
-        " issue is resolved"
-    )
-)
-def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_store, any_output_format):
-    def clear():
-        nonlocal expected_count
-        lib.version_store.clear()
-        expected_count = 0
-
-    def create_stats():
-        nonlocal expected_count
-        lib.create_column_stats(sym, column_stats_dict)
-        expected_count += 1
-
-    def assert_column_stats_key_count():
-        assert lib_tool.count_keys(KeyType.COLUMN_STATS) == expected_count
-
-    def test_prune_previous_kwarg_batch_methods():
-        nonlocal expected_count
-        for operation in ["batch_write", "batch_append", "batch_write_metadata"]:
-            lib.write(sym, df0)
-            create_stats()
-            assert_column_stats_key_count()
-            getattr(lib, operation)([sym], [df1], prune_previous_version=True)
-            expected_count = 0
-            assert_column_stats_key_count()
-            clear()
-
-    lib = lmdb_version_store
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    lib_tool = lib.library_tool()
-    sym = "test_column_stats_object_deleted_with_index_key_batch_methods"
-    column_stats_dict = {"col_1": {"MINMAX"}}
-    expected_count = 0
-
-    for test in [test_prune_previous_kwarg_batch_methods]:
         test()
         clear()
