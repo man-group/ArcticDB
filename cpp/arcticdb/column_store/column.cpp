@@ -215,11 +215,20 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
     type_(type),
     allow_sparse_(allow_sparse) {}
 
+namespace {
+ChunkedBuffer make_column_buffer(size_t size, AllocationType allocation_type, size_t extra_bytes_per_block) {
+    if (allocation_type == AllocationType::PRESIZED) {
+        return ChunkedBuffer::presized(size);
+    }
+    return ChunkedBuffer{size, allocation_type, extra_bytes_per_block};
+}
+} // anonymous namespace
+
 Column::Column(
         TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
         size_t extra_bytes_per_block
 ) :
-    data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
+    data_(make_column_buffer(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block)),
     type_(type),
     allow_sparse_(allow_sparse) {
     ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -241,19 +250,19 @@ void Column::backfill_sparse_map(ssize_t to_row) {
 }
 
 void Column::set_sparse_block(ChunkedBuffer&& buffer, util::BitSet&& bitset) {
-    data_.buffer() = std::move(buffer);
+    data_ = std::move(buffer);
     sparse_map_ = std::move(bitset);
 }
 
 void Column::set_sparse_block(ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
-    data_.buffer() = std::move(buffer);
-    shapes_.buffer() = std::move(shapes);
+    data_ = std::move(buffer);
+    shapes_ = std::move(shapes);
     sparse_map_ = std::move(bitset);
 }
 
-ChunkedBuffer&& Column::release_buffer() { return std::move(data_.buffer()); }
+ChunkedBuffer&& Column::release_buffer() { return std::move(data_); }
 
-Buffer&& Column::release_shapes() { return std::move(shapes_.buffer()); }
+Buffer&& Column::release_shapes() { return std::move(shapes_); }
 
 std::optional<Column::StringArrayData> Column::string_array_at(position_t idx, const StringPool& string_pool) {
     util::check_arg(idx < row_count(), "String array index out of bounds in column");
@@ -270,22 +279,20 @@ std::optional<Column::StringArrayData> Column::string_array_at(position_t idx, c
 }
 
 ChunkedBuffer::Iterator Column::get_iterator() const {
-    return {const_cast<ChunkedBuffer*>(&data_.buffer()), get_type_size(type_.data_type())};
+    return {const_cast<ChunkedBuffer*>(&data_), get_type_size(type_.data_type())};
 }
 
 size_t Column::bytes() const { return data_.bytes(); }
 
-ColumnData Column::data() const {
-    return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
-}
+ColumnData Column::data() const { return ColumnData(&data_, &shapes_, type_, sparse_map_ ? &*sparse_map_ : nullptr); }
 
-const uint8_t* Column::ptr() const { return data_.buffer().data(); }
+const uint8_t* Column::ptr() const { return data_.data(); }
 
-uint8_t* Column::ptr() { return data_.buffer().data(); }
+uint8_t* Column::ptr() { return data_.data(); }
 
 TypeDescriptor Column::type() const { return type_; }
 
-size_t Column::num_blocks() const { return data_.buffer().num_blocks(); }
+size_t Column::num_blocks() const { return data_.num_blocks(); }
 
 const shape_t* Column::shape_ptr() const { return shapes_.ptr_cast<shape_t>(0, num_shapes()); }
 
@@ -295,33 +302,54 @@ bool Column::has_orig_type() const { return static_cast<bool>(orig_type_); }
 
 const TypeDescriptor& Column::orig_type() const { return orig_type_.value(); }
 
-void Column::compact_blocks() { data_.compact_blocks(); }
+void Column::compact_blocks() {
+    if (data_.blocks().size() <= 1)
+        return;
+
+    auto total_bytes = data_.bytes();
+    auto dest = ChunkedBuffer{total_bytes, entity::AllocationType::DYNAMIC};
+    dest.ensure(total_bytes);
+    size_t write_pos = 0;
+    for (const auto& block : data_.blocks()) {
+        memcpy(&dest[write_pos], block->data(), block->physical_bytes());
+        write_pos += block->physical_bytes();
+    }
+    std::swap(data_, dest);
+}
 
 shape_t* Column::allocate_shapes(std::size_t bytes) {
-    shapes_.ensure_bytes(bytes);
-    return reinterpret_cast<shape_t*>(shapes_.cursor());
+    auto write_pos = shapes_.bytes();
+    shapes_.ensure(write_pos + bytes);
+    return reinterpret_cast<shape_t*>(&shapes_[write_pos]);
 }
 
 uint8_t* Column::allocate_data(std::size_t bytes) {
     util::check(bytes != 0, "Allocate data called with zero size");
-    data_.ensure_bytes(bytes);
-    return data_.cursor();
+    auto write_pos = data_.bytes();
+    data_.ensure(write_pos + bytes);
+    return &data_[write_pos];
 }
 
-void Column::advance_data(std::size_t size) { data_.advance(position_t(size)); }
+void Column::advance_data(std::size_t) {
+    // No-op: with plain ChunkedBuffer, ensure() already updates bytes().
+}
 
-void Column::advance_shapes(std::size_t size) { shapes_.advance(position_t(size)); }
+void Column::advance_shapes(std::size_t) {
+    // No-op: with plain Buffer, ensure() already updates bytes().
+}
 
-[[nodiscard]] ChunkedBuffer& Column::buffer() { return data_.buffer(); }
+[[nodiscard]] ChunkedBuffer& Column::buffer() { return data_; }
 
 uint8_t* Column::bytes_at(size_t bytes, size_t required) {
     ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);
-    return data_.bytes_at(bytes, required);
+    return data_.ptr_cast<uint8_t>(bytes, required);
 }
 
-const uint8_t* Column::bytes_at(size_t bytes, size_t required) const { return data_.bytes_at(bytes, required); }
+const uint8_t* Column::bytes_at(size_t bytes, size_t required) const {
+    return data_.ptr_cast<uint8_t>(bytes, required);
+}
 
-void Column::assert_size(size_t bytes) const { data_.buffer().assert_size(bytes); }
+void Column::assert_size(size_t bytes) const { data_.assert_size(bytes); }
 
 void Column::init_buffer() {
     std::call_once(*init_buffer_, [this]() { extra_buffers_ = std::make_unique<ExtraBufferContainer>(); });
@@ -401,18 +429,13 @@ void Column::unsparsify(size_t num_rows) {
         const auto dest_bytes = num_rows * sizeof(RawType);
         auto dest = ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
-        util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
-        std::swap(dest, data_.buffer());
+        util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.data(), dest.data());
+        std::swap(dest, data_);
     });
     sparse_map_ = std::nullopt;
     logical_size_ = physical_size_ = num_rows;
 
-    ARCTICDB_DEBUG(
-            log::version(),
-            "Unsparsify: logical_size_: {} physical_size_: {}",
-            logical_size_,
-            physical_size_
-    );
+    ARCTICDB_DEBUG(log::version(), "Unsparsify: logical_size_: {} physical_size_: {}", logical_size_, physical_size_);
 }
 
 void Column::sparsify() {
@@ -421,7 +444,7 @@ void Column::sparsify() {
         if constexpr (is_floating_point_type(type_desc_tag.data_type())) {
             auto raw_ptr = reinterpret_cast<const RawType*>(ptr());
             auto buffer = util::scan_floating_point_to_sparse(raw_ptr, row_count(), sparse_map());
-            std::swap(data().buffer(), buffer);
+            std::swap(data_, buffer);
             physical_size_ = sparse_map().count();
         }
     });
@@ -434,15 +457,15 @@ void Column::string_array_prologue(ssize_t row_offset, size_t num_strings) {
             logical_size_,
             row_offset
     );
-    shapes_.ensure<shape_t>();
-    auto shape_cursor = reinterpret_cast<shape_t*>(shapes_.cursor());
+    auto shape_write_pos = shapes_.bytes();
+    shapes_.ensure(shape_write_pos + sizeof(shape_t));
+    auto shape_cursor = reinterpret_cast<shape_t*>(&shapes_[shape_write_pos]);
     *shape_cursor = shape_t(num_strings);
-    data_.ensure<entity::position_t>(num_strings);
+    auto data_write_pos = data_.bytes();
+    data_.ensure(data_write_pos + num_strings * sizeof(entity::position_t));
 }
 
 void Column::string_array_epilogue(size_t num_strings) {
-    data_.commit();
-    shapes_.commit();
     update_offsets(num_strings * sizeof(entity::position_t));
     ++logical_size_;
 }
@@ -450,8 +473,9 @@ void Column::string_array_epilogue(size_t num_strings) {
 void Column::set_string_array(
         ssize_t row_offset, size_t string_size, size_t num_strings, char* input, StringPool& string_pool
 ) {
+    auto data_write_pos = data_.bytes();
     string_array_prologue(row_offset, num_strings);
-    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.cursor());
+    auto data_ptr = reinterpret_cast<entity::position_t*>(&data_[data_write_pos]);
     for (size_t i = 0; i < num_strings; ++i) {
         auto off = string_pool.get(std::string_view(input, string_size));
         *data_ptr++ = off.offset();
@@ -461,8 +485,9 @@ void Column::set_string_array(
 }
 
 void Column::set_string_list(ssize_t row_offset, const std::vector<std::string>& input, StringPool& string_pool) {
+    auto data_write_pos = data_.bytes();
     string_array_prologue(row_offset, input.size());
-    auto data_ptr = reinterpret_cast<entity::position_t*>(data_.cursor());
+    auto data_ptr = reinterpret_cast<entity::position_t*>(&data_[data_write_pos]);
     for (const auto& str : input) {
         auto off = string_pool.get(str.data());
         *data_ptr++ = off.offset();
@@ -489,15 +514,17 @@ void Column::append(const Column& other, position_t at_row) {
     util::check(type() == other.type(), "Cannot append column type {} to column type {}", type(), other.type());
     const bool was_sparse = is_sparse();
     const bool was_empty = empty();
-    util::check(physical_size_ == row_count(), "Row count calculation incorrect before dense append");
+    util::check(
+            physical_size_ == static_cast<size_t>(row_count()), "Row count calculation incorrect before dense append"
+    );
     util::check(!is_sparse() || row_count() == sparse_map_.value().count(), "Row count does not match bitmap count");
 
-    const auto& blocks = other.data_.buffer().blocks();
+    const auto& blocks = other.data_.blocks();
     const auto initial_row_count = row_count();
     for (const auto& block : blocks) {
-        data_.ensure<uint8_t>(block->physical_bytes());
-        block->copy_to(data_.cursor());
-        data_.commit();
+        auto write_pos = data_.bytes();
+        data_.ensure(write_pos + block->physical_bytes());
+        block->copy_to(&data_[write_pos]);
     }
 
     logical_size_ = at_row + other.logical_size_;
@@ -520,9 +547,11 @@ void Column::append(const Column& other, position_t at_row) {
             row_count()
     );
 
-    util::check(physical_size_ == row_count(), "Row count calculation incorrect after dense append");
+    util::check(
+            physical_size_ == static_cast<size_t>(row_count()), "Row count calculation incorrect after dense append"
+    );
 
-    if (static_cast<size_t>(at_row) == initial_row_count && !other.is_sparse() && !is_sparse()) {
+    if (at_row == initial_row_count && !other.is_sparse() && !is_sparse()) {
         util::check(
                 logical_size_ == physical_size_,
                 "Expected logical and physical sizes to line up in append of non-sparse columns"
@@ -557,7 +586,7 @@ void Column::append(const Column& other, position_t at_row) {
 
 void Column::physical_sort_external(std::vector<uint32_t>&& sorted_pos) {
     size_t physical_rows = row_count();
-    auto& buffer = data_.buffer();
+    auto& buffer = data_;
 
     util::check(
             sorted_pos.size() == physical_rows,
@@ -642,8 +671,7 @@ void Column::mark_absent_rows(size_t num_rows) {
         logical_size_ += num_rows;
     } else {
         util::check(
-                logical_size_ == physical_size_,
-                "Expected logical and physical sizes to be equal in non-sparse column"
+                logical_size_ == physical_size_, "Expected logical and physical sizes to be equal in non-sparse column"
         );
         default_initialize_rows(logical_size_, num_rows, true);
     }
@@ -663,12 +691,10 @@ void Column::default_initialize_rows(
             const auto bytes = (num_rows * sizeof(RawType));
 
             if (ensure_alloc) {
-                data_.ensure<uint8_t>(bytes);
+                auto write_pos = data_.bytes();
+                data_.ensure(write_pos + bytes);
             }
-            util::initialize<T>(data_.buffer(), start_pos * sizeof(RawType), bytes, default_value);
-            if (ensure_alloc) {
-                data_.commit();
-            }
+            util::initialize<T>(data_, start_pos * sizeof(RawType), bytes, default_value);
 
             logical_size_ += num_rows;
             physical_size_ += num_rows;
@@ -681,7 +707,7 @@ void Column::set_row_data(size_t row_id) {
         return;
     }
     logical_size_ = row_id + 1;
-    const auto stored_row_count = row_count();
+    const auto stored_row_count = static_cast<size_t>(row_count());
     if (sparse_map_) {
         physical_size_ = sparse_map_->count();
     } else if (logical_size_ != stored_row_count) {
@@ -694,10 +720,7 @@ void Column::set_row_data(size_t row_id) {
         sparse_map_->resize(row_id + 1);
     }
     ARCTICDB_TRACE(
-            log::version(),
-            "Set row data: logical_size_: {}, physical_size_: {}",
-            logical_size_,
-            physical_size_
+            log::version(), "Set row data: logical_size_: {}, physical_size_: {}", logical_size_, physical_size_
     );
 }
 
@@ -736,11 +759,10 @@ bool Column::has_value_at(position_t row) const { return !is_sparse() || sparse_
 void Column::set_allow_sparse(Sparsity value) { allow_sparse_ = value; }
 
 void Column::set_shapes_buffer(size_t row_count) {
-    CursoredBuffer<Buffer> shapes;
-    shapes.ensure<shape_t>();
+    Buffer shapes;
+    shapes.ensure(sizeof(shape_t));
     shape_t rc(row_count);
-    memcpy(shapes.cursor(), &rc, sizeof(shape_t));
-    shapes.commit();
+    memcpy(shapes.data(), &rc, sizeof(shape_t));
     swap(shapes_, shapes);
 }
 
@@ -784,9 +806,9 @@ void Column::inflate_string_arrays(const StringPool& string_pool) {
     }
 
     using std::swap;
-    swap(shapes_, shapes);
+    swap(shapes_, shapes.buffer());
     swap(offsets_, offsets);
-    swap(data_, data);
+    swap(data_, data.buffer());
     inflated_ = true;
 }
 
@@ -805,7 +827,7 @@ void Column::change_type(DataType target_type) {
         return;
 
     CursoredBuffer<ChunkedBuffer> buf;
-    for (const auto& block : data_.buffer().blocks()) {
+    for (const auto& block : data_.blocks()) {
         details::visit_type(type_.data_type(), [&buf, &block, type = type_, target_type](auto&& source_dtt) {
             using source_raw_type = typename std::decay_t<decltype(source_dtt)>::raw_type;
             details::visit_type(target_type, [&buf, &block, &type, target_type](auto&& target_dtt) {
@@ -827,7 +849,7 @@ void Column::change_type(DataType target_type) {
     }
     buf.commit();
     type_ = TypeDescriptor{target_type, type_.dimension()};
-    std::swap(data_, buf);
+    std::swap(data_, buf.buffer());
 }
 
 position_t Column::row_count() const {
@@ -845,7 +867,7 @@ position_t Column::row_count() const {
 std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>& column, size_t rows) {
     // TODO: Doesn't work the way you would expect for sparse columns - the bytes for each buffer won't be uniform
     const auto bytes = rows * get_type_size(column->type().data_type());
-    auto new_buffers = ::arcticdb::split(column->data_.buffer(), bytes);
+    auto new_buffers = ::arcticdb::split(column->data_, bytes);
     util::check(
             bytes % get_type_size(column->type().data_type()) == 0,
             "Bytes {} is not a multiple of type size {}",
@@ -874,7 +896,7 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
 void Column::truncate_first_block(size_t start_row) {
     util::check(!is_sparse(), "Truncation should only happen for dense columns.");
     auto bytes = start_row * data_type_size(type_);
-    data_.buffer().truncate_first_block(bytes);
+    data_.truncate_first_block(bytes);
 }
 
 void Column::truncate_last_block(size_t end_row) {
@@ -887,7 +909,7 @@ void Column::truncate_last_block(size_t end_row) {
             end_row
     );
     auto bytes = (column_row_count - end_row) * data_type_size(type_);
-    data_.buffer().truncate_last_block(bytes);
+    data_.truncate_last_block(bytes);
 }
 
 void Column::truncate_single_block(size_t start_row, size_t end_row) {
@@ -895,7 +917,7 @@ void Column::truncate_single_block(size_t start_row, size_t end_row) {
     const auto type_size = data_type_size(type_);
     auto start_offset = type_size * start_row;
     auto end_offset = type_size * end_row;
-    data_.buffer().truncate_single_block(start_offset, end_offset);
+    data_.truncate_single_block(start_offset, end_offset);
 }
 
 /// Bytes from the underlying chunked buffer to include when truncating. Inclusive of start_byte, exclusive of end_byte
@@ -930,7 +952,7 @@ void Column::truncate_single_block(size_t start_row, size_t end_row) {
 
 std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row) {
     const auto [start_byte, end_byte] = column_start_end_bytes(*column, start_row, end_row);
-    auto buffer = ::arcticdb::truncate(column->data_.buffer(), start_byte, end_byte);
+    auto buffer = ::arcticdb::truncate(column->data_, start_byte, end_byte);
     auto res = std::make_shared<Column>(column->type(), column->allow_sparse_, std::move(buffer));
     if (column->is_sparse()) {
         res->set_sparse_map(util::truncate_sparse_map(column->sparse_map(), start_row, end_row));
@@ -948,9 +970,9 @@ void Column::set_empty_array(ssize_t row_offset, int dimension_count) {
             logical_size_,
             row_offset
     );
-    shapes_.ensure<shape_t>(dimension_count);
-    memset(shapes_.cursor(), 0, dimension_count * sizeof(shape_t));
-    shapes_.commit();
+    auto shape_write_pos = shapes_.bytes();
+    shapes_.ensure(shape_write_pos + dimension_count * sizeof(shape_t));
+    memset(&shapes_[shape_write_pos], 0, dimension_count * sizeof(shape_t));
     ++logical_size_;
 }
 
@@ -967,7 +989,7 @@ const shape_t* Column::shape_index(position_t idx) const {
     if (is_scalar())
         return nullptr;
 
-    return shapes_.buffer().ptr_cast<shape_t>(idx * size_t(type_.dimension()) * sizeof(shape_t), sizeof(shape_t));
+    return shapes_.ptr_cast<shape_t>(idx * size_t(type_.dimension()) * sizeof(shape_t), sizeof(shape_t));
 }
 
 position_t Column::bytes_offset(position_t idx) const {

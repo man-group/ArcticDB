@@ -300,11 +300,13 @@ class Column {
 
         ARCTICDB_TRACE(log::version(), "Setting scalar {} at {} ({})", val, logical_size_ - 1, physical_size_ - 1);
 
-        data_.ensure<T>();
-        *data_.ptr_cast<T>(position_t(physical_size_ - 1), sizeof(T)) = val;
-        data_.commit();
+        auto write_bytes = (physical_size_ - 1) * sizeof(T);
+        data_.ensure(write_bytes + sizeof(T));
+        *data_.ptr_cast<T>(write_bytes, sizeof(T)) = val;
 
-        util::check(physical_size_ == row_count(), "Row count calculation incorrect in set_scalar");
+        util::check(
+                physical_size_ == static_cast<size_t>(row_count()), "Row count calculation incorrect in set_scalar"
+        );
     }
 
     template<class T>
@@ -321,7 +323,7 @@ class Column {
                 row_offset
         );
         auto bytes = sizeof(T) * size;
-        const_cast<ChunkedBuffer&>(data_.buffer()).add_external_block(reinterpret_cast<const uint8_t*>(val), bytes);
+        data_.add_external_block(reinterpret_cast<const uint8_t*>(val), bytes);
         logical_size_ += size;
         physical_size_ = logical_size_;
     }
@@ -330,7 +332,7 @@ class Column {
     void set_sparse_block(ssize_t row_offset, T* ptr, size_t rows_to_write) {
         util::check(row_offset == 0, "Cannot write sparse column with existing data");
         auto new_buffer = util::scan_floating_point_to_sparse(ptr, rows_to_write, sparse_map());
-        std::swap(data_.buffer(), new_buffer);
+        std::swap(data_, new_buffer);
     }
 
     void set_sparse_block(ChunkedBuffer&& buffer, util::BitSet&& bitset);
@@ -352,16 +354,16 @@ class Column {
                 logical_size_,
                 row_offset
         );
-        data_.ensure_bytes(val.nbytes());
-        shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
+        auto data_write_pos = data_.bytes();
+        auto shape_write_pos = shapes_.bytes();
+        data_.ensure(data_write_pos + val.nbytes());
+        shapes_.ensure(shape_write_pos + val.ndim() * sizeof(shape_t));
+        memcpy(&shapes_[shape_write_pos], val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
+        auto data_ptr = reinterpret_cast<T*>(&data_[data_write_pos]);
         flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
         update_offsets(val.nbytes());
-        data_.commit();
-        shapes_.commit();
         ++logical_size_;
     }
 
@@ -376,16 +378,16 @@ class Column {
                 logical_size_,
                 row_offset
         );
-        data_.ensure_bytes(val.nbytes());
-        shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
+        auto data_write_pos = data_.bytes();
+        auto shape_write_pos = shapes_.bytes();
+        data_.ensure(data_write_pos + val.nbytes());
+        shapes_.ensure(shape_write_pos + val.ndim() * sizeof(shape_t));
+        memcpy(&shapes_[shape_write_pos], val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper<T, py_array_t> flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
+        auto data_ptr = reinterpret_cast<T*>(&data_[data_write_pos]);
         flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
         update_offsets(val.nbytes());
-        data_.commit();
-        shapes_.commit();
         ++logical_size_;
     }
 
@@ -487,9 +489,9 @@ class Column {
 
     void compact_blocks();
 
-    const auto& blocks() const { return data_.buffer().blocks(); }
+    const auto& blocks() const { return data_.blocks(); }
 
-    const auto& block_offsets() const { return data_.buffer().block_offsets(); }
+    const auto& block_offsets() const { return data_.block_offsets(); }
 
     shape_t* allocate_shapes(std::size_t bytes);
 
@@ -505,7 +507,7 @@ class Column {
         if (!physical_row)
             return std::nullopt;
 
-        return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
+        return *data_.ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
     }
 
     // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
@@ -514,7 +516,7 @@ class Column {
     std::vector<T> clone_scalars_to_vector() const {
         auto values = std::vector<T>();
         values.reserve(row_count());
-        const auto& buffer = data_.buffer();
+        const auto& buffer = data_;
         for (auto i = 0u; i < row_count(); ++i) {
             values.push_back(*buffer.ptr_cast<T>(i * item_size(), sizeof(T)));
         }
@@ -529,7 +531,7 @@ class Column {
                 row < row_count(), "Scalar reference index {} out of bounds in column of size {}", row, row_count()
         );
         util::check_arg(is_scalar(), "get_reference requested on non-scalar column");
-        return *data_.buffer().ptr_cast<T>(bytes_offset(row), sizeof(T));
+        return *data_.ptr_cast<T>(bytes_offset(row), sizeof(T));
     }
 
     template<typename T>
@@ -543,16 +545,14 @@ class Column {
                 ndim,
                 type().data_type(),
                 get_type_size(type().data_type()),
-                reinterpret_cast<const T*>(
-                        data_.buffer().ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))
-                ),
+                reinterpret_cast<const T*>(data_.ptr_cast<uint8_t>(bytes_offset(idx), calc_elements(shape_ptr, ndim))),
                 ndim
         );
     }
 
     template<typename T>
     const T* ptr_cast(position_t idx, size_t required_bytes) const {
-        return data_.buffer().ptr_cast<T>(bytes_offset(idx), required_bytes);
+        return data_.ptr_cast<T>(bytes_offset(idx), required_bytes);
     }
 
     template<typename T>
@@ -686,8 +686,8 @@ class Column {
     void physical_sort_external(std::vector<uint32_t>&& sorted_pos);
 
     // Members
-    CursoredBuffer<ChunkedBuffer> data_;
-    CursoredBuffer<Buffer> shapes_;
+    ChunkedBuffer data_;
+    Buffer shapes_;
 
     mutable boost::container::small_vector<position_t, 1> offsets_;
     TypeDescriptor type_;
