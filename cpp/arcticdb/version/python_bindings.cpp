@@ -1130,11 +1130,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                const ReadOptions& read_options) -> std::pair<RecordBatchData, py::object> {
                 schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                         preloaded_index_query->index_key_.type() == KeyType::TABLE_INDEX,
-                        "collect_schema() not supported with recursively normalized data"
+                        "_collect_schema() not supported with recursively normalized data"
                 );
                 const auto& tsd = preloaded_index_query->index_seg_.index_descriptor();
-                auto schema =
-                        modify_schema({tsd.as_stream_descriptor().clone(), tsd.normalization()}, read_query->clauses_);
+                const auto& norm = tsd.normalization();
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+                        !norm.has_msg_pack_frame(), "_collect_schema() not supported with pickled data"
+                );
+                auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, read_query->clauses_);
                 const auto& stream_desc = schema.stream_descriptor();
                 const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
                     if (read_query->columns.has_value()) {
@@ -1142,7 +1145,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 read_query->columns->cbegin(), read_query->columns->cend()
                         };
                         // Always include index columns, so that the invariant:
-                        // lazy_df.collect_schema() == lazy_df.collect().data.schema
+                        // lazy_df._collect_schema() == lazy_df.collect().data.schema
                         // is maintained. In polarctic we can drop index columns if they are not in with_columns.
                         auto num_index_levels =
                                 pipelines::index::required_fields_count(stream_desc, schema.norm_metadata_);
@@ -1155,7 +1158,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     }
                 }();
                 auto record_batch =
-                        arrow_schema_from_descriptor(stream_desc, read_options.arrow_output_config(), columns);
+                        empty_record_batch_from_descriptor(stream_desc, read_options.arrow_output_config(), columns);
                 return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
             }
     );

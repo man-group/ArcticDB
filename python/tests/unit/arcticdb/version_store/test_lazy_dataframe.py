@@ -44,7 +44,7 @@ class TestLazyDataFrame:
             sym, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]
         ).data
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -65,7 +65,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df.date_range((pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-09")))
         expected = df.iloc[1:9]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -86,7 +86,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df[lazy_df["col1"].isin(0, 3, 6, 9)]
         expected = df.query("col1 in [0, 3, 6, 9]")
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -107,7 +107,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df[lazy_df["col1"] >= 2]
         expected = df.iloc[2:4]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -128,7 +128,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df[lazy_df["col1"] <= 7]
         expected = df.iloc[6:8]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -150,7 +150,7 @@ class TestLazyDataFrame:
         expected = df
         expected["new_col"] = expected["col1"] + expected["col2"]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -171,7 +171,7 @@ class TestLazyDataFrame:
         expected = df
         expected["new_col"] = expected["col1"] + expected["col2"]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -193,7 +193,7 @@ class TestLazyDataFrame:
         expected = df
         expected["new_col"] = expected["col1"] + expected["col2"]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -215,11 +215,11 @@ class TestLazyDataFrame:
         expected = df
         expected["new_col"] = np.uint8(5)
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received)
 
     def test_lazy_ternary(self, lmdb_library, any_output_format, collect_schema_first):
         lib = lmdb_library
@@ -241,7 +241,7 @@ class TestLazyDataFrame:
         expected = df
         expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), df["col2"].to_numpy())
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -258,7 +258,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df.groupby("col1").agg({"col2": "sum"})
         expected = df.groupby("col1").agg({"col2": "sum"})
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
         received.sort_index(inplace=True)
@@ -280,7 +280,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df.resample("D").agg({"col1": "sum"})
         expected = df.resample("D").agg({"col1": "sum"})
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
         assert_frame_equal(expected, received)
@@ -299,7 +299,7 @@ class TestLazyDataFrame:
         lazy_df = lazy_df[lazy_df["a"].regex_match(pattern)]
         expected = df[df.a.str.contains(pattern)]
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
@@ -322,11 +322,11 @@ class TestLazyDataFrame:
         expected = df.resample("us").agg({"col": "sum"})
         expected["new_col"] = expected["col"] * 3
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received)
 
     def test_lazy_chaining(self, lmdb_library, any_output_format, collect_schema_first):
         lib = lmdb_library
@@ -343,11 +343,11 @@ class TestLazyDataFrame:
         expected = df.resample("us").agg({"col": "sum"})
         expected["new_col"] = expected["col"] * 3
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received = lazy_df.collect().data
 
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received)
 
     def test_lazy_batch_collect_separately(self, lmdb_library, any_output_format, collect_schema_first):
         lib = lmdb_library
@@ -368,9 +368,9 @@ class TestLazyDataFrame:
         expected_1 = df
         expected_2 = df.query("col1 in [2, 4, 8]")
         if collect_schema_first:
-            schema_0 = lazy_df_0.collect_schema()
-            schema_1 = lazy_df_1.collect_schema()
-            schema_2 = lazy_df_2.collect_schema()
+            schema_0 = lazy_df_0._collect_schema()
+            schema_1 = lazy_df_1._collect_schema()
+            schema_2 = lazy_df_2._collect_schema()
             assert schema_0 == pl.from_pandas(expected_0, include_index=True).schema
             assert schema_1 == pl.from_pandas(expected_1, include_index=True).schema
             assert schema_2 == pl.from_pandas(expected_2, include_index=True).schema
@@ -399,9 +399,9 @@ class TestLazyDataFrame:
         expected_1 = df
         expected_2 = df.query("col1 in [2, 4, 8]")
         if collect_schema_first:
-            schema_0 = lazy_dfs[0].collect_schema()
-            schema_1 = lazy_dfs[1].collect_schema()
-            schema_2 = lazy_dfs[2].collect_schema()
+            schema_0 = lazy_dfs[0]._collect_schema()
+            schema_1 = lazy_dfs[1]._collect_schema()
+            schema_2 = lazy_dfs[2]._collect_schema()
             assert schema_0 == pl.from_pandas(expected_0, include_index=True).schema
             assert schema_1 == pl.from_pandas(expected_1, include_index=True).schema
             assert schema_2 == pl.from_pandas(expected_2, include_index=True).schema
@@ -423,18 +423,18 @@ class TestLazyDataFrame:
         lazy_df = lib.read(sym, lazy=True).resample("us").agg({"col": "sum"})
         expected = df.resample("us").agg({"col": "sum"})
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received_0 = lazy_df.collect().data
-        assert_frame_equal(expected, received_0, check_dtype=False)
+        assert_frame_equal(expected, received_0)
         received_1 = lazy_df.collect().data
-        assert_frame_equal(expected, received_1, check_dtype=False)
+        assert_frame_equal(expected, received_1)
 
         lazy_df["new_col"] = lazy_df["col"] * 3
         received_2 = lazy_df.collect().data
 
         expected["new_col"] = expected["col"] * 3
-        assert_frame_equal(expected, received_2, check_dtype=False)
+        assert_frame_equal(expected, received_2)
 
     def test_lazy_collect_twice_with_date_range(self, lmdb_library, any_output_format, collect_schema_first):
         lib = lmdb_library
@@ -452,12 +452,12 @@ class TestLazyDataFrame:
         lazy_df = lib.read(sym, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), lazy=True)
         expected = lib.read(sym, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07"))).data
         if collect_schema_first:
-            schema = lazy_df.collect_schema()
+            schema = lazy_df._collect_schema()
             assert schema == pl.from_pandas(expected, include_index=True).schema
         received_0 = lazy_df.collect().data
-        assert_frame_equal(expected, received_0, check_dtype=False)
+        assert_frame_equal(expected, received_0)
         received_1 = lazy_df.collect().data
-        assert_frame_equal(expected, received_1, check_dtype=False)
+        assert_frame_equal(expected, received_1)
 
 
 def test_lazy_batch_read(lmdb_library, any_output_format):
@@ -596,10 +596,10 @@ def test_lazy_pickling(lmdb_library, any_output_format):
     roundtripped = pickle.loads(pickle.dumps(lazy_df))
     assert roundtripped == lazy_df
     received_initial = lazy_df.collect().data
-    assert_frame_equal(expected, received_initial, check_dtype=False)
+    assert_frame_equal(expected, received_initial)
 
     received_roundtripped = roundtripped.collect().data
-    assert_frame_equal(expected, received_roundtripped, check_dtype=False)
+    assert_frame_equal(expected, received_roundtripped)
 
 
 def test_lazy_batch_pickling(lmdb_library, any_output_format):

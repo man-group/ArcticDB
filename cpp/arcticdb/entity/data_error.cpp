@@ -33,7 +33,9 @@ DataError::DataError(
                     version_request_data_ = query.version_id_;
                 },
                 [](const std::shared_ptr<PreloadedIndexQuery>&) {
-                    util::raise_rte("collect_schema() not supported with batch methods");
+                    // PreloadedIndexQuery is for _collect_schema() usages in the Polars plugin, which does not support
+                    // batch reading with joins yet
+                    util::raise_rte("_collect_schema() not supported with batch methods");
                 },
                 [this](const std::monostate&) { version_request_type_ = VersionRequestType::LATEST; }
         );

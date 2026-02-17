@@ -492,8 +492,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     return {seg, index_column_position};
 }
 
-RecordBatchData arrow_schema_from_descriptor(
-        const StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
+RecordBatchData empty_record_batch_from_descriptor(
+        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
 ) {
     // The logic here is similar to empty_arrow_array_for_column, but there the string format is dictated by the
@@ -504,7 +504,7 @@ RecordBatchData arrow_schema_from_descriptor(
     for (const auto& field : stream_desc.fields()) {
         // The column filtering is done here rather than in the calling function for efficiency, so we only have to
         // iterate the fields once, and not construct an intermediate FieldCollection that would then be immediately
-        // discarded
+        // discarded. std::nullopt implies read all columns
         if (!columns.has_value() || columns->contains(field.name())) {
             auto arr = details::visit_scalar(field.type(), [&](auto&& tdt) {
                 using TagType = std::decay_t<decltype(tdt)>;
@@ -525,11 +525,8 @@ RecordBatchData arrow_schema_from_descriptor(
                         return minimal_strings_array<int32_t>();
                     case ArrowOutputStringFormat::LARGE_STRING:
                         return minimal_strings_array<int64_t>();
-                    case ArrowOutputStringFormat::CATEGORICAL:
-                        // Not all compilers can tell that these are all of the cases, so complain of control reaching
-                        // end of non-void function
-                    default: {
-                        sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
+                    case ArrowOutputStringFormat::CATEGORICAL: {
+                        sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
                         auto dict_values_array = minimal_strings_for_dict();
                         return sparrow::array{create_dict_array<int32_t>(
                                 sparrow::array{std::move(dict_values_array)},
@@ -537,6 +534,11 @@ RecordBatchData arrow_schema_from_descriptor(
                                 std::move(validity_bitmap)
                         )};
                     }
+                    default:
+                        util::raise_rte("Unknown ArrowOutputStringFormat {}", static_cast<uint64_t>(string_format));
+                        // Not all compilers can tell this code is unreachable, and complain about reaching end of
+                        // non-void function
+                        return sparrow::array{};
                     }
                 } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
                     return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};

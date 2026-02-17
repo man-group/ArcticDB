@@ -44,7 +44,10 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
         const std::optional<std::string>& index_name = std::nullopt
 );
 
-RecordBatchData arrow_schema_from_descriptor(
+// We only really need the ArrowSchema from here, but we return a zero-row record batch instead because:
+// - it makes it easy to reuse our normalization metadata handling in the Python layer for things like multiindex
+// - sparrow lacks support for easy construction of ArrowSchema directly without going through record batches anyway
+RecordBatchData empty_record_batch_from_descriptor(
         const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
         const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
 );

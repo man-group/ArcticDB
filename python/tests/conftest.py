@@ -199,6 +199,11 @@ def check_local_storage_enabled():
 # region ======================================= Storage Fixtures =======================================
 
 
+@pytest.fixture
+def mem_library(mem_storage, lib_name) -> Generator[Library, None, None]:
+    yield mem_storage.create_arctic().create_library(lib_name)
+
+
 @pytest.fixture(scope="session")
 def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
     check_local_storage_enabled()
@@ -246,11 +251,6 @@ def s3_library_factory(s3_storage, lib_name):
         return s3_storage.create_arctic().create_library(lib_name, library_options=library_options)
 
     return f
-
-
-@pytest.fixture
-def s3_library(s3_storage, lib_name) -> Generator[Library, None, None]:
-    yield s3_storage.create_arctic().create_library(lib_name)
 
 
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world

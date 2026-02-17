@@ -516,7 +516,7 @@ class LazyDataFrame(QueryBuilder):
 
     # Polars is an optional dependency, using pl.Schema here without the quotation marks results in failed imports when
     # Polars is not installed
-    def collect_schema(self) -> "pl.Schema":
+    def _collect_schema(self) -> "pl.Schema":
         # Considered wrapping this in an if self._preloaded_index is None statement, but this could then give
         # non-intuitive results when using as_of snapshots that are changing or negative integers when new versions
         # are being created, so to be on the safe side we will always return to storage, even though the result will

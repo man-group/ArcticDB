@@ -17,7 +17,7 @@ void StreamVersionData::react(const pipelines::VersionQuery& version_query) {
     util::variant_match(
             version_query.content_,
             [](const std::shared_ptr<PreloadedIndexQuery>&) {
-                util::raise_rte("collect_schema() not yet supported with batch methods");
+                util::raise_rte("_collect_schema() not yet supported with batch methods");
             },
             [this](const auto& query) { do_react(query); }
     );
