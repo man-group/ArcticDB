@@ -213,7 +213,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     // legacy exception base type kept for backwards compat with Man Python client
     struct ArcticCompatibilityException : public ArcticException {};
-    auto compat_exception = py::register_exception<ArcticCompatibilityException>(
+    auto compat_exception = py::register_local_exception<ArcticCompatibilityException>(
             m, "_ArcticLegacyCompatibilityException", base_exception
     );
 
@@ -222,7 +222,8 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     static py::exception<LMDBMapFullException> lmdb_map_full_exception(m, "LmdbMapFullError", storage_exception.ptr());
     static py::exception<UserInputException> user_input_exception(m, "UserInputException", compat_exception.ptr());
 
-    py::register_exception_translator([](std::exception_ptr p) {
+    // This has to be local. When it was global, it could cause import-order related exceptions, such as #2181
+    py::register_local_exception_translator([](std::exception_ptr p) {
         try {
             if (p)
                 std::rethrow_exception(p);
@@ -254,18 +255,19 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
         }
     });
 
-    py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
-    py::register_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
-    py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
+    py::register_local_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_local_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
+    py::register_local_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
-    py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
-    py::register_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
-    py::register_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
+    py::register_local_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
+    py::register_local_exception<NormalizationException>(m, "NormalizationException", compat_exception.ptr());
+    py::register_local_exception<MissingDataException>(m, "MissingDataException", compat_exception.ptr());
 
-    auto sorting_exception = py::register_exception<SortingException>(m, "SortingException", compat_exception.ptr());
-    py::register_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
-    py::register_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
-    py::register_exception<CodecException>(m, "CodecException", compat_exception.ptr());
+    auto sorting_exception =
+            py::register_local_exception<SortingException>(m, "SortingException", compat_exception.ptr());
+    py::register_local_exception<UnsortedDataException>(m, "UnsortedDataException", sorting_exception.ptr());
+    py::register_local_exception<CompatibilityException>(m, "CompatibilityException", compat_exception.ptr());
+    py::register_local_exception<CodecException>(m, "CodecException", compat_exception.ptr());
 }
 
 void reinit_scheduler() {
@@ -309,7 +311,8 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 #endif
     // Set up the global exception handlers first, so module-specific exception handler can override it:
     auto exceptions = m.def_submodule("exceptions");
-    auto base_exception = py::register_exception<ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
+    auto base_exception =
+            py::register_local_exception<ArcticException>(exceptions, "ArcticException", PyExc_RuntimeError);
     register_error_code_ecosystem(exceptions, base_exception);
 
     async::register_bindings(m);
@@ -317,7 +320,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     column_store::register_bindings(m);
 
     auto storage_submodule = m.def_submodule("storage", "Segment storage implementation apis");
-    auto no_data_found_exception = py::register_exception<storage::NoDataFoundException>(
+    auto no_data_found_exception = py::register_local_exception<storage::NoDataFoundException>(
             storage_submodule, "NoDataFoundException", base_exception.ptr()
     );
     storage::apy::register_bindings(storage_submodule, base_exception);
@@ -330,7 +333,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
     auto version_submodule = m.def_submodule("version_store", "Versioned storage implementation apis");
     version_store::register_bindings(version_submodule, base_exception);
-    py::register_exception<NoSuchVersionException>(
+    py::register_local_exception<NoSuchVersionException>(
             version_submodule, "NoSuchVersionException", no_data_found_exception.ptr()
     );
 
