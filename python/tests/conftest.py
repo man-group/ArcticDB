@@ -91,6 +91,7 @@ from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
 )
+from arcticdb.util.test import config_context, config_context_multi
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -1717,6 +1718,23 @@ def all_recursive_metastructure_versions(request):
     set_config_int("VersionStore.RecursiveNormalizerMetastructure", request.param)
     yield request.param
     unset_config_int("VersionStore.RecursiveNormalizerMetastructure")
+
+
+@pytest.fixture
+def column_stats_filtering_enabled():
+    with config_context("ColumnStats.UseForQueries", 1):
+        yield
+
+
+@pytest.fixture
+def column_stats_filtering_disabled():
+    with config_context("ColumnStats.UseForQueries", 0):
+        yield
+
+
+@pytest.fixture(params=["column_stats_filtering_enabled", "column_stats_filtering_disabled"])
+def column_stats_filtering_enabled_and_disabled(request):
+    yield request.getfixturevalue(request.param)
 
 
 # region Pytest special xfail handling

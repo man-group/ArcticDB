@@ -139,7 +139,7 @@ class Storage {
     }
 
     [[nodiscard]] virtual bool supports_object_size_calculation() const {
-        // TODO aseaton remove this default implementation when more storages have special size calculations implemented
+        // TODO remove this default implementation when more storages have special size calculations implemented
         return false;
     }
 
