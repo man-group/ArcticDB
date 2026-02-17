@@ -31,7 +31,7 @@ ARCTICDB_FLATTEN static void for_each_flattened(Iterator begin, Iterator end, fu
 
 template<typename input_tdt, typename functor>
 requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
-         std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+         std::is_invocable_r_v<void, functor, Enumeration<typename input_tdt::DataTypeTag::raw_type>>
 static void for_each_enumerated(const Column& input_column, functor&& f) {
     auto input_data = input_column.data();
     if (input_column.is_sparse()) {
@@ -49,7 +49,7 @@ static void for_each_enumerated(const Column& input_column, functor&& f) {
 // This increases compile-time memory usage, so only use in performance-critical hot paths.
 template<typename input_tdt, typename functor>
 requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
-         std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+         std::is_invocable_r_v<void, functor, Enumeration<typename input_tdt::DataTypeTag::raw_type>>
 static void for_each_enumerated_flattened(
         const Column& input_column, functor&& f, std::optional<size_t> start_idx = std::nullopt,
         std::optional<size_t> end_idx = std::nullopt

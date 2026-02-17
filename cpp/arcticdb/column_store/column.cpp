@@ -294,6 +294,10 @@ TypeDescriptor Column::type() const { return type_; }
 
 size_t Column::num_blocks() const { return data_.num_blocks(); }
 
+const util::BitMagic* Column::sparse_map_ptr() const { return sparse_map_ ? &*sparse_map_ : nullptr; }
+
+const Buffer* Column::shapes_buffer() const { return &shapes_; }
+
 const shape_t* Column::shape_ptr() const { return shapes_.ptr_cast<shape_t>(0, num_shapes()); }
 
 void Column::set_orig_type(const TypeDescriptor& desc) { orig_type_ = desc; }

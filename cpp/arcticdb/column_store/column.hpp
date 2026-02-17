@@ -192,7 +192,7 @@ class Column {
         void set_offset(size_t offset) {
             const auto bytes = offset * type_size;
             auto block_and_offset = parent_.buffer().block_and_offset(bytes);
-            block_ = ColumnData::make_typed_block<TDT>(block_and_offset.block_);
+            block_ = make_typed_block<TDT>(block_and_offset.block_);
             block_pos_ = std::begin(*block_);
             std::advance(block_pos_, block_and_offset.offset_ / type_size);
             block_end_ = std::end(block_.value());
@@ -478,6 +478,12 @@ class Column {
     TypeDescriptor type() const;
 
     size_t num_blocks() const;
+
+    /// @brief Non-owning pointer to the sparse map, or nullptr if not sparse
+    const util::BitMagic* sparse_map_ptr() const;
+
+    /// @brief Non-owning pointer to the shapes buffer
+    const Buffer* shapes_buffer() const;
 
     const shape_t* shape_ptr() const;
 

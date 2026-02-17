@@ -213,6 +213,7 @@ set(arcticdb_srcs
         column_store/chunked_buffer.hpp
         column_store/column_data.hpp
         column_store/column_data_random_accessor.hpp
+        column_store/typed_block_data.hpp
         column_store/column.hpp
         column_store/column_algorithms.hpp
         column_store/column_utils.hpp
