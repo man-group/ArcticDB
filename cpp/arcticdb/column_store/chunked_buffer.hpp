@@ -365,7 +365,7 @@ class ChunkedBufferImpl {
         return BlockAndOffset(block, pos_bytes - *block_offset, first_irregular_block + irregular_block_num);
     }
 
-    uint8_t* bytes_at(size_t pos_bytes, size_t required) {
+    uint8_t* bytes_at(size_t pos_bytes, [[maybe_unused]] size_t required) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
         DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
@@ -416,7 +416,7 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] uint8_t* data() { return const_cast<uint8_t*>(const_cast<const ChunkedBufferImpl*>(this)->data()); }
 
-    void check_bytes(size_t pos_bytes, size_t required_bytes) const {
+    void check_bytes([[maybe_unused]] size_t pos_bytes, [[maybe_unused]] size_t required_bytes) const {
         DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 pos_bytes + required_bytes <= bytes(),
