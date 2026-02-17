@@ -679,6 +679,52 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
 
 
 @pytest.mark.parametrize(
+    "row_range_and_expected_segment_sizes",
+    [
+        ((3, 8), [5]),  # Within a segment
+        ((7, 15), [3, 5]),  # Truncating first and last
+        ((10, 20), [10]),  # Aligned to segment boundaries
+    ],
+)
+def test_arrow_string_layout_after_truncation(version_store_factory, row_range_and_expected_segment_sizes):
+    row_range, expected_segment_sizes = row_range_and_expected_segment_sizes
+    lib = version_store_factory(segment_row_size=10, dynamic_strings=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    sym = "test_arrow_string_layout_after_truncation"
+    # Each string is of the same width for easier calculation of buffer sizes
+    str_values = [f"string_{i:02d}" for i in range(25)]
+    df = pd.DataFrame({"str_col": str_values, "cat_col": str_values})
+    lib.write(sym, df)
+    table = lib.read(
+        sym,
+        row_range=row_range,
+        arrow_string_format_per_column={
+            "str_col": ArrowOutputStringFormat.LARGE_STRING,
+            "cat_col": ArrowOutputStringFormat.CATEGORICAL,
+        },
+    ).data
+    expected_df = df.iloc[row_range[0] : row_range[1]].reset_index(drop=True)
+    assert_frame_equal_with_arrow(table, expected_df)
+    batches = table.to_batches()
+    assert len(batches) == len(expected_segment_sizes)
+    for record_batch, expected_size in zip(batches, expected_segment_sizes):
+        # Arrow string arrays's offsets buffer has one more element than the number of strings because it includes the end offset of the last string
+        # Each offset for large_string is an int64 (8 bytes)
+        expected_offset_buffer_size_bytes = (expected_size + 1) * 8
+        # Arrow string arrays's strings buffer has all concatenated string data. Since all strings are of the same length, we can calculate the expected size as:
+        expected_strings_buffer_size_bytes = expected_size * len("string_00")
+
+        str_arr, cat_arr = record_batch.columns
+        assert str_arr.type == pa.large_string()
+        assert str_arr.buffers()[1].size == expected_offset_buffer_size_bytes  # Offsets buffer size
+        assert str_arr.buffers()[2].size == expected_strings_buffer_size_bytes  # Strings buffer size
+        assert cat_arr.type == pa.dictionary(pa.int32(), pa.large_string())
+        assert cat_arr.buffers()[1].size == expected_size * 4  # Keys buffer size
+        assert cat_arr.dictionary.buffers()[1].size == expected_offset_buffer_size_bytes  # Offsets buffer size
+        assert cat_arr.dictionary.buffers()[2].size == expected_strings_buffer_size_bytes  # Strings buffer size
+
+
+@pytest.mark.parametrize(
     "first_type",
     [
         pa.uint8(),
@@ -954,6 +1000,100 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
         expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
         received = lib.read(sym).data
     assert expected.equals(received)
+
+
+@pytest.mark.parametrize("row_range_start", [0, 1, 3, 6, 12])
+@pytest.mark.parametrize("row_range_width", [0, 1, 2, 5])
+@pytest.mark.parametrize("use_query_builder", [True, False])
+def test_arrow_dynamic_schema_row_range(
+    version_store_factory, row_range_start, row_range_width, use_query_builder, any_arrow_string_format
+):
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True, dynamic_strings=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    lib.set_arrow_string_format_default(any_arrow_string_format)
+    sym = "test_arrow_dynamic_schema_row_range"
+
+    df1 = pd.DataFrame(
+        {
+            "a": [1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", periods=4),
+    )
+    lib.write(sym, df1)
+
+    df2 = pd.DataFrame(
+        {},
+        index=pd.date_range("2025-01-05", periods=4),
+    )
+    lib.append(sym, df2)
+
+    df3 = pd.DataFrame(
+        {
+            "b": ["a", "b", "c", "d"],
+            "c": [10.0, 20.0, 30.0, 40.0],
+        },
+        index=pd.date_range("2025-01-09", periods=4),
+    )
+    lib.append(sym, df3)
+
+    row_range = (row_range_start, row_range_start + row_range_width)
+    expected = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder:
+        q = QueryBuilder().row_range(row_range)
+        result = lib.read(
+            sym,
+            query_builder=q,
+        ).data
+    else:
+        result = lib.read(sym, row_range=row_range).data
+    assert_frame_equal_with_arrow(expected, result)
+
+
+@pytest.mark.parametrize("date_range_start", [0, 1, 3, 6, 12])
+@pytest.mark.parametrize("date_range_width", [0, 1, 2, 5])
+@pytest.mark.parametrize("use_query_builder", [True, False])
+def test_arrow_dynamic_schema_date_range(
+    version_store_factory, date_range_start, date_range_width, use_query_builder, any_arrow_string_format
+):
+    lib = version_store_factory(segment_row_size=3, dynamic_schema=True, dynamic_strings=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    lib.set_arrow_string_format_default(any_arrow_string_format)
+    sym = "test_arrow_dynamic_schema_date_range"
+
+    df1 = pd.DataFrame(
+        {
+            "a": [1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", periods=4),
+    )
+    lib.write(sym, df1)
+
+    df2 = pd.DataFrame(
+        {},
+        index=pd.date_range("2025-01-05", periods=4),
+    )
+    lib.append(sym, df2)
+
+    df3 = pd.DataFrame(
+        {
+            "b": ["a", "b", "c", "d"],
+            "c": [10.0, 20.0, 30.0, 40.0],
+        },
+        index=pd.date_range("2025-01-09", periods=4),
+    )
+    lib.append(sym, df3)
+
+    date_range = (
+        pd.Timestamp("2025-01-01") + pd.Timedelta(days=date_range_start),
+        pd.Timestamp("2025-01-01") + pd.Timedelta(days=date_range_start + date_range_width - 1),
+    )
+    expected = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder:
+        q = QueryBuilder().date_range(date_range)
+        result = lib.read(sym, query_builder=q).data
+    else:
+        result = lib.read(sym, date_range=date_range).data
+    assert_frame_equal_with_arrow(expected, result)
 
 
 @pytest.mark.parametrize("type_to_drop", [pa.int64(), pa.float64(), pa.large_string()])

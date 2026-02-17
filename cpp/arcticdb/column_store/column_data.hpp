@@ -66,7 +66,7 @@ struct TypedBlockData {
     ARCTICDB_MOVE_COPY_DEFAULT(TypedBlockData)
 
     TypedBlockData(
-            const raw_type* data, const shape_t* shapes, size_t nbytes, size_t row_count, const MemBlock* block
+            const raw_type* data, const shape_t* shapes, size_t nbytes, size_t row_count, const IMemBlock* block
     ) :
         data_(data),
         shapes_(shapes),
@@ -83,7 +83,7 @@ struct TypedBlockData {
 
     [[nodiscard]] std::size_t nbytes() const { return nbytes_; }
 
-    [[nodiscard]] raw_type* release() { return reinterpret_cast<raw_type*>(const_cast<MemBlock*>(block_)->release()); }
+    [[nodiscard]] raw_type* release() { return reinterpret_cast<raw_type*>(const_cast<IMemBlock*>(block_)->release()); }
 
     [[nodiscard]] std::size_t row_count() const { return row_count_; }
 
@@ -93,7 +93,7 @@ struct TypedBlockData {
 
     [[nodiscard]] const raw_type* data() const { return data_; }
 
-    [[nodiscard]] const MemBlock* mem_block() const { return block_; }
+    [[nodiscard]] const IMemBlock* mem_block() const { return block_; }
 
     raw_type operator[](size_t pos) const { return reinterpret_cast<const raw_type*>(block_->data())[pos]; }
 
@@ -101,7 +101,7 @@ struct TypedBlockData {
 
     auto end() const { return TypedColumnBlockIterator<const raw_type>(data_ + row_count_); }
 
-    [[nodiscard]] size_t offset() const { return block_->offset_; }
+    [[nodiscard]] size_t offset() const { return block_->offset(); }
 
     friend bool operator==(const TypedBlockData& left, const TypedBlockData& right) {
         return left.block_ == right.block_;
@@ -112,7 +112,7 @@ struct TypedBlockData {
     const shape_t* shapes_;
     size_t nbytes_;
     size_t row_count_;
-    const MemBlock* block_; // pointer to the parent memblock from which this was created from.
+    const IMemBlock* block_; // pointer to the parent memblock from which this was created from.
 };
 
 enum class IteratorType { REGULAR, ENUMERATED };
@@ -180,7 +180,7 @@ struct ColumnData {
         ColumnDataIterator() = delete;
 
         // Used to construct [c]begin iterators
-        explicit ColumnDataIterator(ColumnData* parent) : parent_(parent) {
+        explicit ColumnDataIterator(const ColumnData* parent) : parent_(parent) {
             increment_block();
             if constexpr (iterator_type == IteratorType::ENUMERATED && iterator_density == IteratorDensity::SPARSE) {
                 // idx_ default-constructs to 0, which is correct for dense case
@@ -189,11 +189,14 @@ struct ColumnData {
         }
 
         // Used to construct [c]end iterators
-        explicit ColumnDataIterator(ColumnData* parent, RawType* end_ptr) : parent_(parent) { data_.ptr_ = end_ptr; }
+        explicit ColumnDataIterator(const ColumnData* parent, RawType* end_ptr) : parent_(parent) {
+            data_.ptr_ = end_ptr;
+        }
 
         template<bool OtherConst>
         explicit ColumnDataIterator(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other) :
             parent_(other.parent_),
+            block_pos_(other.block_pos_),
             opt_block_(other.opt_block_),
             remaining_values_in_block_(other.remaining_values_in_block_),
             data_(other.data_) {}
@@ -216,7 +219,7 @@ struct ColumnData {
         }
 
         void increment_block() {
-            opt_block_ = parent_->next<TDT>();
+            opt_block_ = parent_->typed_block_at_position<TDT>(block_pos_++);
             if (ARCTICDB_LIKELY(opt_block_.has_value())) {
                 remaining_values_in_block_ = opt_block_->row_count();
                 data_.ptr_ = const_cast<typename TDT::DataTypeTag::raw_type*>(opt_block_->data());
@@ -257,7 +260,8 @@ struct ColumnData {
             }
         }
 
-        ColumnData* parent_{nullptr};
+        const ColumnData* parent_{nullptr};
+        size_t block_pos_{0};
         std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
         std::size_t remaining_values_in_block_{0};
         typename base_type::value_type data_;
@@ -294,7 +298,7 @@ struct ColumnData {
     template<
             typename TDT, IteratorType iterator_type = IteratorType::REGULAR,
             IteratorDensity iterator_density = IteratorDensity::DENSE>
-    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() {
+    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cbegin() const {
         return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this);
     }
 
@@ -306,7 +310,7 @@ struct ColumnData {
         RawType* end_ptr{nullptr};
         if (!data_->blocks().empty()) {
             auto block = data_->blocks().at(num_blocks() - 1);
-            auto typed_block_data = next_typed_block<TDT>(block);
+            auto typed_block_data = make_typed_block<TDT>(block);
             end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
         return ColumnDataIterator<TDT, iterator_type, iterator_density, false>(this, end_ptr);
@@ -315,12 +319,12 @@ struct ColumnData {
     template<
             typename TDT, IteratorType iterator_type = IteratorType::REGULAR,
             IteratorDensity iterator_density = IteratorDensity::DENSE>
-    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cend() {
+    ColumnDataIterator<TDT, iterator_type, iterator_density, true> cend() const {
         using RawType = typename TDT::DataTypeTag::raw_type;
         RawType* end_ptr{nullptr};
         if (!data_->blocks().empty()) {
             auto block = data_->blocks().at(num_blocks() - 1);
-            auto typed_block_data = next_typed_block<TDT>(block);
+            auto typed_block_data = make_typed_block<TDT>(block);
             end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
         return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this, end_ptr);
@@ -349,7 +353,7 @@ struct ColumnData {
 
     template<typename TDT>
     std::optional<TypedBlockData<TDT>> next() {
-        MemBlock* block = nullptr;
+        IMemBlock* block = nullptr;
         do {
             if (pos_ == num_blocks())
                 return std::nullopt;
@@ -358,6 +362,16 @@ struct ColumnData {
         } while (!block);
 
         return next_typed_block<TDT>(block);
+    }
+
+    template<typename TDT>
+    std::optional<TypedBlockData<TDT>> typed_block_at_position(size_t pos) const {
+        if (pos == num_blocks())
+            return std::nullopt;
+
+        auto block = data_->blocks().at(pos);
+        util::check(block != nullptr, "Null block at position {} in typed_block_at_position", pos);
+        return make_typed_block<TDT>(block);
     }
 
     template<typename TDT>
@@ -371,7 +385,7 @@ struct ColumnData {
     }
 
     template<typename TDT>
-    static TypedBlockData<TDT> make_typed_block(MemBlock* block) {
+    static TypedBlockData<TDT> make_typed_block(IMemBlock* block) {
         if constexpr (TDT::DimensionTag::value != Dimension::Dim0) {
             util::raise_rte("Random access block in multi-dimentional column");
         }
@@ -379,8 +393,8 @@ struct ColumnData {
         return TypedBlockData<TDT>{
                 reinterpret_cast<const typename TDT::DataTypeTag::raw_type*>(block->data()),
                 nullptr,
-                block->bytes(),
-                block->bytes() / get_type_size(TDT::DataTypeTag::data_type),
+                block->physical_bytes(),
+                block->logical_size() / get_type_size(TDT::DataTypeTag::data_type),
                 block
         };
     }
@@ -390,18 +404,18 @@ struct ColumnData {
 
   private:
     template<typename TDT>
-    TypedBlockData<TDT> next_typed_block(MemBlock* block) {
+    TypedBlockData<TDT> next_typed_block(IMemBlock* block) {
         size_t num_elements = 0;
         const shape_t* shape_ptr = nullptr;
 
         constexpr auto dim = TDT::DimensionTag::value;
         if constexpr (dim == Dimension::Dim0) {
-            auto bytes_without_extra = block->bytes() - buffer().extra_bytes_per_block();
-            num_elements = bytes_without_extra / get_type_size(type_.data_type());
+            auto logical_size = block->logical_size();
+            num_elements = logical_size / get_type_size(type_.data_type());
         } else {
             util::check(!buffer().has_extra_bytes_per_block(), "Can't have `extra_bytes_per_block` when using dim > 0");
             if (shapes_->empty()) {
-                num_elements = block->bytes() / get_type_size(type_.data_type());
+                num_elements = block->logical_size() / get_type_size(type_.data_type());
             } else {
                 shape_ptr = shapes_->ptr_cast<shape_t>(shape_pos_, sizeof(shape_t));
                 size_t size = 0;
@@ -414,7 +428,7 @@ struct ColumnData {
                 // conditions are satisfied:
                 // i) The processed size becomes equal to the block size
                 // ii) All zero-sized shapes are parsed (i.e. the shape of the current tensor is not 0)
-                while (current_tensor_is_empty() || size < block->bytes()) {
+                while (current_tensor_is_empty() || size < block->logical_size()) {
                     if constexpr (dim == Dimension::Dim1) {
                         size += next_shape() * raw_type_sz;
                     } else {
@@ -429,7 +443,10 @@ struct ColumnData {
                     ++num_elements;
                 }
                 util::check(
-                        size == block->bytes(), "Element size vs block size overrun: {} > {}", size, block->bytes()
+                        size == block->logical_size(),
+                        "Element size vs block size overrun: {} > {}",
+                        size,
+                        block->logical_size()
                 );
             }
         }
@@ -437,7 +454,7 @@ struct ColumnData {
         return TypedBlockData<TDT>{
                 reinterpret_cast<const typename TDT::DataTypeTag::raw_type*>(block->data()),
                 shape_ptr,
-                block->bytes(),
+                block->physical_bytes(),
                 num_elements,
                 block
         };

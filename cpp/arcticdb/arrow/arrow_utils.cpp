@@ -9,6 +9,7 @@
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/allocator.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/record_batch.hpp>
 
@@ -24,7 +25,9 @@ std::optional<sparrow::validity_bitmap> create_validity_bitmap(
                 "Expected a single block bitmap extra buffer but got {} blocks",
                 bitmap_buffer.blocks().size()
         );
-        return sparrow::validity_bitmap{reinterpret_cast<uint8_t*>(bitmap_buffer.block(0)->release()), bitmap_size};
+        return sparrow::validity_bitmap{
+                reinterpret_cast<uint8_t*>(bitmap_buffer.block(0)->release()), bitmap_size, get_detachable_allocator()
+        };
     } else {
         return std::nullopt;
     }
@@ -34,7 +37,7 @@ template<typename T>
 sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
-    sparrow::u8_buffer<T> buffer(data_ptr, data_size);
+    sparrow::u8_buffer<T> buffer(data_ptr, data_size, get_detachable_allocator());
     if (validity_bitmap) {
         return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
     } else {
@@ -65,7 +68,9 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
     // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
     // applied during normalization in python layer.
     sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
-            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr), data_size
+            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
+            data_size,
+            get_detachable_allocator()
     );
     if (validity_bitmap) {
         return sparrow::timestamp_without_timezone_nanoseconds_array{
@@ -95,7 +100,9 @@ sparrow::dictionary_encoded_array<T> create_dict_array(
     }
 }
 
-sparrow::u8_buffer<char> minimal_string_buffer() { return sparrow::u8_buffer<char>(nullptr, 0); }
+sparrow::u8_buffer<char> minimal_string_buffer() {
+    return sparrow::u8_buffer<char>(nullptr, 0, get_detachable_allocator());
+}
 
 // TODO: This is super hacky. If our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
@@ -123,8 +130,10 @@ sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t o
             "Expected a single block string extra buffer but got {} blocks",
             strings.blocks().size()
     );
-    const auto strings_buffer_size = strings.block(0)->bytes();
-    return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
+    const auto strings_buffer_size = strings.block(0)->physical_bytes();
+    return sparrow::u8_buffer<char>(
+            reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size, get_detachable_allocator()
+    );
 }
 
 template<typename TagType>
@@ -140,13 +149,15 @@ sparrow::array string_array_from_block(
     auto offset = block.offset();
     auto block_size = block.row_count();
     util::check(
-            block.mem_block()->bytes() == (block_size + 1) * sizeof(SignedType),
+            block.mem_block()->physical_bytes() == (block_size + 1) * sizeof(SignedType),
             "Expected memory block for variable length strings to have size {} due to extra bytes but got a memory "
             "block with size {}",
             (block_size + 1) * sizeof(SignedType),
-            block.mem_block()->bytes()
+            block.mem_block()->physical_bytes()
     );
-    sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1);
+    sparrow::u8_buffer<SignedType> offset_buffer(
+            reinterpret_cast<SignedType*>(block.release()), block_size + 1, get_detachable_allocator()
+    );
     auto strings_buffer = strings_buffer_at_offset(column, offset);
     auto arr = [&]() {
         if (maybe_bitmap.has_value()) {
@@ -180,16 +191,20 @@ sparrow::array string_dict_from_block(
     // We use `int32_t` dictionary keys because pyarrow doesn't work with unsigned dictionary keys:
     // https://github.com/pola-rs/polars/issues/10977
     const auto block_size = block.row_count();
-    sparrow::u8_buffer<int32_t> dict_keys_buffer{reinterpret_cast<int32_t*>(block.release()), block_size};
+    sparrow::u8_buffer<int32_t> dict_keys_buffer{
+            reinterpret_cast<int32_t*>(block.release()), block_size, get_detachable_allocator()
+    };
 
     const bool has_offset_buffer = column.has_extra_buffer(offset, ExtraBufferType::OFFSET);
     const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
     auto dict_values_array = [&]() -> sparrow::big_string_array {
         if (has_offset_buffer && has_string_buffer) {
             auto& string_offsets = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
-            const auto offset_buffer_value_count = string_offsets.block(0)->bytes() / sizeof(int64_t);
+            const auto offset_buffer_value_count = string_offsets.block(0)->physical_bytes() / sizeof(int64_t);
             sparrow::u8_buffer<int64_t> offsets_buffer(
-                    reinterpret_cast<int64_t*>(string_offsets.block(0)->release()), offset_buffer_value_count
+                    reinterpret_cast<int64_t*>(string_offsets.block(0)->release()),
+                    offset_buffer_value_count,
+                    get_detachable_allocator()
             );
             auto strings_buffer = strings_buffer_at_offset(column, offset);
             return {std::move(strings_buffer), std::move(offsets_buffer)};
@@ -242,7 +257,7 @@ sparrow::array empty_arrow_array_for_column(const Column& column, std::string_vi
             if (column.data().buffer().has_extra_bytes_per_block()) {
                 return minimal_strings_array<SignedType>();
             } else {
-                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
+                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
                 auto dict_values_array = minimal_strings_for_dict();
                 return sparrow::array{create_dict_array<int32_t>(
                         sparrow::array{std::move(dict_values_array)},
@@ -271,6 +286,12 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
             vec.emplace_back(empty_arrow_array_for_column(column, name));
         }
         while (auto block = column_data.next<TagType>()) {
+            if (block->row_count() == 0) {
+                // Empty blocks should produce empty arrays, without reading extra buffers, because they share the same
+                // offset as the next block.
+                vec.emplace_back(empty_arrow_array_for_column(column, name));
+                continue;
+            }
             auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
                 if (column_data.buffer().has_extra_bytes_per_block()) {
@@ -432,22 +453,14 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
                 // Arrow bool columns are packed bitsets
-                // This is the limiting factor when writing a lot of bool data as it is serial. This should be moved to
-                // WriteToSegmentTask
-                if (record_batch == record_batches.cbegin()) {
-                    column.buffer() = ChunkedBuffer::presized(total_rows);
-                }
-                packed_bits_to_buffer(
-                        data, array.size(), array.offset(), column.buffer().bytes_at(start_row, array.size())
-                );
+                column.buffer().add_external_packed_block(data, array.size(), array.offset());
             } else { // Numeric and string types
                 data += array.offset() * get_type_size(data_type);
-                // For string columns, we deliberately omit the last value from the offsets buffer to keep our indexing
-                // into the column's ChunkedBuffer accurate. See corresponding comment in
-                // WriteToSegmentTask::slice_column
                 const auto bytes = array.size() * get_type_size(data_type);
-                column.buffer().add_external_block(data, bytes);
                 if (is_sequence_type(data_type)) {
+                    // For string columns, we add an external block with extra bytes for the last offset.
+                    // This is needed to keep our indexing into the column's ChunkedBuffer accurate.
+                    column.buffer().add_external_block(data, bytes, get_type_size(data_type));
                     // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer
                     // represents offsets into this buffer
                     ChunkedBuffer strings_buffer;
@@ -456,6 +469,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                     column.set_extra_buffer(
                             start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
                     );
+                } else {
+                    column.buffer().add_external_block(data, bytes);
                 }
             }
         }

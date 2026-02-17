@@ -495,7 +495,7 @@ void Column::append(const Column& other, position_t at_row) {
     const auto& blocks = other.data_.buffer().blocks();
     const auto initial_row_count = row_count();
     for (const auto& block : blocks) {
-        data_.ensure<uint8_t>(block->bytes());
+        data_.ensure<uint8_t>(block->physical_bytes());
         block->copy_to(data_.cursor());
         data_.commit();
     }
@@ -813,7 +813,7 @@ void Column::change_type(DataType target_type) {
 
                 if constexpr (!is_narrowing_conversion<source_raw_type, target_raw_type>() &&
                               !std::is_same_v<source_raw_type, bool>) {
-                    auto num_values = block->bytes() / sizeof(source_raw_type);
+                    auto num_values = block->physical_bytes() / sizeof(source_raw_type);
                     buf.ensure<target_raw_type>(num_values);
                     auto src = reinterpret_cast<const source_raw_type*>(block->data());
                     auto dest = reinterpret_cast<target_raw_type*>(buf.cursor());
