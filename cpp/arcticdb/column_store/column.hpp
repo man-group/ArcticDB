@@ -276,54 +276,54 @@ class Column {
                 sizeof(T)
         );
 
-        auto prev_logical_row = last_logical_row_;
-        last_logical_row_ = row_offset;
-        ++last_physical_row_;
+        auto prev_logical_size = logical_size_;
+        logical_size_ = row_offset + 1;
+        ++physical_size_;
 
-        if (row_offset != prev_logical_row + 1) {
+        if (static_cast<size_t>(row_offset) != prev_logical_size) {
             if (sparse_permitted()) {
                 if (!sparse_map_) {
-                    if (prev_logical_row != -1)
-                        backfill_sparse_map(prev_logical_row);
+                    if (prev_logical_size != 0)
+                        backfill_sparse_map(prev_logical_size - 1);
                     else
                         (void)sparse_map();
                 }
             } else {
-                util::raise_rte("set_scalar expected row {}, actual {} ", prev_logical_row + 1, row_offset);
+                util::raise_rte("set_scalar expected row {}, actual {} ", prev_logical_size, row_offset);
             }
         }
 
         if (is_sparse()) {
-            ARCTICDB_TRACE(log::version(), "setting sparse bit at position {}", last_logical_row_);
-            set_sparse_bit_for_row(last_logical_row_);
+            ARCTICDB_TRACE(log::version(), "setting sparse bit at position {}", row_offset);
+            set_sparse_bit_for_row(row_offset);
         }
 
-        ARCTICDB_TRACE(log::version(), "Setting scalar {} at {} ({})", val, last_logical_row_, last_physical_row_);
+        ARCTICDB_TRACE(log::version(), "Setting scalar {} at {} ({})", val, logical_size_ - 1, physical_size_ - 1);
 
         data_.ensure<T>();
-        *data_.ptr_cast<T>(position_t(last_physical_row_), sizeof(T)) = val;
+        *data_.ptr_cast<T>(position_t(physical_size_ - 1), sizeof(T)) = val;
         data_.commit();
 
-        util::check(last_physical_row_ + 1 == row_count(), "Row count calculation incorrect in set_scalar");
+        util::check(physical_size_ == row_count(), "Row count calculation incorrect in set_scalar");
     }
 
     template<class T>
     void push_back(T val) {
-        set_scalar(last_logical_row_ + 1, val);
+        set_scalar(static_cast<ssize_t>(logical_size_), val);
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
     void set_external_block(ssize_t row_offset, T* val, size_t size) {
         util::check_arg(
-                last_logical_row_ + 1 == row_offset,
+                logical_size_ == static_cast<size_t>(row_offset),
                 "set_external_block expected row {}, actual {} ",
-                last_logical_row_ + 1,
+                logical_size_,
                 row_offset
         );
         auto bytes = sizeof(T) * size;
         const_cast<ChunkedBuffer&>(data_.buffer()).add_external_block(reinterpret_cast<const uint8_t*>(val), bytes);
-        last_logical_row_ += static_cast<ssize_t>(size);
-        last_physical_row_ = last_logical_row_;
+        logical_size_ += size;
+        physical_size_ = logical_size_;
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
@@ -347,9 +347,9 @@ class Column {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
         util::check_arg(
-                last_logical_row_ + 1 == row_offset,
+                logical_size_ == static_cast<size_t>(row_offset),
                 "set_array expected row {}, actual {} ",
-                last_logical_row_ + 1,
+                logical_size_,
                 row_offset
         );
         data_.ensure_bytes(val.nbytes());
@@ -362,7 +362,7 @@ class Column {
         update_offsets(val.nbytes());
         data_.commit();
         shapes_.commit();
-        ++last_logical_row_;
+        ++logical_size_;
     }
 
     template<class T>
@@ -371,9 +371,9 @@ class Column {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
         util::check_arg(
-                last_logical_row_ + 1 == row_offset,
+                logical_size_ == static_cast<size_t>(row_offset),
                 "set_array expected row {}, actual {} ",
-                last_logical_row_ + 1,
+                logical_size_,
                 row_offset
         );
         data_.ensure_bytes(val.nbytes());
@@ -386,7 +386,7 @@ class Column {
         update_offsets(val.nbytes());
         data_.commit();
         shapes_.commit();
-        ++last_logical_row_;
+        ++logical_size_;
     }
 
     void set_empty_array(ssize_t row_offset, int dimension_count);
@@ -692,8 +692,8 @@ class Column {
     mutable boost::container::small_vector<position_t, 1> offsets_;
     TypeDescriptor type_;
     std::optional<TypeDescriptor> orig_type_;
-    ssize_t last_logical_row_ = -1;
-    ssize_t last_physical_row_ = -1;
+    size_t logical_size_ = 0;
+    size_t physical_size_ = 0;
 
     bool inflated_ = false;
     Sparsity allow_sparse_ = Sparsity::NOT_PERMITTED;

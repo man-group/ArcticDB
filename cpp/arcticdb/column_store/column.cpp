@@ -361,8 +361,8 @@ Column Column::clone() const {
     output.offsets_ = offsets_;
     output.type_ = type_;
     output.orig_type_ = orig_type_;
-    output.last_logical_row_ = last_logical_row_;
-    output.last_physical_row_ = last_physical_row_;
+    output.logical_size_ = logical_size_;
+    output.physical_size_ = physical_size_;
     output.inflated_ = inflated_;
     output.allow_sparse_ = allow_sparse_;
     output.sparse_map_ = sparse_map_;
@@ -373,12 +373,12 @@ Column Column::clone() const {
 bool Column::empty() const { return row_count() == 0; }
 
 bool Column::is_sparse() const {
-    if (last_logical_row_ != last_physical_row_) {
+    if (logical_size_ != physical_size_) {
         util::check(
                 static_cast<bool>(sparse_map_),
-                "Expected sparse map in column with logical row {} and physical row {}",
-                last_logical_row_,
-                last_physical_row_
+                "Expected sparse map in column with logical size {} and physical size {}",
+                logical_size_,
+                physical_size_
         );
         return true;
     }
@@ -387,7 +387,7 @@ bool Column::is_sparse() const {
 
 bool Column::sparse_permitted() const { return allow_sparse_ == Sparsity::PERMITTED; }
 
-ssize_t Column::last_row() const { return last_logical_row_; }
+ssize_t Column::last_row() const { return logical_size_ == 0 ? -1 : static_cast<ssize_t>(logical_size_) - 1; }
 
 void Column::check_magic() const { magic_.check(); }
 
@@ -405,13 +405,13 @@ void Column::unsparsify(size_t num_rows) {
         std::swap(dest, data_.buffer());
     });
     sparse_map_ = std::nullopt;
-    last_logical_row_ = last_physical_row_ = static_cast<ssize_t>(num_rows) - 1;
+    logical_size_ = physical_size_ = num_rows;
 
     ARCTICDB_DEBUG(
             log::version(),
-            "Unsparsify: last_logical_row_: {} last_physical_row_: {}",
-            last_logical_row_,
-            last_physical_row_
+            "Unsparsify: logical_size_: {} physical_size_: {}",
+            logical_size_,
+            physical_size_
     );
 }
 
@@ -422,16 +422,16 @@ void Column::sparsify() {
             auto raw_ptr = reinterpret_cast<const RawType*>(ptr());
             auto buffer = util::scan_floating_point_to_sparse(raw_ptr, row_count(), sparse_map());
             std::swap(data().buffer(), buffer);
-            last_physical_row_ = sparse_map().count() - 1;
+            physical_size_ = sparse_map().count();
         }
     });
 }
 
 void Column::string_array_prologue(ssize_t row_offset, size_t num_strings) {
     util::check_arg(
-            last_logical_row_ + 1 == row_offset,
+            logical_size_ == static_cast<size_t>(row_offset),
             "string_array_prologue expected row {}, actual {} ",
-            last_logical_row_ + 1,
+            logical_size_,
             row_offset
     );
     shapes_.ensure<shape_t>();
@@ -444,7 +444,7 @@ void Column::string_array_epilogue(size_t num_strings) {
     data_.commit();
     shapes_.commit();
     update_offsets(num_strings * sizeof(entity::position_t));
-    ++last_logical_row_;
+    ++logical_size_;
 }
 
 void Column::set_string_array(
@@ -489,7 +489,7 @@ void Column::append(const Column& other, position_t at_row) {
     util::check(type() == other.type(), "Cannot append column type {} to column type {}", type(), other.type());
     const bool was_sparse = is_sparse();
     const bool was_empty = empty();
-    util::check(last_physical_row_ + 1 == row_count(), "Row count calculation incorrect before dense append");
+    util::check(physical_size_ == row_count(), "Row count calculation incorrect before dense append");
     util::check(!is_sparse() || row_count() == sparse_map_.value().count(), "Row count does not match bitmap count");
 
     const auto& blocks = other.data_.buffer().blocks();
@@ -500,32 +500,32 @@ void Column::append(const Column& other, position_t at_row) {
         data_.commit();
     }
 
-    last_logical_row_ = at_row + other.last_logical_row_;
-    last_physical_row_ += other.last_physical_row_ + 1;
+    logical_size_ = at_row + other.logical_size_;
+    physical_size_ += other.physical_size_;
 
     ARCTICDB_DEBUG(
             log::version(),
-            "at_row: {}\tother.last_logical_row_: {}\tother.last_physical_row_: {}\tother.row_count(): {}",
+            "at_row: {}\tother.logical_size_: {}\tother.physical_size_: {}\tother.row_count(): {}",
             at_row,
-            other.last_logical_row_,
-            other.last_physical_row_,
+            other.logical_size_,
+            other.physical_size_,
             other.row_count()
     );
     ARCTICDB_DEBUG(
             log::version(),
-            "initial_row_count: {}\tlast_logical_row_: {}\tlast_physical_row_: {}\trow_count: {}",
+            "initial_row_count: {}\tlogical_size_: {}\tphysical_size_: {}\trow_count: {}",
             initial_row_count,
-            last_logical_row_,
-            last_physical_row_,
+            logical_size_,
+            physical_size_,
             row_count()
     );
 
-    util::check(last_physical_row_ + 1 == row_count(), "Row count calculation incorrect after dense append");
+    util::check(physical_size_ == row_count(), "Row count calculation incorrect after dense append");
 
-    if (at_row == initial_row_count && !other.is_sparse() && !is_sparse()) {
+    if (static_cast<size_t>(at_row) == initial_row_count && !other.is_sparse() && !is_sparse()) {
         util::check(
-                last_logical_row_ == last_physical_row_,
-                "Expected logical and physical rows to line up in append of non-sparse columns"
+                logical_size_ == physical_size_,
+                "Expected logical and physical sizes to line up in append of non-sparse columns"
         );
         return;
     }
@@ -544,7 +544,7 @@ void Column::append(const Column& other, position_t at_row) {
         ARCTICDB_DEBUG(
                 log::version(), "Other column is dense, setting range from {} to {}", at_row, at_row + other.row_count()
         );
-        sparse_map().set_range(uint32_t(at_row), uint32_t(at_row + other.last_logical_row_), true);
+        sparse_map().set_range(uint32_t(at_row), uint32_t(at_row + other.logical_size_ - 1), true);
     }
 
     util::check(
@@ -634,18 +634,18 @@ void Column::sort_external(const JiveTable& jive_table, std::vector<uint32_t>& p
 void Column::mark_absent_rows(size_t num_rows) {
     if (sparse_permitted()) {
         if (!sparse_map_) {
-            if (last_physical_row_ != -1)
-                backfill_sparse_map(last_physical_row_);
+            if (physical_size_ != 0)
+                backfill_sparse_map(physical_size_ - 1);
             else
                 (void)sparse_map();
         }
-        last_logical_row_ += static_cast<ssize_t>(num_rows);
+        logical_size_ += num_rows;
     } else {
         util::check(
-                last_logical_row_ == last_physical_row_,
-                "Expected logical and physical rows to be equal in non-sparse column"
+                logical_size_ == physical_size_,
+                "Expected logical and physical sizes to be equal in non-sparse column"
         );
-        default_initialize_rows(last_logical_row_ + 1, num_rows, true);
+        default_initialize_rows(logical_size_, num_rows, true);
     }
 }
 
@@ -670,8 +670,8 @@ void Column::default_initialize_rows(
                 data_.commit();
             }
 
-            last_logical_row_ += static_cast<ssize_t>(num_rows);
-            last_physical_row_ += static_cast<ssize_t>(num_rows);
+            logical_size_ += num_rows;
+            physical_size_ += num_rows;
         });
     }
 }
@@ -680,24 +680,24 @@ void Column::set_row_data(size_t row_id) {
     if (is_empty_type(type_.data_type())) {
         return;
     }
-    last_logical_row_ = row_id;
-    const auto last_stored_row = row_count() - 1;
+    logical_size_ = row_id + 1;
+    const auto stored_row_count = row_count();
     if (sparse_map_) {
-        last_physical_row_ = static_cast<ssize_t>(sparse_map_->count()) - 1;
-    } else if (last_logical_row_ != last_stored_row) {
-        last_physical_row_ = last_stored_row;
-        backfill_sparse_map(last_stored_row);
+        physical_size_ = sparse_map_->count();
+    } else if (logical_size_ != stored_row_count) {
+        physical_size_ = stored_row_count;
+        backfill_sparse_map(stored_row_count - 1);
     } else {
-        last_physical_row_ = last_logical_row_;
+        physical_size_ = logical_size_;
     }
     if (sparse_map_) {
         sparse_map_->resize(row_id + 1);
     }
     ARCTICDB_TRACE(
             log::version(),
-            "Set row data: last_logical_row_: {}, last_physical_row_: {}",
-            last_logical_row_,
-            last_physical_row_
+            "Set row data: logical_size_: {}, physical_size_: {}",
+            logical_size_,
+            physical_size_
     );
 }
 
@@ -717,7 +717,7 @@ size_t Column::get_physical_offset(size_t row) const {
 void Column::set_sparse_map(util::BitSet&& bitset) { sparse_map_ = std::move(bitset); }
 
 std::optional<position_t> Column::get_physical_row(position_t row) const {
-    if (row > last_logical_row_) {
+    if (static_cast<size_t>(row) >= logical_size_) {
         if (sparse_permitted())
             return std::nullopt;
         else
@@ -943,15 +943,15 @@ void Column::set_empty_array(ssize_t row_offset, int dimension_count) {
     ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
     magic_.check();
     util::check_arg(
-            last_logical_row_ + 1 == row_offset,
+            logical_size_ == static_cast<size_t>(row_offset),
             "set_array expected row {}, actual {} ",
-            last_logical_row_ + 1,
+            logical_size_,
             row_offset
     );
     shapes_.ensure<shape_t>(dimension_count);
     memset(shapes_.cursor(), 0, dimension_count * sizeof(shape_t));
     shapes_.commit();
-    ++last_logical_row_;
+    ++logical_size_;
 }
 
 void Column::set_type(TypeDescriptor td) { type_ = td; }
