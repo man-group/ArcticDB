@@ -894,9 +894,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             self.client_cert_file = ""
         self.client_cert_dir = self.working_dir
 
-        spawn_context = multiprocessing.get_context(
-            "spawn"
-        )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
+        context = "forkserver" if os.name == "posix" else None
+        spawn_context = multiprocessing.get_context(context)
         self._p = spawn_context.Process(
             target=run_s3_server,
             args=(
@@ -1034,9 +1033,8 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
             self.client_cert_file = ""
         self.client_cert_dir = self.working_dir
 
-        spawn_context = multiprocessing.get_context(
-            "spawn"
-        )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
+        context = "forkserver" if os.name == "posix" else None
+        spawn_context = multiprocessing.get_context(context)
         self._p = spawn_context.Process(
             target=run_gcp_server,
             args=(
