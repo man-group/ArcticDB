@@ -7,8 +7,6 @@ from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
-from tests.util.mark import REAL_S3_TESTS_MARK
-
 
 @pytest.mark.storage
 def test_symbol_sizes(basic_store):

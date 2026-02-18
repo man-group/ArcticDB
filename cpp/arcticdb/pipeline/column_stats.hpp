@@ -2,6 +2,8 @@
 
 #include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/pipeline/index_fields.hpp>
+#include <ankerl/unordered_dense.h>
 #include <map>
 #include <set>
 #include <string>
@@ -18,7 +20,21 @@ enum class ColumnStatType { MINMAX };
 using ColumnStatTypeInternal = arcticc::pb2::descriptors_pb2::ColumnStatsType;
 
 static const char* const start_index_column_name = "start_index";
+static constexpr size_t start_index_column_offset = 0;
 static const char* const end_index_column_name = "end_index";
+static constexpr size_t end_index_column_offset = 1;
+
+enum class ColumnStatElement { MIN, MAX };
+
+/**
+ * Parse a column stats segment column name and extract the stat type (MIN or MAX) and original column name.
+ * Expected format: "vX.Y_MIN(column)" or "vX.Y_MAX(column)"
+ *
+ * @param segment_column_name The column name from the stats segment
+ */
+std::pair<std::string, ColumnStatElement> from_segment_column_name_to_internal(std::string_view segment_column_name);
+
+std::pair<std::string, ColumnStatType> from_segment_column_name_to_external(std::string_view segment_column_name);
 
 struct NameAndStatTypes {
     std::string mangled_name;

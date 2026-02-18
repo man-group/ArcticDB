@@ -1,7 +1,5 @@
-#include <pipeline/column_stats.hpp>
-
-#include <pipeline/index_fields.hpp>
-
+#include <arcticdb/pipeline/column_stats.hpp>
+#include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -100,9 +98,9 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
     TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MIN_V1) = "v1_MIN";
     TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MAX_V1) = "v1_MAX";
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            TypeToOperatorStringMap::contains(type), "Unknown column stat type requested"
+            TypeToOperatorStringMap::contains(element), "Unknown column stat type requested"
     );
-    return TypeToOperatorStringMap::get(type);
+    return TypeToOperatorStringMap::get(element);
 }
 
 std::string type_to_name(ColumnStatType type) {
@@ -128,6 +126,7 @@ std::string to_segment_column_name(const std::string& column, ColumnStatTypeInte
 }
 
 ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats) {
+    version_ = {1, 0};
     for (const auto& [column, column_stat_names] : column_stats) {
         if (!column_stat_names.empty()) {
             user_specified_column_stats_[column] = {};

@@ -256,6 +256,8 @@ set(arcticdb_srcs
         pipeline/column_mapping.hpp
         pipeline/column_name_resolution.hpp
         pipeline/column_stats.hpp
+        pipeline/column_stats_filter.hpp
+        pipeline/column_stats_dispatch.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -481,6 +483,8 @@ set(arcticdb_srcs
         pipeline/column_mapping.cpp
         pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
+        pipeline/column_stats_filter.cpp
+        pipeline/column_stats_dispatch.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
@@ -1039,6 +1043,7 @@ if(${TEST})
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
             pipeline/test/test_value.cpp
+            pipeline/test/test_column_stats_dispatch.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp

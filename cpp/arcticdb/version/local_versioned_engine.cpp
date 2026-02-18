@@ -483,8 +483,10 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), target_stream);
     const auto target_version = get_next_version_from_key(maybe_prev);
 
+    VersionIdentifier resolved =
+            std::make_shared<IndexInformation>(read_index_key_without_column_stats(store(), source_version->key_));
     std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store(), std::move(source_version).value(), *read_query, read_options);
+            setup_pipeline_context(store(), resolved, *read_query, read_options);
     const IndexPartialKey target_partial_index_key{target_stream, target_version};
     VersionedItem versioned_item = read_modify_write_impl(
                                            store(),
