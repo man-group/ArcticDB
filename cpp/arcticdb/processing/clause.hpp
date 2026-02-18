@@ -102,6 +102,8 @@ void check_column_presence(
         std::string_view clause_name
 );
 
+OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses);
+
 struct PassthroughClause {
     ClauseInfo clause_info_;
 

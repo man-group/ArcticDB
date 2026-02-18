@@ -199,6 +199,11 @@ def check_local_storage_enabled():
 # region ======================================= Storage Fixtures =======================================
 
 
+@pytest.fixture
+def mem_library(mem_storage, lib_name) -> Generator[Library, None, None]:
+    yield mem_storage.create_arctic().create_library(lib_name)
+
+
 @pytest.fixture(scope="session")
 def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
     check_local_storage_enabled()

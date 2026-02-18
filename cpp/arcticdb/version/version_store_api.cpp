@@ -1378,8 +1378,10 @@ std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> Pytho
     return results;
 }
 
-DescriptorItem PythonVersionStore::read_descriptor(const StreamId& stream_id, const VersionQuery& version_query) {
-    return read_descriptor_internal(stream_id, version_query);
+DescriptorItem PythonVersionStore::read_descriptor(
+        const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
+) {
+    return read_descriptor_internal(stream_id, version_query, include_index_segment);
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_read_descriptor(
