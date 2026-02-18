@@ -15,7 +15,9 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 enum class ColumnStatType { MINMAX };
 
 static const char* const start_index_column_name = "start_index";
+static constexpr size_t start_index_column_offset = 0;
 static const char* const end_index_column_name = "end_index";
+static constexpr size_t end_index_column_offset = 1;
 
 enum class ColumnStatElement { MIN, MAX };
 

@@ -358,3 +358,6 @@ def test_column_stats_query_optimisation_with_date_range(
     table_data_reads = get_table_data_read_count()
     assert_frame_equal(df1, result)
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
+
+
+# TODO aseaton there are more tests worth porting here https://github.com/man-group/ArcticDB/compare/master...aseaton/column-stats-read#diff-aee6edf7c9863ea50d8bf13666b84d051eb90b99ae26e5e02459c31e18f35495
