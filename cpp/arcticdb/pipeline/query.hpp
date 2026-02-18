@@ -45,7 +45,7 @@ struct PreloadedIndexQuery {
         index_seg_(std::move(index_seg)) {}
 
     // Key is just needed for constructing the VersionedItem to return
-    const entity::AtomKey index_key_;
+    const AtomKey index_key_;
     const SegmentInMemory index_seg_;
 };
 
