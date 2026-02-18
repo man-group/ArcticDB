@@ -34,6 +34,9 @@ def make_matching_source(target_df: pd.DataFrame, segments: List[int], rows_per_
     return res
 
 
+# Merge update stress tests use a lot of memory and can OOM if run in parallel. Add a xdist_group to ensure the tests
+# are not running in parallel with each other.
+@pytest.mark.xdist_group(name="stress_merge_update")
 class TestStressTimeseriesMergeUpdate:
 
     @classmethod
