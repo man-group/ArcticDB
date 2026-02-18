@@ -320,3 +320,41 @@ def test_column_stats_query_optimisation_different_types(
 
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read(s) for dtype {dtype.__name__}, got {table_data_reads}"
     assert_frame_equal(df1, result)
+
+
+def test_column_stats_query_optimisation_with_date_range(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """
+    Test that column stats pruning works correctly when the QueryBuilder includes
+    both a column filter and a date_range clause.
+
+    Segments:
+    - Segment 0: col_1=[1,2], dates 2000-01-01 to 2000-01-02
+    - Segment 1: col_1=[3,4], dates 2000-01-03 to 2000-01-04
+    - Segment 2: col_1=[5,6], dates 2000-01-05 to 2000-01-06
+    """
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    # date_range restricts to segments 0 and 1, column filter col_1 > 2 prunes segment 0
+    # Only segment 1 should be read
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04")))
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+    assert_frame_equal(df1, result)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
