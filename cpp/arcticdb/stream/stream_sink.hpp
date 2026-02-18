@@ -78,6 +78,10 @@ struct StreamSink {
             const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts = storage::UpdateOpts{}
     ) = 0;
 
+    [[nodiscard]] virtual entity::VariantKey update_sync(
+            const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts = storage::UpdateOpts{}
+    ) = 0;
+
     [[nodiscard]] virtual folly::Future<entity::VariantKey> write(PartialKey pk, SegmentInMemory&& segment) = 0;
 
     // shared_ptr for semaphore as executing futures need guarantees it is in a valid state, so need to participate
