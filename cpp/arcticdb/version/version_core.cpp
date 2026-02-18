@@ -19,6 +19,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
+#include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/name_validation.hpp>
@@ -1361,6 +1362,14 @@ static void read_indexed_keys_to_pipeline(
     auto queries = get_column_bitset_and_query_functions<index::IndexSegmentReader>(
             read_query, pipeline_context, dynamic_schema, bucketize_dynamic
     );
+
+    // Try to add column stats filter for segment pruning optimization
+    if (!read_query.clauses_.empty()) {
+        auto column_stats_filter = try_create_column_stats_filter_for_clauses(store, version_info, read_query.clauses_);
+        if (column_stats_filter.has_value()) {
+            queries.push_back(std::move(*column_stats_filter));
+        }
+    }
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
