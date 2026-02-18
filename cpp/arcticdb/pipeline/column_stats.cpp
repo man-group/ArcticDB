@@ -55,22 +55,19 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     return merged;
 }
 
-// Needed as MINMAX maps to 2 columns in the column stats object
-enum class ColumnStatTypeInternal { MIN, MAX };
-
-std::string type_to_operator_string(ColumnStatTypeInternal type) {
+std::string type_to_operator_string(ColumnStatElement element) {
     struct Tag {};
-    using TypeToOperatorStringMap = semi::static_map<ColumnStatTypeInternal, std::string, Tag>;
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::MIN) = "MIN";
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::MAX) = "MAX";
+    using TypeToOperatorStringMap = semi::static_map<ColumnStatElement, std::string, Tag>;
+    TypeToOperatorStringMap::get(ColumnStatElement::MIN) = "MIN";
+    TypeToOperatorStringMap::get(ColumnStatElement::MAX) = "MAX";
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            TypeToOperatorStringMap::contains(type), "Unknown column stat type requested"
+            TypeToOperatorStringMap::contains(element), "Unknown column stat type requested"
     );
-    return TypeToOperatorStringMap::get(type);
+    return TypeToOperatorStringMap::get(element);
 }
 
 std::string to_segment_column_name_v1(
-        const std::string& column, ColumnStatTypeInternal column_stat_type,
+        const std::string& column, ColumnStatElement column_stat_element,
         std::optional<uint64_t> minor_version = std::nullopt
 ) {
     // Increment when modifying
@@ -78,23 +75,23 @@ std::string to_segment_column_name_v1(
     return fmt::format(
             "v1.{}_{}({})",
             minor_version.value_or(latest_minor_version),
-            type_to_operator_string(column_stat_type),
+            type_to_operator_string(column_stat_element),
             column
     );
 }
 
 std::string to_segment_column_name(
-        const std::string& column, ColumnStatTypeInternal column_stat_type,
+        const std::string& column, ColumnStatElement column_stat_element,
         std::optional<std::pair<uint64_t, uint64_t>> version = std::nullopt
 ) {
     if (!version.has_value()) {
         // Use latest version
-        return to_segment_column_name_v1(column, column_stat_type);
+        return to_segment_column_name_v1(column, column_stat_element);
     } else {
         // Use version specified
         switch (version->first) {
         case 1:
-            return to_segment_column_name_v1(column, column_stat_type, version->second);
+            return to_segment_column_name_v1(column, column_stat_element, version->second);
         default:
             compatibility::raise<ErrorCode::E_UNRECOGNISED_COLUMN_STATS_VERSION>(
                     "Unrecognised major version number in column stats column name: {}", version->first
@@ -104,12 +101,13 @@ std::string to_segment_column_name(
 }
 
 // Expected to be of the form "<operation>(<column name>)"
-std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_view pattern) {
+// Note: pattern is taken by reference so the caller sees the updated view with the operator prefix stripped.
+ColumnStatElement from_segment_column_name_v1_internal(std::string_view& pattern) {
     const semi::map<std::string, ColumnStatType> name_to_type_map;
-    const ankerl::unordered_dense::map<std::string, ColumnStatTypeInternal> operator_string_to_type{
-            {"MIN", ColumnStatTypeInternal::MIN}, {"MAX", ColumnStatTypeInternal::MAX}
+    const ankerl::unordered_dense::map<std::string, ColumnStatElement> operator_string_to_type{
+            {"MIN", ColumnStatElement::MIN}, {"MAX", ColumnStatElement::MAX}
     };
-    std::optional<ColumnStatTypeInternal> type;
+    std::optional<ColumnStatElement> type;
     for (const auto& [name, type_candidate] : operator_string_to_type) {
         if (pattern.find(name) == 0) {
             pattern = pattern.substr(name.size());
@@ -125,13 +123,20 @@ std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_v
             "Unexpected column stat column format: {}",
             pattern
     );
+    return *type;
+}
+
+ColumnStatType convert_to_external_type(ColumnStatElement internal_type) {
     struct Tag {};
-    using InternalToExternalColumnStatType = semi::static_map<ColumnStatTypeInternal, ColumnStatType, Tag>;
-    InternalToExternalColumnStatType::get(ColumnStatTypeInternal::MIN) = ColumnStatType::MINMAX;
-    InternalToExternalColumnStatType::get(ColumnStatTypeInternal::MAX) = ColumnStatType::MINMAX;
-    return std::make_pair(
-            std::string(pattern.substr(1, pattern.size() - 2)), InternalToExternalColumnStatType::get(*type)
-    );
+    using InternalToExternalColumnStatType = semi::static_map<ColumnStatElement, ColumnStatType, Tag>;
+    InternalToExternalColumnStatType::get(ColumnStatElement::MIN) = ColumnStatType::MINMAX;
+    InternalToExternalColumnStatType::get(ColumnStatElement::MAX) = ColumnStatType::MINMAX;
+    return InternalToExternalColumnStatType::get(internal_type);
+}
+
+std::pair<std::string, ColumnStatElement> from_segment_column_name_v1(std::string_view pattern) {
+    auto type = from_segment_column_name_v1_internal(pattern);
+    return std::make_pair(std::string(pattern.substr(1, pattern.size() - 2)), type);
 }
 
 std::string type_to_name(ColumnStatType type) {
@@ -170,7 +175,7 @@ ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_se
 ColumnStats::ColumnStats(const FieldCollection& column_stats_fields) {
     for (const auto& field : column_stats_fields) {
         if (field.name() != start_index_column_name && field.name() != end_index_column_name) {
-            auto [column_name, index_type] = from_segment_column_name(field.name());
+            auto [column_name, index_type] = from_segment_column_name_to_external(field.name());
             if (auto it = column_stats_.find(column_name); it == column_stats_.end()) {
                 column_stats_[column_name] = {index_type};
             } else {
@@ -215,9 +220,9 @@ ankerl::unordered_dense::set<std::string> ColumnStats::segment_column_names() co
     );
     struct Tag {};
     using ExternalToInternalColumnStatType =
-            semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
+            semi::static_map<ColumnStatType, std::unordered_set<ColumnStatElement>, Tag>;
     ExternalToInternalColumnStatType::get(ColumnStatType::MINMAX) =
-            std::unordered_set<ColumnStatTypeInternal>{ColumnStatTypeInternal::MIN, ColumnStatTypeInternal::MAX};
+            std::unordered_set<ColumnStatElement>{ColumnStatElement::MIN, ColumnStatElement::MAX};
     ankerl::unordered_dense::set<std::string> res;
     for (const auto& [column, column_stat_types] : column_stats_) {
         for (const auto& column_stat_type : column_stat_types) {
@@ -254,8 +259,8 @@ std::optional<Clause> ColumnStats::clause() const {
             case ColumnStatType::MINMAX:
                 index_generation_aggregators->emplace_back(MinMaxAggregator(
                         ColumnName(column),
-                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MIN)),
-                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MAX))
+                        ColumnName(to_segment_column_name(column, ColumnStatElement::MIN)),
+                        ColumnName(to_segment_column_name(column, ColumnStatElement::MAX))
                 ));
                 break;
             default:
@@ -269,7 +274,7 @@ std::optional<Clause> ColumnStats::clause() const {
 bool ColumnStats::operator==(const ColumnStats& right) const { return column_stats_ == right.column_stats_; }
 
 // Expected to be of the form "vX.Y"
-void ColumnStats::parse_version(std::string_view version_string) {
+std::pair<uint64_t, uint64_t> parse_version_internal(std::string_view version_string) {
     auto dot_position = version_string.find('.');
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             dot_position != std::string::npos,
@@ -294,25 +299,33 @@ void ColumnStats::parse_version(std::string_view version_string) {
             candidate
     );
 
-    version_ = std::make_pair(major_version, minor_version);
+    return std::make_pair(major_version, minor_version);
 }
 
+// Expected to be of the form "vX.Y"
+void ColumnStats::parse_version(std::string_view version_string) { version_ = parse_version_internal(version_string); }
+
 // Expected to be of the form "vX.Y_<version specific pattern>"
-std::pair<std::string, ColumnStatType> ColumnStats::from_segment_column_name(std::string_view segment_column_name) {
+std::pair<std::string, ColumnStatType> from_segment_column_name_to_external(std::string_view segment_column_name) {
+    auto res = from_segment_column_name_to_internal(segment_column_name);
+    return {res.first, convert_to_external_type(res.second)};
+}
+
+std::pair<std::string, ColumnStatElement> from_segment_column_name_to_internal(std::string_view segment_column_name) {
     auto underscore_position = segment_column_name.find('_');
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             underscore_position != std::string::npos,
             "Unexpected column stats column name (expected vX.Y_<version specific pattern>): {}",
             segment_column_name
     );
-    parse_version(segment_column_name.substr(0, underscore_position));
+    auto version = parse_version_internal(segment_column_name.substr(0, underscore_position));
     auto version_specific_pattern = segment_column_name.substr(underscore_position + 1);
-    switch (version_->first) {
+    switch (version.first) {
     case 1:
         return from_segment_column_name_v1(version_specific_pattern);
     default:
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                "Unsupported major version {} when parsing column stats column name", version_->first
+                "Unsupported major version {} when parsing column stats column name", version.first
         );
     }
 }

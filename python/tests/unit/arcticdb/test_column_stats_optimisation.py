@@ -23,7 +23,7 @@ def get_table_data_read_count():
 sym = "sym"
 
 
-def test_column_stats_query_optimization(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+def test_column_stats_query_optimisation(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
     """Test that column stats are used to optimize QueryBuilder queries by pruning segments."""
     lib = in_memory_version_store
 
@@ -105,7 +105,7 @@ def test_column_stats_query_optimization(in_memory_version_store, clear_query_st
     assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads (both segments), got {table_data_reads}"
 
 
-def test_column_stats_query_optimization_disabled(in_memory_version_store, clear_query_stats):
+def test_column_stats_query_optimisation_disabled(in_memory_version_store, clear_query_stats):
     """Check that we don't use column stats by default (yet)."""
     lib = in_memory_version_store
 
@@ -118,7 +118,6 @@ def test_column_stats_query_optimization_disabled(in_memory_version_store, clear
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
     qs.enable()
-    # Test 1: col_1 > 2 should only read segment 1 (segment 0 max=2 <= 2, pruned)
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
     qs.reset_stats()
@@ -128,7 +127,29 @@ def test_column_stats_query_optimization_disabled(in_memory_version_store, clear
     assert table_data_reads == 2
 
 
-def test_column_stats_query_optimization_column_not_in_stats(lmdb_version_store_tiny_segment):
+def test_column_stats_query_optimisation_no_stats(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """Check that everything still works if there aren't any column stats."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+    assert_frame_equal(df1, result)
+    assert table_data_reads == 2
+
+
+def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_tiny_segment):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
@@ -150,7 +171,9 @@ def test_column_stats_query_optimization_column_not_in_stats(lmdb_version_store_
     assert_frame_equal(df1, result)
 
 
-def test_column_stats_query_optimization_multiple_filters(in_memory_version_store, clear_query_stats):
+def test_column_stats_query_optimisation_multiple_filters(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
     """
     Test that column stats pruning works correctly with multiple filters on different columns.
 
@@ -261,8 +284,14 @@ def test_column_stats_query_optimization_multiple_filters(in_memory_version_stor
         (np.float64, [1.5e10, 2.5e10], [10.5e10, 11.5e10], 5.0e10),
     ],
 )
-def test_column_stats_query_optimization_different_types(
-    in_memory_version_store, clear_query_stats, dtype, values_seg0, values_seg1, filter_val
+def test_column_stats_query_optimisation_different_types(
+    in_memory_version_store,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+    dtype,
+    values_seg0,
+    values_seg1,
+    filter_val,
 ):
     """
     Test that column stats pruning works correctly with different numeric column types.
