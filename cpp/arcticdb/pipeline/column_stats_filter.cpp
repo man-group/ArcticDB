@@ -39,23 +39,12 @@ std::optional<Value> extract_value_from_column(const Column& column, size_t row,
 }
 } // anonymous namespace
 
-enum class StatsComparison {
-    /** All rows in the block satisfy the predicate. */
-    ALL_MATCH,
-    /** None of the rows in the block satisfy the predicate. */
-    NONE_MATCH,
-    /** Some of the rows in the block satisfy the predicate, or we don't have enough information to draw a conclusion. */
-    UNKNOWN
-};
-
 // TODO replace with the StatsComparison enum above
 // Returns true if the segment MIGHT contain matching data (should be kept)
 // Returns false if the segment CANNOT contain matching data (can be pruned)
 bool compare_value_with_stats(
-    const Value& query_value,
-    const std::optional<Value>& min_value,
-    const std::optional<Value>& max_value,
-    OperationType op
+        const Value& query_value, const std::optional<Value>& min_value, const std::optional<Value>& max_value,
+        OperationType op
 ) {
     if (!min_value || !max_value) {
         // No stats available, cannot prune
@@ -119,8 +108,7 @@ bool compare_value_with_stats(
                 });
             };
 
-            if (!extract_as(*min_value, minval) ||
-                !extract_as(*max_value, maxval)) {
+            if (!extract_as(*min_value, minval) || !extract_as(*max_value, maxval)) {
                 // Could not convert stats values, cannot prune
                 return true;
             }
@@ -145,9 +133,9 @@ bool compare_value_with_stats(
                 // col != qval: keep unless the entire segment contains only qval (min == max == qval)
                 // If min == max == qval, then all values are qval, so no values satisfy != qval
                 if (EqualsOperator{}(minval, qval) && EqualsOperator{}(maxval, qval)) {
-                    return false;  // Can prune - all values equal qval
+                    return false; // Can prune - all values equal qval
                 }
-                return true;  // Cannot prune - segment contains values other than qval
+                return true; // Cannot prune - segment contains values other than qval
             default:
                 // For unsupported operations, don't prune
                 return true;
@@ -158,48 +146,40 @@ bool compare_value_with_stats(
 }
 
 bool evaluate_expression_node_against_stats(
-    const ExpressionContext& expression_context,
-    const ExpressionNode& node,
-    const ColumnStatsRow& stats
+        const ExpressionContext& expression_context, const ExpressionNode& node, const ColumnStatsRow& stats
 );
 
 bool evaluate_node_against_stats(
-    const ExpressionContext& expression_context,
-    const VariantNode& node,
-    const ColumnStatsRow& stats
+        const ExpressionContext& expression_context, const VariantNode& node, const ColumnStatsRow& stats
 ) {
     return util::variant_match(
-        node,
-        [&](const ColumnName&) -> bool {
-            // A bare column name doesn't give us enough info to prune
-            return true;
-        },
-        [&](const ValueName&) -> bool {
-            // A bare value doesn't give us enough info to prune
-            return true;
-        },
-        [&](const ValueSetName&) -> bool {
-            // Value sets (isin/isnotin) - not supported for column stats filtering yet
-            return true;
-        },
-        [&](const ExpressionName& expression_name) -> bool {
-            auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
-            return evaluate_expression_node_against_stats(expression_context, *expr, stats);
-        },
-        [&](const RegexName&) -> bool {
-            // Regex matching not supported for column stats filtering
-            return true;
-        },
-        [&](std::monostate) -> bool {
-            return true;
-        }
+            node,
+            [&](const ColumnName&) -> bool {
+                // A bare column name doesn't give us enough info to prune
+                return true;
+            },
+            [&](const ValueName&) -> bool {
+                // A bare value doesn't give us enough info to prune
+                return true;
+            },
+            [&](const ValueSetName&) -> bool {
+                // Value sets (isin/isnotin) - not supported for column stats filtering yet
+                return true;
+            },
+            [&](const ExpressionName& expression_name) -> bool {
+                auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
+                return evaluate_expression_node_against_stats(expression_context, *expr, stats);
+            },
+            [&](const RegexName&) -> bool {
+                // Regex matching not supported for column stats filtering
+                return true;
+            },
+            [&](std::monostate) -> bool { return true; }
     );
 }
 
 bool evaluate_expression_node_against_stats(
-    const ExpressionContext& expression_context,
-    const ExpressionNode& node,
-    const ColumnStatsRow& stats
+        const ExpressionContext& expression_context, const ExpressionNode& node, const ColumnStatsRow& stats
 ) {
     // TODO aseaton check if we can do something more similar to the FilterClause evaluation
     OperationType op = node.operation_type_;
@@ -233,14 +213,13 @@ bool evaluate_expression_node_against_stats(
     }
 
     // Handle comparison operations
-    if (op == OperationType::GT || op == OperationType::GE ||
-        op == OperationType::LT || op == OperationType::LE ||
+    if (op == OperationType::GT || op == OperationType::GE || op == OperationType::LT || op == OperationType::LE ||
         op == OperationType::EQ || op == OperationType::NE) {
 
         // Check if this is a column vs value comparison
         std::optional<std::string> column_name;
         std::shared_ptr<Value> query_value;
-        bool reversed = false;  // true if the value is on the left
+        bool reversed = false; // true if the value is on the left
 
         // Try left = column, right = value
         if (std::holds_alternative<ColumnName>(node.left_)) {
@@ -276,11 +255,20 @@ bool evaluate_expression_node_against_stats(
         OperationType effective_op = op;
         if (reversed) {
             switch (op) {
-            case OperationType::GT: effective_op = OperationType::LT; break;
-            case OperationType::GE: effective_op = OperationType::LE; break;
-            case OperationType::LT: effective_op = OperationType::GT; break;
-            case OperationType::LE: effective_op = OperationType::GE; break;
-            default: break;  // EQ and NE are symmetric
+            case OperationType::GT:
+                effective_op = OperationType::LT;
+                break;
+            case OperationType::GE:
+                effective_op = OperationType::LE;
+                break;
+            case OperationType::LT:
+                effective_op = OperationType::GT;
+                break;
+            case OperationType::LE:
+                effective_op = OperationType::GE;
+                break;
+            default:
+                break; // EQ and NE are symmetric
             }
         }
 
@@ -315,7 +303,6 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
             end_index_col_idx = i;
         } else {
             auto parsed = from_segment_column_name_to_internal(name);
-            columns_with_stats_.insert(parsed.first);
             column_indices[std::string(name)] = i;
         }
     }
@@ -351,11 +338,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
 
             auto parsed = from_segment_column_name_to_internal(name);
 
-            auto value = extract_value_from_column(
-                segment.column(col_idx),
-                row,
-                field.type().data_type()
-            );
+            auto value = extract_value_from_column(segment.column(col_idx), row, field.type().data_type());
 
             auto& min_max = stats_row.column_min_max[parsed.first];
             if (parsed.second == ColumnStatElement::MIN) {
@@ -379,9 +362,7 @@ const ColumnStatsRow* ColumnStatsData::find_stats(timestamp start_index, timesta
     return nullptr;
 }
 
-bool ColumnStatsData::has_stats_for_column(const std::string& column_name) const {
-    return columns_with_stats_.contains(column_name);
-}
+bool ColumnStatsData::empty() const { return rows_.empty(); }
 
 std::optional<ColumnStatsData> try_load_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item
@@ -398,18 +379,16 @@ std::optional<ColumnStatsData> try_load_column_stats(
 }
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        std::shared_ptr<ColumnStatsData> column_stats_data, ExpressionContext&& expression_context
+        ColumnStatsData&& column_stats_data, ExpressionContext&& expression_context
 ) {
-        return [column_stats_data = std::move(column_stats_data),
-            expression_context = std::move(expression_context)](
-        const index::IndexSegmentReader& isr,
-        std::unique_ptr<util::BitSet>&& input
-    ) mutable {
+    return [column_stats_data = std::move(column_stats_data), expression_context = std::move(expression_context)](
+                   const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input
+           ) mutable {
         using namespace pipelines::index;
 
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
 
-        if (column_stats_data->empty()) {
+        if (column_stats_data.empty()) {
             // No column stats, keep all segments
             if (input) {
                 return std::move(input);
@@ -436,7 +415,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             timestamp end_idx = *(end_index_col + row);
 
             // Find the column stats for this row
-            const ColumnStatsRow* stats = column_stats_data->find_stats(start_idx, end_idx);
+            const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx);
 
             if (!stats) {
                 // No stats for this row, keep it
@@ -452,12 +431,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             }
         }
 
-        ARCTICDB_DEBUG(
-            log::version(),
-            "Column stats filter pruned {} of {} segments",
-            pruned_count,
-            total_count
-        );
+        ARCTICDB_DEBUG(log::version(), "Column stats filter pruned {} of {} segments", pruned_count, total_count);
 
         return res;
     };
@@ -475,10 +449,12 @@ ExpressionContext and_contexts(const std::vector<std::shared_ptr<ExpressionConte
     std::optional<ExpressionName> overall_root_name;
 
     for (const auto& expression_context : expression_contexts) {
-        util::check(std::holds_alternative<ExpressionName>(expression_context->root_node_name_), "Only expect to be called with filter expressions");
+        util::check(
+                std::holds_alternative<ExpressionName>(expression_context->root_node_name_),
+                "Only expect to be called with filter expressions"
+        );
         auto root_name = std::get<ExpressionName>(expression_context->root_node_name_);
-        auto root_expr = expression_context->expression_nodes_
-            .get_value(root_name.value);
+        auto root_expr = expression_context->expression_nodes_.get_value(root_name.value);
 
         if (!overall_root) {
             overall_root = *root_expr;
@@ -517,7 +493,11 @@ std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_fi
         // Resample, GroupBy, and Projection clauses transform the data so column stats
         // computed on the original segments are no longer valid for any subsequent filters.
         if (clause_type != typeid(FilterClause)) {
-            ARCTICDB_DEBUG(log::version(), "Found clause that modifies data {}, not applying any more column stats", clause_type.name());
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "Found clause that modifies data {}, not applying any more column stats",
+                    clause_type.name()
+            );
             break;
         }
 
@@ -530,6 +510,7 @@ std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_fi
         return std::nullopt;
     }
 
+    ARCTICDB_DEBUG(log::version(), "Loading column stats");
     auto column_stats = try_load_column_stats(store, versioned_item);
     if (!column_stats.has_value()) {
         ARCTICDB_DEBUG(log::version(), "No column stats available for pruning");
@@ -538,9 +519,7 @@ std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_fi
 
     ExpressionContext overall_context = and_contexts(filter_expressions);
 
-    return create_column_stats_filter(
-            std::make_shared<ColumnStatsData>(std::move(*column_stats)), std::move(overall_context)
-    );
+    return create_column_stats_filter({std::move(*column_stats)}, std::move(overall_context));
 }
 
 } // namespace arcticdb
