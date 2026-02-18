@@ -51,7 +51,7 @@ class StringReducer {
     ) :
         context_(std::move(context)),
         frame_(std::move(frame)),
-        src_buffer_(column.data().buffer()),
+        src_buffer_(column.buffer()),
         column_width_(alloc_width),
         dest_buffer_(frame_.row_count() * column_width_, entity::AllocationType::DETACHABLE),
         dst_(dest_buffer_.data()) {
@@ -142,11 +142,11 @@ std::unique_ptr<StringReducer> get_fixed_string_reducer(
 
     if (was_coerced_from_dynamic_to_fixed(field_type, column)) {
         const auto alloc_width =
-                get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, true);
+                get_max_string_size_in_column(column.buffer(), context, frame, frame_field, slice_map, true);
         string_reducer = std::make_unique<UnicodeConvertingStringReducer>(column, context, frame, alloc_width);
     } else {
         const auto alloc_width =
-                get_max_string_size_in_column(column.data().buffer(), context, frame, frame_field, slice_map, false);
+                get_max_string_size_in_column(column.buffer(), context, frame, frame_field, slice_map, false);
         string_reducer = std::make_unique<FixedStringReducer>(column, context, frame, alloc_width);
     }
 

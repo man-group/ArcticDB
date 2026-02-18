@@ -13,6 +13,7 @@
 #include <arcticdb/util/test/test_utils.hpp>
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 TEST(Column, Empty) {
@@ -117,7 +118,7 @@ TEST(Column, IterateData) {
 
     std::vector<uint16_t> output;
 
-    auto column_data = column.data();
+    auto column_data = ColumnData::from_column(column);
     while (auto block = column_data.next<TDT>()) {
         for (const auto& item : *block)
             output.emplace_back(item);
@@ -292,7 +293,7 @@ TEST(ColumnData, LowerBound) {
 FieldStatsImpl generate_stats_from_column(const Column& column) {
     return details::visit_scalar(column.type(), [&column](auto tdt) {
         using TagType = std::decay_t<decltype(tdt)>;
-        return generate_column_statistics<TagType>(column.data());
+        return generate_column_statistics<TagType>(ColumnData::from_column(column));
     });
 }
 

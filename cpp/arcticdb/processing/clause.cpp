@@ -11,6 +11,7 @@
 
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/stream/merge.hpp>
 
@@ -102,7 +103,7 @@ Column merge_update_string_column(
                 AllocationType::PRESIZED,
                 target_column.is_sparse() ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED
         );
-        ColumnData new_column_data = new_string_column.data();
+        ColumnData new_column_data = ColumnData::from_column(new_string_column);
         auto new_column_data_it = new_column_data.begin<TDT>();
         auto source_row_it = rows_to_update.begin();
         auto next_target_row_to_update = source_row_it->begin();
@@ -665,7 +666,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                    const std::pair<typename col_type_info::RawType, size_t>& r) { return l.second < r.second; }
         );
 
-        auto column_data = index_col->data();
+        auto column_data = ColumnData::from_column(*index_col);
         std::transform(
                 elements.cbegin(),
                 elements.cend(),
@@ -1149,7 +1150,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
             Sparsity::NOT_PERMITTED,
             ChunkedBuffer::presized_in_blocks(max_index_column_bytes)
     );
-    auto output_index_column_data = output_index_column->data();
+    auto output_index_column_data = ColumnData::from_column(*output_index_column);
     auto output_index_column_it = output_index_column_data.template begin<IndexTDT>();
     size_t output_index_column_row_count{0};
 
@@ -1158,7 +1159,7 @@ std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_c
     bool current_bucket_added_to_index{false};
     // Only include buckets that have at least one index value in range
     for (const auto& input_index_column : input_index_columns) {
-        auto index_column_data = input_index_column->data();
+        auto index_column_data = ColumnData::from_column(*input_index_column);
         const auto cend = index_column_data.cend<IndexTDT>();
         auto it = index_column_data.cbegin<IndexTDT>();
         // In case the passed date_range does not span the whole segment we need to skip the index values
@@ -2035,7 +2036,7 @@ void MergeUpdateClause::update_and_insert(
                     );
                     target_segment.column(column_index_in_slice) = std::move(new_string_column);
                 } else {
-                    ColumnData target_column_data = target_column.data();
+                    ColumnData target_column_data = ColumnData::from_column(target_column);
                     auto target_row_to_update_it = target_column_data.begin<TDT>();
                     size_t target_row_to_update_idx = 0;
                     for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
@@ -2069,8 +2070,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
         const TimestampRange& target_atom_key_range
 ) const {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    ColumnData target_index_column_data = target_index.data();
-    const auto target_index_accessor = random_accessor<IndexType>(&target_index_column_data);
+    const auto target_index_accessor = random_accessor<IndexType>(&target_index);
     const auto [source_row_start, source_row_end] = source_start_end_for_row_range_.at(target_atom_key_range);
     const size_t last_target_row_to_consider = [&] {
         auto row_indexes = ranges::iota_view{position_t{0}, target_index.row_count()};

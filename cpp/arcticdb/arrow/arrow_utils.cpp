@@ -8,6 +8,7 @@
 
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
@@ -254,7 +255,7 @@ sparrow::array empty_arrow_array_for_column(const Column& column, std::string_vi
         std::optional<sparrow::validity_bitmap> validity_bitmap;
         if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
             using SignedType = std::make_signed_t<RawType>;
-            if (column.data().buffer().has_extra_bytes_per_block()) {
+            if (column.buffer().has_extra_bytes_per_block()) {
                 return minimal_strings_array<SignedType>();
             } else {
                 sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
@@ -277,7 +278,7 @@ sparrow::array empty_arrow_array_for_column(const Column& column, std::string_vi
 
 std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name) {
     std::vector<sparrow::array> vec;
-    auto column_data = column.data();
+    auto column_data = ColumnData::from_column(column);
     vec.reserve(column.num_blocks());
     details::visit_scalar(column.type(), [&vec, &column_data, &column, name](auto&& impl) {
         using TagType = std::decay_t<decltype(impl)>;

@@ -132,7 +132,7 @@ using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1
                     "Attempts to encode an output only type {}",
                     column.type()
             );
-            auto column_data = column.data();
+            auto column_data = ColumnData::from_column(column);
             auto* column_field = encoded_fields.add_field(column_data.num_blocks());
             if (column_data.num_blocks() > 0) {
                 encoder.encode(codec_opts, column_data, *column_field, *out_buffer, pos);

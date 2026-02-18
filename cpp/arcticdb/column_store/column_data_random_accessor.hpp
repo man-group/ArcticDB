@@ -10,9 +10,11 @@
 
 #include <folly/Poly.h>
 
-#include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/column_store/typed_block_data.hpp>
 
 namespace arcticdb {
+
+class Column;
 
 template<typename TDT>
 struct IColumnDataRandomAccessor {
@@ -29,5 +31,6 @@ template<typename TDT>
 using ColumnDataRandomAccessor = folly::Poly<IColumnDataRandomAccessor<TDT>>;
 
 template<typename TDT>
-ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent);
+ColumnDataRandomAccessor<TDT> random_accessor(const Column* parent);
+
 } // namespace arcticdb

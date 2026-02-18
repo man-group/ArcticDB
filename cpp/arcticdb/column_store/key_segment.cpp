@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/key_segment.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/index_range.hpp>
@@ -77,12 +78,12 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
 }
 
 std::variant<std::vector<entity::AtomKeyPacked>, std::vector<entity::AtomKey>> KeySegment::materialise() const {
-    auto version_data = version_ids_->data();
-    auto creation_ts_data = creation_timestamps_->data();
-    auto content_hash_data = content_hashes_->data();
-    auto index_start_data = start_indexes_->data();
-    auto index_end_data = end_indexes_->data();
-    auto key_types_data = key_types_->data();
+    auto version_data = ColumnData::from_column(*version_ids_);
+    auto creation_ts_data = ColumnData::from_column(*creation_timestamps_);
+    auto content_hash_data = ColumnData::from_column(*content_hashes_);
+    auto index_start_data = ColumnData::from_column(*start_indexes_);
+    auto index_end_data = ColumnData::from_column(*end_indexes_);
+    auto key_types_data = ColumnData::from_column(*key_types_);
 
     auto version_it = version_data.template cbegin<uint64_TDT>();
     auto creation_ts_it = creation_ts_data.template cbegin<int64_TDT>();
@@ -116,7 +117,7 @@ std::variant<std::vector<entity::AtomKeyPacked>, std::vector<entity::AtomKey>> K
         // Fall back to returning fully materialised AtomKeys
         std::vector<AtomKey> res;
         res.reserve(num_keys_);
-        auto stream_id_data = stream_ids_->data();
+        auto stream_id_data = ColumnData::from_column(*stream_ids_);
         auto stream_id_it = stream_id_data.template cbegin<uint64_TDT>();
         const bool stream_id_is_sequence_type = is_sequence_type(stream_ids_->type().data_type());
         const bool index_is_sequence_type = is_sequence_type(start_indexes_->type().data_type());
@@ -148,7 +149,7 @@ std::variant<std::vector<entity::AtomKeyPacked>, std::vector<entity::AtomKey>> K
 
 bool KeySegment::check_symbols_all_same() const {
     if (stream_ids_->row_count() != 0) {
-        auto data = stream_ids_->data();
+        auto data = ColumnData::from_column(*stream_ids_);
         auto end_it = data.template cend<uint64_TDT>();
         auto it = data.template cbegin<uint64_TDT>();
         uint64_t value{*it};
@@ -163,7 +164,7 @@ bool KeySegment::check_symbols_all_same() const {
 
 bool KeySegment::check_symbols_all_unique() const {
     if (stream_ids_->row_count() != 0) {
-        auto data = stream_ids_->data();
+        auto data = ColumnData::from_column(*stream_ids_);
         auto end_it = data.template cend<uint64_TDT>();
         ankerl::unordered_dense::set<uint64_t> values;
         values.reserve(stream_ids_->row_count());

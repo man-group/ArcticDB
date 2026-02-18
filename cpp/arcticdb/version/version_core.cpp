@@ -8,6 +8,7 @@
 
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -1635,7 +1636,7 @@ void copy_frame_data_to_buffer(
     const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
 
-    auto src_data = src_column.data();
+    auto src_data = ColumnData::from_column(src_column);
     auto dst_ptr = dst_column.bytes_at(offset, total_size);
 
     auto type_promotion_error_msg = fmt::format(

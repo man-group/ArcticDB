@@ -249,7 +249,7 @@ void decode_index_field(
 
             data += size;
         } else {
-            auto& buffer = frame.column(0).data().buffer();
+            auto& buffer = frame.column(0).buffer();
             auto& frame_field_descriptor = frame.field(0);
             auto sz = data_type_size(frame_field_descriptor.type());
             const auto& slice_and_key = context.slice_and_key();
@@ -848,7 +848,7 @@ class NullValueReducer {
         handler_data_(handler_data),
         output_format_(output_format),
         default_value_(default_value) {
-        if (column_.data().buffer().allocation_type() != AllocationType::DETACHABLE) {
+        if (column_.buffer().allocation_type() != AllocationType::DETACHABLE) {
             // Non-detachable buffers are never truncated, so we can just set the first and last positions to the frame
             // bounds. We can't rely on block_offsets in this case.
             first_pos_ = frame_offset_;

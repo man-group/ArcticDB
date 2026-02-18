@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
+#include <arcticdb/column_store/column.hpp>
 
 namespace arcticdb {
 
@@ -33,8 +34,9 @@ class ChunkedBufferSingleBlockAccessor {
     using RawType = typename TDT::DataTypeTag::raw_type;
 
   public:
-    ChunkedBufferSingleBlockAccessor(ColumnData* parent) {
-        auto typed_block = parent->next<TDT>();
+    ChunkedBufferSingleBlockAccessor(const Column* parent) {
+        auto range = parent->block_range();
+        auto typed_block = range.next<TDT>();
         // Cache the base pointer of the block, as typed_block->data() has an if statement for internal vs external
         base_ptr_ = reinterpret_cast<const RawType*>(typed_block->data());
     }
@@ -50,10 +52,11 @@ class ChunkedBufferRegularBlocksAccessor {
     using RawType = typename TDT::DataTypeTag::raw_type;
 
   public:
-    ChunkedBufferRegularBlocksAccessor(ColumnData* parent) {
+    ChunkedBufferRegularBlocksAccessor(const Column* parent) {
         // Cache the base pointers of each block, as typed_block->data() has an if statement for internal vs external
+        auto range = parent->block_range();
         base_ptrs_.reserve(parent->num_blocks());
-        while (auto typed_block = parent->next<TDT>()) {
+        while (auto typed_block = range.next<TDT>()) {
             base_ptrs_.emplace_back(reinterpret_cast<const RawType*>(typed_block->data()));
         }
     }
@@ -62,7 +65,7 @@ class ChunkedBufferRegularBlocksAccessor {
         // quot is the block index, rem is the offset within the block
         auto div = std::div(static_cast<long long>(idx), values_per_block_);
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                div.quot < static_cast<long long>(base_ptrs_.size()), "ColumnData::at called with out of bounds index"
+                div.quot < static_cast<long long>(base_ptrs_.size()), "Column::at called with out of bounds index"
         );
         return *(base_ptrs_[div.quot] + div.rem);
     }
@@ -77,7 +80,7 @@ class ChunkedBufferIrregularBlocksAccessor {
     using RawType = typename TDT::DataTypeTag::raw_type;
 
   public:
-    ChunkedBufferIrregularBlocksAccessor(ColumnData* parent) : parent_(parent) {}
+    ChunkedBufferIrregularBlocksAccessor(const Column* parent) : parent_(parent) {}
 
     RawType at(size_t idx) const {
         auto pos_bytes = idx * sizeof(RawType);
@@ -88,7 +91,7 @@ class ChunkedBufferIrregularBlocksAccessor {
     }
 
   private:
-    ColumnData* parent_;
+    const Column* parent_;
 };
 
 template<typename TDT, BlockStructure block_structure>
@@ -96,8 +99,8 @@ class ColumnDataRandomAccessorSparse {
     using RawType = typename TDT::DataTypeTag::raw_type;
 
   public:
-    ColumnDataRandomAccessorSparse(ColumnData* parent) : parent_(parent) {
-        parent_->bit_vector()->build_rs_index(&(bit_index_));
+    ColumnDataRandomAccessorSparse(const Column* parent) : parent_(parent) {
+        parent_->sparse_map_ptr()->build_rs_index(&(bit_index_));
         if constexpr (block_structure == BlockStructure::SINGLE) {
             chunked_buffer_random_accessor_ = ChunkedBufferSingleBlockAccessor<TDT>(parent);
         } else if constexpr (block_structure == BlockStructure::REGULAR) {
@@ -109,23 +112,23 @@ class ColumnDataRandomAccessorSparse {
     }
     RawType at(size_t idx) const {
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                parent_->bit_vector(), "ColumnData::at called with sparse true, but bit_vector_ == nullptr"
+                parent_->sparse_map_ptr(), "Column::at called with sparse true, but sparse_map_ == nullptr"
         );
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                parent_->bit_vector()->size() > idx, "ColumnData::at called with sparse true, but index is out of range"
+                parent_->sparse_map_ptr()->size() > idx, "Column::at called with sparse true, but index is out of range"
         );
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                parent_->bit_vector()->get_bit(idx), "ColumnData::at called with sparse true, but selected bit is false"
+                parent_->sparse_map_ptr()->get_bit(idx), "Column::at called with sparse true, but selected bit is false"
         );
         // This is the same as using rank_corrected, but we always require the idx bit to be true, so do the -1
         // ourselves for efficiency
-        auto physical_offset = parent_->bit_vector()->rank(idx, bit_index_) - 1;
+        auto physical_offset = parent_->sparse_map_ptr()->rank(idx, bit_index_) - 1;
         return chunked_buffer_random_accessor_.at(physical_offset);
     }
 
   private:
     ChunkedBufferRandomAccessor<TDT> chunked_buffer_random_accessor_;
-    ColumnData* parent_;
+    const Column* parent_;
     util::BitIndex bit_index_;
 };
 
@@ -134,7 +137,7 @@ class ColumnDataRandomAccessorDense {
     using RawType = typename TDT::DataTypeTag::raw_type;
 
   public:
-    ColumnDataRandomAccessorDense(ColumnData* parent) {
+    ColumnDataRandomAccessorDense(const Column* parent) {
         if constexpr (block_structure == BlockStructure::SINGLE) {
             chunked_buffer_random_accessor_ = ChunkedBufferSingleBlockAccessor<TDT>(parent);
         } else if constexpr (block_structure == BlockStructure::REGULAR) {
@@ -151,8 +154,8 @@ class ColumnDataRandomAccessorDense {
 };
 
 template<typename TDT>
-ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent) {
-    bool sparse = parent->bit_vector() != nullptr;
+ColumnDataRandomAccessor<TDT> random_accessor(const Column* parent) {
+    bool sparse = parent->sparse_map_ptr() != nullptr;
     if (parent->buffer().num_blocks() == 1) {
         if (sparse) {
             return ColumnDataRandomAccessorSparse<TDT, BlockStructure::SINGLE>(parent);
@@ -194,7 +197,7 @@ ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent) {
             TypeDescriptorTag<DataTypeTag<DataType::__T__>, DimensionTag<Dimension::Dim0>>,                            \
             BlockStructure::IRREGULAR>;                                                                                \
     template ColumnDataRandomAccessor<TypeDescriptorTag<DataTypeTag<DataType::__T__>, DimensionTag<Dimension::Dim0>>>  \
-    random_accessor(ColumnData* parent);
+    random_accessor(const Column* parent);
 
 INSTANTIATE_RANDOM_ACCESSORS(UINT8)
 INSTANTIATE_RANDOM_ACCESSORS(UINT16)

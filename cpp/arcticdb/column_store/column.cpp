@@ -40,8 +40,7 @@ JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& columns)
         );
         details::visit_type(column->type().data_type(), [&output, &column](auto type_desc_tag) {
             using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
-            auto column_data = column->data();
-            auto accessor = random_accessor<typename type_info::TDT>(&column_data);
+            auto accessor = random_accessor<typename type_info::TDT>(column.get());
             std::stable_sort(
                     std::begin(output.orig_pos_),
                     std::end(output.orig_pos_),
@@ -284,7 +283,7 @@ ChunkedBuffer::Iterator Column::get_iterator() const {
 
 size_t Column::bytes() const { return data_.bytes(); }
 
-ColumnData Column::data() const { return ColumnData(&data_, &shapes_, type_, sparse_map_ ? &*sparse_map_ : nullptr); }
+ColumnBlockRange Column::block_range() const { return ColumnBlockRange(data_, &shapes_, type_); }
 
 const uint8_t* Column::ptr() const { return data_.data(); }
 
@@ -343,6 +342,7 @@ void Column::advance_shapes(std::size_t) {
 }
 
 [[nodiscard]] ChunkedBuffer& Column::buffer() { return data_; }
+[[nodiscard]] const ChunkedBuffer& Column::buffer() const { return data_; }
 
 uint8_t* Column::bytes_at(size_t bytes, size_t required) {
     ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);

@@ -265,7 +265,7 @@ void SegmentInMemoryImpl::compact_blocks() const {
 
 const FieldCollection& SegmentInMemoryImpl::fields() const { return descriptor().fields(); }
 
-ColumnData SegmentInMemoryImpl::column_data(size_t col) const { return columns_[col]->data(); }
+ColumnData SegmentInMemoryImpl::column_data(size_t col) const { return ColumnData::from_column(*columns_[col]); }
 
 const StreamDescriptor& SegmentInMemoryImpl::descriptor() const { return *descriptor_; }
 
@@ -588,7 +588,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::filter(
                 }
             }
             auto output_ptr = reinterpret_cast<RawType*>(output_col.ptr());
-            auto input_data = (*column)->data();
+            auto input_data = ColumnData::from_column(**column);
 
             auto bitset_iter = final_bitset->first();
             auto row_count_so_far = 0;
@@ -979,7 +979,7 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
     if (is_fixed_string_type(td.data_type()) && col_ref.is_inflated()) {
 
         auto string_size = col_ref.bytes() / row_count();
-        auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
+        auto ptr = col_ref.buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);
     } else {
         const auto offset = col_ref.scalar_at<entity::position_t>(row);
@@ -1088,7 +1088,7 @@ void SegmentInMemoryImpl::calculate_statistics() {
             if (is_numeric_type(type.data_type()) || is_sequence_type(type.data_type())) {
                 details::visit_scalar(type, [&column](auto tdt) {
                     using TagType = std::decay_t<decltype(tdt)>;
-                    column->set_statistics(generate_column_statistics<TagType>(column->data()));
+                    column->set_statistics(generate_column_statistics<TagType>(ColumnData::from_column(*column)));
                 });
             }
         }

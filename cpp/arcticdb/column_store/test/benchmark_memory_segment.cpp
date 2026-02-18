@@ -9,6 +9,7 @@
 #include <benchmark/benchmark.h>
 
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <folly/container/Enumerate.h>
 
 #include <algorithm>
@@ -131,7 +132,7 @@ static void BM_iterate_with_iterator(benchmark::State& state) {
     for (auto _ : state) {
         // Starting col from 1 to skip the index
         for (auto col = 1; col <= num_cols; ++col) {
-            auto data = segment.column(col).data();
+            auto data = ColumnData::from_column(segment.column(col));
             using tdt = ScalarTagType<DataTypeTag<DataType::UINT64>>;
             std::for_each(
                     data.cbegin<tdt, IteratorType::REGULAR, IteratorDensity::DENSE>(),

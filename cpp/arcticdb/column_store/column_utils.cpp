@@ -9,6 +9,7 @@
 #include <arcticdb/column_store/column_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/python/numpy_buffer_holder.hpp>
 
 namespace arcticdb::detail {
@@ -58,7 +59,7 @@ py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
     return visit_field(frame.field(col_pos), [&, frame = frame, col_pos = col_pos](auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
-        auto column_data = frame.column(col_pos).data();
+        auto column_data = ColumnData::from_column(frame.column(col_pos));
         const auto& buffer = column_data.buffer();
         util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}", buffer.num_blocks());
         auto* block = buffer.blocks().at(0);

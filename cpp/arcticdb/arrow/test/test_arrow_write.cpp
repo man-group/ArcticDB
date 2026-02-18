@@ -78,7 +78,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, Simple) {
     ASSERT_EQ(col.last_row(), num_rows - 1);
     ASSERT_FALSE(col.is_sparse());
     if constexpr (std::is_same_v<TypeParam, bool>) {
-        const auto& blocks = col.data().buffer().blocks();
+        const auto& blocks = col.buffer().blocks();
         ASSERT_EQ(blocks.size(), 1);
         ASSERT_EQ(blocks[0]->get_type(), MemBlockType::EXTERNAL_PACKED);
     } else {
@@ -125,7 +125,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
         ASSERT_EQ(col.last_row(), num_rows - 1);
         ASSERT_FALSE(col.is_sparse());
         if constexpr (std::is_same_v<TypeParam, bool>) {
-            const auto& blocks = col.data().buffer().blocks();
+            const auto& blocks = col.buffer().blocks();
             ASSERT_EQ(blocks.size(), 1);
             ASSERT_EQ(blocks[0]->get_type(), MemBlockType::EXTERNAL_PACKED);
         } else {
@@ -171,7 +171,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
             ASSERT_EQ(*col.scalar_at<TypeParam>(idx), idx);
         }
     }
-    const auto& buffer = col.data().buffer();
+    const auto& buffer = col.buffer();
     ASSERT_EQ(buffer.bytes(), total_rows * sizeof(TypeParam));
     ASSERT_EQ(buffer.blocks().size(), rows_per_batch.size());
     ASSERT_EQ(buffer.block_offsets().size(), rows_per_batch.size() + 1);

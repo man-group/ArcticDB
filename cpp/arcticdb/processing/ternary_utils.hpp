@@ -8,6 +8,7 @@
 
 #pragma once
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 
 namespace arcticdb {
 
@@ -122,9 +123,9 @@ void ternary_transform(
         Column& output_column, functor&& f
 ) {
     initialise_output_column(condition, left_input_column, right_input_column, output_column);
-    auto left_data = left_input_column.data();
-    auto right_data = right_input_column.data();
-    auto output_data = output_column.data();
+    auto left_data = ColumnData::from_column(left_input_column);
+    auto right_data = ColumnData::from_column(right_input_column);
+    auto output_data = ColumnData::from_column(output_column);
     // By construction, where the output column has a value (in the sparse sense), if the condition at this index is
     // true, then the left input column must have a value at this index as well. Similarly, if the condition is false,
     // then the right input column must have a value at this index. All of the loops below take advantage of this fact,
@@ -251,8 +252,8 @@ void ternary_transform(
         transformed_condition = condition;
     }
     initialise_output_column<FullResult>(transformed_condition, input_column, output_column);
-    auto input_data = input_column.data();
-    auto output_data = output_column.data();
+    auto input_data = ColumnData::from_column(input_column);
+    auto output_data = ColumnData::from_column(output_column);
     // See comments in similar method above that takes 2 input columns for why this works
     // Compute the RHS result f(false, {}, value) just once
     auto loop = [&transformed_condition,
@@ -310,8 +311,8 @@ void ternary_transform(
         transformed_condition = condition;
     }
     initialise_output_column<EmptyResult>(transformed_condition, input_column, output_column);
-    auto input_data = input_column.data();
-    auto output_data = output_column.data();
+    auto input_data = ColumnData::from_column(input_column);
+    auto output_data = ColumnData::from_column(output_column);
     // See comments in similar method above that takes 2 input columns for why this works
     auto loop = [&transformed_condition,
                  f = std::forward<functor>(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
@@ -406,7 +407,7 @@ void ternary_transform(
         transformed_condition = condition;
     }
     initialise_output_column(transformed_condition, output_column);
-    auto output_data = output_column.data();
+    auto output_data = ColumnData::from_column(output_column);
     const auto output_end_it = output_data.end<value_tdt>();
     for (auto output_it = output_data.begin<value_tdt>(); output_it != output_end_it; ++output_it) {
         *output_it = value;

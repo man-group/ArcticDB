@@ -287,7 +287,7 @@ static void encode_encoded_fields(
     segment_header.set_footer_offset(pos);
     write_magic<EncodedMagic>(out_buffer, pos);
     Column encoded_fields_column(encoded_fields_type_desc(), Sparsity::NOT_PERMITTED, encoded_fields.release_data());
-    auto data = encoded_fields_column.data();
+    auto data = ColumnData::from_column(encoded_fields_column);
     auto& encoded_field = segment_header.mutable_column_fields(calc_num_blocks<EncodingPolicyV2>(data));
     ColumnEncoderV2::encode(codec_opts, data, encoded_field, out_buffer, pos);
     ARCTICDB_DEBUG(log::codec(), "Encoded encoded blocks to position {}", pos);
@@ -340,7 +340,7 @@ static void encode_encoded_fields(
                     "Attempts to encode an output only type {}",
                     column.type()
             );
-            auto column_data = column.data();
+            auto column_data = ColumnData::from_column(column);
             auto* column_field = encoded_fields.add_field(column_data.num_blocks());
             if (column.has_statistics())
                 column_field->set_statistics(column.get_statistics());

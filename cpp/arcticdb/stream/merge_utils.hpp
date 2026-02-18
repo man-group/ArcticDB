@@ -52,7 +52,7 @@ inline void merge_string_columns(
         if (!is_sequence_type(field_type.data_type_))
             continue;
 
-        auto& src = segment.column(static_cast<position_t>(c)).data().buffer();
+        auto& src = const_cast<ChunkedBuffer&>(segment.column(static_cast<position_t>(c)).buffer());
         CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), AllocationType::DYNAMIC};
         merge_string_column(src, segment.string_pool_ptr(), merged_pool, cursor, verify);
         std::swap(src, cursor.buffer());

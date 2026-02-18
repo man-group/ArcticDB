@@ -11,6 +11,7 @@
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/python/python_strings.hpp>
 #include <arcticdb/python/python_utils.hpp>
 
@@ -287,7 +288,7 @@ void PythonArrayHandler::convert_type(
     if (source_column.empty())
         return;
 
-    auto column_data = source_column.data();
+    auto column_data = ColumnData::from_column(source_column);
     if (source_column.is_sparse()) {
         auto& handler_data = cast_handler_data(any);
         python_util::prefill_with_none(ptr_dest, mapping.num_rows_, source_column.sparse_map().count(), handler_data);
@@ -319,7 +320,7 @@ void PythonArrayHandler::convert_type(
         });
     }
     dest_column.set_extra_buffer(
-            mapping.offset_bytes_, ExtraBufferType::ARRAY, std::move(source_column.data().buffer())
+            mapping.offset_bytes_, ExtraBufferType::ARRAY, std::move(const_cast<ChunkedBuffer&>(source_column.buffer()))
     );
 }
 

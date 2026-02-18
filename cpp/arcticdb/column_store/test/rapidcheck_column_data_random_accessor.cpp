@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/util/test/rapidcheck.hpp>
 
@@ -22,7 +23,7 @@ RC_GTEST_PROP(ColumnDataRandomAccessor, DenseSingleBlock, (const std::vector<int
     RC_ASSERT(column.num_blocks() == 1);
     memcpy(column.ptr(), input.data(), n * sizeof(int64_t));
 
-    auto column_data = column.data();
+    auto column_data = ColumnData::from_column(column);
     auto accessor = random_accessor<TDT>(&column_data);
     for (size_t idx = 0; idx < n; ++idx) {
         RC_ASSERT(accessor.at(idx) == input[idx]);
@@ -50,7 +51,7 @@ RC_GTEST_PROP(ColumnDataRandomAccessor, SparseSingleBlock, (const std::vector<in
     memcpy(column.ptr(), input.data(), on_bits * sizeof(int64_t));
     column.set_sparse_map(std::move(sparse_map));
 
-    auto column_data = column.data();
+    auto column_data = ColumnData::from_column(column);
     auto accessor = random_accessor<TDT>(&column_data);
     size_t input_idx{0};
     for (size_t idx = 0; idx < n; ++idx) {

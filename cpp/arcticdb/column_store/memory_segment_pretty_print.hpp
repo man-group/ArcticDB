@@ -2,6 +2,7 @@
 #include <fmt/format.h>
 
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 
 namespace fmt {
 template<>
@@ -21,7 +22,7 @@ struct formatter<arcticdb::SegmentInMemory> {
             const arcticdb::Column& column = segment.column(i);
             details::visit_type(column.type().data_type(), [&](auto tag) {
                 using type_info = ScalarTypeInfo<decltype(tag)>;
-                auto input_data = column.data();
+                auto input_data = ColumnData::from_column(column);
                 auto it = input_data.begin<typename type_info::TDT>();
                 while (it != input_data.end<typename type_info::TDT>()) {
                     if constexpr (is_sequence_type(type_info::data_type)) {

@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -577,7 +578,7 @@ void FirstAggregatorData::aggregate(
             aggregated_.resize(sizeof(GlobalRawType) * unique_values);
             sparse_map_.resize(unique_values);
             util::BitSet::bulk_insert_iterator inserter(sparse_map_);
-            auto col_data = input_column.column_->data();
+            auto col_data = ColumnData::from_column(*input_column.column_);
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             details::visit_type(
                     input_column.column_->type().data_type(),
@@ -659,7 +660,7 @@ void LastAggregatorData::aggregate(
             aggregated_.resize(sizeof(GlobalRawType) * unique_values);
             sparse_map_.resize(unique_values);
             util::BitSet::bulk_insert_iterator inserter(sparse_map_);
-            auto col_data = input_column.column_->data();
+            auto col_data = ColumnData::from_column(*input_column.column_);
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             details::visit_type(
                     input_column.column_->type().data_type(),

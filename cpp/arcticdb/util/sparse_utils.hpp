@@ -15,7 +15,6 @@
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/type_traits.hpp>
-#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <fmt/ranges.h>

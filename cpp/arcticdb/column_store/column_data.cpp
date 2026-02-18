@@ -7,6 +7,7 @@
  */
 
 #include "column_data.hpp"
+#include <arcticdb/column_store/column.hpp>
 
 namespace arcticdb {
 bool ColumnData::current_tensor_is_empty() const {
@@ -14,4 +15,8 @@ bool ColumnData::current_tensor_is_empty() const {
 }
 
 const Buffer* ColumnData::shapes() const noexcept { return shapes_; }
+
+ColumnData ColumnData::from_column(const Column& col) {
+    return ColumnData(&col.buffer(), col.shapes_buffer(), col.type(), col.sparse_map_ptr());
+}
 } // namespace arcticdb

@@ -706,7 +706,7 @@ SegmentInMemory write_entries_to_symbol_segment(
                 added_segment.descriptor().field_count()
         );
 
-        auto& src = added_segment.column(static_cast<position_t>(3)).data().buffer();
+        auto& src = added_segment.column(static_cast<position_t>(3)).buffer();
         CursoredBuffer<ChunkedBuffer> cursor{src.bytes(), AllocationType::DYNAMIC};
         merge_string_column(src, deleted_segment.string_pool_ptr(), added_segment.string_pool_ptr(), cursor, false);
         std::swap(src, cursor.buffer());

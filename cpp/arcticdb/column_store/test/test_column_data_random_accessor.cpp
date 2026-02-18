@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
 
 using namespace arcticdb;
@@ -35,8 +36,7 @@ TEST_F(ColumnDataRandomAccessorTest, DenseRegularBlocks) {
     ASSERT_TRUE(column.buffer().is_regular_sized());
     ASSERT_EQ(column.num_blocks(), 3);
 
-    auto column_data = column.data();
-    auto accessor = random_accessor<TDT>(&column_data);
+    auto accessor = random_accessor<TDT>(&column);
     for (size_t idx = 0; idx < n; ++idx) {
         ASSERT_EQ(accessor.at(idx), input_data[idx]);
     }
@@ -53,8 +53,7 @@ TEST_F(ColumnDataRandomAccessorTest, SparseRegularBlocks) {
     ASSERT_TRUE(column.buffer().is_regular_sized());
     ASSERT_EQ(column.num_blocks(), 3);
 
-    auto column_data = column.data();
-    auto accessor = random_accessor<TDT>(&column_data);
+    auto accessor = random_accessor<TDT>(&column);
     for (size_t idx = 0; idx < n; ++idx) {
         ASSERT_EQ(accessor.at(3 * idx), input_data[idx]);
     }
@@ -73,8 +72,7 @@ TEST_F(ColumnDataRandomAccessorTest, DenseIrregularBlocks) {
     ASSERT_FALSE(column.buffer().is_regular_sized());
     ASSERT_EQ(column.num_blocks(), 3);
 
-    auto column_data = column.data();
-    auto accessor = random_accessor<TDT>(&column_data);
+    auto accessor = random_accessor<TDT>(&column);
     for (size_t idx = 0; idx < n; ++idx) {
         ASSERT_EQ(accessor.at(idx), input_data[idx]);
     }
@@ -95,8 +93,7 @@ TEST_F(ColumnDataRandomAccessorTest, SparseIrregularBlocks) {
     ASSERT_FALSE(column.buffer().is_regular_sized());
     ASSERT_EQ(column.num_blocks(), 3);
 
-    auto column_data = column.data();
-    auto accessor = random_accessor<TDT>(&column_data);
+    auto accessor = random_accessor<TDT>(&column);
     for (size_t idx = 0; idx < n; ++idx) {
         if (idx < n / 2) {
             ASSERT_EQ(accessor.at(idx), input_data[idx]);

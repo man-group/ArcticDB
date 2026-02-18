@@ -16,10 +16,12 @@
 namespace arcticdb {
 using namespace arcticdb::entity;
 
+class Column;
+
+/// Lightweight non-owning view over raw column buffers for block iteration, codec encoding,
+/// and element-level iteration. Construct via ColumnData::from_column() when starting from
+/// a Column, or directly from raw buffers (e.g. FieldCollection::column_data()).
 struct ColumnData {
-    /*
-     * ColumnData is just a thin wrapper that helps in iteration over all the blocks in the column
-     */
   public:
     template<typename TDT, IteratorType iterator_type, IteratorDensity iterator_density, bool constant>
     class ColumnDataIterator;
@@ -252,6 +254,9 @@ struct ColumnData {
     /// @brief Get non-owning pointer to the shapes array for the column
     [[nodiscard]] const Buffer* shapes() const noexcept;
 
+    /// Construct a ColumnData view from a Column's public interface
+    static ColumnData from_column(const Column& col);
+
   private:
     template<typename TDT>
     TypedBlockData<TDT> next_typed_block(IMemBlock* block) {
@@ -270,14 +275,6 @@ struct ColumnData {
                 shape_ptr = shapes_->ptr_cast<shape_t>(shape_pos_, sizeof(shape_t));
                 size_t size = 0;
                 constexpr auto raw_type_sz = sizeof(typename TDT::DataTypeTag::raw_type);
-                // Blocks can contain empty tensors (empty arrays/matrices). They don't hold any data, however, they
-                // have assigned shapes. In case of an empty tensor the corresponding entries in the shapes array must
-                // be 0. The rationale is that the shapes array describes how many elements are there in a tensor. This
-                // way we can distinguish between [] (empty array) and None (no array at all). We assume that no block,
-                // besides the first, can start with empty tensors. This means that a block is exhausted when two
-                // conditions are satisfied:
-                // i) The processed size becomes equal to the block size
-                // ii) All zero-sized shapes are parsed (i.e. the shape of the current tensor is not 0)
                 while (current_tensor_is_empty() || size < block->logical_size()) {
                     if constexpr (dim == Dimension::Dim1) {
                         size += next_shape() * raw_type_sz;
@@ -310,8 +307,6 @@ struct ColumnData {
         };
     }
 
-    /// @brief Check if the current tensor is of size 0
-    /// @note The size of the current tensor is written in #shapes_ under #shapes_pos_
     [[nodiscard]] bool current_tensor_is_empty() const;
 
     const ChunkedBuffer* data_;

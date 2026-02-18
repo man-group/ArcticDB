@@ -9,6 +9,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 
@@ -70,7 +71,7 @@ class DynamicStringReducer {
     auto get_unique_counts(const Column& column) {
         ankerl::unordered_dense::map<entity::position_t, size_t> unique_counts;
         unique_counts.reserve(column.row_count());
-        auto data = column.data();
+        auto data = ColumnData::from_column(column);
         auto it =
                 data.begin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>(
                 );
@@ -191,7 +192,7 @@ class DynamicStringReducer {
             size_t, const Column& source_column,
             const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings
     ) {
-        auto data = source_column.data();
+        auto data = ColumnData::from_column(source_column);
         auto src = data
                            .cbegin<ScalarTagType<DataTypeTag<DataType::UINT64>>,
                                    IteratorType::REGULAR,
@@ -221,7 +222,7 @@ class DynamicStringReducer {
             const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings,
             const util::BitSet& sparse_map
     ) {
-        auto data = source_column.data();
+        auto data = ColumnData::from_column(source_column);
         auto src =
                 data.begin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>(
                 );

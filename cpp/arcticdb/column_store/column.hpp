@@ -9,7 +9,7 @@
 #pragma once
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/column_store/column_block_range.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
@@ -109,7 +109,8 @@ class Column {
         using RawType = std::decay_t<typename TDT::DataTypeTag::raw_type>;
         static constexpr size_t type_size = sizeof(RawType);
 
-        ColumnData parent_;
+        const ChunkedBuffer* buffer_;
+        ColumnBlockRange range_;
         std::optional<TypedBlockData<TDT>> block_;
         typename TypedBlockData<TDT>::template TypedColumnBlockIterator<const ValueType> block_pos_;
         typename TypedBlockData<TDT>::template TypedColumnBlockIterator<const ValueType> block_end_;
@@ -122,7 +123,7 @@ class Column {
         }
 
         void set_next_block() {
-            if (auto block = parent_.next<TDT>(); block)
+            if (auto block = range_.next<TDT>(); block)
                 block_.emplace(std::move(*block));
             else
                 block_ = std::nullopt;
@@ -131,16 +132,12 @@ class Column {
         }
 
       public:
-        TypedColumnIterator(const Column& col, bool begin) :
-            parent_(col.data()),
-            block_(begin ? parent_.next<TDT>() : std::nullopt) {
-            if (begin)
-                set_block_range();
-        }
+        TypedColumnIterator(const Column& col, bool begin);
 
         template<class OtherValue>
         explicit TypedColumnIterator(const TypedColumnIterator<TDT, OtherValue>& other) :
-            parent_(other.parent_),
+            buffer_(other.buffer_),
+            range_(other.range_),
             block_(other.block_),
             block_pos_(other.block_pos_),
             block_end_(other.block_end_) {}
@@ -166,7 +163,7 @@ class Column {
 
         void decrement() {
             if (!block_) {
-                block_ = parent_.last<TDT>();
+                block_ = range_.last<TDT>();
                 if (block_) {
                     block_pos_ = block_->begin();
                     std::advance(block_pos_, block_->row_count() - 1);
@@ -182,7 +179,7 @@ class Column {
 
         [[nodiscard]] ssize_t get_offset() const {
             if (!block_)
-                return parent_.buffer().bytes() / type_size;
+                return buffer_->bytes() / type_size;
 
             const auto off = block_->offset();
             const auto dist = std::distance(std::begin(*block_), block_pos_);
@@ -191,7 +188,7 @@ class Column {
 
         void set_offset(size_t offset) {
             const auto bytes = offset * type_size;
-            auto block_and_offset = parent_.buffer().block_and_offset(bytes);
+            auto block_and_offset = buffer_->block_and_offset(bytes);
             block_ = make_typed_block<TDT>(block_and_offset.block_);
             block_pos_ = std::begin(*block_);
             std::advance(block_pos_, block_and_offset.offset_ / type_size);
@@ -469,7 +466,8 @@ class Column {
 
     size_t bytes() const;
 
-    ColumnData data() const;
+    /// Create a block range for sequential block-level iteration.
+    ColumnBlockRange block_range() const;
 
     const uint8_t* ptr() const;
 
@@ -567,6 +565,7 @@ class Column {
     }
 
     [[nodiscard]] ChunkedBuffer& buffer();
+    [[nodiscard]] const ChunkedBuffer& buffer() const;
 
     uint8_t* bytes_at(size_t bytes, size_t required);
 
@@ -598,12 +597,11 @@ class Column {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 !is_sparse(), "Column::search_sorted not supported with sparse columns"
         );
-        auto column_data = data();
         return details::visit_type(
                 type().data_type(),
-                [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
+                [this, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
                     using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
-                    auto accessor = random_accessor<typename type_info::TDT>(&column_data);
+                    auto accessor = random_accessor<typename type_info::TDT>(this);
                     if constexpr (std::is_same_v<T, typename type_info::RawType>) {
                         int64_t first = from.value_or(0);
                         const int64_t last = to.value_or(row_count());
@@ -713,14 +711,23 @@ class Column {
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
 
+// Out-of-line definition of TypedColumnIterator constructor (needs complete Column type)
+template<typename TDT, typename ValueType>
+Column::TypedColumnIterator<TDT, ValueType>::TypedColumnIterator(const Column& col, bool begin_iter) :
+    buffer_(&col.data_),
+    range_(col.block_range()) {
+    if (begin_iter) {
+        set_next_block();
+    }
+}
+
 template<typename TagType>
 JiveTable create_jive_table(const Column& column) {
     JiveTable output(column.row_count());
     std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
 
     // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
-    auto column_data = column.data();
-    auto accessor = random_accessor<TagType>(&column_data);
+    auto accessor = random_accessor<TagType>(&column);
     std::sort(std::begin(output.orig_pos_), std::end(output.orig_pos_), [&](const auto& a, const auto& b) -> bool {
         return accessor.at(a) < accessor.at(b);
     });

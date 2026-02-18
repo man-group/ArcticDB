@@ -211,6 +211,7 @@ set(arcticdb_srcs
         codec/zstd.hpp
         column_store/block.hpp
         column_store/chunked_buffer.hpp
+        column_store/column_block_range.hpp
         column_store/column_data.hpp
         column_store/column_data_random_accessor.hpp
         column_store/typed_block_data.hpp

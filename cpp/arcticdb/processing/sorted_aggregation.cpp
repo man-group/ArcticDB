@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
 #include <arcticdb/util/type_traits.hpp>
@@ -102,8 +103,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
         );
     }
 
-    auto output_data = output_index_column.data();
-    const auto output_accessor = random_accessor<IndexTDT>(&output_data);
+    const auto output_accessor = random_accessor<IndexTDT>(&output_index_column);
     util::BitSet sparse_map(output_index_column.row_count());
     int64_t output_row = 0;
     int64_t output_row_prev = 0;
@@ -171,7 +171,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
     }
     details::visit_type(res->type().data_type(), [&](auto output_type_desc_tag) {
         using output_type_info = ScalarTypeInfo<decltype(output_type_desc_tag)>;
-        auto output_data = res->data();
+        auto output_data = ColumnData::from_column(*res);
         auto output_it = output_data.begin<typename output_type_info::TDT>();
         auto output_end_it = output_data.end<typename output_type_info::TDT>();
         // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at
@@ -209,9 +209,9 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                             "Resample: Cannot aggregate column '{}' as it is sparse",
                                             get_input_column_name().value
                                     );
-                                    auto index_data = input_index_column->data();
+                                    auto index_data = ColumnData::from_column(*input_index_column);
                                     const auto index_cend = index_data.template cend<IndexTDT>();
-                                    auto agg_data = agg_column.column_->data();
+                                    auto agg_data = ColumnData::from_column(*agg_column.column_);
                                     auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
                                     for (auto index_it = index_data.template cbegin<IndexTDT>();
                                          index_it != index_cend && !reached_end_of_buckets;
