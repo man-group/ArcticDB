@@ -46,6 +46,31 @@ def test_write_zero_record_batches(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+def test_write_zero_row_table(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_zero_row_table"
+    table = pa.table({"col1": pa.array([], pa.int64()), "col2": pa.array([], pa.float32())})
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
+def test_write_zero_row_table_view(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_zero_row_table_view"
+    arr0 = pa.array([0, 1], pa.int64())
+    arr1 = pa.array([2, 3, 4], pa.int64())
+    arr2 = pa.array([5, 6, 7, 8], pa.int64())
+    rb0 = pa.RecordBatch.from_arrays([arr0], names=["col"])
+    rb1 = pa.RecordBatch.from_arrays([arr1], names=["col"])
+    rb2 = pa.RecordBatch.from_arrays([arr2], names=["col"])
+    table = pa.Table.from_batches([rb0, rb1, rb2])
+    view = table.slice(3, 0)
+    lib.write(sym, view)
+    received = lib.read(sym).data
+    assert view.equals(received)
+
+
 # Arrow stores bools as packed bitsets so worth testing separately even in scenarios as basic as this
 @pytest.mark.parametrize("type", [pa.int64(), pa.bool_()])
 def test_basic_write(lmdb_version_store_arrow, type):

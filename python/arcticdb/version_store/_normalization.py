@@ -726,7 +726,16 @@ class ArrowTableNormalizer(Normalizer):
         )
 
     def normalize(self, table, **kwargs):
-        pa_record_batches = table.to_batches()
+        if table.num_rows == 0:
+            # to_batches has a bug https://github.com/apache/arrow/issues/49309 so that it returns an empty list when
+            # the table has zero rows, losing the schema information
+            pa_record_batches = [
+                pa.RecordBatch.from_arrays(
+                    [chunked_array.chunk(0) for chunked_array in table.itercolumns()], schema=table.schema
+                )
+            ]
+        else:
+            pa_record_batches = table.to_batches()
         arcticdb_record_batches = []
         for pa_record_batch in pa_record_batches:
             arcticdb_record_batch = RecordBatchData()
