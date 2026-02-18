@@ -213,9 +213,8 @@ class AsyncStore : public Store {
                 .thenValue(UpdateSegmentTask{library_, opts});
     }
 
-    entity::VariantKey update_sync(
-        const entity::VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts
-    ) override {
+    entity::VariantKey update_sync(const entity::VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts)
+            override {
         auto stream_id = variant_key_id(key);
         util::check(
                 segment.descriptor().id() == stream_id,
