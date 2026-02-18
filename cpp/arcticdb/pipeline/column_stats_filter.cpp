@@ -279,40 +279,27 @@ bool evaluate_expression_node_against_stats(
     return true;
 }
 
+bool evaluate_expression_against_stats(const ExpressionContext& expression_context, const ColumnStatsRow& stats) {
+    auto root_node_name = std::get<ExpressionName>(expression_context.root_node_name_).value;
+    auto root_node = expression_context.expression_nodes_.get_value(root_node_name);
+    return evaluate_expression_node_against_stats(expression_context, *root_node, stats);
+}
+
 // TODO aseaton this seems like a very weird way of reading a segment
 ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
     if (segment.row_count() == 0) {
         return;
     }
 
-    // Find the start_index and end_index columns
-    std::optional<size_t> start_index_col_idx;
-    std::optional<size_t> end_index_col_idx;
-
     // Map from column name to column index
     std::unordered_map<std::string, size_t> column_indices;
 
     const auto& fields = segment.descriptor().fields();
-    for (size_t i = 0; i < fields.size(); ++i) {
+    for (size_t i = end_index_column_offset + 1; i < fields.size(); ++i) {
         const auto& field = fields[i];
         std::string_view name = field.name();
-
-        if (name == start_index_column_name) {
-            start_index_col_idx = i;
-        } else if (name == end_index_column_name) {
-            end_index_col_idx = i;
-        } else {
-            auto parsed = from_segment_column_name_to_internal(name);
-            column_indices[std::string(name)] = i;
-        }
-    }
-
-    // TODO aseaton hard code the indexes
-    util::check(start_index_col_idx == 0, "Expected start_index at 0 was {}", start_index_col_idx);
-    util::check(end_index_col_idx == 1, "Expected end_index at 1 was {}", end_index_col_idx);
-    if (!start_index_col_idx || !end_index_col_idx) {
-        log::version().warn("Column stats segment missing start_index or end_index columns");
-        return;
+        auto parsed = from_segment_column_name_to_internal(name);
+        column_indices[std::string(name)] = i;
     }
 
     // Extract all rows
@@ -321,8 +308,8 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
         ColumnStatsRow stats_row;
 
         // Extract start_index and end_index
-        auto start_val = segment.column(*start_index_col_idx).scalar_at<timestamp>(row);
-        auto end_val = segment.column(*end_index_col_idx).scalar_at<timestamp>(row);
+        auto start_val = segment.column(start_index_column_offset).scalar_at<timestamp>(row);
+        auto end_val = segment.column(end_index_column_offset).scalar_at<timestamp>(row);
 
         if (!start_val || !end_val) {
             continue;
@@ -333,6 +320,9 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
 
         // Extract MIN/MAX values for each column with stats
         for (size_t col_idx = 0; col_idx < fields.size(); ++col_idx) {
+            if (col_idx == start_index_column_offset || col_idx == end_index_column_offset) {
+                continue;
+            }
             const auto& field = fields[col_idx];
             std::string_view name = field.name();
 
