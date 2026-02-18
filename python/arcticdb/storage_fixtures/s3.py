@@ -7,7 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import logging
-import multiprocessing
 import json
 import os
 import re
@@ -18,14 +17,13 @@ from tempfile import mkdtemp
 import boto3
 import time
 import random
+import subprocess
 from datetime import datetime
 
 import requests
 from typing import Optional, Any, Type
 
-import werkzeug
 import botocore.exceptions
-from moto.server import DomainDispatcherApplication, create_backend_app
 
 from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
 from arcticdb.util.logger import get_logger
@@ -38,6 +36,7 @@ from .utils import (
     safer_rmtree,
     get_ca_cert_for_testing,
 )
+from . import moto_server
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
 from arcticdb_ext.storage import (
@@ -673,121 +672,6 @@ def mock_s3_with_error_simulation():
     return out
 
 
-class HostDispatcherApplication(DomainDispatcherApplication):
-    _reqs_till_rate_limit = -1
-
-    def get_backend_for_host(self, host):
-        """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
-        if host is None:
-            return None
-        if "s3" in host or host == "localhost":
-            return "s3"
-        elif host == "127.0.0.1":
-            return "iam"
-        elif host == "moto_api":
-            return "moto_api"
-        else:
-            raise RuntimeError(f"Unknown host {host}")
-
-    def __call__(self, environ, start_response):
-        path_info: bytes = environ.get("PATH_INFO", "")
-
-        with self.lock:
-            # Check for x-amz-checksum-mode header
-            if environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
-                response_body = (
-                    b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                    b"<Error><Code>MissingContentLength</Code>"
-                    b"<Message>You must provide the Content-Length HTTP header.</Message></Error>"
-                )
-                start_response(
-                    "411 Length Required", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
-                )
-                return [response_body]
-            # Mock ec2 imds responses for testing
-            if path_info in (
-                "/latest/dynamic/instance-identity/document",
-                b"/latest/dynamic/instance-identity/document",
-            ):
-                start_response("200 OK", [("Content-Type", "text/plain")])
-                return [b"Something to prove imds is reachable"]
-
-            # Allow setting up a rate limit
-            if path_info in ("/rate_limit", b"/rate_limit"):
-                length = int(environ["CONTENT_LENGTH"])
-                body = environ["wsgi.input"].read(length).decode("ascii")
-                self._reqs_till_rate_limit = int(body)
-                start_response("200 OK", [("Content-Type", "text/plain")])
-                return [b"Limit accepted"]
-
-            if self._reqs_till_rate_limit == 0:
-                response_body = (
-                    b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
-                    b"<RequestId>176C22715A856A29</RequestId><HostId>9Gjjt1m+cjU4OPvX9O9/8RuvnG41MRb/18Oux2o5H5MY7ISNTlXN+Dz9IG62/ILVxhAGI0qyPfg=</HostId></Error>"
-                )
-                start_response(
-                    "503 Slow Down", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
-                )
-                return [response_body]
-            else:
-                self._reqs_till_rate_limit -= 1
-
-            # Lets add ability to identify type as S3
-            if "/whoami" in path_info:
-                start_response("200 OK", [("Content-Type", "text/plain")])
-                return [b"Moto AWS S3"]
-
-        return super().__call__(environ, start_response)
-
-
-class GcpHostDispatcherApplication(HostDispatcherApplication):
-    """GCP's S3 implementation does not have batch delete."""
-
-    def __call__(self, environ, start_response):
-        path_info: bytes = environ.get("PATH_INFO", "")
-
-        if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
-            response_body = (
-                b'<?xml version="1.0" encoding="UTF-8"?>'
-                b"<Error>"
-                b"<Code>NotImplemented</Code>"
-                b"<Message>A header or query you provided requested a function that is not implemented.</Message>"
-                b"<Details>POST ?delete is not implemented for objects.</Details>"
-                b"</Error>"
-            )
-            start_response(
-                "501 Not Implemented", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
-            )
-            return [response_body]
-
-        # Lets add ability to identify type as GCP
-        if "/whoami" in path_info:
-            start_response("200 OK", [("Content-Type", "text/plain")])
-            return [b"Moto GCP"]
-
-        return super().__call__(environ, start_response)
-
-
-def run_s3_server(port, key_file, cert_file):
-    werkzeug.run_simple(
-        "0.0.0.0",
-        port,
-        HostDispatcherApplication(create_backend_app),
-        threaded=True,
-        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
-    )
-
-
-def run_gcp_server(port, key_file, cert_file):
-    werkzeug.run_simple(
-        "0.0.0.0",
-        port,
-        GcpHostDispatcherApplication(create_backend_app),
-        threaded=True,
-        ssl_context=(cert_file, key_file) if cert_file and key_file else None,
-    )
-
-
 def is_server_type(url: str, server_type: str):
     """Check if a server is of certain type.
 
@@ -827,7 +711,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     endpoint: str
     _enforcing_permissions = False
     _iam_endpoint: str
-    _p: multiprocessing.Process
+    _p: subprocess.Popen = None
     _s3_admin: Any
     _iam_admin: Any = None
     _bucket_id = 0
@@ -894,18 +778,18 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             self.client_cert_file = ""
         self.client_cert_dir = self.working_dir
 
-        spawn_context = multiprocessing.get_context(
-            "spawn"
-        )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
-        self._p = spawn_context.Process(
-            target=run_s3_server,
-            args=(
-                port,
-                self.key_file if self.http_protocol == "https" else None,
-                self.cert_file if self.http_protocol == "https" else None,
-            ),
-        )
-        self._p.start()
+        cmd = [
+            sys.executable,
+            moto_server.__file__,
+            "--port",
+            str(port),
+            "--server-type",
+            "s3",
+        ]
+        if self.http_protocol == "https":
+            cmd.extend(["--key-file", self.key_file, "--cert-file", self.cert_file])
+
+        self._p = GracefulProcessUtils.start(cmd)
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
@@ -1034,18 +918,18 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
             self.client_cert_file = ""
         self.client_cert_dir = self.working_dir
 
-        spawn_context = multiprocessing.get_context(
-            "spawn"
-        )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
-        self._p = spawn_context.Process(
-            target=run_gcp_server,
-            args=(
-                port,
-                self.key_file if self.http_protocol == "https" else None,
-                self.cert_file if self.http_protocol == "https" else None,
-            ),
-        )
-        self._p.start()
+        cmd = [
+            sys.executable,
+            moto_server.__file__,
+            "--port",
+            str(port),
+            "--server-type",
+            "gcp",
+        ]
+        if self.http_protocol == "https":
+            cmd.extend(["--key-file", self.key_file, "--cert-file", self.cert_file])
+
+        self._p = GracefulProcessUtils.start(cmd)
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
