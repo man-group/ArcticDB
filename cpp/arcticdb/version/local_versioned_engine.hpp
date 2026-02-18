@@ -166,7 +166,9 @@ class LocalVersionedEngine : public VersionedEngine {
             std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
     ) override;
 
-    DescriptorItem read_descriptor_internal(const StreamId& stream_id, const VersionQuery& version_query);
+    DescriptorItem read_descriptor_internal(
+            const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
+    );
 
     StageResult write_parallel_frame(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index,
@@ -218,7 +220,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const VersionQuery& version_query
     );
 
-    folly::Future<DescriptorItem> get_descriptor(AtomKey&& key);
+    folly::Future<DescriptorItem> get_descriptor(AtomKey&& key, bool include_index_segment = false);
 
     folly::Future<DescriptorItem> get_descriptor_async(
             folly::Future<std::optional<AtomKey>>&& opt_index_key_fut, const StreamId& stream_id,

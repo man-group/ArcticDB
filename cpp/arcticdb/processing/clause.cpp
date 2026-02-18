@@ -248,6 +248,13 @@ void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_
     );
 }
 
+OutputSchema modify_schema(OutputSchema&& schema, const std::vector<std::shared_ptr<Clause>>& clauses) {
+    for (const auto& clause : clauses) {
+        schema = clause->modify_schema(std::move(schema));
+    }
+    return schema;
+}
+
 std::vector<EntityId> PassthroughClause::process(std::vector<EntityId>&& entity_ids) const {
     return std::move(entity_ids);
 }

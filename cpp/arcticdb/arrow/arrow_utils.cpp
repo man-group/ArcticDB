@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -489,6 +490,69 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     }
     seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
     return {seg, index_column_position};
+}
+
+RecordBatchData empty_record_batch_from_descriptor(
+        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
+        const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
+) {
+    // The logic here is similar to empty_arrow_array_for_column, but there the string format is dictated by the
+    // column's buffers, whereas here we rely on the ArrowOutputConfig
+    const auto& default_string_format = arrow_output_config.default_string_format_;
+    const auto& per_column_string_format = arrow_output_config.per_column_string_format_;
+    sparrow::record_batch record_batch;
+    for (const auto& field : stream_desc.fields()) {
+        // The column filtering is done here rather than in the calling function for efficiency, so we only have to
+        // iterate the fields once, and not construct an intermediate FieldCollection that would then be immediately
+        // discarded. std::nullopt implies read all columns
+        if (!columns.has_value() || columns->contains(field.name())) {
+            auto arr = details::visit_scalar(field.type(), [&](auto&& tdt) {
+                using TagType = std::decay_t<decltype(tdt)>;
+                using DataTagType = typename TagType::DataTypeTag;
+                using RawType = typename DataTagType::raw_type;
+                std::optional<sparrow::validity_bitmap> validity_bitmap;
+                if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
+                    const auto string_format = [&]() {
+                        if (auto it = per_column_string_format.find(std::string(field.name()));
+                            it != per_column_string_format.end()) {
+                            return it->second;
+                        } else {
+                            return default_string_format;
+                        }
+                    }();
+                    switch (string_format) {
+                    case ArrowOutputStringFormat::SMALL_STRING:
+                        return minimal_strings_array<int32_t>();
+                    case ArrowOutputStringFormat::LARGE_STRING:
+                        return minimal_strings_array<int64_t>();
+                    case ArrowOutputStringFormat::CATEGORICAL: {
+                        sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
+                        auto dict_values_array = minimal_strings_for_dict();
+                        return sparrow::array{create_dict_array<int32_t>(
+                                sparrow::array{std::move(dict_values_array)},
+                                std::move(dict_keys_buffer),
+                                std::move(validity_bitmap)
+                        )};
+                    }
+                    default:
+                        util::raise_rte("Unknown ArrowOutputStringFormat {}", static_cast<uint64_t>(string_format));
+                        // Not all compilers can tell this code is unreachable, and complain about reaching end of
+                        // non-void function
+                        return sparrow::array{};
+                    }
+                } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
+                    return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+                } else {
+                    return sparrow::array{create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+                }
+            });
+            arr.set_name(field.name());
+            record_batch.add_column(std::string(field.name()), std::move(arr));
+        }
+    }
+    auto struct_array = sparrow::array{record_batch.extract_struct_array()};
+    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
+    return {arr, schema};
 }
 
 } // namespace arcticdb
