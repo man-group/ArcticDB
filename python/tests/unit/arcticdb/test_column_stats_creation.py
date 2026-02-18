@@ -630,6 +630,17 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             assert_column_stats_key_count()
             clear()
 
+    def test_prune_previous_kwarg_batch_methods():
+        nonlocal expected_count
+        for operation in ["batch_write", "batch_append", "batch_write_metadata"]:
+            lib.write(sym, df0)
+            create_stats()
+            assert_column_stats_key_count()
+            getattr(lib, operation)([sym], [df1], prune_previous_version=True)
+            expected_count = 0
+            assert_column_stats_key_count()
+            clear()
+
     def test_prune_previous_api():
         nonlocal expected_count
         lib.write(sym, df0)
@@ -657,50 +668,8 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
         test_add_to_snapshot,
         test_remove_from_snapshot,
         test_prune_previous_kwarg,
+        test_prune_previous_kwarg_batch_methods,
         test_prune_previous_api,
     ]:
-        test()
-        clear()
-
-
-@pytest.mark.xfail(
-    reason=(
-        "ArcticDB/issues/230 This test can be folded in with test_column_stats_object_deleted_with_index_key once the"
-        " issue is resolved"
-    )
-)
-def test_column_stats_object_deleted_with_index_key_batch_methods(lmdb_version_store, any_output_format):
-    def clear():
-        nonlocal expected_count
-        lib.version_store.clear()
-        expected_count = 0
-
-    def create_stats():
-        nonlocal expected_count
-        lib.create_column_stats(sym, column_stats_dict)
-        expected_count += 1
-
-    def assert_column_stats_key_count():
-        assert lib_tool.count_keys(KeyType.COLUMN_STATS) == expected_count
-
-    def test_prune_previous_kwarg_batch_methods():
-        nonlocal expected_count
-        for operation in ["batch_write", "batch_append", "batch_write_metadata"]:
-            lib.write(sym, df0)
-            create_stats()
-            assert_column_stats_key_count()
-            getattr(lib, operation)([sym], [df1], prune_previous_version=True)
-            expected_count = 0
-            assert_column_stats_key_count()
-            clear()
-
-    lib = lmdb_version_store
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    lib_tool = lib.library_tool()
-    sym = "test_column_stats_object_deleted_with_index_key_batch_methods"
-    column_stats_dict = {"col_1": {"MINMAX"}}
-    expected_count = 0
-
-    for test in [test_prune_previous_kwarg_batch_methods]:
         test()
         clear()
