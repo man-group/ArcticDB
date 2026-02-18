@@ -19,24 +19,25 @@ import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import assert_frame_equal_with_arrow, config_context
 
 
-def test_collect_schema_basic(lmdb_library):
+@pytest.mark.parametrize("num_rows", [0, 1])
+def test_collect_schema_basic(lmdb_library, num_rows):
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
     sym = "test_collect_schema_basic"
     table = pa.table(
         {
-            "uint8": pa.array([0], pa.uint8()),
-            "uint16": pa.array([1], pa.uint16()),
-            "uint32": pa.array([2], pa.uint32()),
-            "uint64": pa.array([3], pa.uint64()),
-            "int8": pa.array([4], pa.int8()),
-            "int16": pa.array([5], pa.int16()),
-            "int32": pa.array([6], pa.int32()),
-            "int64": pa.array([7], pa.int64()),
-            "float32": pa.array([8], pa.float32()),
-            "float64": pa.array([9], pa.float64()),
-            "timestamp": pa.array([pa.scalar(10, type=pa.timestamp("ns"))]),
+            "uint8": pa.array(num_rows * [0], pa.uint8()),
+            "uint16": pa.array(num_rows * [1], pa.uint16()),
+            "uint32": pa.array(num_rows * [2], pa.uint32()),
+            "uint64": pa.array(num_rows * [3], pa.uint64()),
+            "int8": pa.array(num_rows * [4], pa.int8()),
+            "int16": pa.array(num_rows * [5], pa.int16()),
+            "int32": pa.array(num_rows * [6], pa.int32()),
+            "int64": pa.array(num_rows * [7], pa.int64()),
+            "float32": pa.array(num_rows * [8], pa.float32()),
+            "float64": pa.array(num_rows * [9], pa.float64()),
+            "timestamp": pa.array(num_rows * [pa.scalar(10, type=pa.timestamp("ns"))], pa.timestamp("ns")),
         }
     )
     lib.write(sym, table)
