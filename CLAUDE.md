@@ -187,6 +187,17 @@ See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-B
 
 ## Key Development Guidelines
 
+Stop and ask clarifying questions when you are confused.
+
+It is unlikely you need to catch `std::exception`. Handle less broad exceptions, like `KeyNotFoundException`.
+
+It is important that you do not submit tasks to the threadpools from within a task that is already executing within the
+same threadpool, as this can deadlock. This means you might need to use synchronous APIs like `read_sync` from within tasks.
+
+Do not write comments except where they are very valuable. Keep them as brief as possible.
+
+Prefer writing pytests as standalone functions rather than wrapping them in a class.
+
 ### Backwards Compatibility
 
 - Data written by newer clients should be readable by older clients - document breaking changes clearly
