@@ -145,7 +145,7 @@ void declare_resample_clause(py::module& version) {
 
 void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>& base_exception) {
 
-    py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
+    py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
     entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
