@@ -25,4 +25,42 @@ std::vector<ClauseVariant> plan_query(std::vector<ClauseVariant>&& clauses) {
     return clauses;
 }
 
+/**
+ * Create a single expression context by AND-ing together the supplied expression contexts, which should all come from
+ * FilterClause objects (and hence have an ExpressionNode at their root).
+ */
+ExpressionContext and_filter_expression_contexts(
+        const std::vector<std::shared_ptr<ExpressionContext>>& expression_contexts
+) {
+    util::check(expression_contexts.size() > 0, "Expression context cannot be empty");
+    std::optional<ExpressionNode> overall_root;
+    std::optional<ExpressionName> overall_root_name;
+
+    ExpressionContext res;
+    for (const auto& expression_context : expression_contexts) {
+        util::check(
+                std::holds_alternative<ExpressionName>(expression_context->root_node_name_),
+                "Only expect to be called with filter expressions"
+        );
+        res.expression_nodes_.merge_from(expression_context->expression_nodes_);
+        res.values_.merge_from(expression_context->values_);
+        res.value_sets_.merge_from(expression_context->value_sets_);
+        res.regex_matches_.merge_from(expression_context->regex_matches_);
+        auto root_name = std::get<ExpressionName>(expression_context->root_node_name_);
+        auto root_expr = expression_context->expression_nodes_.get_value(root_name.value);
+
+        if (!overall_root) {
+            overall_root = *root_expr;
+            overall_root_name = root_name;
+            continue;
+        }
+
+        overall_root = ExpressionNode{*overall_root_name, root_name, OperationType::AND};
+    }
+
+    res.add_expression_node("combined-expression", std::make_shared<ExpressionNode>(*overall_root));
+    res.root_node_name_ = ExpressionName{"combined-expression"};
+    return res;
+}
+
 } // namespace arcticdb
