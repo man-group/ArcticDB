@@ -48,14 +48,12 @@ struct ColumnStatsValues {
 };
 
 /**
- * Represents column statistics for a single row-slice, mapping column names to their MIN/MAX values.
- * The values are stored as raw bytes that can be compared using the appropriate type.
+ * Represents column statistics for a single row-slice, mapping column names to their statistics.
  */
 struct ColumnStatsRow {
     timestamp start_index;
     timestamp end_index;
     // Map from column name to its stats
-    // TODO aseaton can we do better than keying this off strings?
     std::unordered_map<std::string, ColumnStatsValues> stats_for_column;
 };
 
