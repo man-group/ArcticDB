@@ -326,8 +326,8 @@ def test_column_stats_query_optimisation_with_date_range(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
 ):
     """
-    Test that column stats pruning works correctly when the QueryBuilder includes
-    both a column filter and a date_range clause.
+    Test that column stats pruning works correctly when the read includes
+    both a column filter and a date_range.
 
     Segments:
     - Segment 0: col_1=[1,2], dates 2000-01-01 to 2000-01-02
@@ -352,9 +352,9 @@ def test_column_stats_query_optimisation_with_date_range(
     # Only segment 1 should be read
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
-    q = q.date_range((pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04")))
+    date_range = (pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-04"))
     qs.reset_stats()
-    result = lib.read(sym, query_builder=q).data
+    result = lib.read(sym, query_builder=q, date_range=date_range).data
     table_data_reads = get_table_data_read_count()
     assert_frame_equal(df1, result)
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
