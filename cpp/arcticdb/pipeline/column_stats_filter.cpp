@@ -21,23 +21,22 @@ namespace arcticdb {
 
 namespace {
 
-// TODO aseaton this seems like kind of a bad idea
-// Extract a value from a segment column at a given row
-// Returns std::nullopt if the value cannot be extracted
-std::optional<Value> extract_value_from_column(const Column& column, size_t row, DataType data_type) {
-    std::optional<Value> result;
-    details::visit_type(data_type, [&column, row, &result](auto tag) {
-        using TagType = decltype(tag);
-        using RawType = TagType::raw_type;
-        if constexpr (is_numeric_type(TagType::data_type) || is_time_type(TagType::data_type)) {
-            auto opt_val = column.scalar_at<RawType>(row);
+std::optional<Value> extract_value_from_column(
+        const SegmentInMemory::iterator& it, size_t col_idx, DataType data_type
+) {
+    return details::visit_type(data_type, [&it, col_idx](auto tag) -> std::optional<Value> {
+        using type_info = ScalarTypeInfo<decltype(tag)>;
+        // Only numeric types are supported at the moment.
+        if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type)) {
+            auto opt_val = it->scalar_at<typename type_info::RawType>(col_idx);
             if (opt_val.has_value()) {
-                result = Value(*opt_val, TagType::data_type);
+                return Value{*opt_val, type_info::data_type};
             }
         }
+        return std::nullopt;
     });
-    return result;
 }
+
 } // anonymous namespace
 
 // TODO replace with the StatsComparison enum above
@@ -288,7 +287,6 @@ bool evaluate_expression_against_stats(const ExpressionContext& expression_conte
     return evaluate_expression_node_against_stats(expression_context, *root_node, stats);
 }
 
-// TODO aseaton this seems like a very weird way of reading a segment
 ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
     if (segment.row_count() == 0) {
         return;
@@ -304,13 +302,14 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
         stats_at_column_index.emplace(i, std::move(parsed));
     }
 
-    // TODO aseaton use the Segment::iterator, possibly iterate column-wise rather than row-wise?
+    // Future aseaton consider iterating column-wise rather than row-wise?
     rows_.reserve(segment.row_count());
-    for (size_t row = 0; row < segment.row_count(); ++row) {
+    for (auto it = segment.begin(); it != segment.end(); ++it) {
         ColumnStatsRow stats_row;
 
-        auto start_index = segment.column(start_index_column_offset).scalar_at<timestamp>(row);
-        auto end_index = segment.column(end_index_column_offset).scalar_at<timestamp>(row);
+        // TODO aseaton different index types
+        auto start_index = it->scalar_at<timestamp>(start_index_column_offset);
+        auto end_index = it->scalar_at<timestamp>(end_index_column_offset);
 
         if (!start_index || !end_index) {
             log::version().warn("Saw column stats row without start_index or end_index");
@@ -323,8 +322,8 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
         for (size_t col_idx = end_index_column_offset + 1; col_idx < fields.size(); ++col_idx) {
             const auto& field = fields[col_idx];
 
-            auto stats_type = stats_at_column_index.at(col_idx);
-            auto value = extract_value_from_column(segment.column(col_idx), row, field.type().data_type());
+            const auto& stats_type = stats_at_column_index.at(col_idx);
+            auto value = extract_value_from_column(it, col_idx, field.type().data_type());
 
             auto& stats = stats_row.stats_for_column[stats_type.first];
             switch (stats_type.second) {
@@ -337,7 +336,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
             }
         }
 
-        index_to_row_[{stats_row.start_index, stats_row.end_index}] = row;
+        index_to_row_[{stats_row.start_index, stats_row.end_index}] = it->row_id_;
         rows_.push_back(std::move(stats_row));
     }
 }
