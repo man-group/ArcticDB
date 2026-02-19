@@ -25,13 +25,9 @@ inline int64_t num_from_strv(std::string_view strv) {
     return *reinterpret_cast<int64_t*>(&val);
 };
 
-inline bool string_starts_with(const std::string& prefix, const std::string& str) {
-    return std::equal(prefix.begin(), prefix.end(), str.begin());
-}
-
-inline std::string&& to_lower(std::string&& str) {
-    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
-    return std::move(str);
+inline std::string to_lower(std::string&& str) {
+    std::ranges::transform(str, str.begin(), ::tolower);
+    return str;
 }
 
 template<uint32_t expected_size>
@@ -86,5 +82,11 @@ std::string safe_decode(const std::string& value);
 // know which strings are which. Therefore methods like get_const_view return a std::string_view regardless. If the
 // string is UTF-32, this converts that view into a UTF-8 string
 std::string utf32_to_u8(std::string_view strv);
+
+struct TransparentStringHash {
+    using is_transparent = void; // enable heterogeneous overloads
+    using is_avalanching = void; // mark class as high quality avalanching hash
+    [[nodiscard]] uint64_t operator()(std::string_view str) const noexcept;
+};
 
 } // namespace arcticdb::util
