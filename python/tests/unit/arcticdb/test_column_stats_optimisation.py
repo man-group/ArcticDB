@@ -638,3 +638,41 @@ def test_column_stats_multiindex_index_col(in_memory_version_store):
 
     column_stats_dict = {"category": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
+
+
+ROWCOUNT_INDEXES = [
+    np.arange(0, 3, dtype=np.int64),
+    np.arange(4, 6, dtype=np.int64),
+]
+
+
+STRING_INDEXES = [["a", "b", "c"], ["d", "e"]]
+
+RANGE_INDEXES = [pd.RangeIndex(start=0, stop=3, step=1), pd.RangeIndex(start=3, stop=5, step=1)]
+
+
+@pytest.mark.parametrize(
+    "indexes", [ROWCOUNT_INDEXES, STRING_INDEXES, RANGE_INDEXES], ids=["rowcount", "string", "range"]
+)
+def test_column_stats_query_optimisation_index_types(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, indexes
+):
+    """Test how column stats filtering copes with different index types. Datetime indexes are covered repeatedly in other tests in this file."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+    # col_1 > 3 should only read segment 0
+    q = QueryBuilder()
+    q = q[q["col_1"] > 3]
+    qs.reset_stats()
+    lib.read(sym, query_builder=q)
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 0 only), got {table_data_reads}"
