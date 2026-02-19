@@ -42,6 +42,11 @@ enum class StatsComparison {
     UNKNOWN
 };
 
+struct ColumnStatsValues {
+    std::optional<Value> min;
+    std::optional<Value> max;
+};
+
 /**
  * Represents column statistics for a single row-slice, mapping column names to their MIN/MAX values.
  * The values are stored as raw bytes that can be compared using the appropriate type.
@@ -49,10 +54,9 @@ enum class StatsComparison {
 struct ColumnStatsRow {
     timestamp start_index;
     timestamp end_index;
-    // TODO use a struct for the values
-    // TODO keying this off of strings is so weird
-    // Map from column name to pair of (min_value, max_value) stored as Value objects
-    std::unordered_map<std::string, std::pair<std::optional<Value>, std::optional<Value>>> column_min_max;
+    // Map from column name to its stats
+    // TODO aseaton can we do better than keying this off strings?
+    std::unordered_map<std::string, ColumnStatsValues> stats_for_column;
 };
 
 /**
@@ -76,7 +80,7 @@ class ColumnStatsData {
   private:
     std::vector<ColumnStatsRow> rows_;
     // (start_index, end_index) -> row index
-    // TODO support the different index types properly
+    // TODO aseaton support the different index types properly
     std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
 };
 

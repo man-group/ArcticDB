@@ -243,13 +243,15 @@ bool evaluate_expression_node_against_stats(
         }
 
         // Check if we have stats for this column
-        auto it = stats.column_min_max.find(*column_name);
-        if (it == stats.column_min_max.end()) {
+        auto it = stats.stats_for_column.find(*column_name);
+        if (it == stats.stats_for_column.end()) {
             // No stats for this column, cannot prune
             return true;
         }
 
-        const auto& [min_value, max_value] = it->second;
+        const auto& stats_values = it->second;
+        const auto& min_value = stats_values.min;
+        const auto& max_value = stats_values.max;
 
         // If reversed (value op column), we need to flip the operation
         OperationType effective_op = op;
@@ -291,55 +293,50 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
         return;
     }
 
-    // Map from column name to column index
-    std::unordered_map<std::string, size_t> column_indices;
+    std::unordered_map<size_t, std::pair<std::string, ColumnStatElement>> stats_at_column_index;
 
     const auto& fields = segment.descriptor().fields();
     for (size_t i = end_index_column_offset + 1; i < fields.size(); ++i) {
         const auto& field = fields[i];
         std::string_view name = field.name();
         auto parsed = from_segment_column_name_to_internal(name);
-        column_indices[std::string(name)] = i;
+        stats_at_column_index.emplace(i, std::move(parsed));
     }
 
-    // Extract all rows
+    // TODO aseaton use the Segment::iterator, possibly iterate column-wise rather than row-wise?
     rows_.reserve(segment.row_count());
     for (size_t row = 0; row < segment.row_count(); ++row) {
         ColumnStatsRow stats_row;
 
-        // Extract start_index and end_index
-        auto start_val = segment.column(start_index_column_offset).scalar_at<timestamp>(row);
-        auto end_val = segment.column(end_index_column_offset).scalar_at<timestamp>(row);
+        auto start_index = segment.column(start_index_column_offset).scalar_at<timestamp>(row);
+        auto end_index = segment.column(end_index_column_offset).scalar_at<timestamp>(row);
 
-        if (!start_val || !end_val) {
+        if (!start_index || !end_index) {
+            log::version().warn("Saw column stats row without start_index or end_index");
             continue;
         }
 
-        stats_row.start_index = *start_val;
-        stats_row.end_index = *end_val;
+        stats_row.start_index = *start_index;
+        stats_row.end_index = *end_index;
 
-        // Extract MIN/MAX values for each column with stats
-        for (size_t col_idx = 0; col_idx < fields.size(); ++col_idx) {
-            if (col_idx == start_index_column_offset || col_idx == end_index_column_offset) {
-                continue;
-            }
+        for (size_t col_idx = end_index_column_offset + 1; col_idx < fields.size(); ++col_idx) {
             const auto& field = fields[col_idx];
-            std::string_view name = field.name();
 
-            auto parsed = from_segment_column_name_to_internal(name);
-
+            auto stats_type = stats_at_column_index.at(col_idx);
             auto value = extract_value_from_column(segment.column(col_idx), row, field.type().data_type());
 
-            auto& min_max = stats_row.column_min_max[parsed.first];
-            if (parsed.second == ColumnStatElement::MIN) {
-                min_max.first = value;
-            } else {
-                min_max.second = value;
+            auto& stats = stats_row.stats_for_column[stats_type.first];
+            switch (stats_type.second) {
+            case ColumnStatElement::MIN:
+                stats.min = value;
+                break;
+            case ColumnStatElement::MAX:
+                stats.max = value;
+                break;
             }
         }
 
-        // Add to lookup map
-        index_to_row_[{stats_row.start_index, stats_row.end_index}] = rows_.size();
+        index_to_row_[{stats_row.start_index, stats_row.end_index}] = row;
         rows_.push_back(std::move(stats_row));
     }
 }
@@ -380,6 +377,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 
         if (column_stats_data.empty()) {
             // No column stats, keep all segments
+            ARCTICDB_DEBUG(log::version(), "Empty column stats - keeping all segments");
             if (input) {
                 return std::move(input);
             }
@@ -404,15 +402,16 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             timestamp start_idx = *(start_index_col + row);
             timestamp end_idx = *(end_index_col + row);
 
-            // Find the column stats for this row
+            ARCTICDB_DEBUG(log::version(), "Looking up stats {} {}", start_idx, end_idx);
             const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx);
 
             if (!stats) {
-                // No stats for this row, keep it
+                ARCTICDB_DEBUG(log::version(), "No stats for this index row - keep it");
                 res->set_bit(row, true);
                 continue;
             }
 
+            ARCTICDB_DEBUG(log::version(), "Evaluating against stats");
             bool keep = evaluate_expression_against_stats(expression_context, *stats);
             if (keep) {
                 res->set_bit(row, true);
@@ -458,6 +457,7 @@ ExpressionContext and_contexts(const std::vector<std::shared_ptr<ExpressionConte
     // TODO aseaton not sure if arbitrary name "combined-expression" is OK
     ExpressionContext res;
     res.add_expression_node("combined-expression", std::make_shared<ExpressionNode>(*overall_root));
+    res.root_node_name_ = ExpressionName{"combined-expression"};
     return res;
 }
 
@@ -507,8 +507,10 @@ std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_fi
         return std::nullopt;
     }
 
+    ARCTICDB_DEBUG(log::version(), "AND-ing expression contexts from filters");
     ExpressionContext overall_context = and_contexts(filter_expressions);
 
+    ARCTICDB_DEBUG(log::version(), "Creating column stats filter");
     return create_column_stats_filter({std::move(*column_stats)}, std::move(overall_context));
 }
 
