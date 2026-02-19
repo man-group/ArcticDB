@@ -13,6 +13,7 @@
 #include <sstream>
 
 #include <boost/locale.hpp>
+#include <ankerl/unordered_dense.h>
 
 namespace arcticdb::util {
 
@@ -71,6 +72,10 @@ std::string utf32_to_u8(std::string_view strv) {
     // Strip trailing null characters
     strv32 = strv32.substr(0, strv32.find_first_of(char32_t(0)));
     return boost::locale::conv::utf_to_utf<char>(strv32.data(), strv32.data() + strv32.size());
+}
+
+uint64_t TransparentStringHash::operator()(std::string_view str) const noexcept {
+    return ankerl::unordered_dense::hash<std::string_view>{}(str);
 }
 
 } // namespace arcticdb::util

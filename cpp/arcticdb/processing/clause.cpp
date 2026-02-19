@@ -2023,7 +2023,7 @@ void MergeUpdateClause::update_and_insert(
                     // of the pool is not populated. Which means that the mapping between a string and offset in the
                     // pool is missing. To get it, we need to rebuild the pool anyway.
                     segment_contains_string_column = true;
-                    if (on_.contains(target_field.name_) && is_update_only()) {
+                    if (on_.contains(target_field.name()) && is_update_only()) {
                         arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
                             if (is_a_string(row.value())) {
                                 const std::string_view string_value =
@@ -2044,7 +2044,7 @@ void MergeUpdateClause::update_and_insert(
                         );
                     }
                 } else {
-                    if (on_.contains(target_field.name_) && is_update_only()) {
+                    if (on_.contains(target_field.name()) && is_update_only()) {
                         return;
                     }
                     ColumnData target_column_data = target_column.data();
@@ -2208,7 +2208,10 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                     }
                 } else {
                     internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                            "Target column \"{}\" has unexpected type {}", column_name, target_field.type()
+                            "Target column \"{}\" has unexpected type {}. Source type: {}",
+                            column_name,
+                            target_field.type(),
+                            field.type()
                     );
                 }
             });

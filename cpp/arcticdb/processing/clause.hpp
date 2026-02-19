@@ -22,6 +22,7 @@
 #include <folly/Poly.h>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/util/string_utils.hpp>
 #include <vector>
 #include <string>
 #include <variant>
@@ -852,7 +853,7 @@ struct WriteClause {
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
-    ankerl::unordered_dense::set<std::string> on_;
+    ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
