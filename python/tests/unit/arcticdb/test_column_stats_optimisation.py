@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 import pytest
 from arcticdb.util.test import assert_frame_equal
@@ -360,4 +362,279 @@ def test_column_stats_query_optimisation_with_date_range(
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
 
 
-# TODO aseaton there are more tests worth porting here https://github.com/man-group/ArcticDB/compare/master...aseaton/column-stats-read#diff-aee6edf7c9863ea50d8bf13666b84d051eb90b99ae26e5e02459c31e18f35495
+def test_column_stats_and_filter_one_column_with_stats(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """AND filter with one column having stats should prune based on that column."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [8, 7]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [10, 9]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[(q["col_1"] > 4) & (q["col_2"] > 7)]
+    result = lib.read(sym, query_builder=q).data
+
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([df0, df1, df2])
+    expected = expected[(expected["col_1"] > 4) & (expected["col_2"] > 7)]
+    assert_frame_equal(result, expected)
+
+    # Should read 1 segment (only seg2 can match col_1 > 4)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+    # Now check an AND filter where both sides do some filtering
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+    qs.reset_stats()
+    q = QueryBuilder()
+    q = q[(q["col_1"] > 4) & (q["col_2"] < 9)]
+    result = lib.read(sym, query_builder=q).data
+    assert result.empty
+
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 0
+
+    qs.reset_stats()
+    q = QueryBuilder()
+    q = q[q["col_1"] > 4]
+    q = q[q["col_2"] < 9]
+    result = lib.read(sym, query_builder=q).data
+    assert result.empty
+
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 0
+
+
+def test_column_stats_or_filter(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    """OR filter should only prune segments ruled out by ALL conditions."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[(q["col_1"] < 2) | (q["col_1"] > 5)]
+    result = lib.read(sym, query_builder=q).data
+
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([df0, df1, df2])
+    expected = expected[(expected["col_1"] < 2) | (expected["col_1"] > 5)]
+    assert_frame_equal(result, expected)
+
+    # Should read 2 segments (seg0 and seg2), seg1 is pruned
+    assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_negation(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    """Negation needs careful handling because if a block's statistics satisfy a comparison, we
+    may still need to visit that block when the comparison is negated.
+    This currently isn't implemented and we conservatively include blocks that we could safely have ruled out."""
+    lib = in_memory_version_store
+
+    df_0 = pd.DataFrame({"col_1": [1, 3]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
+    df_1 = pd.DataFrame({"col_1": [4, 6]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
+    df_2 = pd.DataFrame({"col_1": [6, 8]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.float64)
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[~(q["col_1"] > 5)]
+    result = lib.read(sym, query_builder=q).data
+
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([df_0, df_1, df_2])
+    expected = expected[~(expected["col_1"] > 5)]
+    assert_frame_equal(result, expected)
+
+    assert table_data_reads == 3  # TODO aseaton We currently skip pruning with negated filters
+
+
+@pytest.mark.parametrize("filter_first", [True, False])
+@pytest.mark.parametrize("extra_clause", ["PROJECTION", "RESAMPLE", "GROUPBY"])
+def test_column_stats_projection_before_filter_disables_pruning(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, extra_clause, filter_first
+):
+    """Filter clause after a projection should NOT use column stats pruning at the moment."""
+    lib = in_memory_version_store
+
+    df_0 = pd.DataFrame({"col_1": [1, 3]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
+    df_1 = pd.DataFrame({"col_1": [4, 6]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
+    df_2 = pd.DataFrame({"col_1": [6, 8]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.float64)
+
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+
+    if filter_first:
+        q = q[q["col_1"] > 4]
+
+    if extra_clause == "PROJECTION":
+        q = q.apply("col_1", q["col_1"] * 2)
+    elif extra_clause == "RESAMPLE":
+        q = q.resample("D").agg({"col_1": "first"})
+    elif extra_clause == "GROUPBY":
+        q = q.groupby("col_1").agg({"col_1": "min"})
+    else:
+        raise RuntimeError(f"Unexpected parameter {extra_clause}")
+
+    if not filter_first:
+        q = q[q["col_1"] > 4]
+
+    lib.read(sym, query_builder=q)
+
+    table_data_reads = get_table_data_read_count()
+    expected_reads = 2 if filter_first else 3
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} was {table_data_reads}"
+
+
+def test_column_stats_dynamic_schema_column_type_varies(
+    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled
+):
+    """Test pruning when column type varies across segments (dynamic schema)."""
+    lib = in_memory_version_store_dynamic_schema
+
+    df_int8 = pd.DataFrame({"col_1": np.array([1, 2], dtype=np.int8)}, index=pd.date_range("2000-01-01", periods=2))
+    df_int32 = pd.DataFrame(
+        {"col_1": np.array([100, 200], dtype=np.int32)}, index=pd.date_range("2000-01-03", periods=2)
+    )
+    lib.write(sym, df_int8)
+    lib.append(sym, df_int32)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["col_1"] > 50]
+
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([df_int8, df_int32])
+    expected = expected[expected["col_1"] > 50]
+    assert_frame_equal(result, expected)
+
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read but got {table_data_reads}"
+
+
+def test_column_stats_dynamic_schema_new_column_added(
+    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled
+):
+    """Test when a column is added in later segments (not present in older segments)."""
+    lib = in_memory_version_store_dynamic_schema
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [10, 20]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [30, 40]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_2": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[q["col_2"] > 25]
+    result = lib.read(sym, query_builder=q).data
+
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([df0, df1, df2])
+    expected = expected[expected["col_2"] > 25]
+    # Use check_dtype=False because NaN in dynamic schema causes float64 promotion
+    assert_frame_equal(result, expected, check_dtype=False)
+
+    assert table_data_reads == 1, f"Expected at most 1 TABLE_DATA reads but got {table_data_reads}"
+
+
+def test_column_stats_comparison_operators(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
+    df2 = pd.DataFrame({"col_1": [6, 5]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.float64)
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    test_cases = [
+        (lambda q: q["col_1"] > 4, 1, "col_1 > 4"),
+        (lambda q: q["col_1"] >= 6, 1, "col_1 >= 6"),
+        (lambda q: q["col_1"] >= 7, 0, "col_1 >= 7"),
+        (lambda q: q["col_1"] >= 5, 1, "col_1 >= 5"),
+        (lambda q: q["col_1"] < 2, 1, "col_1 < 2"),
+        (lambda q: q["col_1"] < 1, 0, "col_1 < 1"),
+        (lambda q: q["col_1"] <= 1, 1, "col_1 <= 1"),
+        (lambda q: q["col_1"] == 3, 1, "col_1 == 3"),
+        (lambda q: q["col_1"] != 3, 3, "col_1 != 3"),
+    ]
+
+    for query_expr, expected_reads, desc in test_cases:
+        qs.enable()
+        qs.reset_stats()
+
+        q = QueryBuilder()
+        q = q[query_expr(q)]
+        lib.read(sym, query_builder=q)
+
+        table_data_reads = get_table_data_read_count()
+
+        assert (
+            table_data_reads == expected_reads
+        ), f"For {desc}: expected {expected_reads} TABLE_DATA reads but got {table_data_reads}"
+
+
+@pytest.mark.xfail(reason="Creating column stats on multi-indexed symbols is not supported yet")
+def test_column_stats_multiindex_index_col(in_memory_version_store):
+    """Test column stats creation and usage with a multi-index DataFrame, with column stats created
+    on part of the multi-index."""
+    lib = in_memory_version_store
+
+    index0 = pd.MultiIndex.from_tuples(
+        [(datetime(2000, 1, 1), "A"), (datetime(2000, 1, 1), "B")], names=["date", "category"]
+    )
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=index0)
+
+    index1 = pd.MultiIndex.from_tuples(
+        [(datetime(2000, 1, 2), "C"), (datetime(2000, 1, 2), "D")], names=["date", "category"]
+    )
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=index1)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    column_stats_dict = {"category": {"MINMAX"}}
+    lib.create_column_stats(sym, column_stats_dict)
