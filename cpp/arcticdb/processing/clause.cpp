@@ -2171,7 +2171,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                 using TargetTDT = decltype(target_tdt);
                 using TargetRawType = TargetTDT::DataTypeTag::raw_type;
                 // TODO: Relax for dynamic schema
-                if constexpr (std::same_as<SourceTDT, TargetTDT> && SourceTDT::dimension() == Dimension::Dim0) {
+                if constexpr (std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>> &&
+                              SourceTDT::dimension() == Dimension::Dim0) {
                     auto target_accessor = random_accessor<TargetTDT>(&target_data);
                     for (size_t source_row_idx = 0; source_row_idx < index_match.size(); ++source_row_idx) {
                         std::erase_if(index_match[source_row_idx], [&](const size_t target_row_idx) {
@@ -2207,7 +2208,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                         });
                     }
                 } else {
-                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                             "Target column \"{}\" has unexpected type {}. Source type: {}",
                             column_name,
                             target_field.type(),
