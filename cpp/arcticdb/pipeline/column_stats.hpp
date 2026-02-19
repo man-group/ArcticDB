@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/pipeline/index_fields.hpp>
 #include <ankerl/unordered_dense.h>
 #include <map>
 #include <set>
@@ -15,9 +16,9 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 enum class ColumnStatType { MINMAX };
 
 static const char* const start_index_column_name = "start_index";
-static constexpr size_t start_index_column_offset = 0;
+static constexpr size_t start_index_column_offset = static_cast<size_t>(index::Fields::start_index);
 static const char* const end_index_column_name = "end_index";
-static constexpr size_t end_index_column_offset = 1;
+static constexpr size_t end_index_column_offset = static_cast<size_t>(index::Fields::end_index);
 
 enum class ColumnStatElement { MIN, MAX };
 

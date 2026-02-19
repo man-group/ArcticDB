@@ -1,5 +1,4 @@
-#include <pipeline/column_stats.hpp>
-
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/entity/type_utils.hpp>
