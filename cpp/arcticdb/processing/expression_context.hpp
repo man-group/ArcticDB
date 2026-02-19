@@ -39,6 +39,11 @@ struct ExpressionContext {
       public:
         void set_value(std::string name, std::shared_ptr<T> val) { map_.try_emplace(name, val); }
         std::shared_ptr<T> get_value(std::string name) const { return map_.at(name); }
+        void merge_from(const ConstantMap& other) {
+            for (const auto& [name, val] : other.map_) {
+                map_.try_emplace(name, val);
+            }
+        }
     };
 
     void add_expression_node(const std::string& name, std::shared_ptr<ExpressionNode> expression_node) {
