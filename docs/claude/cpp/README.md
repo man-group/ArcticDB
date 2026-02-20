@@ -28,6 +28,7 @@ Detailed documentation for C++ modules in `cpp/arcticdb/`:
 | **Stream** | [STREAM.md](STREAM.md) | Data streaming, aggregation |
 | **Async** | [ASYNC.md](ASYNC.md) | Task scheduling, thread pools |
 | **Python Bindings** | [PYTHON_BINDINGS.md](PYTHON_BINDINGS.md) | pybind11 bindings to Python |
+| **Arrow** | [ARROW.md](ARROW.md) | Arrow output frame, record batch iterator |
 
 ## C++ Code Location
 
@@ -43,6 +44,7 @@ cpp/arcticdb/
 ├── stream/         # Data streaming
 ├── async/          # Async task management
 ├── python/         # Python bindings
+├── arrow/          # Arrow output frames (DuckDB integration)
 ├── version/        # Version management
 ├── storage/        # Storage backends
 ├── util/           # Utilities
