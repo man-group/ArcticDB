@@ -61,86 +61,101 @@ on:
         required: false
         default: ""
 
-# ─── Shared input block forwarded to every platform call ────────────────────
-# Expressed as an anchor so it is written exactly once.
-# GitHub Actions does not support YAML anchors natively, but most CI systems
-# that pre-process the file (e.g. the actions runner) will expand them. If your
-# tooling does not support anchors, inline the block manually — it is still
-# far less duplication than the original file.
-x-shared-inputs: &shared-inputs
-  run_cpp_tests:    ${{inputs.run_cpp_tests   == true || github.event_name != 'workflow_dispatch'}}
-  persistent_storage: ${{inputs.persistent_storage || 'no'}}
-  debug_enabled:    ${{inputs.debug_enabled   || false}}
-  run_enable_logging: ${{inputs.run_enable_logging || false}}
-  run_commandline:  ${{inputs.run_commandline  || ''}}
-  run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
-
-x-shared-secrets: &shared-secrets
-  AWS_S3_ACCESS_KEY:       ${{secrets.AWS_S3_ACCESS_KEY}}
-  AWS_S3_SECRET_KEY:       ${{secrets.AWS_S3_SECRET_KEY}}
-  GCP_S3_ACCESS_KEY:       ${{secrets.GCP_S3_ACCESS_KEY}}
-  GCP_S3_SECRET_KEY:       ${{secrets.GCP_S3_SECRET_KEY}}
-  AZURE_CONNECTION_STRING: ${{secrets.AZURE_CONNECTION_STRING}}
-
 jobs:
 
-  # ── linux_64 ────────────────────────────────────────────────────────────────
+  # ── linux_64 ─────────────────────────────────────────────────────────────────
   linux_64:
     name: linux_64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/_platform.yml
     with:
-      platform:         linux_64
-      runner:           ubuntu-22.04
-      cmake_preset:     linux-conda-release
-      cpp_out_dir:      cpp/out/linux-conda-release-build
-      conda_cache_key:  conda-env-linux_64
-      <<: *shared-inputs
+      platform:                  linux_64
+      runner:                    ubuntu-22.04
+      cmake_preset:              linux-conda-release
+      cpp_out_dir:               cpp/out/linux-conda-release-build
+      conda_cache_key:           conda-env-linux_64
+      run_cpp_tests:             ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
+      persistent_storage:        ${{ inputs.persistent_storage || 'no' }}
+      debug_enabled:             ${{ inputs.debug_enabled || false }}
+      run_enable_logging:        ${{ inputs.run_enable_logging || false }}
+      run_commandline:           ${{ inputs.run_commandline || '' }}
+      run_custom_pytest_command: ${{ inputs.run_custom_pytest_command || '' }}
     secrets:
-      <<: *shared-secrets
+      AWS_S3_ACCESS_KEY:       ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_S3_SECRET_KEY:       ${{ secrets.AWS_S3_SECRET_KEY }}
+      GCP_S3_ACCESS_KEY:       ${{ secrets.GCP_S3_ACCESS_KEY }}
+      GCP_S3_SECRET_KEY:       ${{ secrets.GCP_S3_SECRET_KEY }}
+      AZURE_CONNECTION_STRING: ${{ secrets.AZURE_CONNECTION_STRING }}
 
-  # ── linux_aarch64 ───────────────────────────────────────────────────────────
+  # ── linux_aarch64 ────────────────────────────────────────────────────────────
   linux_aarch64:
     name: linux_aarch64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/_platform.yml
     with:
-      platform:         linux_aarch64
-      runner:           ubuntu-22.04-arm
-      cmake_preset:     linux-conda-release
-      cpp_out_dir:      cpp/out/linux-conda-release-build
-      conda_cache_key:  conda-env-linux_aarch64
-      <<: *shared-inputs
+      platform:                  linux_aarch64
+      runner:                    ubuntu-22.04-arm
+      cmake_preset:              linux-conda-release
+      cpp_out_dir:               cpp/out/linux-conda-release-build
+      conda_cache_key:           conda-env-linux_aarch64
+      run_cpp_tests:             ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
+      persistent_storage:        ${{ inputs.persistent_storage || 'no' }}
+      debug_enabled:             ${{ inputs.debug_enabled || false }}
+      run_enable_logging:        ${{ inputs.run_enable_logging || false }}
+      run_commandline:           ${{ inputs.run_commandline || '' }}
+      run_custom_pytest_command: ${{ inputs.run_custom_pytest_command || '' }}
     secrets:
-      <<: *shared-secrets
+      AWS_S3_ACCESS_KEY:       ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_S3_SECRET_KEY:       ${{ secrets.AWS_S3_SECRET_KEY }}
+      GCP_S3_ACCESS_KEY:       ${{ secrets.GCP_S3_ACCESS_KEY }}
+      GCP_S3_SECRET_KEY:       ${{ secrets.GCP_S3_SECRET_KEY }}
+      AZURE_CONNECTION_STRING: ${{ secrets.AZURE_CONNECTION_STRING }}
 
-  # ── osx_arm64 ───────────────────────────────────────────────────────────────
+  # ── osx_arm64 ────────────────────────────────────────────────────────────────
   osx_arm64:
     name: osx_arm64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/_platform.yml
     with:
-      platform:         osx_arm64
-      runner:           macos-14
-      cmake_preset:     macos-conda-release
-      cpp_out_dir:      cpp/out/macos-conda-release-build
-      conda_cache_key:  conda-env-osx_arm64
-      <<: *shared-inputs
+      platform:                  osx_arm64
+      runner:                    macos-14
+      cmake_preset:              macos-conda-release
+      cpp_out_dir:               cpp/out/macos-conda-release-build
+      conda_cache_key:           conda-env-osx_arm64
+      run_cpp_tests:             ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
+      persistent_storage:        ${{ inputs.persistent_storage || 'no' }}
+      debug_enabled:             ${{ inputs.debug_enabled || false }}
+      run_enable_logging:        ${{ inputs.run_enable_logging || false }}
+      run_commandline:           ${{ inputs.run_commandline || '' }}
+      run_custom_pytest_command: ${{ inputs.run_custom_pytest_command || '' }}
     secrets:
-      <<: *shared-secrets
+      AWS_S3_ACCESS_KEY:       ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_S3_SECRET_KEY:       ${{ secrets.AWS_S3_SECRET_KEY }}
+      GCP_S3_ACCESS_KEY:       ${{ secrets.GCP_S3_ACCESS_KEY }}
+      GCP_S3_SECRET_KEY:       ${{ secrets.GCP_S3_SECRET_KEY }}
+      AZURE_CONNECTION_STRING: ${{ secrets.AZURE_CONNECTION_STRING }}
 
-  # ── win_64 ──────────────────────────────────────────────────────────────────
+  # ── win_64 ───────────────────────────────────────────────────────────────────
   win_64:
     name: win_64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/_platform.yml
     with:
-      platform:         win_64
-      runner:           windows-latest
-      cmake_preset:     windows-cl-conda-release
-      cpp_out_dir:      cpp/out/windows-cl-conda-release-build
-      conda_cache_key:  conda-env-win_64
-      <<: *shared-inputs
+      platform:                  win_64
+      runner:                    windows-latest
+      cmake_preset:              windows-cl-conda-release
+      cpp_out_dir:               cpp/out/windows-cl-conda-release-build
+      conda_cache_key:           conda-env-win_64
+      run_cpp_tests:             ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
+      persistent_storage:        ${{ inputs.persistent_storage || 'no' }}
+      debug_enabled:             ${{ inputs.debug_enabled || false }}
+      run_enable_logging:        ${{ inputs.run_enable_logging || false }}
+      run_commandline:           ${{ inputs.run_commandline || '' }}
+      run_custom_pytest_command: ${{ inputs.run_custom_pytest_command || '' }}
     secrets:
-      <<: *shared-secrets
+      AWS_S3_ACCESS_KEY:       ${{ secrets.AWS_S3_ACCESS_KEY }}
+      AWS_S3_SECRET_KEY:       ${{ secrets.AWS_S3_SECRET_KEY }}
+      GCP_S3_ACCESS_KEY:       ${{ secrets.GCP_S3_ACCESS_KEY }}
+      GCP_S3_SECRET_KEY:       ${{ secrets.GCP_S3_SECRET_KEY }}
+      AZURE_CONNECTION_STRING: ${{ secrets.AZURE_CONNECTION_STRING }}
 
-  # ── Merge gate ──────────────────────────────────────────────────────────────
+  # ── Merge gate ───────────────────────────────────────────────────────────────
   can_merge_conda:
     name: All conda jobs completed
     needs: [linux_64, linux_aarch64, osx_arm64, win_64]

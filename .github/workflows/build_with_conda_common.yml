@@ -1,4 +1,4 @@
-name: __build_with_conda_common
+name: _platform (reusable)
 
 # This workflow is NOT triggered directly. It is called by build-conda.yml once
 # per platform. All platform-specific values are passed in as inputs so every
@@ -101,7 +101,7 @@ jobs:
       # prevents Ninja+MSVC. Unset them before building.
       # See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
       - name: Unset conda CMake generator overrides (Windows only)
-        if: runner.os == 'Windows'
+        if: inputs.platform == 'win_64'
         run: |
           echo "CMAKE_GENERATOR_PLATFORM=" >> $GITHUB_ENV
           echo "CMAKE_GENERATOR_TOOLSET=" >> $GITHUB_ENV
@@ -132,7 +132,7 @@ jobs:
   cpp_tests:
     name: C++ Tests
     # Rapidcheck tests are disabled on Windows pending a linking fix.
-    if: ${{inputs.run_cpp_tests && runner.os != 'Windows'}}
+    if: ${{inputs.run_cpp_tests && inputs.platform != 'win_64'}}
     needs: [compile]
     runs-on: ${{inputs.runner}}
     env:
@@ -153,7 +153,7 @@ jobs:
           disable_annotations: 'true'
 
       - name: Free Disk Space
-        if: runner.os == 'Linux'
+        if: ${{inputs.platform == 'linux_64' || inputs.platform == 'linux_aarch64'}}
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
@@ -233,7 +233,7 @@ jobs:
         type: [unit, integration, hypothesis, stress, compat, enduser]
     steps:
       - name: Free Disk Space
-        if: runner.os == 'Linux'
+        if: ${{inputs.platform == 'linux_64' || inputs.platform == 'linux_aarch64'}}
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
@@ -306,7 +306,7 @@ jobs:
 
       # On Windows, npm global installs may not be on PATH yet.
       - name: Add Azurite to PATH (Windows only)
-        if: runner.os == 'Windows'
+        if: inputs.platform == 'win_64'
         run: |
           npm_bin=$(npm config get prefix | sed 's|^\([A-Z]\):|/\1|' | tr '[:upper:]' '[:lower:]' | sed 's|\\|/|g')
           echo "${npm_bin}" >> $GITHUB_PATH
@@ -352,14 +352,16 @@ jobs:
           else
             cd python
             # LMDB tests are skipped on Windows — they fill the disk and cause suite failures.
-            lmdb_filter=$([[ "$RUNNER_OS" == "Windows" ]] && echo "-m 'not lmdb'" || echo "")
+            lmdb_filter=$([[ "$PLATFORM" == "win_64" ]] && echo "-m 'not lmdb'" || echo "")
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal $lmdb_filter tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
+          PLATFORM: ${{inputs.platform}}
           COMMANDLINE: ${{inputs.run_commandline}}
           CI_MONGO_HOST: mongodb
-          HYPOTHESIS_PROFILE: ${{runner.os == 'macOS' && 'ci_macos' || 'ci_linux'}}
+          # osx_arm64 uses the macOS hypothesis profile; everything else uses the Linux profile.
+          HYPOTHESIS_PROFILE: ${{inputs.platform == 'osx_arm64' && 'ci_macos' || 'ci_linux'}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
           STORAGE_TYPE: ${{inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage}}
           NODE_OPTIONS: --openssl-legacy-provider
