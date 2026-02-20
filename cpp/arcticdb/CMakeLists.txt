@@ -416,6 +416,7 @@ set(arcticdb_srcs
         util/type_traits.hpp
         util/variant.hpp
         version/de_dup_map.hpp
+        version/lazy_read_helpers.hpp
         version/op_log.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
@@ -571,6 +572,7 @@ set(arcticdb_srcs
         util/format_date.cpp
         version/key_block.hpp
         version/key_block.cpp
+        version/lazy_read_helpers.cpp
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
@@ -1006,6 +1008,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
+            arrow/test/test_lazy_record_batch_iterator.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -1091,6 +1094,7 @@ if(${TEST})
             util/test/input_frame_utils.hpp
             util/test/segment_generation_utils.hpp
             util/test/segment_generation_utils.cpp
+            version/test/test_lazy_read_helpers.cpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
@@ -1197,6 +1201,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
+            arrow/test/benchmark_lazy_iterator.cpp
             column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp

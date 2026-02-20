@@ -28,7 +28,8 @@ void register_version_store_common_bindings(py::module& version, BindingScope sc
                  [](PandasOutputFrame& self) { return python_util::extract_numpy_arrays(self); });
 
     py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame", py::module_local(local_bindings))
-            .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches);
+            .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches)
+            .def("num_blocks", &ArrowOutputFrame::num_blocks);
 }
 
 } // namespace arcticdb::version_store

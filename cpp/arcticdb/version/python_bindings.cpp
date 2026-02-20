@@ -28,6 +28,7 @@
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 
 namespace arcticdb::version_store {
 
@@ -243,10 +244,44 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     register_version_store_common_bindings(version, BindingScope::GLOBAL);
 
-    py::class_<RecordBatchData>(version, "RecordBatchData")
+    py::class_<RecordBatchData, std::shared_ptr<RecordBatchData>>(version, "RecordBatchData")
             .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);
+
+    py::class_<LazyRecordBatchIterator, std::shared_ptr<LazyRecordBatchIterator>>(
+            version, "LazyRecordBatchIterator", R"pbdoc(
+        Iterator that reads and decodes Arrow record batches lazily from storage.
+        Segments are fetched on-demand with a configurable prefetch buffer for latency hiding.
+        This enables querying symbols larger than available memory.
+    )pbdoc"
+    )
+            .def("next", &LazyRecordBatchIterator::next, py::call_guard<py::gil_scoped_release>(), R"pbdoc(
+        Returns the next record batch by reading from storage, or None if exhausted.
+    )pbdoc")
+            .def("has_next", &LazyRecordBatchIterator::has_next, R"pbdoc(
+        Returns True if there are more segments to read.
+    )pbdoc")
+            .def("num_batches", &LazyRecordBatchIterator::num_batches, R"pbdoc(
+        Returns the total number of segments.
+    )pbdoc")
+            .def("current_index", &LazyRecordBatchIterator::current_index, R"pbdoc(
+        Returns the current position (0-indexed).
+    )pbdoc")
+            .def(
+                    "field_count",
+                    [](const LazyRecordBatchIterator& self) { return self.descriptor().field_count(); },
+                    R"pbdoc(
+        Returns the number of fields (columns) in the schema, including index fields.
+    )pbdoc"
+            )
+            .def("descriptor",
+                 &LazyRecordBatchIterator::descriptor,
+                 py::return_value_policy::reference_internal,
+                 R"pbdoc(
+        Returns the StreamDescriptor containing field names and types.
+        Available even when num_batches() == 0 (empty symbols).
+    )pbdoc");
 
     py::enum_<VersionRequestType>(version, "VersionRequestType", R"pbdoc(
         Enum of possible version request types passed to as_of.
@@ -801,6 +836,35 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     },
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Read the specified version of the dataframe from the store"
+            )
+            .def(
+                    "create_lazy_record_batch_iterator_with_metadata",
+                    [&](PythonVersionStore& v,
+                        StreamId sid,
+                        const VersionQuery& version_query,
+                        const std::shared_ptr<ReadQuery>& read_query,
+                        const ReadOptions& read_options,
+                        std::shared_ptr<FilterClause>
+                                filter_clause,
+                        size_t prefetch_size) -> py::tuple {
+                        auto result = v.create_lazy_record_batch_iterator_with_metadata(
+                                sid, version_query, read_query, read_options, std::move(filter_clause), prefetch_size
+                        );
+                        auto pynorm = python_util::pb_to_python(result.norm_meta);
+                        py::object pyuser_meta = py::none();
+                        if (result.user_meta) {
+                            pyuser_meta = python_util::pb_to_python(*result.user_meta);
+                        }
+                        return py::make_tuple(result.versioned_item, pynorm, pyuser_meta, result.iterator);
+                    },
+                    py::call_guard<SingleThreadMutexHolder>(),
+                    "Create lazy iterator with metadata, returning (version, norm, user_meta, iterator)",
+                    py::arg("stream_id"),
+                    py::arg("version_query"),
+                    py::arg("read_query"),
+                    py::arg("read_options"),
+                    py::arg("filter_clause") = std::shared_ptr<FilterClause>{},
+                    py::arg("prefetch_size") = 2
             )
             .def("_read_modify_write",
                  &PythonVersionStore::read_modify_write,
