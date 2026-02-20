@@ -32,16 +32,6 @@ struct PairHasher {
 
 } // namespace util
 
-enum class StatsComparison {
-    /** All rows in the block satisfy the predicate. */
-    ALL_MATCH,
-    /** None of the rows in the block satisfy the predicate. */
-    NONE_MATCH,
-    /** Some of the rows in the block satisfy the predicate, or we don't have enough information to draw a conclusion.
-     */
-    UNKNOWN
-};
-
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;

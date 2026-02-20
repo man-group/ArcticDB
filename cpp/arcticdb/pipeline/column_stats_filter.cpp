@@ -68,12 +68,17 @@ StatsComparison dispatch_binary_stats(
 ) {
     switch (operation) {
     case OperationType::GT:
+        return column_stats_detail::visit_binary_comparator_stats(left, right, GreaterThanOperator{});
     case OperationType::GE:
+        return column_stats_detail::visit_binary_comparator_stats(left, right, GreaterThanEqualsOperator{});
     case OperationType::LT:
+        return column_stats_detail::visit_binary_comparator_stats(left, right, LessThanOperator{});
     case OperationType::LE:
+        return column_stats_detail::visit_binary_comparator_stats(left, right, LessThanEqualsOperator{});
     case OperationType::EQ:
+        return column_stats_detail::visit_binary_comparator_stats(left, right, EqualsOperator{});
     case OperationType::NE:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, operation);
+        return column_stats_detail::visit_binary_comparator_stats(left, right, NotEqualsOperator{});
     default:
         return StatsComparison::UNKNOWN;
     }
