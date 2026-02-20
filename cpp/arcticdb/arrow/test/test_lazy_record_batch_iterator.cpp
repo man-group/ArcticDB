@@ -739,4 +739,222 @@ TEST_F(LazyRecordBatchIteratorTest, PadBatchDynamicSchemaTwoSegments) {
     EXPECT_FALSE(iter.next().has_value());
 }
 
+// =============================================================================
+// Coverage gap tests for arrow_utils.cpp
+// =============================================================================
+
+TEST_F(LazyRecordBatchIteratorTest, DefaultArrowFormatForAllNumericTypes) {
+    // Cover all numeric types in default_arrow_format_for_type that weren't
+    // explicitly tested: INT8, INT16, UINT8, UINT16, UINT32.
+    EXPECT_EQ(default_arrow_format_for_type(DataType::INT8), "c");
+    EXPECT_EQ(default_arrow_format_for_type(DataType::INT16), "s");
+    EXPECT_EQ(default_arrow_format_for_type(DataType::UINT8), "C");
+    EXPECT_EQ(default_arrow_format_for_type(DataType::UINT16), "S");
+    EXPECT_EQ(default_arrow_format_for_type(DataType::UINT32), "I");
+    // String types
+    EXPECT_EQ(default_arrow_format_for_type(DataType::ASCII_DYNAMIC64), "U");
+    EXPECT_EQ(default_arrow_format_for_type(DataType::ASCII_FIXED64), "U");
+    EXPECT_EQ(default_arrow_format_for_type(DataType::UTF_FIXED64), "U");
+}
+
+TEST_F(LazyRecordBatchIteratorTest, PadBatchAllColumnsMissing) {
+    // Target schema has {index, col_a, col_b} but batch only has {index}.
+    // Both data columns should be padded with nulls.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_symbol"};
+    constexpr size_t num_rows = 8;
+
+    auto all_fields = std::array{
+            scalar_field(DataType::INT64, "col_a"),
+            scalar_field(DataType::FLOAT64, "col_b"),
+    };
+    auto full_desc = get_test_descriptor<stream::TimeseriesIndex>(stream_id, all_fields);
+
+    // Segment with only the index column (no data columns)
+    auto empty_fields = std::array<FieldRef, 0>{};
+    auto desc_idx_only = get_test_descriptor<stream::TimeseriesIndex>(stream_id, empty_fields);
+    SegmentInMemory seg(desc_idx_only.clone(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        seg.column(0).set_scalar(static_cast<ssize_t>(i), static_cast<timestamp>(i));
+    }
+    seg.set_row_data(num_rows - 1);
+
+    auto sk = write_segment_to_store(store, stream_id, std::move(seg), 0, num_rows, 0, 1);
+    LazyRecordBatchIterator iter({std::move(sk)}, full_desc.clone(), store, nullptr, FilterRange{}, nullptr, "");
+
+    auto batch = iter.next();
+    ASSERT_TRUE(batch.has_value());
+    // 3 children: index + col_a (null) + col_b (null)
+    EXPECT_EQ(batch->array_.n_children, 3);
+    EXPECT_EQ(batch->array_.length, static_cast<int64_t>(num_rows));
+    // Both padded columns should be all-null
+    EXPECT_EQ(batch->array_.children[1]->null_count, static_cast<int64_t>(num_rows));
+    EXPECT_EQ(batch->array_.children[2]->null_count, static_cast<int64_t>(num_rows));
+}
+
+TEST_F(LazyRecordBatchIteratorTest, PadBatchTimestampNullColumn) {
+    // Target schema has a timestamp column that's missing from the segment.
+    // The null column should have timestamp format.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_symbol"};
+    constexpr size_t num_rows = 5;
+
+    auto all_fields = std::array{
+            scalar_field(DataType::INT64, "col_a"),
+            scalar_field(DataType::NANOSECONDS_UTC64, "ts_col"),
+    };
+    auto full_desc = get_test_descriptor<stream::TimeseriesIndex>(stream_id, all_fields);
+
+    // Segment only has col_a
+    auto fields_a = std::array{scalar_field(DataType::INT64, "col_a")};
+    auto desc_a = get_test_descriptor<stream::TimeseriesIndex>(stream_id, fields_a);
+    SegmentInMemory seg(desc_a.clone(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        seg.column(0).set_scalar(static_cast<ssize_t>(i), static_cast<timestamp>(i));
+        seg.column(1).set_scalar(static_cast<ssize_t>(i), static_cast<int64_t>(i));
+    }
+    seg.set_row_data(num_rows - 1);
+
+    auto sk = write_segment_to_store(store, stream_id, std::move(seg), 0, num_rows, 0, 2);
+    LazyRecordBatchIterator iter({std::move(sk)}, full_desc.clone(), store, nullptr, FilterRange{}, nullptr, "");
+
+    auto batch = iter.next();
+    ASSERT_TRUE(batch.has_value());
+    EXPECT_EQ(batch->array_.n_children, 3);
+    // ts_col should be padded with nulls
+    EXPECT_EQ(batch->array_.children[2]->null_count, static_cast<int64_t>(num_rows));
+    // Verify the format starts with "ts" (timestamp)
+    std::string format(batch->schema_.children[2]->format);
+    EXPECT_TRUE(format.find("ts") == 0) << "Expected timestamp format, got: " << format;
+}
+
+TEST_F(LazyRecordBatchIteratorTest, PadBatchBoolNullColumn) {
+    // Target schema has a bool column that's missing from the segment.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_symbol"};
+    constexpr size_t num_rows = 10;
+
+    auto all_fields = std::array{
+            scalar_field(DataType::INT64, "col_a"),
+            scalar_field(DataType::BOOL8, "flag"),
+    };
+    auto full_desc = get_test_descriptor<stream::TimeseriesIndex>(stream_id, all_fields);
+
+    auto fields_a = std::array{scalar_field(DataType::INT64, "col_a")};
+    auto desc_a = get_test_descriptor<stream::TimeseriesIndex>(stream_id, fields_a);
+    SegmentInMemory seg(desc_a.clone(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        seg.column(0).set_scalar(static_cast<ssize_t>(i), static_cast<timestamp>(i));
+        seg.column(1).set_scalar(static_cast<ssize_t>(i), static_cast<int64_t>(i));
+    }
+    seg.set_row_data(num_rows - 1);
+
+    auto sk = write_segment_to_store(store, stream_id, std::move(seg), 0, num_rows, 0, 2);
+    LazyRecordBatchIterator iter({std::move(sk)}, full_desc.clone(), store, nullptr, FilterRange{}, nullptr, "");
+
+    auto batch = iter.next();
+    ASSERT_TRUE(batch.has_value());
+    EXPECT_EQ(batch->array_.n_children, 3);
+    // Bool column padded with nulls
+    EXPECT_EQ(batch->array_.children[2]->null_count, static_cast<int64_t>(num_rows));
+    EXPECT_STREQ(batch->schema_.children[2]->format, "b");
+}
+
+// =============================================================================
+// Coverage gap tests for arrow_output_frame.cpp
+// =============================================================================
+
+TEST_F(LazyRecordBatchIteratorTest, EmptyStringPoolSegment) {
+    // Write a segment with only numeric columns (no strings).
+    // The prepare_segment_for_arrow path should handle empty string pool.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_symbol"};
+    constexpr size_t num_rows = 20;
+
+    auto fields = std::array{
+            scalar_field(DataType::INT64, "int_col"),
+            scalar_field(DataType::FLOAT64, "float_col"),
+    };
+    auto desc = get_test_descriptor<stream::TimeseriesIndex>(stream_id, fields);
+
+    SegmentInMemory seg(desc.clone(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        seg.column(0).set_scalar(static_cast<ssize_t>(i), static_cast<timestamp>(i));
+        seg.column(1).set_scalar(static_cast<ssize_t>(i), static_cast<int64_t>(i * 100));
+        seg.column(2).set_scalar(static_cast<ssize_t>(i), static_cast<double>(i) + 0.5);
+    }
+    seg.set_row_data(num_rows - 1);
+
+    auto sk = write_segment_to_store(store, stream_id, std::move(seg), 0, num_rows, 0, 3);
+    LazyRecordBatchIterator iter({std::move(sk)}, desc.clone(), store, nullptr, FilterRange{}, nullptr, "");
+
+    auto batch = iter.next();
+    ASSERT_TRUE(batch.has_value());
+    EXPECT_EQ(batch->array_.n_children, 3);
+    EXPECT_EQ(batch->array_.length, static_cast<int64_t>(num_rows));
+}
+
+TEST_F(LazyRecordBatchIteratorTest, MultipleRowGroupsWithPadding) {
+    // Two row groups where each has different columns, exercising schema padding
+    // across multiple batches with the same target schema.
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId stream_id{"test_symbol"};
+    constexpr size_t num_rows = 10;
+
+    auto all_fields = std::array{
+            scalar_field(DataType::INT64, "col_a"),
+            scalar_field(DataType::FLOAT64, "col_b"),
+            scalar_field(DataType::INT32, "col_c"),
+    };
+    auto full_desc = get_test_descriptor<stream::TimeseriesIndex>(stream_id, all_fields);
+
+    std::vector<pipelines::SliceAndKey> sks;
+
+    // Row group 0: has col_a and col_b (no col_c)
+    auto fields_ab = std::array{
+            scalar_field(DataType::INT64, "col_a"),
+            scalar_field(DataType::FLOAT64, "col_b"),
+    };
+    auto desc_ab = get_test_descriptor<stream::TimeseriesIndex>(stream_id, fields_ab);
+    SegmentInMemory seg1(desc_ab.clone(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        seg1.column(0).set_scalar(static_cast<ssize_t>(i), static_cast<timestamp>(i));
+        seg1.column(1).set_scalar(static_cast<ssize_t>(i), static_cast<int64_t>(i));
+        seg1.column(2).set_scalar(static_cast<ssize_t>(i), static_cast<double>(i) + 0.1);
+    }
+    seg1.set_row_data(num_rows - 1);
+    sks.push_back(write_segment_to_store(store, stream_id, std::move(seg1), 0, num_rows, 0, 3));
+
+    // Row group 1: has col_b and col_c (no col_a)
+    auto fields_bc = std::array{
+            scalar_field(DataType::FLOAT64, "col_b"),
+            scalar_field(DataType::INT32, "col_c"),
+    };
+    auto desc_bc = get_test_descriptor<stream::TimeseriesIndex>(stream_id, fields_bc);
+    SegmentInMemory seg2(desc_bc.clone(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        seg2.column(0).set_scalar(static_cast<ssize_t>(i), static_cast<timestamp>(num_rows + i));
+        seg2.column(1).set_scalar(static_cast<ssize_t>(i), static_cast<double>(i) + 0.2);
+        seg2.column(2).set_scalar(static_cast<ssize_t>(i), static_cast<int32_t>(i * 100));
+    }
+    seg2.set_row_data(num_rows - 1);
+    sks.push_back(write_segment_to_store(store, stream_id, std::move(seg2), num_rows, num_rows * 2, 0, 3));
+
+    LazyRecordBatchIterator iter(std::move(sks), full_desc.clone(), store, nullptr, FilterRange{}, nullptr, "");
+
+    // Batch 1: col_c padded with nulls
+    auto batch1 = iter.next();
+    ASSERT_TRUE(batch1.has_value());
+    EXPECT_EQ(batch1->array_.n_children, 4); // time + col_a + col_b + col_c
+    EXPECT_STREQ(batch1->schema_.children[3]->name, "col_c");
+    EXPECT_EQ(batch1->array_.children[3]->null_count, static_cast<int64_t>(num_rows));
+
+    // Batch 2: col_a padded with nulls
+    auto batch2 = iter.next();
+    ASSERT_TRUE(batch2.has_value());
+    EXPECT_EQ(batch2->array_.n_children, 4);
+    EXPECT_STREQ(batch2->schema_.children[1]->name, "col_a");
+    EXPECT_EQ(batch2->array_.children[1]->null_count, static_cast<int64_t>(num_rows));
+}
+
 } // namespace arcticdb

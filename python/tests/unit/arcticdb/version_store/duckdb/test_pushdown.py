@@ -666,11 +666,12 @@ class TestExtractPushdownFromSql:
             index_columns=["id"],
         )
         info = result["test_table"]
-        # With index_columns=['id'], the filter IS pushed as date_range because
-        # extract_pushdown_from_sql doesn't know the dtype — it's the caller's
-        # responsibility (_resolve_index_columns_for_sql) to only pass datetime
-        # index columns. This test documents that behavior.
-        assert info.date_range is not None
+        # Numeric values on an index column are NOT pushed as date_range because
+        # pd.Timestamp(int) produces a nonsensical nanosecond-epoch timestamp.
+        # _extract_date_range now skips int/float values and keeps them as
+        # remaining filters, which are pushed as value filters via QueryBuilder.
+        assert info.date_range is None
+        assert info.filter_pushed_down is True
 
     def test_numeric_filter_without_index_columns_stays_value_filter(self):
         """Test that numeric filters without index_columns are value filters."""
@@ -1642,3 +1643,306 @@ class TestColumnSliceAwareFilterPushdown:
         expected = df[df["e"] > 950][["a", "b"]].reset_index(drop=True)
         assert result.column("a").to_pylist() == expected["a"].tolist()
         assert result.column("b").to_pylist() == expected["b"].tolist()
+
+
+# =============================================================================
+# Coverage gap tests for pushdown.py
+# =============================================================================
+
+
+class TestExtractConstantValueCoverageGaps:
+    """Additional coverage for _extract_constant_value edge cases."""
+
+    def test_decimal_scale_zero(self):
+        """DECIMAL with scale=0 should produce an integer-like float."""
+        node = {
+            "class": "CONSTANT",
+            "type": "VALUE_CONSTANT",
+            "value": {
+                "type": {"id": "DECIMAL", "type_info": {"scale": 0}},
+                "is_null": False,
+                "value": 42,
+            },
+        }
+        result = _extract_constant_value(node)
+        assert result == 42.0
+
+    def test_decimal_negative_value(self):
+        """Negative DECIMAL value with scale."""
+        node = {
+            "class": "CONSTANT",
+            "type": "VALUE_CONSTANT",
+            "value": {
+                "type": {"id": "DECIMAL", "type_info": {"scale": 2}},
+                "is_null": False,
+                "value": -12345,
+            },
+        }
+        result = _extract_constant_value(node)
+        assert result == -123.45
+
+    def test_hugeint_constant(self):
+        """HUGEINT type is handled as integer."""
+        node = {
+            "class": "CONSTANT",
+            "type": "VALUE_CONSTANT",
+            "value": {
+                "type": {"id": "HUGEINT"},
+                "is_null": False,
+                "value": 99999999999999,
+            },
+        }
+        result = _extract_constant_value(node)
+        assert result == 99999999999999
+        assert isinstance(result, int)
+
+    def test_cast_to_float_invalid_value(self):
+        """CAST to DOUBLE with non-numeric string returns None."""
+        node = {
+            "class": "CAST",
+            "type": "OPERATOR_CAST",
+            "child": {
+                "class": "CONSTANT",
+                "type": "VALUE_CONSTANT",
+                "value": {"type": {"id": "VARCHAR"}, "is_null": False, "value": "not_a_number"},
+            },
+            "cast_type": {"id": "DOUBLE"},
+        }
+        assert _extract_constant_value(node) is None
+
+    def test_cast_unknown_type_passthrough(self):
+        """CAST to an unknown type returns the child value unchanged."""
+        node = {
+            "class": "CAST",
+            "type": "OPERATOR_CAST",
+            "child": {
+                "class": "CONSTANT",
+                "type": "VALUE_CONSTANT",
+                "value": {"type": {"id": "VARCHAR"}, "is_null": False, "value": "some_value"},
+            },
+            "cast_type": {"id": "BLOB"},
+        }
+        result = _extract_constant_value(node)
+        assert result == "some_value"
+
+    def test_cast_with_null_child(self):
+        """CAST with null child value returns None."""
+        node = {
+            "class": "CAST",
+            "type": "OPERATOR_CAST",
+            "child": {
+                "class": "CONSTANT",
+                "type": "VALUE_CONSTANT",
+                "value": {"type": {"id": "INTEGER"}, "is_null": True, "value": None},
+            },
+            "cast_type": {"id": "TIMESTAMP"},
+        }
+        assert _extract_constant_value(node) is None
+
+    def test_all_timestamp_cast_types(self):
+        """All timestamp-family CAST types are handled."""
+        for cast_type in [
+            "TIMESTAMP",
+            "TIMESTAMP WITH TIME ZONE",
+            "TIMESTAMP_NS",
+            "TIMESTAMP_MS",
+            "TIMESTAMP_S",
+            "DATE",
+        ]:
+            node = {
+                "class": "CAST",
+                "type": "OPERATOR_CAST",
+                "child": {
+                    "class": "CONSTANT",
+                    "type": "VALUE_CONSTANT",
+                    "value": {"type": {"id": "VARCHAR"}, "is_null": False, "value": "2024-06-15"},
+                },
+                "cast_type": {"id": cast_type},
+            }
+            result = _extract_constant_value(node)
+            assert isinstance(result, pd.Timestamp), f"Failed for cast_type={cast_type}"
+
+    def test_all_integer_cast_types(self):
+        """All integer-family CAST types are handled."""
+        for cast_type in [
+            "INTEGER",
+            "BIGINT",
+            "SMALLINT",
+            "TINYINT",
+            "UINTEGER",
+            "UBIGINT",
+            "USMALLINT",
+            "UTINYINT",
+        ]:
+            node = {
+                "class": "CAST",
+                "type": "OPERATOR_CAST",
+                "child": {
+                    "class": "CONSTANT",
+                    "type": "VALUE_CONSTANT",
+                    "value": {"type": {"id": "VARCHAR"}, "is_null": False, "value": "42"},
+                },
+                "cast_type": {"id": cast_type},
+            }
+            result = _extract_constant_value(node)
+            assert result == 42, f"Failed for cast_type={cast_type}"
+            assert isinstance(result, int), f"Not int for cast_type={cast_type}"
+
+
+class TestAstToFiltersCoverageGaps:
+    """Additional coverage for _ast_to_filters edge cases."""
+
+    def test_deeply_nested_and_chain(self):
+        """Deeply nested AND conjunction (10 levels) flattens correctly."""
+        cols = [chr(ord("a") + i) for i in range(10)]
+        expr = " AND ".join(f"{c} > {i + 1}" for i, c in enumerate(cols))
+        result = _parse_where_clause(expr)
+        assert len(result) == 10
+        parsed_cols = {f["column"] for f in result}
+        assert parsed_cols == set(cols)
+
+    def test_and_with_or_subexpression_drops_or(self):
+        """AND chain containing an OR subexpression: OR part is dropped."""
+        result = _parse_where_clause("a > 1 AND (b > 2 OR c > 3)")
+        assert len(result) == 1
+        assert result[0]["column"] == "a"
+
+    def test_between_with_string_values(self):
+        """BETWEEN with string values (auto-converted to timestamps)."""
+        result = _parse_where_clause("ts BETWEEN '2024-01-01' AND '2024-12-31'")
+        assert len(result) == 1
+        assert result[0]["op"] == "BETWEEN"
+        low, high = result[0]["value"]
+        assert isinstance(low, pd.Timestamp)
+        assert isinstance(high, pd.Timestamp)
+
+    def test_in_with_string_values(self):
+        """IN clause with string values preserves string type."""
+        result = _parse_where_clause("category IN ('A', 'B', 'C')")
+        assert len(result) == 1
+        assert result[0]["op"] == "IN"
+        assert result[0]["value"] == ["A", "B", "C"]
+
+    def test_comparison_with_column_on_right_not_pushed(self):
+        """Comparison with column ref on both sides cannot be pushed."""
+        result = _parse_where_clause("a > b")
+        assert result == []
+
+    def test_not_in_with_mixed_types(self):
+        """NOT IN with mixed integer and float values."""
+        result = _parse_where_clause("x NOT IN (1, 2.5, 3)")
+        assert len(result) == 1
+        assert result[0]["op"] == "NOT IN"
+        assert len(result[0]["value"]) == 3
+
+
+class TestExtractDateRangeCoverageGaps:
+    """Additional coverage for _extract_date_range edge cases."""
+
+    def test_strict_greater_than_sets_flag(self):
+        """Strict > on index sets has_strict_date_op flag."""
+        start = pd.Timestamp("2024-01-01")
+        filters = [{"column": "index", "op": ">", "value": start, "type": "comparison"}]
+        date_range, remaining, has_strict = _extract_date_range(filters)
+        assert date_range == (start, None)
+        assert has_strict is True
+        assert remaining == []
+
+    def test_strict_less_than_sets_flag(self):
+        """Strict < on index sets has_strict_date_op flag."""
+        end = pd.Timestamp("2024-12-31")
+        filters = [{"column": "index", "op": "<", "value": end, "type": "comparison"}]
+        date_range, remaining, has_strict = _extract_date_range(filters)
+        assert date_range == (None, end)
+        assert has_strict is True
+        assert remaining == []
+
+    def test_mixed_strict_and_inclusive(self):
+        """Combining > (strict) and <= (inclusive) on index."""
+        start = pd.Timestamp("2024-01-01")
+        end = pd.Timestamp("2024-12-31")
+        filters = [
+            {"column": "index", "op": ">", "value": start, "type": "comparison"},
+            {"column": "index", "op": "<=", "value": end, "type": "comparison"},
+        ]
+        date_range, remaining, has_strict = _extract_date_range(filters)
+        assert date_range == (start, end)
+        assert has_strict is True
+        assert remaining == []
+
+    def test_equality_on_index_stays_as_remaining(self):
+        """= on index is not a range filter — stays in remaining."""
+        ts = pd.Timestamp("2024-01-15")
+        filters = [{"column": "index", "op": "=", "value": ts, "type": "comparison"}]
+        date_range, remaining, _ = _extract_date_range(filters)
+        assert date_range is None
+        assert len(remaining) == 1
+
+    def test_named_index_multiple_names(self):
+        """Multiple index_columns all work as date range targets."""
+        start = pd.Timestamp("2024-01-01")
+        filters = [
+            {"column": "Date", "op": ">=", "value": start, "type": "comparison"},
+        ]
+        date_range, remaining, _ = _extract_date_range(filters, index_columns=["Date", "Timestamp"])
+        assert date_range == (start, None)
+        assert remaining == []
+
+
+class TestExtractPushdownFromSqlCoverageGaps:
+    """Additional coverage for extract_pushdown_from_sql edge cases."""
+
+    def test_fully_pushed_disabled_by_or(self):
+        """Query with OR in WHERE disables fast-path (all_where_conditions_parsed=False)."""
+        result, _ = extract_pushdown_from_sql("SELECT * FROM sym WHERE x = 1 OR x = 2", ["sym"])
+        info = result["sym"]
+        assert info.fully_pushed is False
+
+    def test_fully_pushed_disabled_by_null_check(self):
+        """Query with IS NULL filter disables fast-path (null-check semantics differ)."""
+        result, _ = extract_pushdown_from_sql("SELECT * FROM sym WHERE x IS NULL", ["sym"])
+        info = result["sym"]
+        assert info.fully_pushed is False
+
+    def test_fully_pushed_enabled_simple_filter(self):
+        """Simple WHERE with AND filters is fully pushable."""
+        result, _ = extract_pushdown_from_sql("SELECT x, y FROM sym WHERE x > 5 AND y < 10", ["sym"])
+        info = result["sym"]
+        assert info.fully_pushed is True
+
+    def test_fully_pushed_disabled_by_limit(self):
+        """LIMIT disables fast-path."""
+        result, _ = extract_pushdown_from_sql("SELECT * FROM sym LIMIT 10", ["sym"])
+        info = result["sym"]
+        assert info.fully_pushed is False
+
+    def test_fully_pushed_disabled_by_distinct(self):
+        """DISTINCT disables fast-path."""
+        result, _ = extract_pushdown_from_sql("SELECT DISTINCT x FROM sym", ["sym"])
+        info = result["sym"]
+        assert info.fully_pushed is False
+
+    def test_fully_pushed_disabled_by_aggregation(self):
+        """Aggregation (non-simple SELECT) disables fast-path."""
+        result, _ = extract_pushdown_from_sql("SELECT SUM(x) FROM sym", ["sym"])
+        info = result["sym"]
+        assert info.fully_pushed is False
+
+    def test_limit_not_pushed_with_where(self):
+        """LIMIT + WHERE: LIMIT not pushed because filter may reduce row count."""
+        result, _ = extract_pushdown_from_sql("SELECT x FROM sym WHERE x > 5 LIMIT 10", ["sym"])
+        info = result["sym"]
+        assert info.limit is None
+        assert info.limit_pushed_down is None
+
+    def test_select_columns_tracked_separately_from_where_columns(self):
+        """select_columns only contains columns from SELECT, not WHERE."""
+        result, _ = extract_pushdown_from_sql("SELECT a FROM sym WHERE b > 5", ["sym"])
+        info = result["sym"]
+        assert info.select_columns == ["a"]
+        assert set(info.columns) == {"a", "b"}
+
+    def test_subquery_tables_not_extracted(self):
+        """Subquery table references are ignored (not treated as ArcticDB symbols)."""
+        _, symbols = extract_pushdown_from_sql("SELECT * FROM sym WHERE x IN (SELECT y FROM sym WHERE y > 0)")
+        assert symbols == ["sym"]

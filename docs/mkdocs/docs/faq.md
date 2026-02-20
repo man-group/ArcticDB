@@ -89,9 +89,13 @@ Please see our [getting started guide](index.md)!
 
 ## Technical
 
-### *Does ArcticDB use SQL?*
+### *Does ArcticDB support SQL?*
 
-No. ArcticDB enables data access and modifications with a Python API that speaks in terms of Pandas DataFrames. See the reference documentation for more details.
+Yes! ArcticDB supports SQL queries via its DuckDB integration. Use `lib.sql()` to query data with
+familiar SQL syntax, including SELECT, WHERE, JOIN, GROUP BY, and more. Data is streamed to DuckDB
+segment-by-segment, so even very large datasets can be queried without loading them fully into memory.
+SQL queries are read-only — use the Python API (`write`, `append`, `update`) for data modifications.
+See the [SQL Queries tutorial](tutorials/sql_queries.md) for details.
 
 ### *Does ArcticDB de-duplicate data?*
 
