@@ -7,11 +7,16 @@
  */
 
 #pragma once
-#include <arcticdb/column_store/memory_segment.hpp>
-
-#include <pybind11/numpy.h>
 
 #include <cstddef>
+
+namespace arcticdb {
+class SegmentInMemory;
+}
+
+namespace pybind11 {
+class array;
+}
 
 namespace arcticdb::detail {
 

@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2026 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -9,7 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/concepts.hpp>
+#include <arcticdb/util/type_traits.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb::util {
