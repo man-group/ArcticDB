@@ -51,84 +51,63 @@ inline bool value_is_nan(const Value& val) {
     return false;
 }
 
-inline OperationType flip_comparison(const OperationType op) {
-    switch (op) {
-    case OperationType::GT:
-        return OperationType::LT;
-    case OperationType::GE:
-        return OperationType::LE;
-    case OperationType::LT:
-        return OperationType::GT;
-    case OperationType::LE:
-        return OperationType::GE;
-    default:
-        return op;
-    }
-}
+template<typename Func>
+struct FlippedComparator;
 
-inline StatsComparison stats_comparator(const ColumnStatsValues& stats, const Value& val, OperationType op) {
-    if (!stats.min || !stats.max) {
+template<>
+struct FlippedComparator<GreaterThanOperator> {
+    using type = LessThanOperator;
+};
+template<>
+struct FlippedComparator<GreaterThanEqualsOperator> {
+    using type = LessThanEqualsOperator;
+};
+template<>
+struct FlippedComparator<LessThanOperator> {
+    using type = GreaterThanOperator;
+};
+template<>
+struct FlippedComparator<LessThanEqualsOperator> {
+    using type = GreaterThanEqualsOperator;
+};
+template<>
+struct FlippedComparator<EqualsOperator> {
+    using type = EqualsOperator;
+};
+template<>
+struct FlippedComparator<NotEqualsOperator> {
+    using type = NotEqualsOperator;
+};
+
+template<typename Func>
+StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func&& func) {
+    if (!stats_lhs.min || !stats_lhs.max) {
         return StatsComparison::UNKNOWN;
     }
 
-    if (value_is_nan(*stats.min) || value_is_nan(*stats.max)) {
+    if (value_is_nan(*stats_lhs.min) || value_is_nan(*stats_lhs.max)) {
         return StatsComparison::UNKNOWN;
     }
 
-    return details::visit_type(stats.min->data_type(), [&](auto stats_tag) -> StatsComparison {
-        using StatsRawType = typename decltype(stats_tag)::raw_type;
+    return details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
+        using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
 
-        return details::visit_type(val.data_type(), [&](auto val_tag) -> StatsComparison {
-            using ValRawType = typename decltype(val_tag)::raw_type;
+        return details::visit_type(val_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
+            using ValTag = std::remove_reference_t<decltype(val_tag)>;
 
-            if constexpr ((is_numeric_type(decltype(stats_tag)::data_type) ||
-                           is_time_type(decltype(stats_tag)::data_type)) &&
-                          (is_numeric_type(decltype(val_tag)::data_type) || is_time_type(decltype(val_tag)::data_type)
-                          )) {
-                using comp = Comparable<StatsRawType, ValRawType>;
-                auto minval = static_cast<typename comp::left_type>(stats.min->get<StatsRawType>());
-                auto maxval = static_cast<typename comp::left_type>(stats.max->get<StatsRawType>());
-                auto qval = static_cast<typename comp::right_type>(val.get<ValRawType>());
-
-                switch (op) {
-                case OperationType::GT:
-                    if (GreaterThanOperator{}(minval, qval))
-                        return StatsComparison::ALL_MATCH;
-                    if (!GreaterThanOperator{}(maxval, qval))
-                        return StatsComparison::NONE_MATCH;
-                    return StatsComparison::UNKNOWN;
-                case OperationType::GE:
-                    if (GreaterThanEqualsOperator{}(minval, qval))
-                        return StatsComparison::ALL_MATCH;
-                    if (!GreaterThanEqualsOperator{}(maxval, qval))
-                        return StatsComparison::NONE_MATCH;
-                    return StatsComparison::UNKNOWN;
-                case OperationType::LT:
-                    if (LessThanOperator{}(maxval, qval))
-                        return StatsComparison::ALL_MATCH;
-                    if (!LessThanOperator{}(minval, qval))
-                        return StatsComparison::NONE_MATCH;
-                    return StatsComparison::UNKNOWN;
-                case OperationType::LE:
-                    if (LessThanEqualsOperator{}(maxval, qval))
-                        return StatsComparison::ALL_MATCH;
-                    if (!LessThanEqualsOperator{}(minval, qval))
-                        return StatsComparison::NONE_MATCH;
-                    return StatsComparison::UNKNOWN;
-                case OperationType::EQ:
-                    if (EqualsOperator{}(minval, qval) && EqualsOperator{}(maxval, qval))
-                        return StatsComparison::ALL_MATCH;
-                    if (LessThanOperator{}(maxval, qval) || GreaterThanOperator{}(minval, qval))
-                        return StatsComparison::NONE_MATCH;
-                    return StatsComparison::UNKNOWN;
-                case OperationType::NE:
-                    if (LessThanOperator{}(maxval, qval) || GreaterThanOperator{}(minval, qval))
-                        return StatsComparison::ALL_MATCH;
-                    if (EqualsOperator{}(minval, qval) && EqualsOperator{}(maxval, qval))
-                        return StatsComparison::NONE_MATCH;
-                    return StatsComparison::UNKNOWN;
-                default:
-                    return StatsComparison::UNKNOWN;
+            if constexpr (requires {
+                              StatsTag::data_type;
+                              ValTag::data_type;
+                          }) {
+                if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
+                              (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
+                    using StatsRawType = typename StatsTag::raw_type;
+                    using ValRawType = typename ValTag::raw_type;
+                    using comp = Comparable<StatsRawType, ValRawType>;
+                    auto minval = static_cast<typename comp::left_type>(stats_lhs.min->get<StatsRawType>());
+                    auto maxval = static_cast<typename comp::left_type>(stats_lhs.max->get<StatsRawType>());
+                    auto qval = static_cast<typename comp::right_type>(val_rhs.get<ValRawType>());
+                    return func(ValueRange<typename comp::left_type>{minval, maxval}, qval);
                 }
             }
 
@@ -137,16 +116,19 @@ inline StatsComparison stats_comparator(const ColumnStatsValues& stats, const Va
     });
 }
 
-inline StatsComparison visit_binary_comparator_stats(
-        const StatsVariantData& left, const StatsVariantData& right, OperationType op
+template<typename Func>
+StatsComparison visit_binary_comparator_stats(
+        const StatsVariantData& left, const StatsVariantData& right, Func&& func
 ) {
+    using FuncType = std::remove_reference_t<Func>;
+    using FlippedType = typename FlippedComparator<FuncType>::type;
     return std::visit(
             util::overload{
-                    [op](const ColumnStatsValues& l, const std::shared_ptr<Value>& r) -> StatsComparison {
-                        return stats_comparator(l, *r, op);
+                    [&func](const ColumnStatsValues& l, const std::shared_ptr<Value>& r) -> StatsComparison {
+                        return stats_comparator(l, *r, std::forward<Func>(func));
                     },
-                    [op](const std::shared_ptr<Value>& l, const ColumnStatsValues& r) -> StatsComparison {
-                        return stats_comparator(r, *l, flip_comparison(op));
+                    [](const std::shared_ptr<Value>& l, const ColumnStatsValues& r) -> StatsComparison {
+                        return stats_comparator(r, *l, FlippedType{});
                     },
                     [](const auto&, const auto&) -> StatsComparison { return StatsComparison::UNKNOWN; }
             },

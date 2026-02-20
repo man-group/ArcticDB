@@ -19,6 +19,15 @@
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
+
+enum class StatsComparison { ALL_MATCH, NONE_MATCH, UNKNOWN };
+
+template<typename T>
+struct ValueRange {
+    T min;
+    T max;
+};
+
 // If reordering this enum, is_binary_operation may also need to be changed
 enum class OperationType : uint8_t {
     // Unary
@@ -356,6 +365,110 @@ struct DivideOperator {
     }
 };
 
+struct LessThanOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t < u;
+    }
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Less than operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Less than operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct LessThanEqualsOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t <= u;
+    }
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Less than equals operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Less than equals operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than_equals(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct GreaterThanOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t > u;
+    }
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Greater than operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Greater than operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct GreaterThanEqualsOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t >= u;
+    }
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Greater than equals operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Greater than equals operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than_equals(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
 struct EqualsOperator {
     template<typename T, typename U>
     bool operator()(T t, U u) const {
@@ -384,6 +497,15 @@ struct EqualsOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value) && (*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct NotEqualsOperator {
@@ -414,74 +536,15 @@ struct NotEqualsOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::not_equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::not_equals(t, u); }
-};
 
-struct LessThanOperator {
     template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t < u;
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
     }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Less than operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Less than operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than(t, u); }
-};
-
-struct LessThanEqualsOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t <= u;
-    }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Less than equals operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Less than equals operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than_equals(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than_equals(t, u); }
-};
-
-struct GreaterThanOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t > u;
-    }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Greater than operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Greater than operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than(t, u); }
-};
-
-struct GreaterThanEqualsOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t >= u;
-    }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Greater than equals operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Greater than equals operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than_equals(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than_equals(t, u); }
 };
 
 struct RegexMatchOperator {
