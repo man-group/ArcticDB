@@ -307,7 +307,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
     for (auto it = segment.begin(); it != segment.end(); ++it) {
         ColumnStatsRow stats_row;
 
-        // TODO aseaton different index types
+        // The index values in the column stats segment are just rowcounts if the symbol is string-indexed
         auto start_index = it->scalar_at<timestamp>(start_index_column_offset);
         auto end_index = it->scalar_at<timestamp>(end_index_column_offset);
 

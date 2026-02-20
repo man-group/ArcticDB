@@ -78,7 +78,7 @@ class ColumnStatsData {
   private:
     std::vector<ColumnStatsRow> rows_;
     // (start_index, end_index) -> row index
-    // TODO aseaton support the different index types properly
+    // The index values in the column stats segment are just rowcounts if the symbol is string-indexed
     std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
 };
 
