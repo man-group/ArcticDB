@@ -72,10 +72,12 @@ std::size_t decode_ndarray(
 
         const auto data_size = encoding_sizes::data_uncompressed_size(field);
         const bool is_empty_array = (data_size == 0) && type_desc_tag.dimension() > Dimension::Dim0;
+        const bool is_fully_sparse = (data_size == 0) && field.sparse_map_bytes() > 0;
         ARCTICDB_TRACE(log::version(), "Decoding ndarray of size {}", data_size);
         // Empty array types will not contain actual data, however, its sparse map should be loaded
         // so that we can distinguish None from []
-        if (data_size == 0 && !is_empty_array) {
+        // Fully sparse columns have zero data but a sparse map that must be decoded
+        if (data_size == 0 && !is_empty_array && !is_fully_sparse) {
             util::check(
                     type_desc_tag.data_type() == DataType::EMPTYVAL,
                     "NDArray of type {} should not be of size 0!",
@@ -85,8 +87,8 @@ std::size_t decode_ndarray(
             return;
         }
 
-        auto data_begin = is_empty_array ? nullptr : static_cast<uint8_t*>(data_sink.allocate_data(data_size));
-        util::check(is_empty_array || data_begin != nullptr, "Failed to allocate data of size {}", data_size);
+        auto data_begin = (is_empty_array || is_fully_sparse) ? nullptr : static_cast<uint8_t*>(data_sink.allocate_data(data_size));
+        util::check(is_empty_array || is_fully_sparse || data_begin != nullptr, "Failed to allocate data of size {}", data_size);
         auto data_out = data_begin;
         auto data_in = input;
         auto num_blocks = field.values_size();
