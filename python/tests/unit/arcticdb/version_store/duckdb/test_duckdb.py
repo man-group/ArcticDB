@@ -1841,3 +1841,130 @@ class TestLibrarySQLEdgeCases:
 
         assert len(result_strict) == 3  # Jan 1, 2, 3
         assert len(result_inclusive) == 4  # Jan 1, 2, 3, 4
+
+
+# =============================================================================
+# Coverage gap tests for duckdb.py
+# =============================================================================
+
+
+class TestDuckDBCoverageGaps:
+    """Additional coverage tests for duckdb.py edge cases."""
+
+    def test_symbol_with_special_characters_in_values(self, lmdb_library):
+        """SQL queries work when data contains special characters (quotes, newlines)."""
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "name": ["O'Brien", 'She said "hi"', "line1\nline2", "tab\there"],
+                "value": [1, 2, 3, 4],
+            }
+        )
+        lib.write("special_chars", df)
+
+        result = lib.sql("SELECT name, value FROM special_chars WHERE value > 2")
+        assert len(result) == 2
+
+    def test_external_connection_query_fails_gracefully(self, lmdb_library):
+        """When a query on an external connection fails, the error is propagated clearly."""
+        import duckdb as duckdb_mod
+
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"x": [1, 2, 3]}))
+
+        conn = duckdb_mod.connect(":memory:")
+
+        with lib.duckdb(connection=conn) as ddb:
+            ddb.register_symbol("sym")
+            # Query referencing non-existent column should fail
+            with pytest.raises(Exception):
+                ddb.sql("SELECT nonexistent_column FROM sym")
+
+        # Connection should still be usable
+        result = conn.execute("SELECT 42 as answer").fetchone()
+        assert result[0] == 42
+        conn.close()
+
+    def test_auto_register_with_cte(self, lmdb_library):
+        """Auto-registration correctly handles CTEs — CTE names are not registered as symbols."""
+        lib = lmdb_library
+        lib.write("trades", pd.DataFrame({"x": [1, 2, 3, 4, 5]}))
+
+        with lib.duckdb() as ddb:
+            result = ddb.sql("WITH filtered AS (SELECT * FROM trades WHERE x > 2) SELECT SUM(x) as total FROM filtered")
+
+        assert result["total"].iloc[0] == 12  # 3 + 4 + 5
+
+    def test_execute_then_sql_with_temp_table(self, lmdb_library):
+        """execute() creates temp table, sql() queries it alongside ArcticDB data."""
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"x": [1, 2, 3]}))
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("sym")
+            ddb.execute("CREATE TEMP TABLE multipliers AS SELECT 10 AS mult")
+            result = ddb.sql("SELECT s.x * m.mult as scaled FROM sym s, multipliers m")
+
+        assert list(result["scaled"]) == [10, 20, 30]
+
+    def test_register_symbol_with_date_range_and_columns(self, lmdb_library):
+        """register_symbol with both date_range and columns parameters."""
+        lib = lmdb_library
+        dates = pd.date_range("2024-01-01", periods=100, freq="D")
+        df = pd.DataFrame(
+            {"a": np.arange(100), "b": np.arange(100, 200), "c": np.arange(200, 300)},
+            index=dates,
+        )
+        lib.write("sym", df)
+
+        with lib.duckdb() as ddb:
+            ddb.register_symbol(
+                "sym",
+                columns=["a", "b"],
+                date_range=(pd.Timestamp("2024-01-15"), pd.Timestamp("2024-01-31")),
+            )
+            result = ddb.sql("SELECT COUNT(*) as cnt FROM sym")
+
+        assert result["cnt"].iloc[0] == 17
+
+    def test_context_connection_property(self, lmdb_library):
+        """DuckDBContext exposes the connection property."""
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"x": [1]}))
+
+        with lib.duckdb() as ddb:
+            conn = ddb.connection
+            # Should be a valid DuckDB connection
+            result = conn.execute("SELECT 1 as val").fetchone()
+            assert result[0] == 1
+
+    def test_parse_library_name_edge_cases(self):
+        """Test _parse_library_name with edge cases."""
+        from arcticdb.version_store.duckdb.duckdb import _parse_library_name
+
+        # Multi-dot library name
+        assert _parse_library_name("user.lib.sublib") == ("user", "lib.sublib")
+
+        # No dot — grouped under __default__
+        assert _parse_library_name("simple_lib") == ("__default__", "simple_lib")
+
+        # Single dot at start
+        assert _parse_library_name(".hidden") == ("", "hidden")
+
+    def test_sql_output_format_none_defaults_to_pandas(self, lmdb_library):
+        """output_format=None defaults to pandas DataFrame."""
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"x": [1, 2, 3]}))
+
+        result = lib.sql("SELECT * FROM sym", output_format=None)
+        assert isinstance(result, pd.DataFrame)
+
+    def test_sql_with_empty_string_column(self, lmdb_library):
+        """SQL works with columns containing empty strings."""
+        lib = lmdb_library
+        df = pd.DataFrame({"text": ["", "hello", "", "world"], "val": [1, 2, 3, 4]})
+        lib.write("sym", df)
+
+        result = lib.sql("SELECT text, val FROM sym WHERE text != ''")
+        assert len(result) == 2
+        assert set(result["text"]) == {"hello", "world"}

@@ -607,3 +607,165 @@ class TestDuckDBIntegrationWithArrow:
         # The important thing is that streaming works correctly
         assert batch_count >= 1, "Expected at least one batch"
         assert total_rows == 1000
+
+
+class TestHelperFunctionsCoverageGaps:
+    """Additional coverage tests for arrow_reader.py helper functions.
+
+    Covers edge cases in _descriptor_to_arrow_schema, _is_wider_numeric_type,
+    _expand_columns_with_idx_prefix, and _strip_idx_prefix_from_names that
+    were identified as gaps in the original test suite.
+    """
+
+    def test_is_wider_numeric_type_all_pairs(self):
+        """Test _is_wider_numeric_type across the full numeric hierarchy."""
+        import pyarrow as pa
+        from arcticdb.version_store.duckdb.arrow_reader import _is_wider_numeric_type
+
+        # Wider: float64 > float32 > float16 > int64/uint64 > int32/uint32 > ...
+        assert _is_wider_numeric_type(pa.float64(), pa.int64()) is True
+        assert _is_wider_numeric_type(pa.float64(), pa.float32()) is True
+        assert _is_wider_numeric_type(pa.float32(), pa.float16()) is True
+        assert _is_wider_numeric_type(pa.int64(), pa.int32()) is True
+        assert _is_wider_numeric_type(pa.int32(), pa.int16()) is True
+        assert _is_wider_numeric_type(pa.int16(), pa.int8()) is True
+        assert _is_wider_numeric_type(pa.uint64(), pa.uint32()) is True
+
+        # Same rank → NOT wider (must be strictly wider)
+        assert _is_wider_numeric_type(pa.int64(), pa.uint64()) is False
+        assert _is_wider_numeric_type(pa.int8(), pa.uint8()) is False
+
+        # Narrower → False
+        assert _is_wider_numeric_type(pa.int32(), pa.int64()) is False
+        assert _is_wider_numeric_type(pa.int8(), pa.float64()) is False
+
+        # Same type → False
+        assert _is_wider_numeric_type(pa.float64(), pa.float64()) is False
+        assert _is_wider_numeric_type(pa.int32(), pa.int32()) is False
+
+    def test_is_wider_numeric_type_non_numeric(self):
+        """Non-numeric types (strings, timestamps) always return False."""
+        import pyarrow as pa
+        from arcticdb.version_store.duckdb.arrow_reader import _is_wider_numeric_type
+
+        assert _is_wider_numeric_type(pa.large_string(), pa.int64()) is False
+        assert _is_wider_numeric_type(pa.timestamp("ns"), pa.int64()) is False
+        assert _is_wider_numeric_type(pa.int64(), pa.large_string()) is False
+        assert _is_wider_numeric_type(pa.large_string(), pa.large_string()) is False
+
+    def test_expand_columns_empty_list(self):
+        """_expand_columns_with_idx_prefix on an empty list returns empty list."""
+        from arcticdb.version_store.duckdb.arrow_reader import _expand_columns_with_idx_prefix
+
+        assert _expand_columns_with_idx_prefix([]) == []
+
+    def test_expand_columns_single_column(self):
+        """Single column gets expanded to include its __idx__ variant."""
+        from arcticdb.version_store.duckdb.arrow_reader import _expand_columns_with_idx_prefix
+
+        result = _expand_columns_with_idx_prefix(["value"])
+        assert result == ["value", "__idx__value"]
+
+    def test_strip_idx_prefix_sequential_collisions(self):
+        """Multiple sequential collision resolutions wrap with underscores correctly."""
+        from arcticdb.version_store.duckdb.arrow_reader import _strip_idx_prefix_from_names
+
+        # "x", "_x_" both already exist; "__idx__x" collides with "x", then "_x_",
+        # so it becomes "__x__"
+        result = _strip_idx_prefix_from_names(["x", "_x_", "__idx__x"])
+        assert result == ["x", "_x_", "__x__"]
+
+    def test_strip_idx_prefix_no_prefix(self):
+        """Names without __idx__ prefix pass through unchanged."""
+        from arcticdb.version_store.duckdb.arrow_reader import _strip_idx_prefix_from_names
+
+        result = _strip_idx_prefix_from_names(["a", "b", "c"])
+        assert result == ["a", "b", "c"]
+
+    def test_build_clean_to_storage_map_all_prefixed(self):
+        """All columns have __idx__ prefix — all appear in mapping."""
+        from arcticdb.version_store.duckdb.arrow_reader import _build_clean_to_storage_map
+
+        result = _build_clean_to_storage_map(["__idx__a", "__idx__b"])
+        assert result == {"a": "__idx__a", "b": "__idx__b"}
+
+    def test_descriptor_schema_all_types(self, lmdb_library):
+        """Descriptor-based schema covers all DataType variants that ArcticDB supports.
+
+        Write DataFrames with diverse column types and verify the descriptor schema
+        round-trips through _descriptor_to_arrow_schema correctly.
+        """
+        import pyarrow as pa
+
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "col_int8": np.array([1], dtype=np.int8),
+                "col_int16": np.array([1], dtype=np.int16),
+                "col_int32": np.array([1], dtype=np.int32),
+                "col_int64": np.array([1], dtype=np.int64),
+                "col_uint8": np.array([1], dtype=np.uint8),
+                "col_uint16": np.array([1], dtype=np.uint16),
+                "col_uint32": np.array([1], dtype=np.uint32),
+                "col_uint64": np.array([1], dtype=np.uint64),
+                "col_float32": np.array([1.0], dtype=np.float32),
+                "col_float64": np.array([1.0], dtype=np.float64),
+                "col_bool": np.array([True], dtype=bool),
+                "col_str": ["hello"],
+            }
+        )
+        lib.write("all_types", df)
+
+        reader, _ = lib._read_as_record_batch_reader("all_types")
+        schema = reader.schema
+
+        # All columns should be present
+        field_names = {f.name for f in schema}
+        for col in df.columns:
+            assert col in field_names, f"Missing column {col} in schema"
+
+        # Verify specific type mappings
+        schema_dict = {f.name: f.type for f in schema}
+        assert schema_dict["col_bool"] == pa.bool_() or pa.types.is_boolean(schema_dict["col_bool"])
+
+    def test_empty_symbol_with_column_projection(self, lmdb_library):
+        """Empty symbol + column projection produces schema with only requested columns."""
+        import pyarrow as pa
+
+        lib = lmdb_library
+        df = pd.DataFrame(
+            {
+                "a": pd.array([], dtype="int64"),
+                "b": pd.array([], dtype="float64"),
+                "c": pd.array([], dtype="int64"),
+            }
+        )
+        lib.write("empty_proj", df)
+
+        reader, _ = lib._read_as_record_batch_reader("empty_proj", columns=["a", "c"])
+        schema = reader.schema
+
+        field_names = [f.name for f in schema]
+        assert "a" in field_names
+        assert "c" in field_names
+        assert "b" not in field_names
+
+        table = reader.read_all()
+        assert isinstance(table, pa.Table)
+        assert len(table) == 0
+
+    def test_current_index_advances_during_iteration(self, lmdb_library):
+        """current_index advances correctly as batches are consumed."""
+        lib = lmdb_library
+        df = pd.DataFrame({"x": np.arange(100)})
+        lib.write("sym", df)
+
+        reader, _ = lib._read_as_record_batch_reader("sym")
+        indices = []
+        for _ in reader:
+            indices.append(reader.current_index)
+
+        # Indices should be monotonically increasing
+        assert indices == sorted(indices)
+        # After exhaustion, index should be at the total batch count
+        assert reader.current_index == reader.num_batches

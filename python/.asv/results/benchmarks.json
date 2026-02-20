@@ -2394,6 +2394,856 @@
         "version": "ece714f981e8de31ee8296644624bf8f5fb895e6bf48d64a6ae2a9c50c5db7a2",
         "warmup_time": -1
     },
+    "sql.SQLFilteringMemory.peakmem_filter": {
+        "code": "class SQLFilteringMemory:\n    def peakmem_filter(self, threshold_pct):\n        self.lib.sql(self.query)\n\n    def setup(self, threshold_pct):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < {threshold_pct}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLFilteringMemory.peakmem_filter",
+        "param_names": [
+            "threshold_pct"
+        ],
+        "params": [
+            [
+                "0.1",
+                "1.0",
+                "10.0",
+                "50.0"
+            ]
+        ],
+        "setup_cache_key": "sql:383",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "6edc668b3f99af731c4e2d25b759562a0b62a7f8622b4ff1a5fad33a2e1c97b7"
+    },
+    "sql.SQLFilteringMemory.peakmem_filter_arrow": {
+        "code": "class SQLFilteringMemory:\n    def peakmem_filter_arrow(self, threshold_pct):\n        self.lib.sql(self.query, output_format=\"pyarrow\")\n\n    def setup(self, threshold_pct):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < {threshold_pct}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLFilteringMemory.peakmem_filter_arrow",
+        "param_names": [
+            "threshold_pct"
+        ],
+        "params": [
+            [
+                "0.1",
+                "1.0",
+                "10.0",
+                "50.0"
+            ]
+        ],
+        "setup_cache_key": "sql:383",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "bab889be2729c9a18a882b523f49c0a6d808f50d5fe66bff0b37bcf3909c8de8"
+    },
+    "sql.SQLFilteringMemory.time_filter": {
+        "code": "class SQLFilteringMemory:\n    def time_filter(self, threshold_pct):\n        self.lib.sql(self.query)\n\n    def setup(self, threshold_pct):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < {threshold_pct}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLFilteringMemory.time_filter",
+        "number": 5,
+        "param_names": [
+            "threshold_pct"
+        ],
+        "params": [
+            [
+                "0.1",
+                "1.0",
+                "10.0",
+                "50.0"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:383",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "330a606e4ad5d6ad048fb0dd926fc7af482ecd8d052ef6805cd72c494c6c68f2",
+        "warmup_time": -1
+    },
+    "sql.SQLFilteringMemory.time_filter_arrow": {
+        "code": "class SQLFilteringMemory:\n    def time_filter_arrow(self, threshold_pct):\n        self.lib.sql(self.query, output_format=\"pyarrow\")\n\n    def setup(self, threshold_pct):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < {threshold_pct}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLFilteringMemory.time_filter_arrow",
+        "number": 5,
+        "param_names": [
+            "threshold_pct"
+        ],
+        "params": [
+            [
+                "0.1",
+                "1.0",
+                "10.0",
+                "50.0"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:383",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4e329a1fb45e8ee5f2931dca37ea2ebc73d43f81bef6850f00d60e038540f401",
+        "warmup_time": -1
+    },
+    "sql.SQLLargeGroupBy.peakmem_groupby": {
+        "code": "class SQLLargeGroupBy:\n    def peakmem_groupby(self, group_column, aggregation):\n        self.lib.sql(self.query)\n\n    def setup(self, group_column, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        agg_func = aggregation.upper()\n        if aggregation == \"count\":\n            agg_expr = \"COUNT(*) as cnt\"\n        elif aggregation == \"mean\":\n            agg_expr = f\"AVG(v3) as avg_v3\"\n        else:\n            agg_expr = f\"{agg_func}(v3) as agg_v3\"\n        self.query = f\"SELECT {group_column}, {agg_expr} FROM {self.SYMBOL} GROUP BY {group_column}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLLargeGroupBy.peakmem_groupby",
+        "param_names": [
+            "group_column",
+            "aggregation"
+        ],
+        "params": [
+            [
+                "'id1'",
+                "'id6'"
+            ],
+            [
+                "'sum'",
+                "'mean'",
+                "'count'"
+            ]
+        ],
+        "setup_cache_key": "sql:313",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "a70c2e6680c1552f8eb735dcbb05022e950c1bf43e4b92a5cd787f5326762cae"
+    },
+    "sql.SQLLargeGroupBy.peakmem_groupby_arrow": {
+        "code": "class SQLLargeGroupBy:\n    def peakmem_groupby_arrow(self, group_column, aggregation):\n        self.lib.sql(self.query, output_format=\"pyarrow\")\n\n    def setup(self, group_column, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        agg_func = aggregation.upper()\n        if aggregation == \"count\":\n            agg_expr = \"COUNT(*) as cnt\"\n        elif aggregation == \"mean\":\n            agg_expr = f\"AVG(v3) as avg_v3\"\n        else:\n            agg_expr = f\"{agg_func}(v3) as agg_v3\"\n        self.query = f\"SELECT {group_column}, {agg_expr} FROM {self.SYMBOL} GROUP BY {group_column}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLLargeGroupBy.peakmem_groupby_arrow",
+        "param_names": [
+            "group_column",
+            "aggregation"
+        ],
+        "params": [
+            [
+                "'id1'",
+                "'id6'"
+            ],
+            [
+                "'sum'",
+                "'mean'",
+                "'count'"
+            ]
+        ],
+        "setup_cache_key": "sql:313",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5695f378858f8c75640485d17b7812b4c788b1a4870f189fa8a826c950b39cae"
+    },
+    "sql.SQLLargeGroupBy.time_groupby": {
+        "code": "class SQLLargeGroupBy:\n    def time_groupby(self, group_column, aggregation):\n        self.lib.sql(self.query)\n\n    def setup(self, group_column, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        agg_func = aggregation.upper()\n        if aggregation == \"count\":\n            agg_expr = \"COUNT(*) as cnt\"\n        elif aggregation == \"mean\":\n            agg_expr = f\"AVG(v3) as avg_v3\"\n        else:\n            agg_expr = f\"{agg_func}(v3) as agg_v3\"\n        self.query = f\"SELECT {group_column}, {agg_expr} FROM {self.SYMBOL} GROUP BY {group_column}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLLargeGroupBy.time_groupby",
+        "number": 5,
+        "param_names": [
+            "group_column",
+            "aggregation"
+        ],
+        "params": [
+            [
+                "'id1'",
+                "'id6'"
+            ],
+            [
+                "'sum'",
+                "'mean'",
+                "'count'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:313",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9917df7bc84c79b56139c317f68fb1a1fe1d40bf9851cd5b061c5591a7a7e9d1",
+        "warmup_time": -1
+    },
+    "sql.SQLLargeGroupBy.time_groupby_arrow": {
+        "code": "class SQLLargeGroupBy:\n    def time_groupby_arrow(self, group_column, aggregation):\n        \"\"\"GROUP BY returning Arrow \u2014 avoids pandas conversion.\"\"\"\n        self.lib.sql(self.query, output_format=\"pyarrow\")\n\n    def setup(self, group_column, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        agg_func = aggregation.upper()\n        if aggregation == \"count\":\n            agg_expr = \"COUNT(*) as cnt\"\n        elif aggregation == \"mean\":\n            agg_expr = f\"AVG(v3) as avg_v3\"\n        else:\n            agg_expr = f\"{agg_func}(v3) as agg_v3\"\n        self.query = f\"SELECT {group_column}, {agg_expr} FROM {self.SYMBOL} GROUP BY {group_column}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLLargeGroupBy.time_groupby_arrow",
+        "number": 5,
+        "param_names": [
+            "group_column",
+            "aggregation"
+        ],
+        "params": [
+            [
+                "'id1'",
+                "'id6'"
+            ],
+            [
+                "'sum'",
+                "'mean'",
+                "'count'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:313",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ccec0dca3bba5da5a39183a02ff35806d7d661edbd823101135127fc2c6b959f",
+        "warmup_time": -1
+    },
+    "sql.SQLQueries.peakmem_filter_numeric": {
+        "code": "class SQLQueries:\n    def peakmem_filter_numeric(self, rows):\n        self.lib.sql(f\"SELECT v3 FROM {self.symbol} WHERE v3 < 1.0\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_filter_numeric",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "2b8d5409f7426e0d81b29dcd00fd56f2b1df09c18ba217e376d5e5583bb1bf54"
+    },
+    "sql.SQLQueries.peakmem_filter_string_equality": {
+        "code": "class SQLQueries:\n    def peakmem_filter_string_equality(self, rows):\n        self.lib.sql(f\"SELECT v1, v3 FROM {self.symbol} WHERE id1 = 'id001'\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_filter_string_equality",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "0614d509ac102f02ab4e640539a018e94bd325e93f5bc4ceb40bcbaefef24753"
+    },
+    "sql.SQLQueries.peakmem_filter_then_groupby": {
+        "code": "class SQLQueries:\n    def peakmem_filter_then_groupby(self, rows):\n        self.lib.sql(f\"SELECT id1, SUM(v3) as total \" f\"FROM {self.symbol} WHERE v3 < 10.0 GROUP BY id1\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_filter_then_groupby",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "aa0438cf59b5701416f5073f77315863116986f578c8628b36d94f9c4e925c94"
+    },
+    "sql.SQLQueries.peakmem_groupby_high_cardinality": {
+        "code": "class SQLQueries:\n    def peakmem_groupby_high_cardinality(self, rows):\n        self.lib.sql(f\"SELECT id6, SUM(v1), SUM(v2) FROM {self.symbol} GROUP BY id6\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_groupby_high_cardinality",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "23520eaf9ac11bb2ce5c10e9d76c876dac2876ffacd2b3bda09bce3634821f46"
+    },
+    "sql.SQLQueries.peakmem_groupby_multi_agg": {
+        "code": "class SQLQueries:\n    def peakmem_groupby_multi_agg(self, rows):\n        self.lib.sql(\n            f\"SELECT id1, SUM(v1) as s, AVG(v3) as a, MIN(v2) as mn, MAX(v2) as mx \" f\"FROM {self.symbol} GROUP BY id1\"\n        )\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_groupby_multi_agg",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "9dbb58f66e2cc853af148a567a29048a7b13a2444bc04bc0c95916f522726f81"
+    },
+    "sql.SQLQueries.peakmem_groupby_sum": {
+        "code": "class SQLQueries:\n    def peakmem_groupby_sum(self, rows):\n        self.lib.sql(f\"SELECT id1, SUM(v1) as total FROM {self.symbol} GROUP BY id1\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_groupby_sum",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "53df514df04ecf656c19d672862860feb6cfad0d29818aafe5006b9dc5923e43"
+    },
+    "sql.SQLQueries.peakmem_join": {
+        "code": "class SQLQueries:\n    def peakmem_join(self, rows):\n        self.lib.sql(\n            f\"SELECT t.id1, t.v1, t.v3, j.category, j.weight \"\n            f\"FROM {self.symbol} t JOIN {self.JOIN_SYMBOL} j ON t.id1 = j.id1\"\n        )\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_join",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "0023318b5230b2fbc1fd0f8e91200aba83e85db68a8e98201696f28375bbd3a6"
+    },
+    "sql.SQLQueries.peakmem_limit": {
+        "code": "class SQLQueries:\n    def peakmem_limit(self, rows):\n        self.lib.sql(f\"SELECT * FROM {self.symbol} LIMIT 100\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_limit",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "c09a25030f4ef29f67ce2e8368b7411233dbebd866e5a1b862cb23a8aa2a3cac"
+    },
+    "sql.SQLQueries.peakmem_select_all": {
+        "code": "class SQLQueries:\n    def peakmem_select_all(self, rows):\n        self.lib.sql(f\"SELECT * FROM {self.symbol}\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_select_all",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "79ec081686cfa4ceacc4a1403caa1296fa7c8c1c3f417099e98d3bad565aa50b"
+    },
+    "sql.SQLQueries.peakmem_select_all_arrow": {
+        "code": "class SQLQueries:\n    def peakmem_select_all_arrow(self, rows):\n        self.lib.sql(f\"SELECT * FROM {self.symbol}\", output_format=\"pyarrow\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_select_all_arrow",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "706cdb0c47e1fc4e98302cce202fde067e585dad1433e4e268e53af54cb45358"
+    },
+    "sql.SQLQueries.peakmem_select_columns": {
+        "code": "class SQLQueries:\n    def peakmem_select_columns(self, rows):\n        self.lib.sql(f\"SELECT v1, v2, v3 FROM {self.symbol}\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLQueries.peakmem_select_columns",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "67f340fee00bb8964129a6a5be5c1983bbf28408498b9ed4203fde204e38f052"
+    },
+    "sql.SQLQueries.time_filter_numeric": {
+        "code": "class SQLQueries:\n    def time_filter_numeric(self, rows):\n        \"\"\"Filter on float column \u2014 ~1% selectivity.\"\"\"\n        self.lib.sql(f\"SELECT v3 FROM {self.symbol} WHERE v3 < 1.0\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_filter_numeric",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c7aee18fc4e30cc84879996156c0b44ae88f71293043f024642e6b000df89a88",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_filter_string_equality": {
+        "code": "class SQLQueries:\n    def time_filter_string_equality(self, rows):\n        \"\"\"Filter on string column \u2014 single value.\"\"\"\n        self.lib.sql(f\"SELECT v1, v3 FROM {self.symbol} WHERE id1 = 'id001'\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_filter_string_equality",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "55cb95a994d17dcc9385f45c47cafaaae3c654e6241f59abcadd1710da53fd1d",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_filter_then_groupby": {
+        "code": "class SQLQueries:\n    def time_filter_then_groupby(self, rows):\n        \"\"\"WHERE filter reducing data ~10x, then GROUP BY.\"\"\"\n        self.lib.sql(f\"SELECT id1, SUM(v3) as total \" f\"FROM {self.symbol} WHERE v3 < 10.0 GROUP BY id1\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_filter_then_groupby",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1e6106c7dd066734b762324f0a90efe2d41de60448ab4446dfc628434113a75a",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_groupby_high_cardinality": {
+        "code": "class SQLQueries:\n    def time_groupby_high_cardinality(self, rows):\n        \"\"\"High-cardinality groupby (id6 has ~N/k distinct values).\"\"\"\n        self.lib.sql(f\"SELECT id6, SUM(v1), SUM(v2) FROM {self.symbol} GROUP BY id6\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_groupby_high_cardinality",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "66134839b6d1664b87a7f69f1ac75df152608651f5c1b77b99d2821ef51b395c",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_groupby_multi_agg": {
+        "code": "class SQLQueries:\n    def time_groupby_multi_agg(self, rows):\n        \"\"\"Multiple aggregations in a single GROUP BY.\"\"\"\n        self.lib.sql(\n            f\"SELECT id1, SUM(v1) as s, AVG(v3) as a, MIN(v2) as mn, MAX(v2) as mx \" f\"FROM {self.symbol} GROUP BY id1\"\n        )\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_groupby_multi_agg",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "717d4ff9a96d97e4c77be139327ac42377c52567f5b87128829b26e9c702404b",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_groupby_sum": {
+        "code": "class SQLQueries:\n    def time_groupby_sum(self, rows):\n        \"\"\"Low-cardinality groupby (id1 has ~N/10 distinct values).\"\"\"\n        self.lib.sql(f\"SELECT id1, SUM(v1) as total FROM {self.symbol} GROUP BY id1\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_groupby_sum",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9a967131f6cdf734bd7b7a4e428a01456e9c7f3d52859ffa5022d263ad6970a6",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_join": {
+        "code": "class SQLQueries:\n    def time_join(self, rows):\n        \"\"\"JOIN main symbol with small lookup table.\"\"\"\n        self.lib.sql(\n            f\"SELECT t.id1, t.v1, t.v3, j.category, j.weight \"\n            f\"FROM {self.symbol} t JOIN {self.JOIN_SYMBOL} j ON t.id1 = j.id1\"\n        )\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_join",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "efe934b21dbc490514a8688f279515c4f5516af9c8c8f77c6ac9fc18496731c6",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_limit": {
+        "code": "class SQLQueries:\n    def time_limit(self, rows):\n        \"\"\"LIMIT pushdown \u2014 should read minimal data.\"\"\"\n        self.lib.sql(f\"SELECT * FROM {self.symbol} LIMIT 100\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_limit",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c2559fbf78743e249bf058ee3075f538ce40a192b2a377e3b0a17a816d2032a2",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_select_all": {
+        "code": "class SQLQueries:\n    def time_select_all(self, rows):\n        self.lib.sql(f\"SELECT * FROM {self.symbol}\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_select_all",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "24f53b45d4169316ad67cff82738d6beb0538efc569a204b5d89205538bbcf16",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_select_all_arrow": {
+        "code": "class SQLQueries:\n    def time_select_all_arrow(self, rows):\n        \"\"\"Same as select_all but returning Arrow table (no pandas conversion).\"\"\"\n        self.lib.sql(f\"SELECT * FROM {self.symbol}\", output_format=\"pyarrow\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_select_all_arrow",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1f1d18cd49be3e7f18b299507face1b901128798fb3e2f57c5594f7ea8ceb9f8",
+        "warmup_time": 0.2
+    },
+    "sql.SQLQueries.time_select_columns": {
+        "code": "class SQLQueries:\n    def time_select_columns(self, rows):\n        self.lib.sql(f\"SELECT v1, v2, v3 FROM {self.symbol}\")\n\n    def setup(self, rows):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.symbol = _sym(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLQueries.time_select_columns",
+        "number": 0,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "sql:55",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "77dd5f086290dfbaf82abf75cea2f8bba063d84f076b9fc07db9e9b19bcf72c9",
+        "warmup_time": 0.2
+    },
+    "sql.SQLStreamingMemory.peakmem_read_baseline": {
+        "code": "class SQLStreamingMemory:\n    def peakmem_read_baseline(self, query_type):\n        \"\"\"\n        Peak memory of lib.read() \u2014 materializes the full table.\n    \n        This is the baseline: the streaming SQL path should use less memory\n        than this for aggregation and filtered queries.\n        \"\"\"\n        self.lib.read(self.SYMBOL)\n\n    def setup(self, query_type):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        if query_type == \"aggregation\":\n            self.query = f\"SELECT id1, SUM(v1) as total, AVG(v3) as avg_v3 FROM {self.SYMBOL} GROUP BY id1\"\n        elif query_type == \"filtered_1pct\":\n            self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < 1.0\"\n        elif query_type == \"full_scan\":\n            self.query = f\"SELECT * FROM {self.SYMBOL}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLStreamingMemory.peakmem_read_baseline",
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'aggregation'",
+                "'filtered_1pct'",
+                "'full_scan'"
+            ]
+        ],
+        "setup_cache_key": "sql:229",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "cdcfdb8bbedb145c7fab834dbc804c78bd39d8a15c366c932d35a8dae93dae86"
+    },
+    "sql.SQLStreamingMemory.peakmem_sql_query": {
+        "code": "class SQLStreamingMemory:\n    def peakmem_sql_query(self, query_type):\n        \"\"\"Peak memory of lib.sql() \u2014 uses streaming under the hood.\"\"\"\n        self.lib.sql(self.query)\n\n    def setup(self, query_type):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        if query_type == \"aggregation\":\n            self.query = f\"SELECT id1, SUM(v1) as total, AVG(v3) as avg_v3 FROM {self.SYMBOL} GROUP BY id1\"\n        elif query_type == \"filtered_1pct\":\n            self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < 1.0\"\n        elif query_type == \"full_scan\":\n            self.query = f\"SELECT * FROM {self.SYMBOL}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLStreamingMemory.peakmem_sql_query",
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'aggregation'",
+                "'filtered_1pct'",
+                "'full_scan'"
+            ]
+        ],
+        "setup_cache_key": "sql:229",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "bd21af3518230d7ac835bccd0cc20f103e33b3826affd273db2d1892a2527003"
+    },
+    "sql.SQLStreamingMemory.peakmem_sql_query_arrow": {
+        "code": "class SQLStreamingMemory:\n    def peakmem_sql_query_arrow(self, query_type):\n        \"\"\"Peak memory of lib.sql() returning Arrow (avoids pandas conversion overhead).\"\"\"\n        self.lib.sql(self.query, output_format=\"pyarrow\")\n\n    def setup(self, query_type):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        if query_type == \"aggregation\":\n            self.query = f\"SELECT id1, SUM(v1) as total, AVG(v3) as avg_v3 FROM {self.SYMBOL} GROUP BY id1\"\n        elif query_type == \"filtered_1pct\":\n            self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < 1.0\"\n        elif query_type == \"full_scan\":\n            self.query = f\"SELECT * FROM {self.SYMBOL}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLStreamingMemory.peakmem_sql_query_arrow",
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'aggregation'",
+                "'filtered_1pct'",
+                "'full_scan'"
+            ]
+        ],
+        "setup_cache_key": "sql:229",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "1e1adb8018eeba648b2a37bbf9bd774506454601ba4790ee3778ebdeb4080bff"
+    },
+    "sql.SQLStreamingMemory.time_sql_query": {
+        "code": "class SQLStreamingMemory:\n    def time_sql_query(self, query_type):\n        \"\"\"Execution time of lib.sql().\"\"\"\n        self.lib.sql(self.query)\n\n    def setup(self, query_type):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        if query_type == \"aggregation\":\n            self.query = f\"SELECT id1, SUM(v1) as total, AVG(v3) as avg_v3 FROM {self.SYMBOL} GROUP BY id1\"\n        elif query_type == \"filtered_1pct\":\n            self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < 1.0\"\n        elif query_type == \"full_scan\":\n            self.query = f\"SELECT * FROM {self.SYMBOL}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLStreamingMemory.time_sql_query",
+        "number": 0,
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'aggregation'",
+                "'filtered_1pct'",
+                "'full_scan'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:229",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4ddc0d2e2db9de6013b98febfd1e04101e3e2735f842f5b48f2e6de960ee4834",
+        "warmup_time": -1
+    },
+    "sql.SQLStreamingMemory.time_sql_query_arrow": {
+        "code": "class SQLStreamingMemory:\n    def time_sql_query_arrow(self, query_type):\n        \"\"\"Execution time returning Arrow.\"\"\"\n        self.lib.sql(self.query, output_format=\"pyarrow\")\n\n    def setup(self, query_type):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        if query_type == \"aggregation\":\n            self.query = f\"SELECT id1, SUM(v1) as total, AVG(v3) as avg_v3 FROM {self.SYMBOL} GROUP BY id1\"\n        elif query_type == \"filtered_1pct\":\n            self.query = f\"SELECT v1, v2, v3 FROM {self.SYMBOL} WHERE v3 < 1.0\"\n        elif query_type == \"full_scan\":\n            self.query = f\"SELECT * FROM {self.SYMBOL}\"\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLStreamingMemory.time_sql_query_arrow",
+        "number": 0,
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'aggregation'",
+                "'filtered_1pct'",
+                "'full_scan'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:229",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e72c5689e78299de3960ad4c63e616f979d3b23346b3b3c70aa583c86b53fb47",
+        "warmup_time": -1
+    },
+    "sql.SQLWideTableDateRange.peakmem_read_date_range": {
+        "code": "class SQLWideTableDateRange:\n    def peakmem_read_date_range(self, query_type):\n        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range, query_builder=self.qb)\n\n    def setup(self, query_type):\n        from arcticdb.version_store.processing import QueryBuilder\n    \n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.date_range = (pd.Timestamp(self.DATE_LO), pd.Timestamp(self.DATE_HI))\n    \n        if query_type == \"select_star\":\n            self.sql_query = f\"SELECT * FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            self.read_columns = None\n            self.qb = None\n        elif query_type == \"projection_3col\":\n            self.sql_query = (\n                f\"SELECT f0, f1, s0 FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            )\n            self.read_columns = [\"f0\", \"f1\", \"s0\"]\n            self.qb = None\n        elif query_type == \"filter\":\n            self.sql_query = (\n                f\"SELECT * FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}'\"\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            self.qb = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n        elif query_type == \"filter_agg\":\n            self.sql_query = (\n                f'SELECT \"{self.GROUP_COL}\", SUM(\"{self.AGG_COL}\") AS total '\n                f\"FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}' \"\n                f'GROUP BY \"{self.GROUP_COL}\"'\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            q = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n            self.qb = q.groupby(self.GROUP_COL).agg({self.AGG_COL: \"sum\"})\n    \n        # Warmup \u2014 ensure LMDB pages are cached\n        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLWideTableDateRange.peakmem_read_date_range",
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'select_star'",
+                "'projection_3col'",
+                "'filter'",
+                "'filter_agg'"
+            ]
+        ],
+        "setup_cache_key": "sql:455",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "efb9ae982db8bc91900a72904735930f2902be8058d00fb8ac5a0d1a9226254c"
+    },
+    "sql.SQLWideTableDateRange.peakmem_sql": {
+        "code": "class SQLWideTableDateRange:\n    def peakmem_sql(self, query_type):\n        self.lib.sql(self.sql_query)\n\n    def setup(self, query_type):\n        from arcticdb.version_store.processing import QueryBuilder\n    \n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.date_range = (pd.Timestamp(self.DATE_LO), pd.Timestamp(self.DATE_HI))\n    \n        if query_type == \"select_star\":\n            self.sql_query = f\"SELECT * FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            self.read_columns = None\n            self.qb = None\n        elif query_type == \"projection_3col\":\n            self.sql_query = (\n                f\"SELECT f0, f1, s0 FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            )\n            self.read_columns = [\"f0\", \"f1\", \"s0\"]\n            self.qb = None\n        elif query_type == \"filter\":\n            self.sql_query = (\n                f\"SELECT * FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}'\"\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            self.qb = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n        elif query_type == \"filter_agg\":\n            self.sql_query = (\n                f'SELECT \"{self.GROUP_COL}\", SUM(\"{self.AGG_COL}\") AS total '\n                f\"FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}' \"\n                f'GROUP BY \"{self.GROUP_COL}\"'\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            q = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n            self.qb = q.groupby(self.GROUP_COL).agg({self.AGG_COL: \"sum\"})\n    \n        # Warmup \u2014 ensure LMDB pages are cached\n        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "sql.SQLWideTableDateRange.peakmem_sql",
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'select_star'",
+                "'projection_3col'",
+                "'filter'",
+                "'filter_agg'"
+            ]
+        ],
+        "setup_cache_key": "sql:455",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "37cc337437dfd5a5127a9d1666b409d6ca32e485d8936ea95ead5a7160fdea39"
+    },
+    "sql.SQLWideTableDateRange.time_read_date_range": {
+        "code": "class SQLWideTableDateRange:\n    def time_read_date_range(self, query_type):\n        \"\"\"lib.read() with date_range \u2014 the storage-optimal path.\"\"\"\n        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range, query_builder=self.qb)\n\n    def setup(self, query_type):\n        from arcticdb.version_store.processing import QueryBuilder\n    \n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.date_range = (pd.Timestamp(self.DATE_LO), pd.Timestamp(self.DATE_HI))\n    \n        if query_type == \"select_star\":\n            self.sql_query = f\"SELECT * FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            self.read_columns = None\n            self.qb = None\n        elif query_type == \"projection_3col\":\n            self.sql_query = (\n                f\"SELECT f0, f1, s0 FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            )\n            self.read_columns = [\"f0\", \"f1\", \"s0\"]\n            self.qb = None\n        elif query_type == \"filter\":\n            self.sql_query = (\n                f\"SELECT * FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}'\"\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            self.qb = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n        elif query_type == \"filter_agg\":\n            self.sql_query = (\n                f'SELECT \"{self.GROUP_COL}\", SUM(\"{self.AGG_COL}\") AS total '\n                f\"FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}' \"\n                f'GROUP BY \"{self.GROUP_COL}\"'\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            q = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n            self.qb = q.groupby(self.GROUP_COL).agg({self.AGG_COL: \"sum\"})\n    \n        # Warmup \u2014 ensure LMDB pages are cached\n        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLWideTableDateRange.time_read_date_range",
+        "number": 3,
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'select_star'",
+                "'projection_3col'",
+                "'filter'",
+                "'filter_agg'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:455",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1e5c41b6cb8d399bc269343039733e17f5e716cb1c46af5c8b969346eb908d35",
+        "warmup_time": -1
+    },
+    "sql.SQLWideTableDateRange.time_sql": {
+        "code": "class SQLWideTableDateRange:\n    def time_sql(self, query_type):\n        \"\"\"SQL query via lib.sql().\"\"\"\n        self.lib.sql(self.sql_query)\n\n    def setup(self, query_type):\n        from arcticdb.version_store.processing import QueryBuilder\n    \n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.LIB_NAME)\n        self.date_range = (pd.Timestamp(self.DATE_LO), pd.Timestamp(self.DATE_HI))\n    \n        if query_type == \"select_star\":\n            self.sql_query = f\"SELECT * FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            self.read_columns = None\n            self.qb = None\n        elif query_type == \"projection_3col\":\n            self.sql_query = (\n                f\"SELECT f0, f1, s0 FROM {self.SYMBOL} WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}'\"\n            )\n            self.read_columns = [\"f0\", \"f1\", \"s0\"]\n            self.qb = None\n        elif query_type == \"filter\":\n            self.sql_query = (\n                f\"SELECT * FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}'\"\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            self.qb = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n        elif query_type == \"filter_agg\":\n            self.sql_query = (\n                f'SELECT \"{self.GROUP_COL}\", SUM(\"{self.AGG_COL}\") AS total '\n                f\"FROM {self.SYMBOL} \"\n                f\"WHERE Date >= '{self.DATE_LO}' AND Date <= '{self.DATE_HI}' \"\n                f\"AND \\\"{self.FILTER_COL}\\\" = '{self.FILTER_VALUE}' \"\n                f'GROUP BY \"{self.GROUP_COL}\"'\n            )\n            self.read_columns = None\n            q = QueryBuilder()\n            q = q[q[self.FILTER_COL] == self.FILTER_VALUE]\n            self.qb = q.groupby(self.GROUP_COL).agg({self.AGG_COL: \"sum\"})\n    \n        # Warmup \u2014 ensure LMDB pages are cached\n        self.lib.read(self.SYMBOL, columns=self.read_columns, date_range=self.date_range)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "sql.SQLWideTableDateRange.time_sql",
+        "number": 3,
+        "param_names": [
+            "query_type"
+        ],
+        "params": [
+            [
+                "'select_star'",
+                "'projection_3col'",
+                "'filter'",
+                "'filter_agg'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "sql:455",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "7fe01f6b61c362c165e497b9eb7cae64f90d3bc74f8cfcbfffff01c56cd61836",
+        "warmup_time": -1
+    },
     "version": 2,
     "version_chain.IterateVersionChain.track_num_ver_reads_list_undeleted_versions": {
         "code": "class IterateVersionChain:\n    def track_num_ver_reads_list_undeleted_versions(self, num_versions, caching, deleted):\n        query_stats.reset_stats()\n        self.lib.list_versions(symbol=self.symbol(num_versions))\n        stats = query_stats.get_query_stats()\n        return count_version_reads(stats)\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        ac = self._setup()\n        if deleted:\n            self.lib = ac[IterateVersionChain.LIB_NAME_DELETED]\n        else:\n            self.lib = ac[IterateVersionChain.LIB_NAME_UNDELETED]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions))\n        query_stats.enable()",
