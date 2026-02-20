@@ -7,6 +7,7 @@
  be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/pipeline/column_stats_filter.hpp>
+#include <arcticdb/pipeline/column_stats_dispatch.hpp>
 
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
@@ -39,252 +40,62 @@ std::optional<Value> extract_value_from_column(
 
 } // anonymous namespace
 
-// TODO replace with the StatsComparison enum above
-// Returns true if the segment MIGHT contain matching data (should be kept)
-// Returns false if the segment CANNOT contain matching data (can be pruned)
-bool compare_value_with_stats(
-        const Value& query_value, const std::optional<Value>& min_value, const std::optional<Value>& max_value,
-        OperationType op
-) {
-    if (!min_value || !max_value) {
-        // No stats available, cannot prune
-        return true;
-    }
-
-    // Handle NaN values in stats - if min or max is NaN, we cannot prune
-    // because NaN comparisons always return false and the segment might have valid values
-    auto check_nan = [](const Value& val) {
-        if (is_floating_point_type(val.data_type())) {
-            return details::visit_type(val.data_type(), [&val](auto tag) {
-                using TagType = decltype(tag);
-                using RawType = typename TagType::raw_type;
-                if constexpr (std::is_floating_point_v<RawType>) {
-                    return std::isnan(val.get<RawType>());
-                }
-                return false;
-            });
-        }
-        return false;
-    };
-
-    if (check_nan(*min_value) || check_nan(*max_value)) {
-        // Stats contain NaN, cannot prune based on them
-        return true;
-    }
-
-    // Get the data type for comparison - use the query value's type
-    DataType compare_type = query_value.data_type();
-
-    // Check if types are compatible - if not, we cannot safely compare
-    // For numeric types, we need to handle type promotion
-    if (!is_numeric_type(compare_type) && !is_time_type(compare_type)) {
-        // Non-numeric types not supported for column stats filtering
-        return true;
-    }
-
-    return details::visit_type(compare_type, [&](auto tag) {
-        using TagType = decltype(tag);
-        using RawType = typename TagType::raw_type;
-
-        if constexpr (is_numeric_type(TagType::data_type) || is_time_type(TagType::data_type)) {
-            RawType qval = query_value.get<RawType>();
-
-            // Convert min/max values to the query type for comparison
-            // If types don't match, we need to cast. For safety, if the stats type
-            // differs significantly, we don't prune.
-            RawType minval, maxval;
-
-            // TODO aseaton the type handling here looks mega wrong
-            auto extract_as = [](const Value& v, RawType& out) -> bool {
-                return details::visit_type(v.data_type(), [&v, &out](auto val_tag) {
-                    using ValTagType = decltype(val_tag);
-                    using ValRawType = typename ValTagType::raw_type;
-                    if constexpr (is_numeric_type(ValTagType::data_type) || is_time_type(ValTagType::data_type)) {
-                        // Safe cast between numeric types
-                        out = static_cast<RawType>(v.get<ValRawType>());
-                        return true;
-                    }
-                    return false;
-                });
-            };
-
-            if (!extract_as(*min_value, minval) || !extract_as(*max_value, maxval)) {
-                // Could not convert stats values, cannot prune
-                return true;
-            }
-
-            switch (op) {
-            case OperationType::GT:
-                // col > qval: keep if max > qval
-                return GreaterThanOperator{}(maxval, qval);
-            case OperationType::GE:
-                // col >= qval: keep if max >= qval
-                return GreaterThanEqualsOperator{}(maxval, qval);
-            case OperationType::LT:
-                // col < qval: keep if min < qval
-                return LessThanOperator{}(minval, qval);
-            case OperationType::LE:
-                // col <= qval: keep if min <= qval
-                return LessThanEqualsOperator{}(minval, qval);
-            case OperationType::EQ:
-                // col == qval: keep if min <= qval <= max
-                return LessThanEqualsOperator{}(minval, qval) && LessThanEqualsOperator{}(qval, maxval);
-            case OperationType::NE:
-                // col != qval: keep unless the entire segment contains only qval (min == max == qval)
-                // If min == max == qval, then all values are qval, so no values satisfy != qval
-                if (EqualsOperator{}(minval, qval) && EqualsOperator{}(maxval, qval)) {
-                    return false; // Can prune - all values equal qval
-                }
-                return true; // Cannot prune - segment contains values other than qval
-            default:
-                // For unsupported operations, don't prune
-                return true;
-            }
-        }
-        return true;
-    });
-}
-
-bool evaluate_expression_node_against_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const ColumnStatsRow& stats
-);
-
-bool evaluate_node_against_stats(
-        const ExpressionContext& expression_context, const VariantNode& node, const ColumnStatsRow& stats
+StatsVariantData resolve_stats_node(
+        const VariantNode& node, const ExpressionContext& expression_context, const ColumnStatsRow& stats
 ) {
     return util::variant_match(
             node,
-            [&](const ColumnName&) -> bool {
-                // A bare column name doesn't give us enough info to prune
-                return true;
+            [&](const ColumnName& column_name) -> StatsVariantData {
+                auto it = stats.stats_for_column.find(column_name.value);
+                if (it != stats.stats_for_column.end()) {
+                    return it->second;
+                }
+                return StatsComparison::UNKNOWN;
             },
-            [&](const ValueName&) -> bool {
-                // A bare value doesn't give us enough info to prune
-                return true;
+            [&](const ValueName& value_name) -> StatsVariantData {
+                return expression_context.values_.get_value(value_name.value);
             },
-            [&](const ValueSetName&) -> bool {
-                // Value sets (isin/isnotin) - not supported for column stats filtering yet
-                return true;
-            },
-            [&](const ExpressionName& expression_name) -> bool {
+            [&](const ExpressionName& expression_name) -> StatsVariantData {
                 auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
-                return evaluate_expression_node_against_stats(expression_context, *expr, stats);
+                return compute_stats(expression_context, *expr, stats);
             },
-            [&](const RegexName&) -> bool {
-                // Regex matching not supported for column stats filtering
-                return true;
-            },
-            [&](std::monostate) -> bool { return true; }
+            [](const auto&) -> StatsVariantData { return StatsComparison::UNKNOWN; }
     );
 }
 
-bool evaluate_expression_node_against_stats(
+StatsComparison dispatch_binary_stats(
+        const StatsVariantData& left, const StatsVariantData& right, OperationType operation
+) {
+    switch (operation) {
+    case OperationType::GT:
+    case OperationType::GE:
+    case OperationType::LT:
+    case OperationType::LE:
+    case OperationType::EQ:
+    case OperationType::NE:
+        return column_stats_detail::visit_binary_comparator_stats(left, right, operation);
+    default:
+        return StatsComparison::UNKNOWN;
+    }
+}
+
+StatsComparison compute_stats(
         const ExpressionContext& expression_context, const ExpressionNode& node, const ColumnStatsRow& stats
 ) {
-    // TODO aseaton check if we can do something more similar to the FilterClause evaluation
-    OperationType op = node.operation_type_;
-
-    // Handle boolean operations (AND, OR, NOT)
-    if (op == OperationType::AND) {
-        bool left_result = evaluate_node_against_stats(expression_context, node.left_, stats);
-        bool right_result = evaluate_node_against_stats(expression_context, node.right_, stats);
-        // For AND: keep if both sides say keep
-        return left_result && right_result;
+    if (is_binary_operation(node.operation_type_)) {
+        auto left = resolve_stats_node(node.left_, expression_context, stats);
+        auto right = resolve_stats_node(node.right_, expression_context, stats);
+        return dispatch_binary_stats(left, right, node.operation_type_);
     }
-
-    if (op == OperationType::OR) {
-        bool left_result = evaluate_node_against_stats(expression_context, node.left_, stats);
-        bool right_result = evaluate_node_against_stats(expression_context, node.right_, stats);
-        // For OR: keep if either side says keep
-        return left_result || right_result;
-    }
-
-    if (op == OperationType::NOT || op == OperationType::IDENTITY) {
-        bool left_result = evaluate_node_against_stats(expression_context, node.left_, stats);
-        if (op == OperationType::NOT) {
-            // For NOT: we cannot simply invert the result because the column stats filtering
-            // is conservative. If we keep a segment (true), inverting would prune it,
-            // but that's incorrect - NOT of "might contain matches" is still "might contain matches".
-            // We can only prune if the child says "definitely all match" which we can't determine.
-            // So we return true (keep) for NOT operations.
-            return true;
-        }
-        return left_result;
-    }
-
-    // Handle comparison operations
-    if (op == OperationType::GT || op == OperationType::GE || op == OperationType::LT || op == OperationType::LE ||
-        op == OperationType::EQ || op == OperationType::NE) {
-
-        // Check if this is a column vs value comparison
-        std::optional<std::string> column_name;
-        std::shared_ptr<Value> query_value;
-        bool reversed = false; // true if the value is on the left
-
-        // Try left = column, right = value
-        if (std::holds_alternative<ColumnName>(node.left_)) {
-            column_name = std::get<ColumnName>(node.left_).value;
-            if (std::holds_alternative<ValueName>(node.right_)) {
-                query_value = expression_context.values_.get_value(std::get<ValueName>(node.right_).value);
-            }
-        }
-        // Try left = value, right = column
-        else if (std::holds_alternative<ValueName>(node.left_)) {
-            query_value = expression_context.values_.get_value(std::get<ValueName>(node.left_).value);
-            if (std::holds_alternative<ColumnName>(node.right_)) {
-                column_name = std::get<ColumnName>(node.right_).value;
-                reversed = true;
-            }
-        }
-
-        if (!column_name || !query_value) {
-            // Not a simple column vs value comparison, cannot optimize
-            return true;
-        }
-
-        // Check if we have stats for this column
-        auto it = stats.stats_for_column.find(*column_name);
-        if (it == stats.stats_for_column.end()) {
-            // No stats for this column, cannot prune
-            return true;
-        }
-
-        const auto& stats_values = it->second;
-        const auto& min_value = stats_values.min;
-        const auto& max_value = stats_values.max;
-
-        // If reversed (value op column), we need to flip the operation
-        OperationType effective_op = op;
-        if (reversed) {
-            switch (op) {
-            case OperationType::GT:
-                effective_op = OperationType::LT;
-                break;
-            case OperationType::GE:
-                effective_op = OperationType::LE;
-                break;
-            case OperationType::LT:
-                effective_op = OperationType::GT;
-                break;
-            case OperationType::LE:
-                effective_op = OperationType::GE;
-                break;
-            default:
-                break; // EQ and NE are symmetric
-            }
-        }
-
-        return compare_value_with_stats(*query_value, min_value, max_value, effective_op);
-    }
-
-    // For any other operation type, we cannot prune
-    return true;
+    return StatsComparison::UNKNOWN;
 }
 
 bool evaluate_expression_against_stats(const ExpressionContext& expression_context, const ColumnStatsRow& stats) {
-    auto root_node_name = std::get<ExpressionName>(expression_context.root_node_name_).value;
-    auto root_node = expression_context.expression_nodes_.get_value(root_node_name);
-    return evaluate_expression_node_against_stats(expression_context, *root_node, stats);
+    auto result = resolve_stats_node(expression_context.root_node_name_, expression_context, stats);
+    if (std::holds_alternative<StatsComparison>(result)) {
+        return std::get<StatsComparison>(result) != StatsComparison::NONE_MATCH;
+    }
+    return true;
 }
 
 ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
