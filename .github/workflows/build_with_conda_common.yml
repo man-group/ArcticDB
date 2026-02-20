@@ -1,4 +1,4 @@
-name: _platform (reusable)
+name: __build_with_conda_common (reusable)
 
 # This workflow is NOT triggered directly. It is called by build-conda.yml once
 # per platform. All platform-specific values are passed in as inputs so every
