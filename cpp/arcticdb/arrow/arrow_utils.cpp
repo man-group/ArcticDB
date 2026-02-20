@@ -8,6 +8,7 @@
 
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
@@ -553,6 +554,553 @@ RecordBatchData empty_record_batch_from_descriptor(
     auto struct_array = sparrow::array{record_batch.extract_struct_array()};
     auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
     return {arr, schema};
+}
+
+namespace {
+
+// Private data for the merged ArrowArray/ArrowSchema release callbacks.
+// Owns all child arrays/schemas and the pointer arrays that parent.children points into.
+struct MergedPrivateData {
+    std::vector<ArrowArray> child_arrays;
+    std::vector<ArrowSchema> child_schemas;
+    // Pointer arrays that parent.children / parent.schema.children point into
+    std::vector<ArrowArray*> child_array_ptrs;
+    std::vector<ArrowSchema*> child_schema_ptrs;
+    // Duplicated format string for the struct type
+    std::string format;
+    // Struct validity bitmap buffer (single null pointer = all-valid)
+    const void* null_bitmap = nullptr;
+};
+
+void merged_array_release(ArrowArray* array) {
+    if (array->release == nullptr) {
+        return; // Already released
+    }
+    auto* data = static_cast<MergedPrivateData*>(array->private_data);
+    // Release each child array that still has a release callback
+    for (auto& child : data->child_arrays) {
+        if (child.release != nullptr) {
+            child.release(&child);
+        }
+    }
+    delete data;
+    array->release = nullptr;
+}
+
+void merged_schema_release(ArrowSchema* schema) {
+    if (schema->release == nullptr) {
+        return; // Already released
+    }
+    auto* data = static_cast<MergedPrivateData*>(schema->private_data);
+    // Release each child schema that still has a release callback
+    for (auto& child : data->child_schemas) {
+        if (child.release != nullptr) {
+            child.release(&child);
+        }
+    }
+    // Free the format string
+    delete data;
+    schema->release = nullptr;
+}
+
+} // anonymous namespace
+
+RecordBatchData horizontal_merge_arrow_batches(RecordBatchData&& batch_a, RecordBatchData&& batch_b) {
+    auto& arr_a = batch_a.array_;
+    auto& sch_a = batch_a.schema_;
+    auto& arr_b = batch_b.array_;
+    auto& sch_b = batch_b.schema_;
+
+    // Collect column names from batch A for deduplication
+    std::unordered_set<std::string> seen_names;
+    for (int64_t i = 0; i < sch_a.n_children; ++i) {
+        if (sch_a.children[i]->name) {
+            seen_names.insert(sch_a.children[i]->name);
+        }
+    }
+
+    // Create private data for the merged array
+    auto* arr_data = new MergedPrivateData();
+    auto* sch_data = new MergedPrivateData();
+
+    // Reserve space: all of A + non-duplicate from B
+    auto total_max = static_cast<size_t>(sch_a.n_children + sch_b.n_children);
+    arr_data->child_arrays.reserve(total_max);
+    sch_data->child_schemas.reserve(total_max);
+
+    // Transfer all children from A
+    for (int64_t i = 0; i < arr_a.n_children; ++i) {
+        // Move child array: copy struct value, then nullify source release to prevent double-free
+        arr_data->child_arrays.push_back(*arr_a.children[i]);
+        arr_a.children[i]->release = nullptr;
+
+        sch_data->child_schemas.push_back(*sch_a.children[i]);
+        sch_a.children[i]->release = nullptr;
+    }
+
+    // Transfer non-duplicate children from B
+    for (int64_t i = 0; i < arr_b.n_children; ++i) {
+        std::string name = sch_b.children[i]->name ? sch_b.children[i]->name : "";
+        if (seen_names.count(name)) {
+            continue; // Skip duplicate (index column)
+        }
+        arr_data->child_arrays.push_back(*arr_b.children[i]);
+        arr_b.children[i]->release = nullptr;
+
+        sch_data->child_schemas.push_back(*sch_b.children[i]);
+        sch_b.children[i]->release = nullptr;
+    }
+
+    auto n_merged = static_cast<int64_t>(arr_data->child_arrays.size());
+
+    // Build pointer arrays
+    arr_data->child_array_ptrs.resize(static_cast<size_t>(n_merged));
+    sch_data->child_schema_ptrs.resize(static_cast<size_t>(n_merged));
+    for (size_t i = 0; i < static_cast<size_t>(n_merged); ++i) {
+        arr_data->child_array_ptrs[i] = &arr_data->child_arrays[i];
+        sch_data->child_schema_ptrs[i] = &sch_data->child_schemas[i];
+    }
+
+    // Duplicate the struct format string
+    sch_data->format = "+s";
+
+    // Release the original parent structs (but children are already nullified)
+    // This frees the original parent's private_data, pointer arrays, etc.
+    if (arr_a.release) {
+        arr_a.release(&arr_a);
+    }
+    if (sch_a.release) {
+        sch_a.release(&sch_a);
+    }
+    if (arr_b.release) {
+        arr_b.release(&arr_b);
+    }
+    if (sch_b.release) {
+        sch_b.release(&sch_b);
+    }
+
+    // Build merged parent ArrowArray
+    ArrowArray merged_array;
+    std::memset(&merged_array, 0, sizeof(merged_array));
+    merged_array.length = arr_data->child_arrays.empty() ? 0 : arr_data->child_arrays[0].length;
+    merged_array.null_count = 0;
+    merged_array.offset = 0;
+    merged_array.n_buffers = 1; // Struct arrays have 1 (null) validity buffer
+    merged_array.buffers = &arr_data->null_bitmap;
+    merged_array.n_children = n_merged;
+    merged_array.children = arr_data->child_array_ptrs.data();
+    merged_array.dictionary = nullptr;
+    merged_array.release = merged_array_release;
+    merged_array.private_data = arr_data;
+
+    // Build merged parent ArrowSchema
+    ArrowSchema merged_schema;
+    std::memset(&merged_schema, 0, sizeof(merged_schema));
+    merged_schema.format = sch_data->format.c_str();
+    merged_schema.name = nullptr;
+    merged_schema.metadata = nullptr;
+    merged_schema.flags = 0;
+    merged_schema.n_children = n_merged;
+    merged_schema.children = sch_data->child_schema_ptrs.data();
+    merged_schema.dictionary = nullptr;
+    merged_schema.release = merged_schema_release;
+    merged_schema.private_data = sch_data;
+
+    return RecordBatchData(merged_array, merged_schema);
+}
+
+std::string default_arrow_format_for_type(DataType data_type) {
+    switch (data_type) {
+    case DataType::INT8:
+        return "c";
+    case DataType::INT16:
+        return "s";
+    case DataType::INT32:
+        return "i";
+    case DataType::INT64:
+        return "l";
+    case DataType::UINT8:
+        return "C";
+    case DataType::UINT16:
+        return "S";
+    case DataType::UINT32:
+        return "I";
+    case DataType::UINT64:
+        return "L";
+    case DataType::FLOAT32:
+        return "f";
+    case DataType::FLOAT64:
+        return "g";
+    case DataType::BOOL8:
+        return "b";
+    case DataType::NANOSECONDS_UTC64:
+        return "tsn:";
+    case DataType::UTF_DYNAMIC32:
+        return "u"; // small_string (32-bit offsets, used with SMALL_STRING/CATEGORICAL output)
+    case DataType::ASCII_DYNAMIC64:
+    case DataType::UTF_DYNAMIC64:
+    case DataType::ASCII_FIXED64:
+    case DataType::UTF_FIXED64:
+        return "U"; // large_string (64-bit offsets)
+    default:
+        return "U"; // Fallback to large_string for unknown types
+    }
+}
+
+void resolve_target_fields_from_batch(std::vector<TargetField>& target_fields, const ArrowSchema& batch_schema) {
+    // Build lookup from name → schema child index
+    std::unordered_map<std::string, int64_t> batch_col_idx;
+    for (int64_t i = 0; i < batch_schema.n_children; ++i) {
+        if (batch_schema.children[i]->name) {
+            batch_col_idx[batch_schema.children[i]->name] = i;
+        }
+    }
+
+    for (auto& field : target_fields) {
+        if (field.format_resolved) {
+            continue;
+        }
+        auto it = batch_col_idx.find(field.name);
+        if (it != batch_col_idx.end()) {
+            auto* child_schema = batch_schema.children[it->second];
+            field.arrow_format = child_schema->format ? child_schema->format : "";
+            field.is_dictionary = (child_schema->dictionary != nullptr);
+            field.format_resolved = true;
+        }
+    }
+}
+
+namespace {
+
+// Owns the buffers for a null-filled Arrow column.
+// Validity bitmap is all zeros (all null), data buffer is zeros.
+struct NullColumnOwner {
+    std::string name;
+    std::string format;
+    std::vector<uint8_t> validity_bitmap; // All zeros = all null
+    std::vector<uint8_t> data_buffer;     // Zeros
+    const void* buffers[3] = {nullptr, nullptr, nullptr};
+
+    // For dictionary-encoded columns:
+    struct DictValues {
+        std::string format = "U"; // large_string
+        // Minimal dictionary with 1 entry (sparrow/Arrow require at least 1)
+        std::vector<int64_t> offsets = {0, 1};
+        std::vector<char> strings = {'a'};
+        uint8_t validity_byte = 0xFF; // 1 valid entry
+        const void* buffers[3] = {nullptr, nullptr, nullptr};
+        ArrowArray array;
+        ArrowSchema schema;
+    };
+    std::unique_ptr<DictValues> dict;
+
+    ArrowArray array;
+    ArrowSchema schema;
+};
+
+void null_column_array_release(ArrowArray* arr) {
+    if (!arr->release)
+        return;
+    // Owner is managed by PaddedBatchData::null_column_owners (unique_ptr).
+    // We don't delete here — the unique_ptr destructor handles cleanup.
+    arr->release = nullptr;
+}
+
+void null_column_schema_release(ArrowSchema* sch) {
+    if (!sch->release)
+        return;
+    // Schema shares NullColumnOwner with the array; array release deletes it.
+    // But schema may outlive array (or vice versa), so we use a separate flag.
+    // For simplicity, schema release is a no-op — owner is freed by array release.
+    sch->release = nullptr;
+}
+
+void null_dict_array_release(ArrowArray* arr) {
+    if (!arr->release)
+        return;
+    // Dict is owned by NullColumnOwner, don't delete it separately
+    arr->release = nullptr;
+}
+
+void null_dict_schema_release(ArrowSchema* sch) {
+    if (!sch->release)
+        return;
+    sch->release = nullptr;
+}
+
+// Create a null-filled ArrowArray + ArrowSchema pair for a single column.
+// Returns a NullColumnOwner that must be kept alive while the arrays are in use.
+NullColumnOwner* create_null_column(
+        const std::string& name, const std::string& format, bool is_dictionary, int64_t num_rows
+) {
+    auto* owner = new NullColumnOwner();
+    owner->name = name;
+    owner->format = format;
+
+    // Validity bitmap: ceil(num_rows / 8) bytes, all zeros = all null
+    auto validity_bytes = static_cast<size_t>((num_rows + 7) / 8);
+    owner->validity_bitmap.resize(validity_bytes, 0);
+
+    if (is_dictionary) {
+        // Dictionary-encoded null column: int32 keys (all zeros) + minimal dictionary
+        auto data_bytes = static_cast<size_t>(num_rows) * sizeof(int32_t);
+        owner->data_buffer.resize(data_bytes, 0);
+
+        // Set up dictionary values (minimal large_string with 1 entry)
+        owner->dict = std::make_unique<NullColumnOwner::DictValues>();
+        auto& dv = *owner->dict;
+
+        // Dict values ArrowArray (large_string with 1 entry ["a"])
+        std::memset(&dv.array, 0, sizeof(dv.array));
+        dv.buffers[0] = &dv.validity_byte; // 1 valid bit
+        dv.buffers[1] = dv.offsets.data(); // [0, 1]
+        dv.buffers[2] = dv.strings.data(); // "a"
+        dv.array.length = 1;
+        dv.array.null_count = 0;
+        dv.array.n_buffers = 3;
+        dv.array.buffers = dv.buffers;
+        dv.array.release = null_dict_array_release;
+        dv.array.private_data = owner;
+
+        // Dict values ArrowSchema
+        std::memset(&dv.schema, 0, sizeof(dv.schema));
+        dv.schema.format = dv.format.c_str();
+        dv.schema.release = null_dict_schema_release;
+
+        // Main column ArrowArray (dictionary keys)
+        owner->buffers[0] = owner->validity_bitmap.data();
+        owner->buffers[1] = owner->data_buffer.data();
+
+        std::memset(&owner->array, 0, sizeof(owner->array));
+        owner->array.length = num_rows;
+        owner->array.null_count = num_rows;
+        owner->array.n_buffers = 2;
+        owner->array.buffers = owner->buffers;
+        owner->array.dictionary = &dv.array;
+        owner->array.release = null_column_array_release;
+        owner->array.private_data = owner;
+
+        // Main column ArrowSchema (dictionary keys, format = "i" for int32)
+        std::memset(&owner->schema, 0, sizeof(owner->schema));
+        owner->schema.format = owner->format.c_str();
+        owner->schema.name = owner->name.c_str();
+        owner->schema.flags = 2 /* ARROW_FLAG_NULLABLE */;
+        owner->schema.dictionary = &dv.schema;
+        owner->schema.release = null_column_schema_release;
+    } else {
+        // Non-dictionary null column
+        size_t type_size = 1; // Default for bool ("b")
+        if (format == "c" || format == "C")
+            type_size = 1;
+        else if (format == "s" || format == "S")
+            type_size = 2;
+        else if (format == "i" || format == "I" || format == "f")
+            type_size = 4;
+        else if (format == "l" || format == "L" || format == "g" || format.rfind("ts", 0) == 0)
+            type_size = 8;
+
+        if (format == "U" || format == "u") {
+            // Large/small string: n_buffers=3 (validity, offsets, data)
+            // Offsets: (num_rows + 1) values (int64 for "U", int32 for "u"), all zero
+            auto offset_size = (format == "U") ? sizeof(int64_t) : sizeof(int32_t);
+            auto offsets_bytes = static_cast<size_t>(num_rows + 1) * offset_size;
+            owner->data_buffer.resize(offsets_bytes, 0);
+
+            owner->buffers[0] = owner->validity_bitmap.data();
+            owner->buffers[1] = owner->data_buffer.data(); // offsets (all zeros)
+            owner->buffers[2] = nullptr;                   // empty string data
+
+            std::memset(&owner->array, 0, sizeof(owner->array));
+            owner->array.length = num_rows;
+            owner->array.null_count = num_rows;
+            owner->array.n_buffers = 3;
+            owner->array.buffers = owner->buffers;
+            owner->array.release = null_column_array_release;
+            owner->array.private_data = owner;
+
+            std::memset(&owner->schema, 0, sizeof(owner->schema));
+            owner->schema.format = owner->format.c_str();
+            owner->schema.name = owner->name.c_str();
+            owner->schema.flags = 2 /* ARROW_FLAG_NULLABLE */;
+            owner->schema.release = null_column_schema_release;
+        } else {
+            // Numeric, timestamp, or bool
+            auto data_bytes = static_cast<size_t>(num_rows) * type_size;
+            owner->data_buffer.resize(data_bytes, 0);
+
+            owner->buffers[0] = owner->validity_bitmap.data();
+            owner->buffers[1] = owner->data_buffer.data();
+
+            std::memset(&owner->array, 0, sizeof(owner->array));
+            owner->array.length = num_rows;
+            owner->array.null_count = num_rows;
+            owner->array.n_buffers = 2;
+            owner->array.buffers = owner->buffers;
+            owner->array.release = null_column_array_release;
+            owner->array.private_data = owner;
+
+            std::memset(&owner->schema, 0, sizeof(owner->schema));
+            owner->schema.format = owner->format.c_str();
+            owner->schema.name = owner->name.c_str();
+            owner->schema.flags = 2 /* ARROW_FLAG_NULLABLE */;
+            owner->schema.release = null_column_schema_release;
+        }
+    }
+
+    return owner;
+}
+
+// Private data for a padded batch. Owns the child pointer arrays and any
+// null columns that were created for padding. Also holds references to
+// the original batch's children (via their ArrowArray/ArrowSchema structs).
+struct PaddedBatchData {
+    // All child arrays/schemas in target order.
+    // Some are moved from the source batch, others are from null columns.
+    std::vector<ArrowArray> child_arrays;
+    std::vector<ArrowSchema> child_schemas;
+    std::vector<ArrowArray*> child_array_ptrs;
+    std::vector<ArrowSchema*> child_schema_ptrs;
+    std::string format = "+s";
+    const void* null_bitmap = nullptr;
+    // Keep null column owners alive until the padded batch is released.
+    // Uses unique_ptr for RAII cleanup on exception paths — if pad_batch_to_schema
+    // throws after creating some null columns, the destructor frees them.
+    // On the normal path, null_column_array_release calls release() to transfer
+    // ownership before destruction.
+    std::vector<std::unique_ptr<NullColumnOwner>> null_column_owners;
+};
+
+void padded_array_release(ArrowArray* array) {
+    if (!array->release)
+        return;
+    auto* data = static_cast<PaddedBatchData*>(array->private_data);
+    for (auto& child : data->child_arrays) {
+        if (child.release) {
+            child.release(&child);
+        }
+    }
+    delete data;
+    array->release = nullptr;
+}
+
+void padded_schema_release(ArrowSchema* schema) {
+    if (!schema->release)
+        return;
+    auto* data = static_cast<PaddedBatchData*>(schema->private_data);
+    for (auto& child : data->child_schemas) {
+        if (child.release) {
+            child.release(&child);
+        }
+    }
+    delete data;
+    schema->release = nullptr;
+}
+
+} // anonymous namespace
+
+RecordBatchData pad_batch_to_schema(RecordBatchData&& batch, const std::vector<TargetField>& target_fields) {
+    auto& arr = batch.array_;
+    auto& sch = batch.schema_;
+
+    // Fast path: check if batch already matches target schema exactly
+    if (static_cast<size_t>(sch.n_children) == target_fields.size()) {
+        bool matches = true;
+        for (size_t i = 0; i < target_fields.size(); ++i) {
+            const char* child_name = sch.children[i]->name;
+            if (!child_name || target_fields[i].name != child_name) {
+                matches = false;
+                break;
+            }
+        }
+        if (matches) {
+            return std::move(batch); // Already matches, zero overhead
+        }
+    }
+
+    // Build lookup: batch column name → child index
+    std::unordered_map<std::string, int64_t> batch_col_idx;
+    for (int64_t i = 0; i < sch.n_children; ++i) {
+        if (sch.children[i]->name) {
+            batch_col_idx[sch.children[i]->name] = i;
+        }
+    }
+
+    auto num_rows = arr.length;
+    auto n_target = target_fields.size();
+
+    auto* arr_data = new PaddedBatchData();
+    auto* sch_data = new PaddedBatchData();
+    arr_data->child_arrays.reserve(n_target);
+    sch_data->child_schemas.reserve(n_target);
+
+    for (const auto& field : target_fields) {
+        auto it = batch_col_idx.find(field.name);
+        if (it != batch_col_idx.end()) {
+            // Column exists in batch — transfer ownership
+            auto idx = it->second;
+            arr_data->child_arrays.push_back(*arr.children[idx]);
+            arr.children[idx]->release = nullptr; // Nullify source
+
+            sch_data->child_schemas.push_back(*sch.children[idx]);
+            sch.children[idx]->release = nullptr;
+        } else {
+            // Column missing — create null column
+            std::unique_ptr<NullColumnOwner> null_col(
+                    create_null_column(field.name, field.arrow_format, field.is_dictionary, num_rows)
+            );
+            arr_data->child_arrays.push_back(null_col->array);
+            null_col->array.release = nullptr; // Transfer to padded batch
+
+            sch_data->child_schemas.push_back(null_col->schema);
+            null_col->schema.release = nullptr;
+
+            // The null column owner's buffers must stay alive until the padded
+            // batch is released.  unique_ptr ensures cleanup on exception paths.
+            arr_data->null_column_owners.push_back(std::move(null_col));
+        }
+    }
+
+    auto n_children = static_cast<int64_t>(arr_data->child_arrays.size());
+
+    // Build pointer arrays
+    arr_data->child_array_ptrs.resize(static_cast<size_t>(n_children));
+    sch_data->child_schema_ptrs.resize(static_cast<size_t>(n_children));
+    for (size_t i = 0; i < static_cast<size_t>(n_children); ++i) {
+        arr_data->child_array_ptrs[i] = &arr_data->child_arrays[i];
+        sch_data->child_schema_ptrs[i] = &sch_data->child_schemas[i];
+    }
+
+    // Release original parent structs (children already nullified)
+    if (arr.release) {
+        arr.release(&arr);
+    }
+    if (sch.release) {
+        sch.release(&sch);
+    }
+
+    // Build padded parent ArrowArray
+    ArrowArray padded_array;
+    std::memset(&padded_array, 0, sizeof(padded_array));
+    padded_array.length = num_rows;
+    padded_array.null_count = 0;
+    padded_array.n_buffers = 1;
+    padded_array.buffers = &arr_data->null_bitmap;
+    padded_array.n_children = n_children;
+    padded_array.children = arr_data->child_array_ptrs.data();
+    padded_array.release = padded_array_release;
+    padded_array.private_data = arr_data;
+
+    // Build padded parent ArrowSchema
+    ArrowSchema padded_schema;
+    std::memset(&padded_schema, 0, sizeof(padded_schema));
+    padded_schema.format = sch_data->format.c_str();
+    padded_schema.flags = 0;
+    padded_schema.n_children = n_children;
+    padded_schema.children = sch_data->child_schema_ptrs.data();
+    padded_schema.release = padded_schema_release;
+    padded_schema.private_data = sch_data;
+
+    return RecordBatchData(padded_array, padded_schema);
 }
 
 } // namespace arcticdb
