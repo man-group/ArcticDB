@@ -642,7 +642,16 @@ RecordBatchData horizontal_merge_arrow_batches(RecordBatchData&& batch_a, Record
     for (int64_t i = 0; i < arr_b.n_children; ++i) {
         std::string name = sch_b.children[i]->name ? sch_b.children[i]->name : "";
         if (seen_names.count(name)) {
-            continue; // Skip duplicate (index column)
+            // Release duplicate children (e.g. index column already taken from A).
+            // Without this, the parent release frees the parent's private_data but
+            // leaves these children with dangling release callbacks.
+            if (arr_b.children[i]->release) {
+                arr_b.children[i]->release(arr_b.children[i]);
+            }
+            if (sch_b.children[i]->release) {
+                sch_b.children[i]->release(sch_b.children[i]);
+            }
+            continue;
         }
         arr_data->child_arrays.push_back(*arr_b.children[i]);
         arr_b.children[i]->release = nullptr;
@@ -963,11 +972,9 @@ struct PaddedBatchData {
     std::string format = "+s";
     const void* null_bitmap = nullptr;
     // Keep null column owners alive until the padded batch is released.
-    // Uses unique_ptr for RAII cleanup on exception paths — if pad_batch_to_schema
-    // throws after creating some null columns, the destructor frees them.
-    // On the normal path, null_column_array_release calls release() to transfer
-    // ownership before destruction.
-    std::vector<std::unique_ptr<NullColumnOwner>> null_column_owners;
+    // Shared between the array and schema PaddedBatchData so the buffers
+    // stay alive regardless of which side is released first.
+    std::shared_ptr<std::vector<std::unique_ptr<NullColumnOwner>>> null_column_owners;
 };
 
 void padded_array_release(ArrowArray* array) {
@@ -1030,6 +1037,11 @@ RecordBatchData pad_batch_to_schema(RecordBatchData&& batch, const std::vector<T
 
     auto* arr_data = new PaddedBatchData();
     auto* sch_data = new PaddedBatchData();
+    // Share null column ownership between array and schema so buffers survive
+    // regardless of which side is released first.
+    auto null_owners = std::make_shared<std::vector<std::unique_ptr<NullColumnOwner>>>();
+    arr_data->null_column_owners = null_owners;
+    sch_data->null_column_owners = null_owners;
     arr_data->child_arrays.reserve(n_target);
     sch_data->child_schemas.reserve(n_target);
 
@@ -1055,8 +1067,9 @@ RecordBatchData pad_batch_to_schema(RecordBatchData&& batch, const std::vector<T
             null_col->schema.release = nullptr;
 
             // The null column owner's buffers must stay alive until the padded
-            // batch is released.  unique_ptr ensures cleanup on exception paths.
-            arr_data->null_column_owners.push_back(std::move(null_col));
+            // batch is released.  Shared ownership ensures cleanup on exception
+            // paths and correct lifetime regardless of array/schema release order.
+            null_owners->push_back(std::move(null_col));
         }
     }
 
