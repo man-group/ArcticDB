@@ -20,7 +20,9 @@
 
 namespace arcticdb {
 
-enum class StatsComparison { ALL_MATCH, NONE_MATCH, UNKNOWN };
+enum class StatsComparison : uint8_t { ALL_MATCH, NONE_MATCH, UNKNOWN };
+
+constexpr bool is_match(StatsComparison c) { return c == StatsComparison::ALL_MATCH; }
 
 template<typename T>
 struct ValueRange {

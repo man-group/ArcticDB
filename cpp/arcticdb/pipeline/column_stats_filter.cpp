@@ -79,7 +79,13 @@ StatsComparison dispatch_binary_stats(
         return column_stats_detail::visit_binary_comparator_stats(left, right, EqualsOperator{});
     case OperationType::NE:
         return column_stats_detail::visit_binary_comparator_stats(left, right, NotEqualsOperator{});
+    case OperationType::AND:
+    case OperationType::OR:
+    case OperationType::XOR:
+        return column_stats_detail::visit_binary_boolean_stats(left, right, operation);
     default:
+        // Not yet implemented: ADD SUB MUL DIV (binary operators) ISIN ISNOTIN (binary membership)
+        // ABS NEG (unary operators)
         return StatsComparison::UNKNOWN;
     }
 }
@@ -92,6 +98,7 @@ StatsComparison compute_stats(
         auto right = resolve_stats_node(node.right_, expression_context, stats);
         return dispatch_binary_stats(left, right, node.operation_type_);
     }
+    // Not yet implemented: unary and ternary operators
     return StatsComparison::UNKNOWN;
 }
 

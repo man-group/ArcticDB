@@ -22,7 +22,14 @@
 
 namespace arcticdb {
 
-using StatsVariantData = std::variant<StatsComparison, std::shared_ptr<Value>, ColumnStatsValues>;
+using StatsVariantData = std::variant<
+    // A result from applying column stats, like q["a"] > 5 -> StatsComparison::NONE_MATCH
+    StatsComparison,
+    // A fixed value, like 5 in q["a"] > 5
+    std::shared_ptr<Value>,
+    // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
+    ColumnStatsValues
+>;
 
 StatsVariantData resolve_stats_node(
         const VariantNode& node, const ExpressionContext& expression_context, const ColumnStatsRow& stats
@@ -131,6 +138,53 @@ StatsComparison visit_binary_comparator_stats(
                         return stats_comparator(r, *l, FlippedType{});
                     },
                     [](const auto&, const auto&) -> StatsComparison { return StatsComparison::UNKNOWN; }
+            },
+            left,
+            right
+    );
+}
+
+// TODO aseaton move to .cpp file and remove "inline"
+inline StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation) {
+    if (left == StatsComparison::UNKNOWN || right == StatsComparison::UNKNOWN) {
+        return StatsComparison::UNKNOWN;
+    }
+
+    bool res{false};
+    switch (operation) {
+    case OperationType::AND:
+        res = is_match(left) && is_match(right);
+        break;
+    case OperationType::OR:
+        res = is_match(left) || is_match(right);
+        break;
+    case OperationType::XOR:
+        res = is_match(left) ^ is_match(right);
+        break;
+    default:
+        util::raise_rte("Unsupported operation in visit_binary_boolean_stats - expected AND OR or XOR");
+    }
+    return res ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+};
+
+inline StatsComparison visit_binary_boolean_stats(
+        const StatsVariantData& left, const StatsVariantData& right, OperationType operation
+) {
+    // TODO aseaton remaining cases
+    // StatsComparison & Value -> Only if Value is a bool
+    // StatsComparison & ColumnStatsValues -> Only if ColumnStatsValues are a bool
+    // Value & Value -> Only if Value is a bool
+    // ColumnStatsValues & ColumnStatsValues -> Only if a bool
+    // Value & ColumnStatsValues -> Only if a bool
+    return std::visit(
+            util::overload{
+                    [operation](const StatsComparison l, const StatsComparison r) {
+                        return binary_boolean_stats(l, r, operation);
+                    },
+                    [](const auto&, const auto&) -> StatsComparison {
+                        log::version().warn("Unsupported case in visit_binary_boolean_stats");
+                        return StatsComparison::UNKNOWN;
+                    }
             },
             left,
             right
