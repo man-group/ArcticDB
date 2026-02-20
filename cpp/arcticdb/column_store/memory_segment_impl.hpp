@@ -12,7 +12,6 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/concepts.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/preconditions.hpp>

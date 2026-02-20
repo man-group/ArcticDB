@@ -22,10 +22,12 @@ void register_column_store(py::module& m) {
 
     py::class_<ColumnData>(m, "ColumnData").def_property_readonly("type", &ColumnData::type);
 
-    py::class_<StringPool>(m, "StringPool")
+    py::class_<StringPool>(m, "StringPool", py::buffer_protocol())
             .def(py::init())
             .def_property_readonly("nbytes", &StringPool::size)
-            .def("as_buffer_info", &python_util::string_pool_as_buffer_info);
+            .def_buffer([](const StringPool& pool) -> py::buffer_info {
+                return python_util::string_pool_as_buffer_info(pool);
+            });
 }
 
 } // namespace arcticdb::column_store

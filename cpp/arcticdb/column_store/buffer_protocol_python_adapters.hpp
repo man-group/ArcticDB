@@ -9,8 +9,11 @@
 #pragma once
 
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <pybind11/pybind11.h>
+
+namespace arcticdb {
+class StringPool;
+}
 
 namespace py = pybind11;
 

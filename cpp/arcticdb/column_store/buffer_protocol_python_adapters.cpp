@@ -7,17 +7,14 @@
  */
 
 #include <arcticdb/column_store/buffer_protocol_python_adapters.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <fmt/format.h>
 
 namespace arcticdb::python_util {
 
 py::buffer_info string_pool_as_buffer_info(const StringPool& pool) {
-    return py::buffer_info{
-            (void*)pool.data().blocks().at(0)->data(),
-            1,
-            py::format_descriptor<char>::format(),
-            ssize_t(pool.data().blocks().at(0)->physical_bytes())
-    };
+    const std::string_view view = pool.get_const_view(0);
+    return py::buffer_info{(void*)view.data(), 1, py::format_descriptor<char>::format(), ssize_t(view.size())};
 }
 
 py::buffer_info from_string_array(const Column::StringArrayData& data) {
