@@ -328,9 +328,9 @@ lib.write("symbol", pd.DataFrame({"b": [3, 4]}))
 One-shot SQL query with automatic symbol discovery and pushdown optimization. Returns DataFrame directly (not VersionedItem).
 
 **Optimization paths**:
-- **Fast path** (`fully_pushed=True`): bypasses DuckDB entirely for single-table SELECT * queries where all filters are pushed to C++ — uses `lib.read()` directly
+- **Fast path** (`_try_sql_fast_path()`): bypasses DuckDB entirely for single-table SELECT * queries where all filters are pushed to C++ — uses `lib.read()` directly
 - **Streaming path**: creates `LazyRecordBatchIterator` per symbol, registers as Arrow reader with DuckDB
-- **Table discovery**: `SHOW TABLES` / `SHOW ALL TABLES` handled without DuckDB
+- **Table discovery**: `SHOW TABLES` / `SHOW ALL TABLES` registers schema-only empty tables via `_description_to_arrow_schema()` (no data read, only `get_description()` metadata)
 
 **Index reconstruction**: For pandas output, retrieves index metadata via `get_description()` (~4ms/symbol) and calls `set_index()` with the most specific matching index across all symbols in the query.
 
@@ -363,11 +363,10 @@ See [DUCKDB.md](DUCKDB.md) for full details.
 
 ### Internal SQL Helpers
 
-- `_read_as_record_batch_reader(symbol, as_of, date_range, row_range, columns, query_builder, **kwargs)` → `Tuple[ArcticRecordBatchReader, int]` — Creates a lazy streaming `ArcticRecordBatchReader` for a symbol. Used internally by `sql()` and `duckdb()`. Delegates to `NativeVersionStore.read_as_lazy_record_batch_iterator()`.
+- `_read_as_record_batch_reader(symbol, as_of, date_range, row_range, columns, query_builder, **kwargs)` → `Tuple[ArcticRecordBatchReader, int]` — Creates a lazy streaming `ArcticRecordBatchReader` for a symbol. Internally expands column names with `_expand_columns_with_idx_prefix()` for MultiIndex support. Used by `sql()` and `duckdb()`. Delegates to `NativeVersionStore.read_as_lazy_record_batch_iterator()`.
+- `_try_sql_fast_path(symbols, pushdown_by_table, ast, as_of, output_format)` — Returns fast-path result or `None`. Bypasses DuckDB for single-symbol pandas SELECT * with full pushdown.
 
-- `_get_index_columns_for_symbol(library, symbol, as_of)` → `Optional[List[str]]` — Static method. Retrieves index column names from symbol metadata via `get_description()`. Used for pandas index reconstruction in SQL results and for date_range pushdown.
-
-- `_resolve_index_columns_for_sql(sql_ast, as_of)` → `Optional[List[str]]` — Extracts symbols from SQL AST, finds datetime index columns via `_get_index_columns_for_symbol()`. Only returns columns with `_DATETIME_DTYPE_MARKERS` types (prevents numeric indexes from being misinterpreted as date_range). Exception handler splits expected failures (`IndexError`, `TypeError`, `ValueError`) from unexpected (`Exception` with `logger.debug`).
+- Shared helpers in `duckdb/index_utils.py`: `_resolve_symbol_as_of()`, `reconstruct_pandas_index()`, `get_index_columns_for_symbol()`, `get_datetime_index_columns_for_symbol()`, `resolve_index_columns_for_sql()`. See [DUCKDB.md](DUCKDB.md) for details.
 
 ## Key Files
 
