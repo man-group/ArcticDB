@@ -115,6 +115,94 @@ In `cpp/arcticdb/pipeline/read_frame.hpp`:
 - `fetch_data()` - Fetch and decode data from keys
 - `decode_into_frame()` - Decode segment into SegmentInMemory
 
+## Lazy Read Path (Arrow/SQL Output)
+
+When the output format is Arrow or Polars (not Pandas), or when the read is for a SQL query, the read pipeline uses `LazyRecordBatchIterator` instead of the eager `read_frame()` path.
+
+### Location
+
+- `cpp/arcticdb/arrow/arrow_output_frame.hpp` — `LazyRecordBatchIterator`
+- `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp` — shared helper functions
+- `cpp/arcticdb/version/version_store_api.cpp` — `create_lazy_record_batch_iterator()`, `create_lazy_record_batch_iterator_with_metadata()`
+
+### Flow
+
+```
+Read Request (format=ARROW/POLARS, or SQL query)
+       │
+       ▼
+┌─────────────────────────┐
+│   Version Resolution    │  ← Same as eager path
+│   (version_map)         │
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│   Index lookup          │  ← Get SliceAndKey list
+│   + Segment filtering   │     (date_range, columns)
+└───────────┬─────────────┘
+            │
+            ▼
+┌─────────────────────────┐
+│ LazyRecordBatchIterator │  ← Prefetch buffer with dual-cap
+│   (on-demand decode)    │     backpressure (count + bytes)
+│                         │     Max: kMaxLazyPrefetchSegments=200
+└───────────┬─────────────┘
+            │ .next()
+            ▼
+┌─────────────────────────┐
+│ Per-segment future:     │  ← Runs on CPU thread pool
+│   batch_read_uncompr()  │     via folly::Future chain
+│   apply_truncation()    │     (.via(&cpu_executor()))
+│   apply_filter_clause() │
+│   prepare_for_arrow()   │
+│   segment_to_arrow()    │
+└───────────┬─────────────┘
+            │
+            ▼ (in next())
+┌─────────────────────────┐
+│   column-slice merge    │  ← Merges slices with same
+│   schema padding        │     row_range in next()
+└───────────┬─────────────┘
+            │
+            ▼
+   RecordBatchData (Arrow C structs)
+```
+
+### Key Differences from Eager Path
+
+| Aspect | Eager (`read_frame()`) | Lazy (`LazyRecordBatchIterator`) |
+|--------|----------------------|--------------------------------|
+| Output | Single `SegmentInMemory` frame | Stream of `RecordBatchData` |
+| Memory | O(symbol_size) during decode | O(prefetch_size × segment_size) |
+| Parallelism | All segments fetched in parallel | Prefetch window with backpressure |
+| Used by | `lib.read(format='pandas')` | `lib.read(format='pyarrow'/'polars')`, `lib.sql()` |
+| Fallback | — | Falls back to eager when `query_builder` is provided |
+
+### Shared Helpers (`lazy_read_helpers.hpp/cpp`)
+
+| Function | Purpose |
+|---|---|
+| `apply_truncation(segment, slice_row_range, row_filter)` | Row-level truncation for date_range (timestamp binary search) and row_range/LIMIT (row offset overlap). Modifies segment in place. |
+| `apply_filter_clause(segment, expression_context, filter_root_node_name)` | Evaluates FilterClause expression via ProcessingUnit. Returns false if all rows filtered. For dynamic schema, `expression_context->dynamic_schema_` must be true. |
+| `estimate_segment_bytes(sk, descriptor)` | Rough uncompressed size estimate (rows × cols × 8 bytes) for dual-cap backpressure. |
+
+### Iterator Construction (`version_store_api.cpp`)
+
+`create_lazy_record_batch_iterator()` and `create_lazy_record_batch_iterator_with_metadata()`:
+
+1. **Slice re-sorting**: `slice_and_keys_` sorted by `(row_range.first, col_range.first)` — makes column slices for each row group consecutive, enabling incremental merging in `next()`
+2. **Column pushdown**: `get_column_bitset_in_context()` populates `overall_column_bitset_` from `ReadQuery.columns`, then builds `columns_to_decode` set. Filter clause input columns merged into this set even if not in user's column selection.
+3. **Prefetch sizing**: `effective_prefetch = min(max(prefetch_size, total_segments), kMaxLazyPrefetchSegments)` where `kMaxLazyPrefetchSegments = 200`. Prefetches all segments when count is small (hides S3 latency); caps at 200 for large symbols.
+
+### Python Bindings
+
+`python_bindings.cpp`:
+- `create_lazy_record_batch_iterator(stream_id, version_query, read_query, read_options, filter_clause, prefetch_size)` — for SQL/DuckDB path
+- `create_lazy_record_batch_iterator_with_metadata(...)` — returns `(VersionedItem, norm, user_meta, iterator)` tuple for `lib.read(output_format='pyarrow')` path
+
+See [ARROW.md](ARROW.md) for details on the Arrow conversion pipeline.
+
 ## Slicing
 
 ### Location
