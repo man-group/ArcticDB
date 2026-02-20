@@ -586,6 +586,7 @@ set(arcticdb_srcs
         storage/s3/ec2_utils.cpp
         pipeline/column_stats_filter.hpp
         pipeline/column_stats_filter.cpp
+        pipeline/column_stats_dispatch.hpp
 )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
