@@ -938,21 +938,22 @@ pybind11_add_module(arcticdb_ext MODULE
         python/arctic_version.cpp
         python/arctic_version.hpp
         )
-set (additional_link_flags "")
-if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 
-    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        list(APPEND additional_link_flags
-            "-Wl,--exclude-libs,ALL"
-            "-Wl,--gc-sections")
+
+if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+        # AppleClang does not support --exclude-libs,ALL. -dead_strip is the equivalent for --gc-sections.
+        target_link_options(arcticdb_ext PRIVATE -Wl,-dead_strip)
+    else()
+        target_link_options(arcticdb_ext PRIVATE
+            -Wl,--exclude-libs,ALL
+            -Wl,--gc-sections)
     endif()
 endif()
 
 target_link_libraries(arcticdb_ext
         PRIVATE
-        arcticdb_python
-        ${additional_link_flags}
-        )
+        arcticdb_python)
 
 if (WIN32)
     target_link_options(arcticdb_ext
