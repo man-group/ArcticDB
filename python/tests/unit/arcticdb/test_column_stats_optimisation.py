@@ -447,8 +447,7 @@ def test_column_stats_or_filter(in_memory_version_store, clear_query_stats, colu
 
 def test_column_stats_negation(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
     """Negation needs careful handling because if a block's statistics satisfy a comparison, we
-    may still need to visit that block when the comparison is negated.
-    This currently isn't implemented and we conservatively include blocks that we could safely have ruled out."""
+    may still need to visit that block when the comparison is negated."""
     lib = in_memory_version_store
 
     df_0 = pd.DataFrame({"col_1": [1, 3]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
@@ -472,7 +471,7 @@ def test_column_stats_negation(in_memory_version_store, clear_query_stats, colum
     expected = expected[~(expected["col_1"] > 5)]
     assert_frame_equal(result, expected)
 
-    assert table_data_reads == 3  # TODO aseaton We currently skip pruning with negated filters
+    assert table_data_reads == 2
 
 
 @pytest.mark.parametrize("filter_first", [True, False])

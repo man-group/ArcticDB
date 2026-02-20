@@ -23,13 +23,12 @@
 namespace arcticdb {
 
 using StatsVariantData = std::variant<
-    // A result from applying column stats, like q["a"] > 5 -> StatsComparison::NONE_MATCH
-    StatsComparison,
-    // A fixed value, like 5 in q["a"] > 5
-    std::shared_ptr<Value>,
-    // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
-    ColumnStatsValues
->;
+        // A result from applying column stats, like q["a"] > 5 -> StatsComparison::NONE_MATCH
+        StatsComparison,
+        // A fixed value, like 5 in q["a"] > 5
+        std::shared_ptr<Value>,
+        // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
+        ColumnStatsValues>;
 
 StatsVariantData resolve_stats_node(
         const VariantNode& node, const ExpressionContext& expression_context, const ColumnStatsRow& stats

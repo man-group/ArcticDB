@@ -85,7 +85,25 @@ StatsComparison dispatch_binary_stats(
         return column_stats_detail::visit_binary_boolean_stats(left, right, operation);
     default:
         // Not yet implemented: ADD SUB MUL DIV (binary operators) ISIN ISNOTIN (binary membership)
-        // ABS NEG (unary operators)
+        return StatsComparison::UNKNOWN;
+    }
+}
+
+StatsComparison dispatch_unary_stats(const StatsVariantData& left, OperationType operation) {
+    if (!std::holds_alternative<StatsComparison>(left)) {
+        return StatsComparison::UNKNOWN; // TODO aseaton not implemented
+    }
+    auto left_transformed = std::get<StatsComparison>(left);
+    if (left_transformed == StatsComparison::UNKNOWN) {
+        return StatsComparison::UNKNOWN;
+    }
+    switch (operation) {
+    case OperationType::NOT:
+        return left_transformed == StatsComparison::ALL_MATCH ? StatsComparison::NONE_MATCH
+                                                              : StatsComparison::ALL_MATCH;
+    default:
+        // Not implemented: ABS, ISNULL, NOTNULL, IDENTITY, NEG
+        ARCTICDB_DEBUG(log::version(), "Unsupported unary operator for stats {}", operation);
         return StatsComparison::UNKNOWN;
     }
 }
@@ -97,6 +115,10 @@ StatsComparison compute_stats(
         auto left = resolve_stats_node(node.left_, expression_context, stats);
         auto right = resolve_stats_node(node.right_, expression_context, stats);
         return dispatch_binary_stats(left, right, node.operation_type_);
+    }
+    if (is_unary_operation(node.operation_type_)) {
+        auto left = resolve_stats_node(node.left_, expression_context, stats);
+        return dispatch_unary_stats(left, node.operation_type_);
     }
     // Not yet implemented: unary and ternary operators
     return StatsComparison::UNKNOWN;
