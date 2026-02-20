@@ -66,7 +66,7 @@ jobs:
   # ── linux_64 ─────────────────────────────────────────────────────────────────
   linux_64:
     name: linux_64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/build_with_conda_common.yml
     with:
       platform:                  linux_64
       runner:                    ubuntu-22.04
@@ -89,7 +89,7 @@ jobs:
   # ── linux_aarch64 ────────────────────────────────────────────────────────────
   linux_aarch64:
     name: linux_aarch64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/build_with_conda_common.yml
     with:
       platform:                  linux_aarch64
       runner:                    ubuntu-22.04-arm
@@ -112,7 +112,7 @@ jobs:
   # ── osx_arm64 ────────────────────────────────────────────────────────────────
   osx_arm64:
     name: osx_arm64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/build_with_conda_common.yml
     with:
       platform:                  osx_arm64
       runner:                    macos-14
@@ -135,7 +135,7 @@ jobs:
   # ── win_64 ───────────────────────────────────────────────────────────────────
   win_64:
     name: win_64
-    uses: ./.github/workflows/__build_with_conda_common.yml
+    uses: ./.github/workflows/build_with_conda_common.yml
     with:
       platform:                  win_64
       runner:                    windows-latest
