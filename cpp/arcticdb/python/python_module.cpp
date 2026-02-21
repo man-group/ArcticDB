@@ -181,14 +181,16 @@ rec_call(int i) {
 void register_termination_handler() {
     std::set_terminate([] {
         auto eptr = std::current_exception();
-        try {
-            std::rethrow_exception(eptr);
-        } catch (const std::exception& e) {
-            arcticdb::log::root().error(
-                    "Terminate called in thread {}: {}\n Aborting", std::this_thread::get_id(), e.what()
-            );
-            std::abort();
+        if (eptr != nullptr) {
+            try {
+                std::rethrow_exception(eptr);
+            } catch (const std::exception& e) {
+                arcticdb::log::root().error(
+                        "Terminate called in thread {}: {}\n Aborting", std::this_thread::get_id(), e.what()
+                );
+            }
         }
+        std::abort();
     });
 }
 
