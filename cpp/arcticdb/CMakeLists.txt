@@ -884,14 +884,25 @@ target_compile_definitions(arcticdb_core PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
 ## C API shared library (language bindings) ##
+# arcticdb_core_static includes pybind11 code that references Python symbols.
+# Link against libpython to resolve them (they are never called through the C API path,
+# but static constructors in the core library reference them during dlopen).
+find_package(Python3 COMPONENTS Development QUIET)
+
 add_library(arcticdb_c SHARED bindings/arcticdb_c.cpp)
 
 target_link_libraries(arcticdb_c
         PRIVATE
+        arcticdb_core_static
         ${arcticdb_core_libraries}
         ${AWSSDK_LINK_LIBRARIES}
         arcticdb_core_static
+        ${AWSSDK_LINK_LIBRARIES}
         )
+
+if(Python3_FOUND)
+    target_link_libraries(arcticdb_c PRIVATE Python3::Python)
+endif()
 
 target_include_directories(arcticdb_c PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
