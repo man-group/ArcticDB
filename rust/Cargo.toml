@@ -1,0 +1,9 @@
+[package]
+name = "arcticdb"
+version = "0.1.0"
+edition = "2021"
+description = "Rust bindings for the ArcticDB C API"
+license = "BSL-1.1"
+
+[lib]
+name = "arcticdb"
