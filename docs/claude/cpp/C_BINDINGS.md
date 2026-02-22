@@ -5,8 +5,9 @@ The C bindings module (`cpp/arcticdb/bindings/`) exposes ArcticDB's read path th
 ## Architecture
 
 ```
-Downstream (future PRs)
-Java (JNI/Panama) │ .NET (P/Invoke) │ Excel (XLL)
+Language Bindings
+Java (Panama FFM)  │ .NET (P/Invoke)  │ Excel (XLL, future)
+java/              │ dotnet/           │
 ────────────────────────────────────────────────
                     │
 C API               │  arcticdb_c.h — extern "C", opaque handles
@@ -108,12 +109,43 @@ cmake --build cpp/out/linux-debug-build --target test_c_api_smoke test_c_api_str
 
 The `libarcticdb_c.so` is the distributable artifact — downstream languages only need this shared library plus `arcticdb_c.h`.
 
+## Language Bindings
+
+### Java (`java/`)
+
+Uses Java 21 Panama FFM API (preview) for zero-JNI native access.
+
+| File | Purpose |
+|------|---------|
+| `ArcticNative.java` | Low-level FFM bindings: struct layouts, `dlopen(RTLD_LAZY)` loading, function pointer helpers for ArrowArrayStream callbacks |
+| `ArcticLibrary.java` | High-level `AutoCloseable` wrapper: `openLmdb()`, `readStream()`, `listSymbols()`, `writeTestData()` |
+| `ArcticReadTest.java` | JUnit 5 integration tests (5 tests) |
+
+Build: `JAVA_HOME=<java21> mvn test -Darcticdb.native.path=<dir-containing-libarcticdb_c.so>`
+
+Key pattern: loads `libarcticdb_c.so` with `dlopen(RTLD_LAZY)` via FFM to avoid resolving unused Python symbols at load time. `SymbolLookup` is backed by `dlsym` calls.
+
+### .NET (`dotnet/`)
+
+Uses P/Invoke (`DllImport`) with `DllImportResolver` for native library path.
+
+| File | Purpose |
+|------|---------|
+| `ArcticNative.cs` | P/Invoke bindings: `StructLayout` structs, delegate types for Arrow function pointers, `DllImportResolver` |
+| `ArcticLibrary.cs` | High-level `IDisposable` wrapper: `OpenLmdb()`, `ReadStream()`, `ListSymbols()`, `WriteTestData()` |
+| `ArcticReadTest.cs` | xUnit integration tests (5 tests) |
+
+Build: `ARCTICDB_NATIVE_PATH=<dir> dotnet test`
+
+Key pattern: `Marshal.GetDelegateForFunctionPointer<T>()` converts Arrow function pointers to callable delegates for schema/batch consumption.
+
 ## Design Decisions
 
 - **LMDB-only initially** — simplest backend, no credentials. S3/Azure added later via `arctic_library_open_*()`.
 - **`ArcticArrowArrayStream`** prefixed to avoid collisions with the standard `ArrowArrayStream` name (which we also define internally in `bindings::ArrowArrayStream`). Layout-compatible via `static_assert` + `reinterpret_cast`.
 - **Symbol visibility** — `ARCTICDB_C_API` macro handles `__attribute__((visibility("default")))` since the project compiles with `-fvisibility=hidden`.
-- **No Python at runtime** — the C API path never touches Python/pybind11. Python symbols are linked transitively from `arcticdb_core_static` but never called.
+- **Python linkage** — `arcticdb_core_static` contains pybind11 code with static constructors that reference Python symbols. `libarcticdb_c.so` links against `Python3::Python` to resolve these at load time. The C API path never calls Python at runtime.
+- **CMake link order** — `arcticdb_core_static` and AWS SDK `.a` files are duplicated on the linker line to satisfy the single-pass static archive resolution order.
 
 ## Related Documentation
 
