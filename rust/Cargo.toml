@@ -5,5 +5,8 @@ edition = "2021"
 description = "Rust bindings for the ArcticDB C API"
 license = "BSL-1.1"
 
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
 [lib]
 name = "arcticdb"

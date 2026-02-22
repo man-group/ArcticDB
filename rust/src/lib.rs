@@ -22,6 +22,7 @@
 //! println!("Read {} rows in {} batches", result.total_rows, result.batch_count);
 //! ```
 
+use serde::Serialize;
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::fmt;
 use std::ptr;
@@ -165,6 +166,23 @@ fn check_error(rc: c_int, err: &ArcticError) -> Result<()> {
 }
 
 // ── High-level wrapper ───────────────────────────────────────────────────────
+
+/// Column data extracted from Arrow arrays.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum ColumnData {
+    Float64(Vec<f64>),
+    Int64(Vec<i64>),
+}
+
+/// A DataFrame read from ArcticDB with column-oriented data.
+#[derive(Debug, Clone, Serialize)]
+pub struct DataFrame {
+    pub column_names: Vec<String>,
+    pub column_types: Vec<String>,
+    pub columns: Vec<ColumnData>,
+    pub num_rows: i64,
+}
 
 /// Summary of data read from an Arrow stream.
 #[derive(Debug)]
@@ -312,6 +330,192 @@ impl ArcticLibrary {
             column_names,
             total_rows,
             batch_count,
+        })
+    }
+
+    /// Read a symbol as a DataFrame, returning actual column data.
+    pub fn read_dataframe(&self, symbol: &str, version: i64) -> Result<DataFrame> {
+        let c_symbol = CString::new(symbol).expect("symbol contains null byte");
+        let mut err = ArcticError::new();
+        let mut stream = unsafe { std::mem::zeroed::<ArcticArrowArrayStream>() };
+
+        let rc = unsafe {
+            arctic_read_stream(self.handle, c_symbol.as_ptr(), version, &mut stream, &mut err)
+        };
+        check_error(rc, &err)?;
+
+        // 1. Get schema — extract column names and formats
+        let mut schema = unsafe { std::mem::zeroed::<ArrowSchema>() };
+        let get_schema = stream.get_schema.expect("get_schema is null");
+        let schema_rc = unsafe { get_schema(&mut stream, &mut schema) };
+        if schema_rc != 0 {
+            if let Some(release) = stream.release {
+                unsafe { release(&mut stream) };
+            }
+            return Err(Error {
+                code: schema_rc,
+                message: "get_schema failed".into(),
+            });
+        }
+
+        let mut column_names = Vec::new();
+        let mut column_formats = Vec::new();
+        if schema.n_children > 0 && !schema.children.is_null() {
+            for i in 0..schema.n_children {
+                let child_ptr = unsafe { *schema.children.add(i as usize) };
+                if !child_ptr.is_null() {
+                    let child = unsafe { &*child_ptr };
+                    let name = if !child.name.is_null() {
+                        unsafe { CStr::from_ptr(child.name) }
+                            .to_string_lossy()
+                            .into_owned()
+                    } else {
+                        format!("col_{i}")
+                    };
+                    let fmt = if !child.format.is_null() {
+                        unsafe { CStr::from_ptr(child.format) }
+                            .to_string_lossy()
+                            .into_owned()
+                    } else {
+                        String::new()
+                    };
+                    column_names.push(name);
+                    column_formats.push(fmt);
+                }
+            }
+        }
+
+        if let Some(release) = schema.release {
+            unsafe { release(&mut schema) };
+        }
+
+        let n_cols = column_names.len();
+
+        // Map Arrow format strings to type names
+        let column_types: Vec<String> = column_formats
+            .iter()
+            .map(|fmt| match fmt.as_str() {
+                "g" => "float64".into(),
+                "f" => "float32".into(),
+                "l" => "int64".into(),
+                "i" => "int32".into(),
+                "ttn" => "int64".into(), // timestamp ns → int64
+                "tsn:" => "int64".into(), // timestamp ns with tz → int64
+                other if other.starts_with("tsn:") => "int64".into(),
+                _ => "float64".into(), // fallback
+            })
+            .collect();
+
+        // Prepare column accumulators
+        let mut columns: Vec<Vec<f64>> = vec![Vec::new(); n_cols];
+        let mut int_columns: Vec<Vec<i64>> = vec![Vec::new(); n_cols];
+        let mut total_rows: i64 = 0;
+
+        // 2. Consume batches — copy data from Arrow arrays
+        let get_next = stream.get_next.expect("get_next is null");
+
+        loop {
+            let mut array = unsafe { std::mem::zeroed::<ArrowArray>() };
+            let next_rc = unsafe { get_next(&mut stream, &mut array) };
+            if next_rc != 0 {
+                if let Some(release) = stream.release {
+                    unsafe { release(&mut stream) };
+                }
+                return Err(Error {
+                    code: next_rc,
+                    message: "get_next failed".into(),
+                });
+            }
+
+            if array.release.is_none() {
+                break;
+            }
+
+            let batch_len = array.length as usize;
+            total_rows += array.length;
+
+            if array.n_children as usize == n_cols && !array.children.is_null() {
+                for col_idx in 0..n_cols {
+                    let child_ptr = unsafe { *array.children.add(col_idx) };
+                    if child_ptr.is_null() {
+                        continue;
+                    }
+                    let child = unsafe { &*child_ptr };
+                    // buffers[1] is the data buffer in Arrow columnar format
+                    if child.n_buffers >= 2 && !child.buffers.is_null() {
+                        let data_buf = unsafe { *child.buffers.add(1) };
+                        if !data_buf.is_null() {
+                            match column_types[col_idx].as_str() {
+                                "float64" => {
+                                    let slice = unsafe {
+                                        std::slice::from_raw_parts(
+                                            data_buf as *const f64,
+                                            batch_len,
+                                        )
+                                    };
+                                    columns[col_idx].extend_from_slice(slice);
+                                }
+                                "float32" => {
+                                    let slice = unsafe {
+                                        std::slice::from_raw_parts(
+                                            data_buf as *const f32,
+                                            batch_len,
+                                        )
+                                    };
+                                    columns[col_idx].extend(slice.iter().map(|&v| v as f64));
+                                }
+                                "int64" => {
+                                    let slice = unsafe {
+                                        std::slice::from_raw_parts(
+                                            data_buf as *const i64,
+                                            batch_len,
+                                        )
+                                    };
+                                    int_columns[col_idx].extend_from_slice(slice);
+                                }
+                                "int32" => {
+                                    let slice = unsafe {
+                                        std::slice::from_raw_parts(
+                                            data_buf as *const i32,
+                                            batch_len,
+                                        )
+                                    };
+                                    int_columns[col_idx]
+                                        .extend(slice.iter().map(|&v| v as i64));
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(release) = array.release {
+                unsafe { release(&mut array) };
+            }
+        }
+
+        // 3. Release stream
+        if let Some(release) = stream.release {
+            unsafe { release(&mut stream) };
+        }
+
+        // Build final ColumnData from the accumulators
+        let final_columns: Vec<ColumnData> = (0..n_cols)
+            .map(|i| {
+                if column_types[i] == "int64" || column_types[i] == "int32" {
+                    ColumnData::Int64(std::mem::take(&mut int_columns[i]))
+                } else {
+                    ColumnData::Float64(std::mem::take(&mut columns[i]))
+                }
+            })
+            .collect();
+
+        Ok(DataFrame {
+            column_names,
+            column_types,
+            columns: final_columns,
+            num_rows: total_rows,
         })
     }
 

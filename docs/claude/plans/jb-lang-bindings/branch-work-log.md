@@ -57,3 +57,35 @@
 - Updated `docs/claude/ARCHITECTURE.md` — added `java/`, `dotnet/`, `bindings/` to directory structure; added language bindings layer to architecture diagram; added bindings module to C++ module table; added Java/dotnet to testing table
 - Created `docs/mkdocs/docs/tutorials/language_bindings.md` — user-facing tutorial covering prerequisites, setup, usage examples, and test commands for both Java and .NET
 - Updated `docs/mkdocs/mkdocs.yml` — added Language Bindings tutorial to nav
+
+## 2026-02-22: Rust Bindings (read_dataframe)
+
+### What was done
+- Updated `rust/Cargo.toml` — added `serde` dependency with `derive` feature
+- Updated `rust/src/lib.rs`:
+  - Added `ColumnData` enum (Float64, Int64) with `Serialize` derive and `#[serde(untagged)]`
+  - Added `DataFrame` struct with column_names, column_types, columns, num_rows
+  - Added `read_dataframe(symbol, version)` method that reads Arrow schema formats and copies data from `ArrowArray.children[i].buffers[1]`
+  - Supports float64/float32/int64/int32 and timestamp formats
+
+## 2026-02-22: Excel Integration (Gateway + Add-in)
+
+### What was done
+- Created `excel/gateway/` — Rust HTTP gateway server using axum
+  - `Cargo.toml`: deps on arcticdb, axum 0.7, tokio, serde, tower-http (cors), clap
+  - `build.rs`: same native lib linking as rust/build.rs
+  - `src/main.rs`: 6 endpoints (health, open/close library, list symbols, read data, write test)
+  - Row-oriented DataFrame JSON wire format for Excel's Range.values compatibility
+  - CORS permissive, configurable port (default 8787, --port or ARCTICDB_GATEWAY_PORT env)
+- Created `excel/addin/` — Office.js Excel add-in (TypeScript)
+  - `manifest.xml`: shared runtime, ARCTICDB namespace, ribbon tab with Connect/Refresh buttons
+  - `functions.json`: static custom functions metadata (READ, LIST)
+  - `src/functions/functions.ts`: ARCTICDB.READ(symbol, version?), ARCTICDB.LIST() custom functions
+  - `src/taskpane/taskpane.{html,ts}`: server URL, library open/close, symbol list, click-to-load, write test data
+  - `src/commands/commands.ts`: ribbon Refresh command (full recalc)
+  - `src/globals.d.ts`: type declarations for Office.js, CustomFunctions, Excel APIs
+  - webpack config for 3 entry points + HTML + copy manifest/metadata
+
+### Build verification
+- Gateway: `cargo build` succeeds, all 6 curl endpoints tested end-to-end
+- Add-in: `npm install && npm run build` succeeds (webpack, 0 errors)

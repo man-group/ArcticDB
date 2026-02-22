@@ -1,0 +1,43 @@
+{
+  "allowCustomDataForDataTypeAny": true,
+  "functions": [
+    {
+      "description": "Reads a symbol from ArcticDB and returns it as a spilling 2D array.",
+      "id": "READ",
+      "name": "READ",
+      "parameters": [
+        {
+          "description": "The symbol name to read",
+          "name": "symbol",
+          "type": "string"
+        },
+        {
+          "description": "Version number (-1 or omit for latest)",
+          "name": "version",
+          "optional": true,
+          "type": "number"
+        }
+      ],
+      "result": {
+        "dimensionality": "matrix",
+        "type": "any"
+      },
+      "options": {
+        "requiresAddress": false
+      }
+    },
+    {
+      "description": "Lists all symbols in the active ArcticDB library.",
+      "id": "LIST",
+      "name": "LIST",
+      "parameters": [],
+      "result": {
+        "dimensionality": "matrix",
+        "type": "string"
+      },
+      "options": {
+        "requiresAddress": false
+      }
+    }
+  ]
+}

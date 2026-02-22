@@ -1,0 +1,15 @@
+[package]
+name = "arcticdb-gateway"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP gateway for ArcticDB Excel integration"
+license = "BSL-1.1"
+
+[dependencies]
+arcticdb = { path = "../../rust" }
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tower-http = { version = "0.5", features = ["cors"] }
+clap = { version = "4", features = ["derive", "env"] }
