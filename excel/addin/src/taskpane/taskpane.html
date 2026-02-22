@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ArcticDB</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1.1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; color: #333; padding: 12px; }
+    h2 { font-size: 16px; margin-bottom: 8px; color: #1a1a2e; }
+    h3 { font-size: 13px; margin: 12px 0 6px; color: #555; }
+    label { display: block; font-size: 12px; color: #666; margin-bottom: 2px; }
+    input, button { font-size: 13px; }
+    input[type="text"], input[type="number"] { width: 100%; padding: 6px 8px; border: 1px solid #ccc; border-radius: 4px; margin-bottom: 8px; }
+    button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; color: #fff; background: #0078d4; }
+    button:hover { background: #106ebe; }
+    button:disabled { background: #999; cursor: not-allowed; }
+    button.secondary { background: #e1e1e1; color: #333; }
+    button.secondary:hover { background: #d0d0d0; }
+    button.danger { background: #d13438; }
+    button.danger:hover { background: #a4262c; }
+    .section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #eee; }
+    #status { font-size: 12px; color: #666; margin-top: 4px; min-height: 16px; }
+    #status.error { color: #d13438; }
+    #status.ok { color: #107c10; }
+    .symbol-list { list-style: none; max-height: 300px; overflow-y: auto; }
+    .symbol-list li { padding: 6px 8px; border-bottom: 1px solid #f0f0f0; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .symbol-list li:hover { background: #f5f5f5; }
+    .symbol-list li button { font-size: 11px; padding: 2px 10px; }
+    .empty { color: #999; font-style: italic; padding: 8px 0; }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+  </style>
+</head>
+<body>
+  <h2>ArcticDB</h2>
+
+  <div class="section">
+    <h3>Server</h3>
+    <label for="serverUrl">Gateway URL</label>
+    <input type="text" id="serverUrl" value="http://localhost:8787" placeholder="http://localhost:8787"/>
+    <button id="btnHealth">Test Connection</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="section">
+    <h3>Open Library</h3>
+    <div class="row">
+      <div>
+        <label for="libName">Name</label>
+        <input type="text" id="libName" placeholder="mylib"/>
+      </div>
+      <div>
+        <label for="libPath">LMDB Path</label>
+        <input type="text" id="libPath" placeholder="/data/db"/>
+      </div>
+    </div>
+    <button id="btnOpen">Open</button>
+    <button id="btnClose" class="danger" style="margin-left:4px;" disabled>Close</button>
+    <div id="libStatus" style="font-size:12px; color:#666; margin-top:4px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>Symbols</h3>
+    <button id="btnRefresh" class="secondary" disabled>Refresh</button>
+    <ul class="symbol-list" id="symbolList">
+      <li class="empty">No library open</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <h3>Write Test Data</h3>
+    <div class="row">
+      <div>
+        <label for="testSymbol">Symbol</label>
+        <input type="text" id="testSymbol" placeholder="prices"/>
+      </div>
+      <div>
+        <label for="testRows">Rows</label>
+        <input type="number" id="testRows" value="100"/>
+      </div>
+      <div>
+        <label for="testCols">Cols</label>
+        <input type="number" id="testCols" value="3"/>
+      </div>
+    </div>
+    <button id="btnWriteTest" disabled>Write</button>
+  </div>
+
+  <script src="taskpane.js"></script>
+</body>
+</html>

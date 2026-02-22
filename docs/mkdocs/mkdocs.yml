@@ -105,6 +105,7 @@ nav:
     - Data Organisation Guide: 'tutorials/data_organisation.md'
     - Library Sizes: 'tutorials/library_sizes.md'
     - Statistics: 'tutorials/query_stats.md'
+    - Language Bindings (Java & .NET): 'tutorials/language_bindings.md'
   - Storage Guides:
     - Getting started with AWS S3: 'aws.md'
     - Library Permissions with AWS S3: 'aws_permissions.md'

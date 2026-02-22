@@ -11,7 +11,10 @@ ArcticDB is a **high-performance, serverless DataFrame database** for Python dat
 ```
 ArcticDB/
 ├── cpp/                    # C++ engine (core data processing)
+│   └── arcticdb/bindings/  # C API (libarcticdb_c.so)
 ├── python/                 # Python package and tests
+├── java/                   # Java bindings (Panama FFM, Java 21)
+├── dotnet/                 # .NET bindings (P/Invoke, .NET 8)
 ├── docs/                   # Documentation (MkDocs + Doxygen)
 ├── docker/                 # Docker build configurations
 ├── build_tooling/          # Code formatting and build scripts
@@ -65,6 +68,7 @@ cpp/
 | **codec/** | Data compression and encoding | `codec.cpp`, `lz4.hpp`, `zstd.hpp`, `segment.cpp` |
 | **column_store/** | In-memory columnar representation | `memory_segment.cpp`, `column.cpp`, `string_pool.cpp` |
 | **entity/** | Core domain types | `key.hpp`, `types.hpp`, `descriptors.hpp` |
+| **bindings/** | C API for language bindings | `arcticdb_c.h`, `arcticdb_c.cpp`, `arrow_stream.hpp` |
 
 ---
 
@@ -133,7 +137,20 @@ ArcticDB stores data as **keys** in the underlying storage. Each key contains a 
 └───────────────────────────────────────────┼─────────────────────────┘
                                             │ pybind11
 ┌───────────────────────────────────────────┼─────────────────────────┐
-│                         C++ LAYER         ▼                         │
+│  LANGUAGE BINDINGS (via C API)            │                         │
+│  ┌──────────────┐  ┌──────────────┐       │                         │
+│  │ Java (Panama)│  │ .NET (P/Inv) │       │                         │
+│  └──────┬───────┘  └──────┬───────┘       │                         │
+│         └──────────┬───────┘              │                         │
+│                    ▼                      │                         │
+│  ┌────────────────────────────────┐       │                         │
+│  │ libarcticdb_c.so (C API)      │       │                         │
+│  │ ArrowArrayStream interface    │       │                         │
+│  └───────────────┬────────────────┘       │                         │
+└──────────────────┼────────────────────────┼─────────────────────────┘
+                   │                        │
+┌──────────────────┼────────────────────────┼─────────────────────────┐
+│                  └───────►C++ LAYER◄──────┘                         │
 │  ┌────────────────────────────────────────────────────────────────┐ │
 │  │                    version_store_api                            │ │
 │  │                 (local_versioned_engine)                        │ │
@@ -294,6 +311,8 @@ windows-cl-debug, windows-cl-release, macos-debug, macos-release
 | C++ Unit | `cpp/arcticdb/*/test/` | Google Test |
 | C++ Benchmarks | `cpp/arcticdb/*/test/benchmark_*.cpp` | Google Benchmark |
 | Python Benchmarks | `python/benchmarks/` | ASV |
+| Java Integration | `java/src/test/` | JUnit 5 |
+| .NET Integration | `dotnet/ArcticDB.Tests/` | xUnit |
 
 ### Running Tests
 

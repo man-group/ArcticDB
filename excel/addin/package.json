@@ -1,0 +1,26 @@
+{
+  "name": "arcticdb-excel-addin",
+  "version": "0.1.0",
+  "description": "Office.js Excel Add-in for ArcticDB",
+  "private": true,
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack serve --mode development",
+    "start": "webpack serve --mode development --open",
+    "lint": "npx tsc --noEmit"
+  },
+  "dependencies": {
+    "@microsoft/office-js": "^1.1.89"
+  },
+  "devDependencies": {
+    "css-loader": "^7.1.2",
+    "html-webpack-plugin": "^5.6.3",
+    "style-loader": "^4.0.0",
+    "ts-loader": "^9.5.1",
+    "typescript": "^5.7.0",
+    "webpack": "^5.97.0",
+    "webpack-cli": "^6.0.0",
+    "webpack-dev-server": "^5.2.0",
+    "copy-webpack-plugin": "^12.0.2"
+  }
+}

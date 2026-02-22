@@ -883,6 +883,42 @@ target_compile_definitions(arcticdb_core PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_
 
 GENERATE_EXPORT_HEADER(arcticdb_core)
 
+## C API shared library (language bindings) ##
+# arcticdb_core_static includes pybind11 code that references Python symbols.
+# Link against libpython to resolve them (they are never called through the C API path,
+# but static constructors in the core library reference them during dlopen).
+find_package(Python3 COMPONENTS Development QUIET)
+
+add_library(arcticdb_c SHARED bindings/arcticdb_c.cpp)
+
+target_link_libraries(arcticdb_c
+        PRIVATE
+        arcticdb_core_static
+        ${arcticdb_core_libraries}
+        ${AWSSDK_LINK_LIBRARIES}
+        arcticdb_core_static
+        ${AWSSDK_LINK_LIBRARIES}
+        )
+
+if(Python3_FOUND)
+    target_link_libraries(arcticdb_c PRIVATE Python3::Python)
+endif()
+
+target_include_directories(arcticdb_c PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/../proto/arcticc/pb2/proto/>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+        ${arcticdb_core_includes}
+        )
+
+if(NOT ${ARCTICDB_USING_CONDA})
+    target_include_directories(arcticdb_c PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
+endif()
+
+target_compile_definitions(arcticdb_c PRIVATE PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t ARCTICDB_C_BUILDING)
+
 ## Core python bindings, private only ##
 set(arcticdb_python_srcs
         async/python_bindings.cpp
@@ -1327,4 +1363,35 @@ if(${TEST})
                 ${BASE_PCH}
         )
     endif()
+
+    ## C API smoke tests ##
+    # Tests link against arcticdb_c (the shared library under test) plus sparrow
+    # (for ArrowArray/ArrowSchema type definitions). The executable linker requires
+    # all transitive dependencies to be resolvable, hence Python and AWS.
+    set(C_API_TEST_LIBS
+            arcticdb_c
+            sparrow::sparrow
+            Python::Python
+            ${AWSSDK_LINK_LIBRARIES}
+            )
+
+    add_executable(test_c_api_smoke bindings/test_c_api_smoke.cpp)
+    target_link_libraries(test_c_api_smoke PRIVATE ${C_API_TEST_LIBS})
+    target_include_directories(test_c_api_smoke PRIVATE
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+            )
+
+    add_executable(test_c_api_stream_smoke bindings/test_c_api_stream_smoke.cpp)
+    target_link_libraries(test_c_api_stream_smoke
+            PRIVATE
+            ${C_API_TEST_LIBS}
+            GTest::gtest
+            GTest::gtest_main
+            )
+    target_include_directories(test_c_api_stream_smoke PRIVATE
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
+            )
+    gtest_discover_tests(test_c_api_stream_smoke PROPERTIES DISCOVERY_TIMEOUT 60)
 endif()
