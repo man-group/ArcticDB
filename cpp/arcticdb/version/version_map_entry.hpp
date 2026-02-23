@@ -209,7 +209,6 @@ struct LoadProgress {
     VersionId oldest_loaded_undeleted_index_version_ = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
     timestamp earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
-    timestamp latest_loaded_timestamp_ = std::numeric_limits<timestamp>::min();
     bool is_earliest_version_loaded{false};
 };
 
@@ -248,6 +247,7 @@ struct VersionMapEntry {
         tombstones_.clear();
         tombstone_all_.reset();
         keys_.clear();
+        next_version_key_.reset();
         load_progress_ = LoadProgress{};
     }
 
@@ -259,6 +259,7 @@ struct VersionMapEntry {
         right.validate();
 
         swap(left.keys_, right.keys_);
+        swap(left.next_version_key_, right.next_version_key_);
         swap(left.tombstones_, right.tombstones_);
         swap(left.last_reload_time_, right.last_reload_time_);
         swap(left.tombstone_all_, right.tombstone_all_);
@@ -299,6 +300,9 @@ struct VersionMapEntry {
 
         if (tombstone_all_)
             strm << fmt::format("Tombstone all: {}\n", *tombstone_all_);
+
+        if (next_version_key_)
+            strm << fmt::format("Next version key: {}\n", *next_version_key_);
 
         strm << "Keys: \n\n";
         for (const auto& key : keys_)
@@ -457,6 +461,7 @@ struct VersionMapEntry {
     timestamp last_reload_time_ = 0;
     LoadProgress load_progress_;
     std::deque<AtomKey> keys_;
+    std::optional<AtomKey> next_version_key_;
     std::unordered_map<VersionId, AtomKey> tombstones_;
     std::optional<AtomKey> tombstone_all_;
 };

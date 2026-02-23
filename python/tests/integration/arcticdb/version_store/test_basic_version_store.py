@@ -1384,7 +1384,6 @@ def test_list_versions_deleted_flag(basic_store):
     basic_store.write("symbol", pd.DataFrame(), metadata=3, prune_previous_version=False)
     basic_store.snapshot("snapshot")
     basic_store.write("symbol", pd.DataFrame(), metadata=4, prune_previous_version=False)
-
     versions = basic_store.list_versions("symbol")
     assert len(versions) == 4
     versions = sorted(versions, key=lambda v: v["version"])

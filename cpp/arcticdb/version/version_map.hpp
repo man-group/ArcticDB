@@ -40,6 +40,15 @@
 
 namespace arcticdb {
 
+enum class CacheStatus {
+    VALID,                 // Cache covers the load strategy
+    EXPIRED_TIME,          // Time-based expiry
+    NEEDS_OLDER,           // Cache has data but needs older versions (extend)
+    NEEDS_NEWER,           // Cache has data but needs newer versions (prepend)
+    NEEDS_RELOAD,          // Cache requires full reload
+    NOT_FOUND              // No cache entry at all
+};
+
 template<class Clock = util::SysClock>
 class VersionMapImpl {
     /*
@@ -156,6 +165,10 @@ class VersionMapImpl {
             entry->keys_.push_back(ref_entry.keys_[0]);
             if (cached_penultimate_index)
                 entry->keys_.push_back(*cached_penultimate_index);
+            // We are setting the next_version_key to null as we don't have information
+            // about the next key in a chain. It will be loaded through the last key
+            // either in keys or through head.
+            entry->next_version_key_.reset();
         } else {
             do {
                 ARCTICDB_DEBUG(log::version(), "Loading version key {}", next_key.value());
@@ -166,8 +179,9 @@ class VersionMapImpl {
                      continue_when_loading_from_time(load_strategy, load_progress) &&
                      continue_when_loading_latest(load_strategy, entry) &&
                      continue_when_loading_undeleted(load_strategy, entry, load_progress));
+            entry->next_version_key_ = std::move(next_key);
         }
-        entry->load_progress_ = load_progress;
+        entry->load_progress_ = std::move(load_progress);
     }
 
     void load_via_ref_key(
@@ -539,11 +553,39 @@ class VersionMapImpl {
     ) {
         ARCTICDB_DEBUG(log::version(), "Check reload in function {} for id {}", function, stream_id);
 
-        if (has_cached_entry(stream_id, load_strategy)) {
-            return get_entry(stream_id);
-        }
+        auto status = check_cache_status(stream_id, load_strategy);
 
-        return storage_reload(store, stream_id, load_strategy);
+        switch (status) {
+        case CacheStatus::VALID:
+            return get_entry(stream_id);
+        case CacheStatus::NEEDS_NEWER: {
+            auto entry = get_entry(stream_id);
+            try {
+                prepend_newer_versions(store, stream_id, entry);
+                const auto clock_unsync_tolerance = ConfigsMap::instance()->get_int(
+                        "VersionMap.UnsyncTolerance", DEFAULT_CLOCK_UNSYNC_TOLERANCE
+                );
+                entry->last_reload_time_ = Clock::nanos_since_epoch() - clock_unsync_tolerance;
+            } catch (const std::exception&) {
+                return storage_reload(store, stream_id, load_strategy);
+            }
+            return entry;
+        }
+        case CacheStatus::NEEDS_OLDER: {
+            auto entry = get_entry(stream_id);
+            try {
+                extend_older_versions(store, entry, load_strategy);
+            } catch (const std::exception&) {
+                return storage_reload(store, stream_id, load_strategy);
+            }
+            return entry;
+        }
+        case CacheStatus::NEEDS_RELOAD:
+        case CacheStatus::EXPIRED_TIME:
+        case CacheStatus::NOT_FOUND:
+        default:
+            return storage_reload(store, stream_id, load_strategy);
+        }
     }
 
     /**
@@ -709,13 +751,18 @@ class VersionMapImpl {
      * @return whether we have a cached entry suitable for the load strategy, so do not need to go to storage
      */
     bool has_cached_entry(const StreamId& stream_id, const LoadStrategy& requested_load_strategy) const {
+        return check_cache_status(stream_id, requested_load_strategy) == CacheStatus::VALID;
+    }
+
+  private:
+    CacheStatus check_cache_status(const StreamId& stream_id, const LoadStrategy& requested_load_strategy) const {
         LoadType requested_load_type = requested_load_strategy.load_type_;
         util::check(requested_load_type < LoadType::UNKNOWN, "Unexpected load type requested {}", requested_load_type);
 
         requested_load_strategy.validate();
         MapType::const_iterator entry_it;
         if (!find_entry(entry_it, stream_id)) {
-            return false;
+            return CacheStatus::NOT_FOUND;
         }
 
         const timestamp reload_interval = reload_interval_.value_or(
@@ -734,24 +781,36 @@ class VersionMapImpl {
                     stream_id
             );
 
-            return false;
+            return CacheStatus::EXPIRED_TIME;
         }
 
-        const bool has_loaded_earliest_version_all = entry->load_progress_.is_earliest_version_loaded;
+        return covers_load_strategy(*entry, requested_load_strategy);
+    }
+
+    /**
+     * Check whether the entry's loaded data covers the requested load strategy.
+     * Returns VALID if fully covered, NEEDS_NEWER if data beyond our latest is needed,
+     * or NEEDS_OLDER if we need to load deeper into the chain.
+     * Does NOT check time-based expiry or entry existence - those are handled by check_cache_status.
+     */
+    CacheStatus covers_load_strategy(const VersionMapEntry& entry, const LoadStrategy& requested_load_strategy) const {
+        LoadType requested_load_type = requested_load_strategy.load_type_;
+
+        const bool has_loaded_earliest_version_all = entry.load_progress_.is_earliest_version_loaded;
         const bool has_loaded_earliest_undeleted =
-                entry->tombstone_all_.has_value() &&
-                entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
+                entry.tombstone_all_.has_value() &&
+                entry.load_progress_.oldest_loaded_index_version_ <= entry.tombstone_all_->version_id();
         const bool has_loaded_earliest =
                 has_loaded_earliest_version_all ||
                 (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted);
 
         if (requested_load_type == LoadType::DOWNTO) {
-            return loaded_as_far_as_version_id(*entry, requested_load_strategy.load_until_version_.value());
+            return loaded_as_far_as_version_id(entry, requested_load_strategy.load_until_version_.value());
         }
 
         if (requested_load_type == LoadType::FROM_TIME) {
             return loaded_as_far_as_timestamp(
-                    *entry,
+                    entry,
                     requested_load_strategy.load_from_time_.value(),
                     requested_load_strategy.should_include_deleted(),
                     has_loaded_earliest
@@ -759,29 +818,23 @@ class VersionMapImpl {
         }
 
         if (has_loaded_earliest) {
-            return true;
+            return CacheStatus::VALID;
         }
 
         switch (requested_load_type) {
         case LoadType::NOT_LOADED:
-            return true;
+            return CacheStatus::VALID;
         case LoadType::LATEST: {
-            // If entry has at least one (maybe undeleted) index we have the latest value cached
-
-            // This check can be slow if we have thousands of deleted versions before the first undeleted and we're
-            // looking for an undeleted version. If that is ever a problem we can just store a boolean whether
-            // we have an undeleted version.
-            auto opt_latest = entry->get_first_index(requested_load_strategy.should_include_deleted()).first;
-            return opt_latest.has_value();
+            auto opt_latest = entry.get_first_index(requested_load_strategy.should_include_deleted()).first;
+            return opt_latest.has_value() ? CacheStatus::VALID : CacheStatus::NEEDS_RELOAD;
         }
         case LoadType::ALL:
         case LoadType::UNKNOWN:
         default:
-            return false;
+            return CacheStatus::NEEDS_OLDER;
         }
     }
 
-  private:
     std::shared_ptr<VersionMapEntry> compact_entry(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::shared_ptr<VersionMapEntry>& entry
     ) {
@@ -826,6 +879,7 @@ class VersionMapImpl {
                 ),
                 std::end(new_entry->keys_)
         );
+        new_entry->next_version_key_.reset();
 
         if (validate_)
             new_entry->validate();
@@ -852,22 +906,19 @@ class VersionMapImpl {
     }
 
     /**
-     * Whether entry contains as much of the version map as specified by load_param. Checks whether
-     * oldest_loaded_index_version_ in entry is earlier than that specified in load_param.
-     *
-     * @param entry the version map state to check
-     * @param load_param the load request to test for completeness
-     * @return true if and only if entry already contains data at least as far back as load_param requests
+     * Whether entry contains as much of the version map as specified by the requested version id.
+     * Returns VALID if covered, NEEDS_NEWER if the version is beyond our latest known,
+     * or NEEDS_OLDER if we haven't loaded deep enough in the chain.
      */
-    bool loaded_as_far_as_version_id(const VersionMapEntry& entry, SignedVersionId requested_version_id) const {
+    CacheStatus loaded_as_far_as_version_id(const VersionMapEntry& entry, SignedVersionId requested_version_id) const {
         auto opt_latest = entry.get_first_index(true).first;
         if (requested_version_id >= 0) {
-            // For positive version IDs, we need to check two things:
-            // 1. We have loaded far enough back: oldest_loaded_index_version_ <= requested_version_id
-            // 2. The requested version is within our known range: requested_version_id <= latest_known_version_id
-            // Without check 2, we'd incorrectly claim to have versions that were written after our cache was populated
-            if (opt_latest.has_value() && static_cast<VersionId>(requested_version_id) <= opt_latest->version_id() &&
-                entry.load_progress_.oldest_loaded_index_version_ <= static_cast<VersionId>(requested_version_id)) {
+            auto requested = static_cast<VersionId>(requested_version_id);
+            if (opt_latest.has_value() && requested > opt_latest->version_id()) {
+                return CacheStatus::NEEDS_NEWER;
+            }
+            if (opt_latest.has_value() &&
+                entry.load_progress_.oldest_loaded_index_version_ <= requested) {
                 ARCTICDB_DEBUG(
                         log::version(),
                         "Loaded as far as required value {}, have {} to {}",
@@ -875,7 +926,7 @@ class VersionMapImpl {
                         entry.load_progress_.oldest_loaded_index_version_,
                         opt_latest->version_id()
                 );
-                return true;
+                return CacheStatus::VALID;
             }
         } else {
             if (opt_latest.has_value()) {
@@ -889,49 +940,46 @@ class VersionMapImpl {
                             entry.load_progress_.oldest_loaded_index_version_,
                             opt_latest->version_id()
                     );
-                    return true;
+                    return CacheStatus::VALID;
                 }
             }
         }
-        return false;
+        return CacheStatus::NEEDS_OLDER;
     }
 
     /**
-     * Whether entry contains as much of the version map as specified by load_param. Checks whether
-     * the loaded timestamps cover the requested timestamp range.
+     * Whether entry contains as much of the version map as specified by the requested timestamp.
+     * Returns VALID if covered, NEEDS_NEWER if the timestamp is beyond our latest loaded,
+     * or NEEDS_OLDER if we haven't loaded deep enough in the chain.
      */
-    bool loaded_as_far_as_timestamp(
+    CacheStatus loaded_as_far_as_timestamp(
             const VersionMapEntry& entry, timestamp requested_timestamp, bool include_deleted_versions,
             bool has_loaded_earliest
     ) const {
         if (requested_timestamp < 0) {
-            // In case of the negative timestamp, we check if everything was already loaded
-            return entry.load_progress_.is_earliest_version_loaded;
+            return entry.load_progress_.is_earliest_version_loaded
+                    ? CacheStatus::VALID
+                    : CacheStatus::NEEDS_RELOAD;
         }
 
-        // Upper bound: always use latest_loaded_timestamp (including deleted) because we need to
-        // know if the requested timestamp within the loaded range
-        timestamp latest_loaded_timestamp = entry.load_progress_.latest_loaded_timestamp_;
+        timestamp latest_loaded_timestamp = entry.last_reload_time_;
+        if (requested_timestamp > latest_loaded_timestamp) {
+            return CacheStatus::NEEDS_RELOAD;
+        }
 
-        // Lower bound: use the appropriate timestamp based on whether we need deleted versions
         timestamp earliest_loaded_timestamp = include_deleted_versions
                                                       ? entry.load_progress_.earliest_loaded_timestamp_
                                                       : entry.load_progress_.earliest_loaded_undeleted_timestamp_;
-        // Lower bound can be relaxed when:
-        // 1. We loaded the entire version chain (is_earliest_version_loaded), OR
-        // 2. For undeleted queries, tombstone_all covers all loaded versions - meaning all undeleted
-        //    versions are known (there are none before the tombstone_all point)
-        if (latest_loaded_timestamp >= requested_timestamp &&
-            (earliest_loaded_timestamp <= requested_timestamp || has_loaded_earliest)) {
+        if (earliest_loaded_timestamp <= requested_timestamp || has_loaded_earliest) {
             ARCTICDB_DEBUG(
                     log::version(),
                     "Loaded as far as required timestamp {}, have latest loaded timestamp {}",
                     requested_timestamp,
                     latest_loaded_timestamp
             );
-            return true;
+            return CacheStatus::VALID;
         }
-        return false;
+        return CacheStatus::NEEDS_RELOAD;
     }
 
     std::shared_ptr<VersionMapEntry>& get_entry(const StreamId& stream_id) {
@@ -973,6 +1021,134 @@ class VersionMapImpl {
         write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, journal_key);
         return journal_key;
     }
+
+    /**
+     * Prepend newer versions to the cached entry.
+     * Reads the VERSION_REF, then follows the chain from the new head until we find the cached head
+     * (the "bridging point"). If found, prepends the new keys and updates head_ and load_progress_.
+     * Throws on failure (e.g. compaction broke the chain), caller falls back to full reload.
+     */
+    void prepend_newer_versions(
+            const std::shared_ptr<Store>& store, const StreamId& stream_id,
+            const std::shared_ptr<VersionMapEntry>& entry
+    ) {
+        VersionMapEntry ref_entry;
+        read_symbol_ref(store, stream_id, ref_entry);
+
+        if (ref_entry.empty()) {
+            util::raise_rte("Symbol {} was deleted from storage during prepend", stream_id);
+        }
+
+        VersionMapEntry newer_keys;
+        std::optional<AtomKey> next_key = ref_entry.head_;
+
+        while (next_key) {
+            if (*next_key == *entry->head_) {
+                // Found the bridging point - old head exists in the new chain
+                newer_keys.keys_.push_back(*entry->head_);
+                entry->keys_.insert(
+                        entry->keys_.begin(),
+                        std::make_move_iterator(newer_keys.keys_.begin()),
+                        std::make_move_iterator(newer_keys.keys_.end())
+                );
+                entry->head_ = ref_entry.head_;
+
+                for (auto& [vid, tk] : newer_keys.tombstones_) {
+                    entry->tombstones_.try_emplace(vid, std::move(tk));
+                }
+                if (newer_keys.tombstone_all_) {
+                    entry->try_set_tombstone_all(std::move(*newer_keys.tombstone_all_));
+                }
+
+                ARCTICDB_DEBUG(log::version(), "Prepended newer versions for symbol {}", stream_id);
+                return;
+            }
+
+            auto [key, seg] = store->read_sync(next_key.value());
+            next_key = read_segment_with_keys(seg, newer_keys, newer_keys.load_progress_);
+        }
+
+        util::raise_rte(
+                "Failed to find bridging point while prepending newer versions for {}", stream_id
+        );
+    }
+
+    /**
+     * Continue loading older versions from the tail of the cached chain.
+     * Uses next_version_key_ if set (normal path), otherwise discovers the continuation
+     * point from the last VERSION key in keys_ or head_ (fast-path / do_write cases).
+     */
+    void extend_older_versions(
+            const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMapEntry>& entry,
+            const LoadStrategy& load_strategy
+    ) {
+        if (entry->load_progress_.is_earliest_version_loaded) {
+            return;
+        }
+        if (!entry->next_version_key_) {
+            // No continuation pointer. This is only safe to mark as "fully loaded" if we
+            // actually loaded version data from storage (oldest_loaded_index_version_ was set).
+            // If the entry was built purely from writes, oldest_loaded_index_version_ is still
+            // at max and we should NOT claim everything is loaded — let the caller fall back
+            // to storage_reload.
+            if (entry->load_progress_.oldest_loaded_index_version_ != std::numeric_limits<VersionId>::max()) {
+                entry->load_progress_.is_earliest_version_loaded = true;
+            }
+            return;
+        }
+
+        std::optional<AtomKey> next_key = entry->next_version_key_;
+
+        // If content already loaded (fast-path ref key bypass), INDEX keys from
+        // already-read segments are in keys_. Read into temp to skip past them.
+        // The fast path may have loaded content from multiple segments (head + penultimate),
+        // so we keep skipping as long as the next segment's INDEX version_id is already present.
+        // if (entry->next_version_key_content_loaded_) {
+        //     while (next_key) {
+        //         VersionMapEntry temp;
+        //         LoadProgress temp_progress;
+        //         auto [key, seg] = store->read_sync(next_key.value());
+        //         next_key = read_segment_with_keys(seg, temp, temp_progress);
+        //         // Check if the next segment's content is also already in the entry
+        //         // by checking if its first INDEX key version_id is already loaded
+        //         if (!next_key) {
+        //             entry->load_progress_.is_earliest_version_loaded = true;
+        //             entry->next_version_key_.reset();
+        //             entry->next_version_key_content_loaded_ = false;
+        //             return;
+        //         }
+        //         // If the next key's version_id has an INDEX already in entry->keys_, skip it too
+        //         bool already_loaded = false;
+        //         for (const auto& k : entry->keys_) {
+        //             if (is_index_key_type(k.type()) && k.version_id() == next_key->version_id()) {
+        //                 already_loaded = true;
+        //                 break;
+        //             }
+        //         }
+        //         if (!already_loaded) {
+        //             break;
+        //         }
+        //     }
+        // }
+
+        LoadProgress load_progress = entry->load_progress_;
+        std::optional<VersionId> latest_version;
+        if (auto opt_latest = entry->get_first_index(true).first; opt_latest) {
+            latest_version = opt_latest->version_id();
+        }
+
+        do {
+            auto [key, seg] = store->read_sync(next_key.value());
+            next_key = read_segment_with_keys(seg, *entry, load_progress);
+        } while (next_key && continue_when_loading_version(load_strategy, load_progress, latest_version) &&
+                 continue_when_loading_from_time(load_strategy, load_progress) &&
+                 continue_when_loading_latest(load_strategy, entry) &&
+                 continue_when_loading_undeleted(load_strategy, entry, load_progress));
+
+        entry->load_progress_ = std::move(load_progress);
+        entry->next_version_key_ = std::move(next_key);
+    }
+
 
     std::shared_ptr<VersionMapEntry> storage_reload(
             std::shared_ptr<Store> store, const StreamId& stream_id, const LoadStrategy& load_strategy
