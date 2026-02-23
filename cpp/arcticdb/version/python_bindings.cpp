@@ -11,6 +11,7 @@
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
 #include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -144,7 +145,7 @@ void declare_resample_clause(py::module& version) {
 
 void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>& base_exception) {
 
-    py::register_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
+    py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
     entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
@@ -186,11 +187,15 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }))
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
+    py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
+            .def(py::init<AtomKey, SegmentInMemory>());
+
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
             .def("set_snap_name", &VersionQuery::set_snap_name)
             .def("set_timestamp", &VersionQuery::set_timestamp)
-            .def("set_version", &VersionQuery::set_version);
+            .def("set_version", &VersionQuery::set_version)
+            .def("set_preloaded_index", &VersionQuery::set_preloaded_index);
 
     py::enum_<OutputFormat>(version, "InternalOutputFormat")
             .value("PANDAS", OutputFormat::PANDAS)
@@ -322,7 +327,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("start_index", &DescriptorItem::start_index)
             .def_property_readonly("end_index", &DescriptorItem::end_index)
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
-            .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+            .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
+            .def_property_readonly("key", &DescriptorItem::key)
+            .def_property_readonly("index_segment", &DescriptorItem::index_segment);
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
@@ -857,6 +864,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Flush the version cache")
             .def("read_descriptor",
                  &PythonVersionStore::read_descriptor,
+                 py::arg("stream_id"),
+                 py::arg("version_query"),
+                 py::arg("include_index_segment") = false,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Get back the descriptor for a symbol.")
             .def("batch_read_descriptor",
@@ -1112,6 +1122,46 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
 
     version.def("read_dataframe_from_file", &read_dataframe_from_file);
+
+    version.def(
+            "_modify_schema",
+            [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query,
+               const std::shared_ptr<ReadQuery>& read_query,
+               const ReadOptions& read_options) -> std::pair<RecordBatchData, py::object> {
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                        preloaded_index_query->index_key_.type() == KeyType::TABLE_INDEX,
+                        "_collect_schema() not supported with recursively normalized data"
+                );
+                const auto& tsd = preloaded_index_query->index_seg_.index_descriptor();
+                const auto& norm = tsd.normalization();
+                schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+                        !norm.has_msg_pack_frame(), "_collect_schema() not supported with pickled data"
+                );
+                auto schema = modify_schema({tsd.as_stream_descriptor().clone(), norm}, read_query->clauses_);
+                const auto& stream_desc = schema.stream_descriptor();
+                const auto columns = [&]() -> std::optional<ankerl::unordered_dense::set<std::string_view>> {
+                    if (read_query->columns.has_value()) {
+                        ankerl::unordered_dense::set<std::string_view> cols{
+                                read_query->columns->cbegin(), read_query->columns->cend()
+                        };
+                        // Always include index columns, so that the invariant:
+                        // lazy_df._collect_schema() == lazy_df.collect().data.schema
+                        // is maintained. In polarctic we can drop index columns if they are not in with_columns.
+                        auto num_index_levels =
+                                pipelines::index::required_fields_count(stream_desc, schema.norm_metadata_);
+                        for (size_t idx = 0; idx < num_index_levels; ++idx) {
+                            cols.insert(stream_desc.field(idx).name());
+                        }
+                        return cols;
+                    } else {
+                        return std::nullopt;
+                    }
+                }();
+                auto record_batch =
+                        empty_record_batch_from_descriptor(stream_desc, read_options.arrow_output_config(), columns);
+                return std::make_pair(std::move(record_batch), python_util::pb_to_python(schema.norm_metadata_));
+            }
+    );
 }
 
 } // namespace arcticdb::version_store

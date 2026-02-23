@@ -213,6 +213,20 @@ class AsyncStore : public Store {
                 .thenValue(UpdateSegmentTask{library_, opts});
     }
 
+    entity::VariantKey update_sync(const entity::VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts)
+            override {
+        auto stream_id = variant_key_id(key);
+        util::check(
+                segment.descriptor().id() == stream_id,
+                "Descriptor id mismatch in variant key {} != {}",
+                stream_id,
+                segment.descriptor().id()
+        );
+
+        auto encoded = EncodeSegmentTask{key, std::move(segment), codec_, encoding_version_}();
+        return UpdateSegmentTask{library_, opts}(std::move(encoded));
+    }
+
     folly::Future<VariantKey> copy(
             KeyType key_type, const StreamId& stream_id, VersionId version_id, const VariantKey& source_key
     ) override {

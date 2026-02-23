@@ -101,6 +101,10 @@ class InMemoryStore : public Store {
         return folly::makeFuture(key);
     }
 
+    VariantKey update_sync(const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts) override {
+        return update(key, std::move(segment), opts).get();
+    }
+
     folly::Future<VariantKey> write(PartialKey pk, SegmentInMemory&& segment) override {
         return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }

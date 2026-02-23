@@ -61,8 +61,10 @@ class ChunkedBufferRegularBlocksAccessor {
     RawType at(size_t idx) const {
         // quot is the block index, rem is the offset within the block
         auto div = std::div(static_cast<long long>(idx), values_per_block_);
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                div.quot < static_cast<long long>(base_ptrs_.size()), "ColumnData::at called with out of bounds index"
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                div.quot < static_cast<long long>(base_ptrs_.size()),
+                "ColumnData::at called with out of bounds index"
         );
         return *(base_ptrs_[div.quot] + div.rem);
     }
@@ -108,14 +110,20 @@ class ColumnDataRandomAccessorSparse {
         }
     }
     RawType at(size_t idx) const {
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                parent_->bit_vector(), "ColumnData::at called with sparse true, but bit_vector_ == nullptr"
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                parent_->bit_vector(),
+                "ColumnData::at called with sparse true, but bit_vector_ == nullptr"
         );
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                parent_->bit_vector()->size() > idx, "ColumnData::at called with sparse true, but index is out of range"
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                parent_->bit_vector()->size() > idx,
+                "ColumnData::at called with sparse true, but index is out of range"
         );
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                parent_->bit_vector()->get_bit(idx), "ColumnData::at called with sparse true, but selected bit is false"
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                parent_->bit_vector()->get_bit(idx),
+                "ColumnData::at called with sparse true, but selected bit is false"
         );
         // This is the same as using rank_corrected, but we always require the idx bit to be true, so do the -1
         // ourselves for efficiency

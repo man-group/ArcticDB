@@ -14,11 +14,12 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
-from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
+from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa, polars as pl
+from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat, ArrowOutputStringFormat
+from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -33,7 +34,12 @@ from arcticdb.version_store._store import (
     MergeAction,
 )
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
+from arcticdb_ext.version_store import (
+    DataError,
+    StageResult,
+    KeyNotFoundInStageResultInfo,
+    PreloadedIndexQuery as _PreloadedIndexQuery,
+)
 
 import pandas as pd
 import numpy as np
@@ -45,7 +51,7 @@ import arcticdb_ext as _ae
 logger = logging.getLogger(__name__)
 
 
-AsOf = Union[int, str, datetime.datetime]
+AsOf = Union[int, str, datetime.datetime, _PreloadedIndexQuery]
 
 
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
@@ -468,6 +474,7 @@ class LazyDataFrame(QueryBuilder):
             self._optimisation = read_request.query_builder._optimisation
         self.lib = lib
         self.read_request = read_request._replace(query_builder=None)
+        self._preloaded_index = None
 
     def _to_read_request(self) -> ReadRequest:
         """
@@ -501,7 +508,34 @@ class LazyDataFrame(QueryBuilder):
         VersionedItem
             Object that contains a .data and .metadata element.
         """
-        return self.lib.read(**self._to_read_request()._asdict())
+        if self._preloaded_index is None:
+            return self.lib.read(**self._to_read_request()._asdict())
+        else:
+            read_request = self._to_read_request()._replace(as_of=self._preloaded_index)
+            return self.lib.read(**read_request._asdict())
+
+    # Polars is an optional dependency, using pl.Schema here without the quotation marks results in failed imports when
+    # Polars is not installed
+    def _collect_schema(self) -> "pl.Schema":
+        # Considered wrapping this in an if self._preloaded_index is None statement, but this could then give
+        # non-intuitive results when using as_of snapshots that are changing or negative integers when new versions
+        # are being created, so to be on the safe side we will always return to storage, even though the result will
+        # probably be the same when collect_schema is called multiple times
+        dit = self.lib._nvs._get_info(
+            self.read_request.symbol,
+            self.read_request.as_of,
+            iterate_snapshots_if_tombstoned=False,
+            include_index_segment=True,
+        )
+        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment)
+        read_request = self._to_read_request()
+        return self.lib._nvs._modify_schema(
+            self._preloaded_index,
+            columns=read_request.columns,
+            query_builder=read_request.query_builder,
+            arrow_string_format_default=read_request.arrow_string_format_default,
+            arrow_string_format_per_column=read_request.arrow_string_format_per_column,
+        )
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()

@@ -55,8 +55,10 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
 
     switch (symbol_structure_) {
     case SymbolStructure::SAME:
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                check_symbols_all_same(), "Expected all symbols to be identical in KeySegment"
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                check_symbols_all_same(),
+                "Expected all symbols to be identical in KeySegment"
         );
         if (stream_ids_->row_count() != 0) {
             if (is_sequence_type(stream_ids_->type().data_type())) {
@@ -67,8 +69,10 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
         }
         break;
     case SymbolStructure::UNIQUE:
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                check_symbols_all_unique(), "Expected all symbols to be unique in KeySegment"
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                check_symbols_all_unique(),
+                "Expected all symbols to be unique in KeySegment"
         );
     case SymbolStructure::UNKNOWN:
     default:

@@ -36,7 +36,6 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/format_date.hpp>
-#include <arcticdb/version/version_tasks.hpp>
 #include <iterator>
 #include <aws/core/utils/stream/ResponseStream.h>
 
@@ -287,7 +286,8 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
 ///     adjust_slice_ranges will change the column slices, making the first slice start from 0 even for timestamp-index
 ///     dataframes (which should have column range starting from 1 when being written to disk).
 void compact_row_slices(std::span<SliceAndKey> slices) {
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
             ranges::adjacent_find(
                     slices,
                     [](const SliceAndKey& a, const SliceAndKey& b) {
@@ -1110,10 +1110,7 @@ static OutputSchema create_initial_output_schema(PipelineContext& pipeline_conte
 }
 
 static OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
-    OutputSchema output_schema = create_initial_output_schema(pipeline_context);
-    for (const auto& clause : read_query.clauses_) {
-        output_schema = clause->modify_schema(std::move(output_schema));
-    }
+    auto output_schema = modify_schema(create_initial_output_schema(pipeline_context), read_query.clauses_);
     if (read_query.columns) {
         std::unordered_set<std::string_view> selected_columns(read_query.columns->begin(), read_query.columns->end());
         FieldCollection fields_to_use;
@@ -1340,14 +1337,9 @@ void check_can_perform_processing(
 }
 
 static void read_indexed_keys_to_pipeline(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const VersionedItem& version_info, ReadQuery& read_query, const ReadOptions& read_options
+        const std::shared_ptr<PipelineContext>& pipeline_context, index::IndexSegmentReader&& index_segment_reader,
+        ReadQuery& read_query, const ReadOptions& read_options
 ) {
-    auto maybe_reader = get_index_segment_reader(*store, pipeline_context, version_info);
-    if (!maybe_reader)
-        return;
-
-    auto index_segment_reader = std::move(*maybe_reader);
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_can_read_index_only_if_required(index_segment_reader, read_query);
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
@@ -1378,7 +1370,7 @@ static void read_indexed_keys_to_pipeline(
             "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows",
             pipeline_context->slice_and_keys_.size(),
             pipeline_context->total_rows_,
-            version_info.symbol()
+            pipeline_context->stream_id_
     );
 }
 
@@ -1425,7 +1417,9 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
     // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
     // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
-    debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE, !incomplete_segments.empty(), "Incomplete segments must be non-empty"
+    );
     const auto first_non_empty_seg = ranges::find_if(incomplete_segments, [&](auto& slice) {
         auto res = slice.segment(store).row_count() > 0;
         ARCTICDB_DEBUG(log::version(), "Testing for non-empty seg {} res={}", slice.key(), res);
@@ -1952,7 +1946,10 @@ void create_column_stats_impl(
 
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
-    read_indexed_keys_to_pipeline(store, pipeline_context, versioned_item, *read_query, read_options);
+    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item);
+    if (maybe_isr.has_value()) {
+        read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), *read_query, read_options);
+    }
 
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
             !pipeline_context->multi_key_, "Column stats generation not supported with multi-indexed symbols"
@@ -2207,9 +2204,10 @@ static void read_indexed_keys_for_compaction(
 ) {
     const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if (append_to_existing) {
-        read_indexed_keys_to_pipeline(
-                store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options
-        );
+        auto maybe_isr = get_index_segment_reader(*store, pipeline_context, *update_info.previous_index_key_);
+        if (maybe_isr.has_value()) {
+            read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), read_query, read_options);
+        }
     }
 }
 
@@ -2504,13 +2502,12 @@ PredefragmentationInfo get_pre_defragmentation_info(
     pipeline_context->version_id_ = update_info.next_version_id_;
 
     auto read_query = std::make_shared<ReadQuery>();
-    read_indexed_keys_to_pipeline(
-            store,
-            pipeline_context,
-            *(update_info.previous_index_key_),
-            *read_query,
-            defragmentation_read_options_generator(options)
-    );
+    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, *update_info.previous_index_key_);
+    if (maybe_isr.has_value()) {
+        read_indexed_keys_to_pipeline(
+                pipeline_context, std::move(*maybe_isr), *read_query, defragmentation_read_options_generator(options)
+        );
+    }
 
     using CompactionStartInfo = std::pair<size_t, size_t>; // row, segment_append_after
     std::vector<CompactionStartInfo> first_col_segment_idx;
@@ -2645,21 +2642,31 @@ void set_row_id_if_index_only(
 }
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        ReadQuery& read_query, const ReadOptions& read_options
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
+        const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
 
-    const bool has_active_version = std::holds_alternative<VersionedItem>(version_info);
-    if (!has_active_version) {
-        pipeline_context->stream_id_ = std::get<StreamId>(version_info);
-    } else {
-        pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
-        read_indexed_keys_to_pipeline(
-                store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options
-        );
-    }
+    const bool has_active_version = !std::holds_alternative<StreamId>(version_info);
+    util::variant_match(
+            version_info,
+            [&](const StreamId& stream_id) { pipeline_context->stream_id_ = stream_id; },
+            [&](const VersionedItem& versioned_item) {
+                pipeline_context->stream_id_ = versioned_item.key_.id();
+                auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item.key_);
+                if (maybe_isr.has_value()) {
+                    read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), read_query, read_options);
+                }
+            },
+            [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
+                pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
+                // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
+                // dataframe, hence the clone
+                index::IndexSegmentReader isr(preloaded_index_query->index_seg_.clone());
+                read_indexed_keys_to_pipeline(pipeline_context, std::move(isr), read_query, read_options);
+            }
+    );
 
     if (pipeline_context->multi_key_) {
         return pipeline_context;
@@ -2693,26 +2700,30 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     return pipeline_context;
 }
 
-VersionedItem generate_result_versioned_item(const std::variant<VersionedItem, StreamId>& version_info) {
-    VersionedItem versioned_item;
-    if (std::holds_alternative<StreamId>(version_info)) {
-        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
-        // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
-        // This class is very hard to change at this point, as users do things like pickling them to pass them around.
-        // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
-        // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
-        // values are meaningless before an indexed version exists.
-        versioned_item = VersionedItem(AtomKeyBuilder()
-                                               .version_id(std::numeric_limits<VersionId>::max())
-                                               .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
-    } else {
-        versioned_item = std::get<VersionedItem>(version_info);
-    }
-    return versioned_item;
+VersionedItem generate_result_versioned_item(const VersionIdentifier& version_info) {
+    return util::variant_match(
+            version_info,
+            [](const StreamId& stream_id) {
+                // This isn't ideal. It would be better if the version() and timestamp() methods on the C++
+                // VersionedItem class returned optionals, but this change would bubble up to the Python VersionedItem
+                // class defined in _store.py. This class is very hard to change at this point, as users do things like
+                // pickling them to pass them around. This at least gets the symbol attribute of VersionedItem correct.
+                // The creation timestamp will be zero, which corresponds to 1970, and so with this obviously ridiculous
+                // version ID, it should be clear to users that these values are meaningless before an indexed version
+                // exists.
+                return VersionedItem(AtomKeyBuilder()
+                                             .version_id(std::numeric_limits<VersionId>::max())
+                                             .build<KeyType::TABLE_INDEX>(stream_id));
+            },
+            [](const VersionedItem& versioned_item) { return versioned_item; },
+            [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
+                return VersionedItem(preloaded_index_query->index_key_);
+            }
+    );
 }
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
     return async::submit_io_task(SetupPipelineContextTask{store, version_info, read_query, read_options})
@@ -2806,7 +2817,8 @@ folly::Future<VersionedItem> read_modify_write_impl(
                    store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
     )
             .thenValue([&](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                ARCTICDB_DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
                         std::ranges::all_of(
                                 data_keys_and_slices,
                                 [](const SliceAndKey& slice_and_key) {
@@ -2841,10 +2853,9 @@ folly::Future<VersionedItem> read_modify_write_impl(
 }
 
 folly::Future<VersionedItem> merge_update_impl(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        const ReadOptions& read_options, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, std::vector<std::string>&& on, const MergeStrategy& strategy,
-        std::shared_ptr<InputFrame> source
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
@@ -2913,7 +2924,7 @@ folly::Future<VersionedItem> merge_update_impl(
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
