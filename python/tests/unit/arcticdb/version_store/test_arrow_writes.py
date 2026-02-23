@@ -984,9 +984,7 @@ def test_sparse_write_different_types(lmdb_version_store_arrow, data, arrow_type
     lib.write(sym, table)
     arrow_string_format = arrow_type if arrow_type in (pa.string(), pa.large_string()) else None
     received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
-    # TODO(Monday #8995352594): sparse string arrow read not yet working. Remove the if when addressing to assert reading as arrow is also correct
-    if arrow_string_format is None:
-        assert table.equals(received)
+    assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow(table, pandas_received)
 
@@ -999,9 +997,8 @@ def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow)
             "int_col": pa.array([1, None, 3, None, 5], pa.int64()),
             "float_col": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
             "bool_col": pa.array([True, None, None, False, True], pa.bool_()),
-            # TODO(Monday #8995352594): sparse string arrow read not yet working
-            # "string_col": pa.array([None, "a", "b", None, "c"], pa.string()),
-            # "large_string_col": pa.array([None, "a", "b", None, "c"], pa.large_string()),
+            "string_col": pa.array([None, "a", "b", None, "c"], pa.string()),
+            "large_string_col": pa.array([None, "a", "b", None, "c"], pa.large_string()),
         }
     )
     lib.write(sym, table)
@@ -1022,18 +1019,8 @@ def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow)
         pytest.param(3, pa.uint8(), id="uint8"),
         pytest.param(3.14, pa.float32(), id="float32"),
         pytest.param(True, pa.bool_(), id="bool"),
-        pytest.param(
-            "hello",
-            pa.string(),
-            id="string",
-            marks=pytest.mark.skip(reason="Monday #8995352594: sparse string arrow read not yet working"),
-        ),
-        pytest.param(
-            "hello",
-            pa.large_string(),
-            id="large_string",
-            marks=pytest.mark.skip(reason="Monday #8995352594: sparse string arrow read not yet working"),
-        ),
+        pytest.param("hello", pa.string(), id="string"),
+        pytest.param("hello", pa.large_string(), id="large_string"),
     ],
 )
 def test_sparse_many_different_size_batches(version_store_factory, rows_per_slice, value, arrow_type):
@@ -1052,7 +1039,8 @@ def test_sparse_many_different_size_batches(version_store_factory, rows_per_slic
     ]
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym).data
+    arrow_string_format = arrow_type if arrow_type in (pa.string(), pa.large_string()) else None
+    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow(table, pandas_received)
@@ -1104,8 +1092,8 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
                     "int_col": int_arr,
                     "float_col": float_arr,
                     "bool_col": bool_arr,
-                    # TODO(Monday #8995352594): sparse string arrow read not yet working
-                    # "string_col": string_arr, "large_string_col": large_string_arr,
+                    "string_col": string_arr,
+                    "large_string_col": large_string_arr,
                 }
             )
         )
@@ -1150,9 +1138,8 @@ def test_sparse_write_with_index(lmdb_version_store_arrow):
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=5), type=pa.timestamp("ns")),
             "int_col": pa.array([1, None, 3, None, 5], pa.int64()),
-            # TODO(Monday #8995352594): sparse string arrow read not yet working
-            # "string_col": pa.array([None, "a", None, "c", None], pa.string()),
-            # "large_string_col": pa.array([None, "a", None, "c", None], pa.large_string()),
+            "string_col": pa.array([None, "a", None, "c", None], pa.string()),
+            "large_string_col": pa.array([None, "a", None, "c", None], pa.large_string()),
         }
     )
     lib.write(sym, table, index_column="ts")
