@@ -216,6 +216,7 @@ jobs:
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
+    permissions: {contents: read}
     with:
       job_type: cleanup
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
@@ -235,7 +236,7 @@ jobs:
     name: Seed Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
@@ -260,7 +261,7 @@ jobs:
     name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
@@ -284,7 +285,7 @@ jobs:
     name: Seed Persistent Storage for 3.${{matrix.python3}} MacOS with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read}
     with:
       job_type: seed
       python3: ${{matrix.python3}}
@@ -410,7 +411,7 @@ jobs:
     name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
@@ -434,7 +435,7 @@ jobs:
     name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
@@ -486,7 +487,7 @@ jobs:
     name: Verify Persistent Storage for 3.${{matrix.python3}} MacOS with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
-    permissions: {packages: write}
+    permissions: {contents: read}
     with:
       job_type: verify
       python3: ${{matrix.python3}}
@@ -501,6 +502,7 @@ jobs:
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
+    permissions: {contents: read}
     with:
       job_type: cleanup
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
