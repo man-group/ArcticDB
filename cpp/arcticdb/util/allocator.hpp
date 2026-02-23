@@ -30,6 +30,10 @@ uint8_t* allocate_detachable_memory(size_t size);
 // Must be used whenever memory was allocated with allocate_detachable_memory
 void free_detachable_memory(uint8_t* ptr, size_t size);
 
+// Returns the allocator used by allocate_detachable_memory(). Must be passed to sparrow when
+// creating buffers from raw pointers to ensure memory can be properly freed.
+std::allocator<uint8_t> get_detachable_allocator();
+
 static constexpr uint64_t BYTES = 1;
 static constexpr uint64_t KILOBYTES = 1024 * BYTES;
 static constexpr uint64_t MEGABYTES = 1024 * KILOBYTES;

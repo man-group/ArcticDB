@@ -6,9 +6,11 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/util/allocator.hpp>
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/record_batch.hpp>
 
@@ -24,7 +26,9 @@ std::optional<sparrow::validity_bitmap> create_validity_bitmap(
                 "Expected a single block bitmap extra buffer but got {} blocks",
                 bitmap_buffer.blocks().size()
         );
-        return sparrow::validity_bitmap{reinterpret_cast<uint8_t*>(bitmap_buffer.block(0)->release()), bitmap_size};
+        return sparrow::validity_bitmap{
+                reinterpret_cast<uint8_t*>(bitmap_buffer.block(0)->release()), bitmap_size, get_detachable_allocator()
+        };
     } else {
         return std::nullopt;
     }
@@ -34,7 +38,7 @@ template<typename T>
 sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
-    sparrow::u8_buffer<T> buffer(data_ptr, data_size);
+    sparrow::u8_buffer<T> buffer(data_ptr, data_size, get_detachable_allocator());
     if (validity_bitmap) {
         return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
     } else {
@@ -65,7 +69,9 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
     // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
     // applied during normalization in python layer.
     sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
-            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr), data_size
+            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr),
+            data_size,
+            get_detachable_allocator()
     );
     if (validity_bitmap) {
         return sparrow::timestamp_without_timezone_nanoseconds_array{
@@ -95,7 +101,9 @@ sparrow::dictionary_encoded_array<T> create_dict_array(
     }
 }
 
-sparrow::u8_buffer<char> minimal_string_buffer() { return sparrow::u8_buffer<char>(nullptr, 0); }
+sparrow::u8_buffer<char> minimal_string_buffer() {
+    return sparrow::u8_buffer<char>(nullptr, 0, get_detachable_allocator());
+}
 
 // TODO: This is super hacky. If our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
@@ -124,7 +132,9 @@ sparrow::u8_buffer<char> strings_buffer_at_offset(const Column& column, size_t o
             strings.blocks().size()
     );
     const auto strings_buffer_size = strings.block(0)->physical_bytes();
-    return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
+    return sparrow::u8_buffer<char>(
+            reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size, get_detachable_allocator()
+    );
 }
 
 template<typename TagType>
@@ -146,7 +156,9 @@ sparrow::array string_array_from_block(
             (block_size + 1) * sizeof(SignedType),
             block.mem_block()->physical_bytes()
     );
-    sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1);
+    sparrow::u8_buffer<SignedType> offset_buffer(
+            reinterpret_cast<SignedType*>(block.release()), block_size + 1, get_detachable_allocator()
+    );
     auto strings_buffer = strings_buffer_at_offset(column, offset);
     auto arr = [&]() {
         if (maybe_bitmap.has_value()) {
@@ -180,7 +192,9 @@ sparrow::array string_dict_from_block(
     // We use `int32_t` dictionary keys because pyarrow doesn't work with unsigned dictionary keys:
     // https://github.com/pola-rs/polars/issues/10977
     const auto block_size = block.row_count();
-    sparrow::u8_buffer<int32_t> dict_keys_buffer{reinterpret_cast<int32_t*>(block.release()), block_size};
+    sparrow::u8_buffer<int32_t> dict_keys_buffer{
+            reinterpret_cast<int32_t*>(block.release()), block_size, get_detachable_allocator()
+    };
 
     const bool has_offset_buffer = column.has_extra_buffer(offset, ExtraBufferType::OFFSET);
     const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
@@ -189,7 +203,9 @@ sparrow::array string_dict_from_block(
             auto& string_offsets = column.get_extra_buffer(offset, ExtraBufferType::OFFSET);
             const auto offset_buffer_value_count = string_offsets.block(0)->physical_bytes() / sizeof(int64_t);
             sparrow::u8_buffer<int64_t> offsets_buffer(
-                    reinterpret_cast<int64_t*>(string_offsets.block(0)->release()), offset_buffer_value_count
+                    reinterpret_cast<int64_t*>(string_offsets.block(0)->release()),
+                    offset_buffer_value_count,
+                    get_detachable_allocator()
             );
             auto strings_buffer = strings_buffer_at_offset(column, offset);
             return {std::move(strings_buffer), std::move(offsets_buffer)};
@@ -242,7 +258,7 @@ sparrow::array empty_arrow_array_for_column(const Column& column, std::string_vi
             if (column.data().buffer().has_extra_bytes_per_block()) {
                 return minimal_strings_array<SignedType>();
             } else {
-                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
+                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
                 auto dict_values_array = minimal_strings_for_dict();
                 return sparrow::array{create_dict_array<int32_t>(
                         sparrow::array{std::move(dict_values_array)},
@@ -474,6 +490,69 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     }
     seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
     return {seg, index_column_position};
+}
+
+RecordBatchData empty_record_batch_from_descriptor(
+        const entity::StreamDescriptor& stream_desc, const ArrowOutputConfig& arrow_output_config,
+        const std::optional<ankerl::unordered_dense::set<std::string_view>>& columns
+) {
+    // The logic here is similar to empty_arrow_array_for_column, but there the string format is dictated by the
+    // column's buffers, whereas here we rely on the ArrowOutputConfig
+    const auto& default_string_format = arrow_output_config.default_string_format_;
+    const auto& per_column_string_format = arrow_output_config.per_column_string_format_;
+    sparrow::record_batch record_batch;
+    for (const auto& field : stream_desc.fields()) {
+        // The column filtering is done here rather than in the calling function for efficiency, so we only have to
+        // iterate the fields once, and not construct an intermediate FieldCollection that would then be immediately
+        // discarded. std::nullopt implies read all columns
+        if (!columns.has_value() || columns->contains(field.name())) {
+            auto arr = details::visit_scalar(field.type(), [&](auto&& tdt) {
+                using TagType = std::decay_t<decltype(tdt)>;
+                using DataTagType = typename TagType::DataTypeTag;
+                using RawType = typename DataTagType::raw_type;
+                std::optional<sparrow::validity_bitmap> validity_bitmap;
+                if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
+                    const auto string_format = [&]() {
+                        if (auto it = per_column_string_format.find(std::string(field.name()));
+                            it != per_column_string_format.end()) {
+                            return it->second;
+                        } else {
+                            return default_string_format;
+                        }
+                    }();
+                    switch (string_format) {
+                    case ArrowOutputStringFormat::SMALL_STRING:
+                        return minimal_strings_array<int32_t>();
+                    case ArrowOutputStringFormat::LARGE_STRING:
+                        return minimal_strings_array<int64_t>();
+                    case ArrowOutputStringFormat::CATEGORICAL: {
+                        sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0, get_detachable_allocator()};
+                        auto dict_values_array = minimal_strings_for_dict();
+                        return sparrow::array{create_dict_array<int32_t>(
+                                sparrow::array{std::move(dict_values_array)},
+                                std::move(dict_keys_buffer),
+                                std::move(validity_bitmap)
+                        )};
+                    }
+                    default:
+                        util::raise_rte("Unknown ArrowOutputStringFormat {}", static_cast<uint64_t>(string_format));
+                        // Not all compilers can tell this code is unreachable, and complain about reaching end of
+                        // non-void function
+                        return sparrow::array{};
+                    }
+                } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
+                    return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+                } else {
+                    return sparrow::array{create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
+                }
+            });
+            arr.set_name(field.name());
+            record_batch.add_column(std::string(field.name()), std::move(arr));
+        }
+    }
+    auto struct_array = sparrow::array{record_batch.extract_struct_array()};
+    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
+    return {arr, schema};
 }
 
 } // namespace arcticdb

@@ -143,7 +143,9 @@ class PythonVersionStore : public LocalVersionedEngine {
             const BatchReadOptions& batch_read_options
     );
 
-    DescriptorItem read_descriptor(const StreamId& stream_id, const VersionQuery& version_query);
+    DescriptorItem read_descriptor(
+            const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
+    );
 
     ReadResult read_index(
             const StreamId& stream_id, const VersionQuery& version_query, OutputFormat output_format,
