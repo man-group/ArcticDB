@@ -78,6 +78,7 @@ void ArrowStringHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    decoded_data.set_row_data(m.num_rows_ - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
