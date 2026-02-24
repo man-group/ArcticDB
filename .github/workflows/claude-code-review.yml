@@ -30,7 +30,7 @@ jobs:
         run: |
           {
             echo 'PROMPT<<PROMPT_EOF'
-            cat .claude/commands/review-pr.md
+            cat .claude/skills/review-pr/SKILL.md
             echo 'PROMPT_EOF'
           } >> "$GITHUB_OUTPUT"
 
