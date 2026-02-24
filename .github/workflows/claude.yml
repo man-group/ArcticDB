@@ -24,7 +24,6 @@ jobs:
       contents: write
       pull-requests: write
       issues: read
-      id-token: write
       actions: read
 
     steps:
