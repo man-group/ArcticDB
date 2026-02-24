@@ -143,28 +143,7 @@ StatsComparison visit_binary_comparator_stats(
     );
 }
 
-// TODO aseaton move to .cpp file and remove "inline"
-inline StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation) {
-    if (left == StatsComparison::UNKNOWN || right == StatsComparison::UNKNOWN) {
-        return StatsComparison::UNKNOWN;
-    }
-
-    bool res{false};
-    switch (operation) {
-    case OperationType::AND:
-        res = is_match(left) && is_match(right);
-        break;
-    case OperationType::OR:
-        res = is_match(left) || is_match(right);
-        break;
-    case OperationType::XOR:
-        res = is_match(left) ^ is_match(right);
-        break;
-    default:
-        util::raise_rte("Unsupported operation in visit_binary_boolean_stats - expected AND OR or XOR");
-    }
-    return res ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
-};
+StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation);
 
 inline StatsComparison visit_binary_boolean_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation

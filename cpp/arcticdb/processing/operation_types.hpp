@@ -20,6 +20,10 @@
 
 namespace arcticdb {
 
+// We need a Kleene three-valued logic for filtering with column stats. Consider the filter,
+// ~(q["a"] < 5)
+// If a block has [min, max] = [4, 6] then we need to include it for both (q["a"] < 5) and
+// ~(q["a"] < 5). So we evaluate q["a"] < 5 to UNKNOWN.
 enum class StatsComparison : uint8_t { ALL_MATCH, NONE_MATCH, UNKNOWN };
 
 constexpr bool is_match(StatsComparison c) { return c == StatsComparison::ALL_MATCH; }
