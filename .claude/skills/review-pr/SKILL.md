@@ -1,3 +1,10 @@
+---
+name: review-pr
+description: Review a pull request for ArcticDB
+---
+
+# review-pr
+
 Review the current PR. Use `gh pr diff` to get the diff, and `gh pr view` to get the title and description.
 
 You are reviewing a pull request for ArcticDB, a high-performance serverless DataFrame
