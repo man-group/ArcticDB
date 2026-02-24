@@ -135,6 +135,39 @@ void merge_update_string_column(
         });
     }
 }
+
+template<
+        typename SourceTDT, typename TargetTDT, typename SourceValueRawType = TargetTDT::DataTypeTag::raw_type,
+        typename TargetValueRawType = TargetTDT::DataTypeTag::raw_type>
+requires std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>
+std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
+        const SourceValueRawType& source_value, const TargetValueRawType& target_value,
+        const StringPool& target_string_pool, std::optional<ScopedGILLock>& scoped_gil_lock
+) {
+    if constexpr (is_sequence_type(SourceTDT::data_type())) {
+        const bool is_source_null = is_py_none(source_value) || is_py_nan(source_value);
+        const bool is_target_null = !is_a_string(target_value);
+        if (is_source_null ^ is_target_null) {
+            return false;
+        } else if (is_source_null && is_target_null) {
+            return true;
+        } else {
+            std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error =
+                    create_py_object_wrapper_or_error<TargetTDT::data_type()>(source_value, scoped_gil_lock);
+            if (const auto* err = std::get_if<convert::StringEncodingError>(&wrapper_or_error); err) {
+                return std::get<convert::StringEncodingError>(std::move(wrapper_or_error));
+            } else {
+                const auto& wrapper = std::get<convert::PyStringWrapper>(wrapper_or_error);
+                return target_string_pool.get_const_view(target_value) !=
+                       std::string_view(wrapper.buffer_, wrapper.length_);
+            }
+        }
+    } else if constexpr (is_floating_point_type(SourceTDT::data_type())) {
+        return source_value == target_value || (std::isnan(target_value) && std::isnan(source_value));
+    } else {
+        return source_value == target_value;
+    }
+}
 } // namespace
 
 namespace arcticdb {
@@ -2177,34 +2210,20 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                     for (size_t source_row_idx = 0; source_row_idx < index_match.size(); ++source_row_idx) {
                         std::erase_if(index_match[source_row_idx], [&](const size_t target_row_idx) {
                             const TargetRawType target_value = target_accessor.at(target_row_idx);
-                            if constexpr (is_sequence_type(source_tdt.data_type())) {
-                                auto py_string_object = source_data[source_row_idx];
-                                if (is_py_none(py_string_object) || is_py_nan(py_string_object)) {
-                                    return is_a_string(target_value);
-                                } else if (!is_a_string(target_value)) {
-                                    return true;
+                            const auto& source_value = source_data[source_row_idx];
+                            auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
+                                    source_value, target_value, target_segment.const_string_pool(), scoped_gil_lock
+                            );
+                            if constexpr (is_sequence_type(target_tdt.data_type())) {
+                                if (auto* err = std::get_if<convert::StringEncodingError>(&are_values_equal); err) {
+                                    err->row_index_in_slice_ = target_row_idx;
+                                    err->raise(column_name, row_ranges[0]->start());
                                 } else {
-                                    std::variant<convert::StringEncodingError, convert::PyStringWrapper>
-                                            wrapper_or_error =
-                                                    create_py_object_wrapper_or_error<target_tdt.data_type()>(
-                                                            py_string_object, scoped_gil_lock
-                                                    );
-                                    if (auto* err = std::get_if<convert::StringEncodingError>(&wrapper_or_error); err) {
-                                        err->row_index_in_slice_ = row_ranges[0]->start() + source_row_idx;
-                                        err->raise(column_name, row_ranges[0]->start());
-                                    } else {
-                                        const auto& wrapper = std::get<convert::PyStringWrapper>(wrapper_or_error);
-                                        return target_segment.string_at_offset(target_value) !=
-                                               std::string_view(wrapper.buffer_, wrapper.length_);
-                                    }
+                                    return !std::get<bool>(are_values_equal);
                                 }
-                            } else if constexpr (is_floating_point_type(source_tdt.data_type())) {
-                                return source_data[source_row_idx] != target_value &&
-                                       !(std::isnan(target_value) && std::isnan(source_data[source_row_idx]));
                             } else {
-                                return source_data[source_row_idx] != target_value;
+                                return !std::get<bool>(are_values_equal);
                             }
-                            return false;
                         });
                     }
                 } else {
