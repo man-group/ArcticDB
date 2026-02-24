@@ -27,6 +27,7 @@
 #include <string>
 #include <variant>
 #include <memory>
+#include <ranges>
 
 namespace arcticdb {
 
@@ -886,6 +887,7 @@ struct MergeUpdateClause {
     [[nodiscard]] std::string to_string() const;
 
   private:
+    using OnIterator = decltype(on_)::iterator;
     void update_and_insert(
             const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
             const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
@@ -906,7 +908,7 @@ struct MergeUpdateClause {
     std::vector<std::vector<size_t>> filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
             const std::span<const NativeTensor> source_tensors, const ProcessingUnit& proc,
-            std::vector<std::vector<size_t>>&& index_match
+            std::vector<std::vector<size_t>>&& index_match, std::ranges::subrange<OnIterator> on
     ) const;
 
     bool is_update_only() const;
