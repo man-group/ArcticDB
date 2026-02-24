@@ -1147,7 +1147,6 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
 
 
 def test_sparse_index_column_raises(lmdb_version_store_arrow):
-    """Test that writing with a sparse (contains nulls) index column raises an error."""
     lib = lmdb_version_store_arrow
     sym = "test_sparse_index_column_raises"
     # Create a table with a timestamp index column that has null values
@@ -1164,7 +1163,7 @@ def test_sparse_index_column_raises(lmdb_version_store_arrow):
             "col": pa.array([1, 2, 3], pa.int64()),
         }
     )
-    with pytest.raises((UserInputException, SchemaException)):
+    with pytest.raises(SchemaException):
         lib.write(sym, table, index_column="ts")
 
 
