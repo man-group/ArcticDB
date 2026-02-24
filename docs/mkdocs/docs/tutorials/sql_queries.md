@@ -684,6 +684,92 @@ SQL queries are read-only. To write data, use `lib.write()`, `lib.append()`, or 
 
 ## Examples
 
+### Version Comparison (Diffing)
+
+A powerful use of `register_symbol` is comparing two versions of the same symbol.
+Register the same symbol twice with different `as_of` values and aliases, then use a
+`FULL OUTER JOIN` to classify every row as added, removed, changed, or unchanged:
+
+```python
+# Write two versions of a portfolio
+v0 = pd.DataFrame({
+    "ticker": ["AAPL", "GOOG", "MSFT", "TSLA"],
+    "shares": [100, 50, 200, 75],
+    "price": [150.0, 2800.0, 300.0, 700.0],
+})
+lib.write("portfolio", v0)
+
+# Version 1: AAPL shares increased, MSFT price updated, TSLA removed, NVDA added
+v1 = pd.DataFrame({
+    "ticker": ["AAPL", "GOOG", "MSFT", "NVDA"],
+    "shares": [150, 50, 200, 300],
+    "price": [155.0, 2800.0, 310.0, 500.0],
+})
+lib.write("portfolio", v1)
+
+with lib.duckdb() as ddb:
+    ddb.register_symbol("portfolio", alias="old", as_of=0)
+    ddb.register_symbol("portfolio", alias="new", as_of=1)
+
+    diff = ddb.sql("""
+        SELECT
+            COALESCE(o.ticker, n.ticker) AS ticker,
+            CASE
+                WHEN o.ticker IS NULL THEN 'added'
+                WHEN n.ticker IS NULL THEN 'removed'
+                WHEN o.shares != n.shares OR o.price != n.price THEN 'changed'
+                ELSE 'unchanged'
+            END AS status,
+            o.shares AS old_shares, n.shares AS new_shares,
+            o.price  AS old_price,  n.price  AS new_price
+        FROM old o
+        FULL OUTER JOIN new n ON o.ticker = n.ticker
+        ORDER BY ticker
+    """)
+
+print(diff)
+#   ticker    status  old_shares  new_shares  old_price  new_price
+# 0   AAPL   changed       100.0       150.0      150.0      155.0
+# 1   GOOG unchanged        50.0        50.0     2800.0     2800.0
+# 2   MSFT   changed       200.0       200.0      300.0      310.0
+# 3   NVDA     added         NaN       300.0        NaN      500.0
+# 4   TSLA   removed        75.0         NaN      700.0        NaN
+
+# Filter to just the changes
+changed = diff[diff["status"] == "changed"]
+print(changed[["ticker", "old_shares", "new_shares", "old_price", "new_price"]])
+#   ticker  old_shares  new_shares  old_price  new_price
+# 0   AAPL       100.0       150.0      150.0      155.0
+# 2   MSFT       200.0       200.0      300.0      310.0
+```
+
+!!! note "Streaming tables are single-scan"
+    Registered symbols are backed by streaming Arrow readers, so each alias can only
+    be scanned once per context. Use a single query (like the `FULL OUTER JOIN` above)
+    rather than multiple separate queries against the same aliases.
+
+You can also use `as_of` with timestamps or snapshot names to compare
+versions at specific points in time:
+
+```python
+with lib.duckdb() as ddb:
+    ddb.register_symbol("portfolio", alias="yesterday", as_of=pd.Timestamp("2024-06-01"))
+    ddb.register_symbol("portfolio", alias="today",     as_of=pd.Timestamp("2024-06-02"))
+
+    diff = ddb.sql("""
+        SELECT
+            COALESCE(y.ticker, t.ticker) AS ticker,
+            t.shares - y.shares AS share_change,
+            t.price  - y.price  AS price_change
+        FROM yesterday y
+        FULL OUTER JOIN today t ON y.ticker = t.ticker
+        WHERE y.ticker IS NULL      -- added
+           OR t.ticker IS NULL      -- removed
+           OR y.shares != t.shares  -- changed
+           OR y.price  != t.price
+    """)
+```
+
 ### Financial Analytics
 
 ```python

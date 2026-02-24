@@ -520,6 +520,78 @@ class TestDuckDBContext:
 
         assert result["total"].iloc[0] == 6  # 1 + 2 + 3
 
+    def test_join_two_versions_to_diff(self, lmdb_library):
+        """Join two versions of the same symbol to find changed, added, and removed rows."""
+        lib = lmdb_library
+
+        # Version 0: initial portfolio
+        v0 = pd.DataFrame(
+            {
+                "ticker": ["AAPL", "GOOG", "MSFT", "TSLA"],
+                "shares": [100, 50, 200, 75],
+                "price": [150.0, 2800.0, 300.0, 700.0],
+            }
+        )
+        lib.write("portfolio", v0)
+
+        # Version 1: AAPL shares changed, TSLA removed, NVDA added
+        v1 = pd.DataFrame(
+            {
+                "ticker": ["AAPL", "GOOG", "MSFT", "NVDA"],
+                "shares": [150, 50, 200, 300],
+                "price": [155.0, 2800.0, 310.0, 500.0],
+            }
+        )
+        lib.write("portfolio", v1)
+
+        # Use FULL OUTER JOIN to classify every row in a single query.
+        # (RecordBatchReader-backed tables are streaming, so each alias
+        #  can only be scanned once per context.)
+        with lib.duckdb() as ddb:
+            ddb.register_symbol("portfolio", alias="old", as_of=0)
+            ddb.register_symbol("portfolio", alias="new", as_of=1)
+
+            diff = ddb.sql("""
+                SELECT
+                    COALESCE(o.ticker, n.ticker) AS ticker,
+                    CASE
+                        WHEN o.ticker IS NULL THEN 'added'
+                        WHEN n.ticker IS NULL THEN 'removed'
+                        WHEN o.shares != n.shares OR o.price != n.price THEN 'changed'
+                        ELSE 'unchanged'
+                    END AS status,
+                    o.shares AS old_shares, n.shares AS new_shares,
+                    o.price  AS old_price,  n.price  AS new_price
+                FROM old o
+                FULL OUTER JOIN new n ON o.ticker = n.ticker
+                ORDER BY ticker
+            """)
+
+        changed = diff[diff["status"] == "changed"]
+        added = diff[diff["status"] == "added"]
+        removed = diff[diff["status"] == "removed"]
+        unchanged = diff[diff["status"] == "unchanged"]
+
+        # Changed: AAPL (shares 100->150, price 150->155) and MSFT (price 300->310)
+        assert len(changed) == 2
+        assert set(changed["ticker"].tolist()) == {"AAPL", "MSFT"}
+
+        aapl = changed[changed["ticker"] == "AAPL"].iloc[0]
+        assert aapl["old_shares"] == 100
+        assert aapl["new_shares"] == 150
+
+        # Added: NVDA
+        assert len(added) == 1
+        assert added["ticker"].iloc[0] == "NVDA"
+
+        # Removed: TSLA
+        assert len(removed) == 1
+        assert removed["ticker"].iloc[0] == "TSLA"
+
+        # Unchanged: GOOG
+        assert len(unchanged) == 1
+        assert unchanged["ticker"].iloc[0] == "GOOG"
+
     def test_with_row_range(self, lmdb_library):
         """Test register_symbol with row_range parameter."""
         lib = lmdb_library
