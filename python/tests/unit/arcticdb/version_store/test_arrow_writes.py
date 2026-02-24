@@ -1162,6 +1162,7 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
         pytest.param(3, 4, id="mixed_nulls_and_values"),
         pytest.param(0, 5, id="all_values_set"),
         pytest.param(5, 5, id="all_nulls"),
+        pytest.param(5, 1, id="single_null_row"),
         pytest.param(3, 0, id="empty_slice"),
     ],
 )
@@ -1267,3 +1268,20 @@ def test_sparse_update(lmdb_version_store_arrow):
     assert expected.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected, pandas_received)
+
+
+@pytest.mark.xfail(
+    reason="Column selection for Arrow-written data always includes the first column even when not requested (monday: 11432991054)"
+)
+def test_arrow_column_selection_excludes_first_column(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    table = pa.table(
+        {
+            "a": pa.array([1, 2, 3], pa.int64()),
+            "b": pa.array([10.0, 20.0, 30.0], pa.float64()),
+        }
+    )
+    lib.write("s", table)
+    received = lib.read("s", columns=["b"]).data
+    expected = table.select(["b"])
+    assert expected.equals(received)
