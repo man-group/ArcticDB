@@ -1,5 +1,15 @@
 # DuckDB Branch Work Log
 
+## 2026-02-24: Refactor — Extract LazyRecordBatchIterator and move lazy_read_helpers
+
+- **Extracted `FilterRange`** to `pipeline/filter_range.hpp` — removed 3 duplicate definitions from `read_query.hpp`, `arrow_output_frame.hpp`, and `lazy_read_helpers.hpp`
+- **Extracted `LazyRecordBatchIterator`** from `arrow_output_frame.{hpp,cpp}` into `arrow/lazy_record_batch_iterator.{hpp,cpp}` — includes all helper functions (`prepare_segment_for_arrow`, `SharedStringDictionary`, `build_shared_dictionary`, `encode_dictionary_with_shared_dict`, `make_column_blocks_detachable`)
+- **Moved `lazy_read_helpers`** from `version/` to `pipeline/` — zero dependencies on version/ code, pure segment-level transforms using processing/ and entity/ types
+- **Slimmed `arrow_output_frame.{hpp,cpp}`** to only contain `RecordBatchData` and `ArrowOutputFrame` (~100 lines header, ~45 lines impl)
+- Updated all consumer includes (7 files), CMakeLists.txt (4 entries), and documentation (ARROW.md, PIPELINE.md)
+- Fixed doc inaccuracies: `apply_truncation()`/`apply_filter_clause()` described as "static" (they're free functions), `build_shared_dictionary()` described as walking pool buffer (it iterates column data), removed non-existent `read_and_decode_segment()` from shared helpers list
+- All 42 C++ tests pass, all 458 Python DuckDB tests pass
+
 ## 2026-02-20: Coverage gap tests
 
 - Analyzed Python and C++ test coverage across the DuckDB branch

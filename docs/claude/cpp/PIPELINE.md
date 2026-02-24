@@ -121,8 +121,8 @@ When the output format is Arrow or Polars (not Pandas), or when the read is for 
 
 ### Location
 
-- `cpp/arcticdb/arrow/arrow_output_frame.hpp` — `LazyRecordBatchIterator`
-- `cpp/arcticdb/version/lazy_read_helpers.hpp/cpp` — shared helper functions
+- `cpp/arcticdb/arrow/lazy_record_batch_iterator.hpp/cpp` — `LazyRecordBatchIterator`
+- `cpp/arcticdb/pipeline/lazy_read_helpers.hpp/cpp` — shared helper functions
 - `cpp/arcticdb/version/version_store_api.cpp` — `create_lazy_record_batch_iterator()`, `create_lazy_record_batch_iterator_with_metadata()`
 
 ### Flow
@@ -177,9 +177,9 @@ Read Request (format=ARROW/POLARS, or SQL query)
 | Memory | O(symbol_size) during decode | O(prefetch_size × segment_size) |
 | Parallelism | All segments fetched in parallel | Prefetch window with backpressure |
 | Used by | `lib.read(format='pandas')` | `lib.read(format='pyarrow'/'polars')`, `lib.sql()` |
-| Fallback | — | Falls back to eager when `query_builder` is provided |
+| Fallback | — | Falls back to eager for complex clauses (aggregation, resample), not simple FilterClause |
 
-### Shared Helpers (`lazy_read_helpers.hpp/cpp`)
+### Shared Helpers (`pipeline/lazy_read_helpers.hpp/cpp`)
 
 | Function | Purpose |
 |---|---|

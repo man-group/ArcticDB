@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/lazy_record_batch_iterator.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>

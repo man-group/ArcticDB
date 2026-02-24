@@ -9,18 +9,13 @@
 
 #include <memory>
 #include <string>
-#include <variant>
 
-#include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/filter_range.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
 
 struct ExpressionContext;
-
-// FilterRange: same definition as in arrow_output_frame.hpp.
-using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
 
 // Apply row-level truncation to a decoded segment.
 // Handles both timestamp-based (date_range) and row-based (row_range/LIMIT) truncation.

@@ -6,11 +6,15 @@ Arrow C Data Interface integration for streaming ArcticDB data to DuckDB and PyA
 
 ```
 cpp/arcticdb/arrow/
-├── arrow_output_frame.hpp   # RecordBatchData, LazyRecordBatchIterator, ArrowOutputFrame
-├── arrow_output_frame.cpp   # Implementation: lazy iterator, prepare_segment_for_arrow, SharedStringDictionary
-├── arrow_output_options.hpp # ArrowOutputStringFormat enum, ArrowOutputConfig struct
-├── arrow_handlers.hpp/cpp   # Per-type Arrow conversion (string, numeric, timestamp)
-└── arrow_utils.hpp/cpp      # segment_to_arrow_data(), horizontal_merge, schema padding (TargetField, pad_batch_to_schema)
+├── arrow_output_frame.hpp/cpp          # RecordBatchData, ArrowOutputFrame
+├── lazy_record_batch_iterator.hpp/cpp  # LazyRecordBatchIterator, prepare_segment_for_arrow, SharedStringDictionary
+├── arrow_output_options.hpp            # ArrowOutputStringFormat enum, ArrowOutputConfig struct
+├── arrow_handlers.hpp/cpp              # Per-type Arrow conversion (string, numeric, timestamp)
+└── arrow_utils.hpp/cpp                 # segment_to_arrow_data(), horizontal_merge, schema padding (TargetField, pad_batch_to_schema)
+
+cpp/arcticdb/pipeline/
+├── filter_range.hpp          # FilterRange type alias (variant of monostate, IndexRange, RowRange)
+└── lazy_read_helpers.hpp/cpp # apply_truncation(), apply_filter_clause(), estimate_segment_bytes()
 ```
 
 ## Classes
@@ -70,9 +74,9 @@ LazyRecordBatchIterator
 
 **Prefetch + Parallel Conversion**: `fill_prefetch_buffer()` maintains up to `prefetch_size_` (default 2) in-flight `folly::Future<vector<RecordBatchData>>` via `read_decode_and_prepare_segment()`. Each future chains I/O (`batch_read_uncompressed`) with CPU-intensive work (truncation, filter, Arrow conversion) via `.via(&async::cpu_executor())`. This means `prepare_segment_for_arrow()` runs on the **CPU thread pool in parallel** across segments — critical for wide tables where Arrow conversion takes seconds per segment.
 
-**Truncation**: `apply_truncation()` is `static` — handles `IndexRange` (timestamp binary search) and `RowRange` (row offset overlap) for date_range/row_range/LIMIT pushdown. Called inside the future chain lambda with captured (not member) state.
+**Truncation**: `apply_truncation()` is a free function in `pipeline/lazy_read_helpers.hpp` — handles `IndexRange` (timestamp binary search) and `RowRange` (row offset overlap) for date_range/row_range/LIMIT pushdown. Called inside the future chain lambda with captured (not member) state.
 
-**Filter**: `apply_filter_clause()` is `static` — evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering. For dynamic-schema symbols, `expression_context_->dynamic_schema_` must be `true` so that `ProcessingUnit::get()` returns `EmptyResult` instead of throwing when a filter column is missing from a segment.
+**Filter**: `apply_filter_clause()` is a free function in `pipeline/lazy_read_helpers.hpp` — evaluates `ExpressionContext` via `ProcessingUnit`, applying WHERE pushdown bitset filtering. For dynamic-schema symbols, `expression_context_->dynamic_schema_` must be `true` so that `ProcessingUnit::get()` returns `EmptyResult` instead of throwing when a filter column is missing from a segment.
 
 **Thread safety**: All state needed by the CPU lambda (row_filter, expression_context, filter_name) is captured by value/move — no shared mutable state across threads. Each segment is processed independently.
 
@@ -92,7 +96,7 @@ Single-use enforcement via `data_consumed_` flag — `extract_record_batches()` 
 
 ## Segment-to-Arrow Conversion
 
-### prepare_segment_for_arrow() (anonymous namespace in arrow_output_frame.cpp)
+### prepare_segment_for_arrow() (anonymous namespace in lazy_record_batch_iterator.cpp)
 
 Converts a decoded `SegmentInMemory` for Arrow consumption. **This is the dominant cost** in the SQL pipeline.
 
@@ -118,7 +122,7 @@ struct SharedStringDictionary {
 };
 ```
 
-`build_shared_dictionary()` walks the pool buffer sequentially using `[uint32_t size][char data]` entry layout (min 8 bytes per entry). O(U) where U = unique strings in pool.
+`build_shared_dictionary()` iterates CATEGORICAL column data collecting referenced pool offsets, then resolves each offset via `string_pool->get_const_view()`. O(R) where R = total rows across CATEGORICAL columns, plus O(U) lookups where U = unique strings.
 
 `encode_dictionary_with_shared_dict()` does read-only hash map lookups per row (no insert), then copies the shared dictionary buffers into each column's extra buffers.
 
@@ -286,10 +290,10 @@ Implemented across Phases 0-9 (see `docs/claude/plans/duckdb/unified-lazy-read-p
 
 ### Shared Helpers
 
-`lazy_read_helpers.hpp/cpp`: extracted pure functions shared by the iterator:
-- `read_and_decode_segment()` → `folly::Future<SegmentAndSlice>`
+`pipeline/lazy_read_helpers.hpp/cpp`: extracted pure functions shared by the iterator:
 - `apply_truncation()` → modifies segment in place
 - `apply_filter_clause()` → returns false if all rows filtered
+- `estimate_segment_bytes()` → rough uncompressed size for backpressure
 
 ### Dual-Cap Prefetch Backpressure
 

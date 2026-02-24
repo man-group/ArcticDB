@@ -18,7 +18,7 @@
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/lazy_record_batch_iterator.hpp>
 
 namespace arcticdb::version_store {
 

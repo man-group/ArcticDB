@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/version/lazy_read_helpers.hpp>
+#include <arcticdb/pipeline/lazy_read_helpers.hpp>
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/expression_context.hpp>

@@ -28,7 +28,7 @@
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/lazy_record_batch_iterator.hpp>
 
 namespace arcticdb::version_store {
 

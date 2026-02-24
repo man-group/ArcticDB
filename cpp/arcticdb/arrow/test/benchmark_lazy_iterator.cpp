@@ -8,7 +8,7 @@
 
 #include <benchmark/benchmark.h>
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/lazy_record_batch_iterator.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>

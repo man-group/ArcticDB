@@ -8,7 +8,7 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/version/lazy_read_helpers.hpp>
+#include <arcticdb/pipeline/lazy_read_helpers.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
