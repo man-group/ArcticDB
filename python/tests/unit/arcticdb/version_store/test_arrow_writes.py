@@ -1162,6 +1162,7 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
         pytest.param(3, 4, id="mixed_nulls_and_values"),
         pytest.param(0, 5, id="all_values_set"),
         pytest.param(5, 5, id="all_nulls"),
+        pytest.param(5, 1, id="single_null_row"),
         pytest.param(3, 0, id="empty_slice"),
     ],
 )
