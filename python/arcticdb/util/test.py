@@ -1381,19 +1381,25 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
 
         return result
 
-    # Row range: match purely on column values using pd.merge (row range index is not used for matching)
+    # Row range: match on column values only. Explicit loop handles None/NaN as equal
+    # and many-to-many matching where last source row wins (matching C++ iteration order).
     update_columns = [col for col in target.columns if col not in on]
     if not update_columns:
         return target.copy()
 
-    merged = target.merge(source, on=on, how="left", suffixes=("", "_src"), indicator=True)
-    matched = merged["_merge"] == "both"
-    for col in update_columns:
-        merged.loc[matched, col] = merged.loc[matched, f"{col}_src"]
-    merged.drop(columns=[f"{c}_src" for c in update_columns] + ["_merge"], inplace=True)
+    result = target.copy()
+    for i in range(len(result)):
+        for j in range(len(source)):
+            if all(
+                (pd.isna(target.iloc[i][c]) and pd.isna(source.iloc[j][c])) or target.iloc[i][c] == source.iloc[j][c]
+                for c in on
+            ):
+                for col in update_columns:
+                    result.iat[i, result.columns.get_loc(col)] = source.iloc[j][col]
+
     for column in target.columns:
-        merged[column] = merged[column].astype(target[column].dtype)
-    return merged
+        result[column] = result[column].astype(target[column].dtype)
+    return result
 
 
 def merge(
