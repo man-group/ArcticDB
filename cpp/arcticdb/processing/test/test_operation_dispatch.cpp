@@ -75,6 +75,20 @@ TEST(OperationDispatch, binary_operator) {
     EXPECT_THROW(visit_binary_operator(value, empty_column, PlusOperator{}), SchemaException);
 }
 
+TEST(OperationDispatch, binary_operator_modulo) {
+    using namespace arcticdb;
+    size_t num_rows = 100;
+    auto int_column = ColumnWithStrings(std::make_unique<Column>(generate_int_column(num_rows)), "int_col");
+    auto value = std::make_shared<Value>(static_cast<int64_t>(7), DataType::INT64);
+
+    auto variant_data = visit_binary_operator(int_column, value, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<ColumnWithStrings>(variant_data));
+    auto results_column = std::get<ColumnWithStrings>(variant_data).column_;
+    for (size_t idx = 0; idx < num_rows; idx++) {
+        ASSERT_EQ(static_cast<int64_t>(idx) % 7, results_column->scalar_at<int64_t>(idx));
+    }
+}
+
 TEST(OperationDispatch, binary_comparator) {
     using namespace arcticdb;
     size_t num_rows = 100;

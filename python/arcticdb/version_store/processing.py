@@ -126,6 +126,9 @@ class ExpressionNode:
     def __truediv__(self, right):
         return self._apply(right, _OperationType.DIV)
 
+    def __mod__(self, right):
+        return self._apply(right, _OperationType.MOD)
+
     def __eq__(self, right):
         if is_supported_sequence(right):
             return self.isin(right)
@@ -185,6 +188,9 @@ class ExpressionNode:
 
     def __rtruediv__(self, left):
         return self._rapply(left, _OperationType.DIV)
+
+    def __rmod__(self, left):
+        return self._rapply(left, _OperationType.MOD)
 
     def __rand__(self, left):
         if left is True:
@@ -435,7 +441,7 @@ class QueryBuilder:
 
     Supported arithmetic operations when projection or filtering:
 
-    * Binary arithmetic: +, -, *, /
+    * Binary arithmetic: +, -, *, /, %
     * Unary arithmetic: -, abs
 
     Supported filtering operations:

@@ -241,6 +241,41 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
     assert not can_read_back(us_time, notz_summer_time)
 
 
+def test_querybuilder_projection_modulo(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_projection_modulo"
+    df = pd.DataFrame({"col": np.arange(10, dtype=np.int64)}, index=np.arange(10))
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("mod_col", q["col"] % 3)
+
+    expected = df.copy()
+    expected["mod_col"] = expected["col"] % 3
+    received = lib.read(symbol, query_builder=q).data
+
+    assert_frame_equal(expected, received)
+
+
+def test_querybuilder_filter_datetime_index_by_minute_with_modulo(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_filter_datetime_index_by_minute_with_modulo"
+    index = pd.date_range("2024-01-01", periods=180, freq="min")
+    df = pd.DataFrame({"col": np.arange(index.shape[0], dtype=np.int64)}, index=index)
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    minute_in_hour = q["index"] % pd.Timedelta(hours=1)
+    q = q[(minute_in_hour >= pd.Timedelta(minutes=10)) & (minute_in_hour < pd.Timedelta(minutes=11))]
+
+    expected = df[df.index.minute == 10]
+    received = lib.read(symbol, query_builder=q).data
+
+    assert_frame_equal(expected, received)
+
+
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_querybuilder_date_range_then_date_range(

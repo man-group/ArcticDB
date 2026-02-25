@@ -10,6 +10,7 @@
 
 #include <unordered_set>
 #include <optional>
+#include <cmath>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
@@ -51,6 +52,8 @@ enum class OperationType : uint8_t {
     AND,
     OR,
     XOR,
+    // Operator (kept here to preserve existing enum values)
+    MOD,
     // Ternary
     TERNARY
 };
@@ -70,6 +73,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(SUB)
         TO_STR(MUL)
         TO_STR(DIV)
+        TO_STR(MOD)
         TO_STR(EQ)
         TO_STR(NE)
         TO_STR(LT)
@@ -353,6 +357,17 @@ struct DivideOperator {
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, DivideOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) / static_cast<V>(u);
+    }
+};
+
+struct ModOperator {
+    template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, ModOperator>::type>
+    V apply(T t, U u) {
+        if constexpr (std::is_floating_point_v<V>) {
+            return std::fmod(static_cast<V>(t), static_cast<V>(u));
+        } else {
+            return static_cast<V>(t) % static_cast<V>(u);
+        }
     }
 };
 
@@ -712,6 +727,19 @@ struct formatter<arcticdb::DivideOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::DivideOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "/");
+    }
+};
+
+template<>
+struct formatter<arcticdb::ModOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::ModOperator, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "%");
     }
 };
 

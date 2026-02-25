@@ -143,6 +143,8 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
         return visit_binary_operator(left, right, TimesOperator{});
     case OperationType::DIV:
         return visit_binary_operator(left, right, DivideOperator{});
+    case OperationType::MOD:
+        return visit_binary_operator(left, right, ModOperator{});
     case OperationType::EQ:
         return visit_binary_comparator(left, right, EqualsOperator{});
     case OperationType::NE:
