@@ -197,7 +197,7 @@ class StorageLock {
 
     std::optional<timestamp> read_timestamp(const std::shared_ptr<Store>& store) const {
         try {
-            auto key_seg = store->read_sync(ref_key());
+            auto key_seg = store->read_sync(ref_key(), {.dont_warn_about_missing_key = true});
             return key_seg.second.template scalar_at<timestamp>(0, 0).value();
         } catch (const std::invalid_argument&) {
             return std::nullopt;
