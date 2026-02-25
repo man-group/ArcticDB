@@ -354,6 +354,18 @@ class NativeVersionStore:
     )
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
+    _valid_read_kwargs = {
+        "iterate_snapshots_if_tombstoned",
+        "force_string_to_object",
+        "optimise_string_memory",
+        "output_format",
+        "dynamic_schema",
+        "set_tz",
+        "allow_sparse",
+        "incomplete",
+        "arrow_string_format_default",
+        "arrow_string_format_per_column",
+    }
 
     def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
@@ -641,6 +653,20 @@ class NativeVersionStore:
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
 
+    @staticmethod
+    def _validate_kwargs(method, valid_kwargs, **kwargs):
+        invalid_args = []
+        for arg in kwargs.keys():
+            if arg not in valid_kwargs:
+                invalid_args.append(arg)
+        if len(invalid_args):
+            # Log formatting gets confused by curly braces in input string, hence the conversion to a list
+            msg = f"{method} received invalid kwargs {invalid_args}. Supported kwargs are {list(valid_kwargs)}"
+            if os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", None) == "1":
+                log.warning(msg)
+            else:
+                raise ArcticNativeException(msg)
+
     def stage(
         self,
         symbol: str,
@@ -651,6 +677,7 @@ class NativeVersionStore:
         index_column: Optional[str] = None,
         **kwargs,
     ):
+        self._validate_kwargs("stage", {"norm_failure_options_msg"}, **kwargs)
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
         _handle_categorical_columns(symbol, data, True, operation_supports_categoricals=True)
         udm, item, norm_meta = self._try_normalize(
@@ -756,6 +783,22 @@ class NativeVersionStore:
         1       6
         2       7
         """
+        self._validate_kwargs(
+            "write",
+            {
+                "dynamic_strings",
+                "pickle_on_failure",
+                "prune_previous_version",
+                "parallel",
+                "incomplete",
+                "recursive_normalizers",
+                "recursive_normalize_msgpack_no_pickle_fallback",
+                "coerce_columns",
+                "sparsify_floats",
+                "norm_failure_options_msg",
+            },
+            **kwargs,
+        )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
@@ -932,6 +975,16 @@ class NativeVersionStore:
         2018-01-05       5
         2018-01-06       6
         """
+        self._validate_kwargs(
+            "append",
+            {
+                "dynamic_strings",
+                "coerce_columns",
+                "prune_previous_version",
+                "write_if_missing",
+            },
+            **kwargs,
+        )
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
@@ -1052,6 +1105,17 @@ class NativeVersionStore:
         2018-01-03      40
         2018-01-04       4
         """
+        self._validate_kwargs(
+            "update",
+            {
+                "dynamic_strings",
+                "dynamic_schema",
+                "coerce_columns",
+                "prune_previous_version",
+            },
+            **kwargs,
+        )
+
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1338,6 +1402,8 @@ class NativeVersionStore:
         Dict
             Dictionary of symbol mapping with the versioned items
         """
+        self._validate_kwargs("batch_read", self._valid_read_kwargs.union({"implement_read_index"}), **kwargs)
+
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
         throw_on_error = True
         versioned_items = self._batch_read_to_versioned_items(
@@ -1504,6 +1570,8 @@ class NativeVersionStore:
                 * Different index types, including MultiIndexes with different numbers of levels
                 * Incompatible column types e.g. joining a string column to an integer column
         """
+        self._validate_kwargs("batch_read_and_join", self._valid_read_kwargs.union({"implement_read_index"}), **kwargs)
+
         implement_read_index = kwargs.get("implement_read_index", False)
         if columns:
             columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
@@ -1558,6 +1626,8 @@ class NativeVersionStore:
         Dict
             Dictionary of symbol mapping with the versioned items. The data attribute will be None.
         """
+        self._validate_kwargs("batch_read_metadata", self._valid_read_kwargs, **kwargs)
+
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         include_errors_and_none_meta = False
         meta_items = self._batch_read_metadata_to_versioned_items(
@@ -1626,6 +1696,7 @@ class NativeVersionStore:
             Dictionary of symbol mapped to dictionary of [int, VersionedItem], where the int represents the version for
             each VersionedItem for each symbol. The data attribute will be None.
         """
+        self._validate_kwargs("batch_read_metadata_multi", self._valid_read_kwargs, **kwargs)
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
@@ -1723,6 +1794,12 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        self._validate_kwargs(
+            "batch_write",
+            {"dynamic_strings", "pickle_on_failure", "norm_failure_options_msg"},
+            **kwargs,
+        )
+
         _check_batch_kwargs(NativeVersionStore.batch_write, NativeVersionStore.write, kwargs)
         throw_on_error = True
         return self._batch_write_internal(
@@ -1924,6 +2001,12 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        self._validate_kwargs(
+            "batch_append",
+            {"prune_previous_version", "dynamic_strings", "write_if_missing"},
+            **kwargs,
+        )
+
         throw_on_error = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
         return self._batch_append_to_versioned_items(
@@ -2015,6 +2098,8 @@ class NativeVersionStore:
             Includes the version number that was just written.
             i-th entry corresponds to i-th element of `symbols`.
         """
+        self._validate_kwargs("batch_restore_version", self._valid_read_kwargs, **kwargs)
+
         _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
@@ -2345,6 +2430,8 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), **kwargs)
+
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
@@ -2388,6 +2475,8 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        self._validate_kwargs("head", self._valid_read_kwargs.union({"implement_read_index"}), **kwargs)
+
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
@@ -2422,6 +2511,7 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        self._validate_kwargs("tail", self._valid_read_kwargs.union({"implement_read_index"}), **kwargs)
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -2566,6 +2656,14 @@ class NativeVersionStore:
         -------
         Pandas DataFrame representing the index key in a human-readable format.
         """
+        self._validate_kwargs(
+            "read_index",
+            {
+                "iterate_snapshots_if_tombstoned",
+            },
+            **kwargs,
+        )
+
         version_query = self._get_version_query(as_of, **kwargs)
         data = denormalize_dataframe(self.version_store.read_index(symbol, version_query))
         return data
@@ -2587,6 +2685,8 @@ class NativeVersionStore:
         VersionedItem
             Includes the version number that was just written.
         """
+        self._validate_kwargs("restore_version", self._valid_read_kwargs, **kwargs)
+
         version_query = self._get_version_query(as_of, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
         read_result = ReadResult(*self.version_store.restore_version(symbol, version_query, read_options))
@@ -3022,6 +3122,14 @@ class NativeVersionStore:
             List of version queries. See documentation of `read` method for more details.
             i-th entry corresponds to i-th element of `symbols`.
         """
+        self._validate_kwargs(
+            "add_to_snapshot",
+            {
+                "iterate_snapshots_if_tombstoned",
+            },
+            **kwargs,
+        )
+
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         self.version_store.add_to_snapshot(snap_name, symbols, version_queries)
 
@@ -3066,6 +3174,12 @@ class NativeVersionStore:
         prune_previous_versions : `Optional[bool]`, default=False
             Remove previous versions from version list. Uses library default if left as None.
         """
+        self._validate_kwargs(
+            "delete",
+            {"dynamic_schema", "prune_previous_versions", "prune_previous_version"},
+            **kwargs,
+        )
+
         if date_range is not None:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
             dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
@@ -3310,6 +3424,14 @@ class NativeVersionStore:
             Structure including the metadata read from the store.
             The data attribute will not be populated.
         """
+        self._validate_kwargs(
+            "read_metadata",
+            {
+                "iterate_snapshots_if_tombstoned",
+            },
+            **kwargs,
+        )
+
         version_query = self._get_version_query(as_of, **kwargs)
         version_item, udm = self.version_store.read_metadata(symbol, version_query)
         meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
@@ -3454,6 +3576,14 @@ class NativeVersionStore:
         `bool`
             True if the symbol is pickled, False otherwise.
         """
+        self._validate_kwargs(
+            "is_symbol_pickled",
+            {
+                "iterate_snapshots_if_tombstoned",
+                "include_index_segment",
+            },
+            **kwargs,
+        )
         dit = self._get_info(symbol, as_of, **kwargs)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
@@ -3518,6 +3648,8 @@ class NativeVersionStore:
         `Tuple[datetime, datetime]`
             The earliest and latest timestamps in the index.
         """
+        self._validate_kwargs("get_timerange_for_symbol", {}, **kwargs)
+
         given_version = max([v["version"] for v in self.list_versions(symbol)]) if version is None else version
         version_query = self._get_version_query(given_version)
 
@@ -3551,6 +3683,7 @@ class NativeVersionStore:
         `Optional[int]`
             The number of rows in the specified revision of the symbol, or `None` if the symbol is pickled.
         """
+        self._validate_kwargs("get_num_rows", {"iterate_snapshots_if_tombstoned", "include_index_segment"}, **kwargs)
         dit = self._get_info(symbol, as_of, **kwargs)
         return None if self.is_pickled_descriptor(dit.timeseries_descriptor) else dit.timeseries_descriptor.total_rows
 
@@ -3685,6 +3818,11 @@ class NativeVersionStore:
             - date_range, `tuple`
             - sorted, `str`
         """
+        self._validate_kwargs(
+            "get_info",
+            {"iterate_snapshots_if_tombstoned", "include_index_segment", "date_range_ns_precision"},
+            **kwargs,
+        )
         dit = self._get_info(symbol, version, **kwargs)
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         return self._process_info(dit, date_range_ns_precision)
@@ -3869,6 +4007,7 @@ class NativeVersionStore:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
+        self._validate_kwargs("defragment_symbol_data", {"prune_previous_version"}, **kwargs)
 
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         if proto_cfg.bucketize_dynamic:
