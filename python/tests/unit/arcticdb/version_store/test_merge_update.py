@@ -1517,6 +1517,11 @@ class TestMergeRowrangeUpdate:
         # When all columns are in on, there are no columns left to update
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
 
+    @pytest.mark.xfail(
+        reason="In pandas 2 empty data frame is written it's index is datetime by default. The current implementation"
+        "checks the for schema matching before starting to read the data. At this point we don't know if the"
+        "target is empty, so it's not easy to do an early return. Ideally the empty index should be used"
+    )
     @pytest.mark.parametrize("merge_metadata", (None, "meta"))
     def test_target_is_empty(self, lmdb_library, merge_metadata):
         lib = lmdb_library
