@@ -158,7 +158,7 @@ std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
                 return std::get<convert::StringEncodingError>(std::move(wrapper_or_error));
             } else {
                 const auto& wrapper = std::get<convert::PyStringWrapper>(wrapper_or_error);
-                return target_string_pool.get_const_view(target_value) !=
+                return target_string_pool.get_const_view(target_value) ==
                        std::string_view(wrapper.buffer_, wrapper.length_);
             }
         }
@@ -1910,9 +1910,6 @@ MergeUpdateClause::MergeUpdateClause(
     source_(std::move(source)) {
 
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            source_->has_index(), "Merge can be performed only on timestamp indexed dataframes at the moment"
-    );
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             strategy_.not_matched_by_target == MergeAction::DO_NOTHING, "Merge cannot perform insertion at the moment"
     );
 }
@@ -2122,15 +2119,22 @@ void MergeUpdateClause::update_and_insert(
     const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
     const std::span<const std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
     const std::span<const std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
-    const std::span<const std::shared_ptr<AtomKey>> atom_keys = *proc.atom_keys_;
-    const auto source_row_range_it = source_start_end_for_row_range_.find(atom_keys.front()->time_range());
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            source_row_range_it != source_start_end_for_row_range_.end(),
-            "Missing mapping between AtomKey timerange {} {} and source row start/end",
-            atom_keys.front()->time_range().first,
-            atom_keys.front()->time_range().second
-    );
-    const auto [source_row_start, source_row_end] = source_row_range_it->second;
+    const auto [source_row_start, source_row_end] = [&]() -> std::pair<size_t, size_t> {
+        if (source_->has_index()) {
+            const std::span<const std::shared_ptr<AtomKey>> atom_keys = *proc.atom_keys_;
+            const auto source_row_range_it = source_start_end_for_row_range_.find(atom_keys.front()->time_range());
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    source_row_range_it != source_start_end_for_row_range_.end(),
+                    "Missing mapping between AtomKey timerange {} {} and source row start/end",
+                    atom_keys.front()->time_range().first,
+                    atom_keys.front()->time_range().second
+            );
+            return source_row_range_it->second;
+        } else {
+            return std::pair{0, source_->num_rows};
+        }
+    }();
+    const bool is_timeseries = source_descriptor.index().type() == IndexDescriptor::Type::TIMESTAMP;
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
     // updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
@@ -2148,12 +2152,13 @@ void MergeUpdateClause::update_and_insert(
                 // index twice.
                 const size_t column_position_in_ts_descriptor =
                         col_ranges[segment_idx]->start() + column_index_in_slice - index_fields;
-                // For pandas input the index NativeTensor is stored separately from the field NativeTensors. Subtract
-                // the index fields to get the correct position in the source descriptor
+                // For pandas input the index NativeTensor is stored separately from the field NativeTensors.
+                // Subtract the index fields to get the correct position in the source descriptor
                 const size_t column_position_in_source = column_position_in_ts_descriptor - index_fields;
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         util::is_cstyle_array<RawType>(source_tensors[column_position_in_source]),
-                        "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type {} of "
+                        "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type "
+                        "{} of "
                         "size {} bytes but the stride is {} bytes",
                         target_field.name(),
                         target_field.type(),
@@ -2174,10 +2179,10 @@ void MergeUpdateClause::update_and_insert(
                         !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
                 );
                 if constexpr (is_sequence_type(tdt.data_type())) {
-                    // String columns are always recreated from scratch regardless if an update or insert is happening.
-                    // This is done because the string pool must be updated. With data read from disk, the map_ member
-                    // of the pool is not populated. Which means that the mapping between a string and offset in the
-                    // pool is missing. To get it, we need to rebuild the pool anyway.
+                    // String columns are always recreated from scratch regardless if an update or insert is
+                    // happening. This is done because the string pool must be updated. With data read from disk,
+                    // the map_ member of the pool is not populated. Which means that the mapping between a string
+                    // and offset in the pool is missing. To get it, we need to rebuild the pool anyway.
                     segment_contains_string_column = true;
                     if (on_.contains(target_field.name()) && is_update_only()) {
                         arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {

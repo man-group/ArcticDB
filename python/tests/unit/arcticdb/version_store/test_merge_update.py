@@ -1451,16 +1451,20 @@ class TestMergeRowrangeUpdate:
 
     def test_multiple_on_columns(self, lmdb_library):
         lib = lmdb_library
-        target = pd.DataFrame({
-            "a": [1, 2, 3, 4],
-            "b": ["x", "y", "z", "w"],
-            "c": [10.0, 20.0, 30.0, 40.0],
-        })
-        source = pd.DataFrame({
-            "a": [1, 2, 99, 4],
-            "b": ["x", "wrong", "z", "w"],
-            "c": [99.0, 99.0, 99.0, 99.0],
-        })
+        target = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4],
+                "b": ["x", "y", "z", "w"],
+                "c": [10.0, 20.0, 30.0, 40.0],
+            }
+        )
+        source = pd.DataFrame(
+            {
+                "a": [1, 2, 99, 4],
+                "b": ["x", "wrong", "z", "w"],
+                "c": [99.0, 99.0, 99.0, 99.0],
+            }
+        )
         # Must match on both "a" and "b": rows 0 and 3 match, rows 1 and 2 do not
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
 
@@ -1476,18 +1480,22 @@ class TestMergeRowrangeUpdate:
     )
     def test_row_and_column_slicing(self, lmdb_library_factory, slicing_policy):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
-        target = pd.DataFrame({
-            "a": [1, 2, 3, 4, 5],
-            "b": [1.0, 2.0, 3.0, 4.0, 5.0],
-            "c": [True, False, True, False, True],
-            "d": ["a", "b", "c", "d", "e"],
-        })
-        source = pd.DataFrame({
-            "a": [3, 5],
-            "b": [30.1, 50.1],
-            "c": [False, False],
-            "d": ["C", "E"],
-        })
+        target = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5],
+                "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "c": [True, False, True, False, True],
+                "d": ["a", "b", "c", "d", "e"],
+            }
+        )
+        source = pd.DataFrame(
+            {
+                "a": [3, 5],
+                "b": [30.1, 50.1],
+                "c": [False, False],
+                "d": ["C", "E"],
+            }
+        )
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
 
     def test_match_on_float_nan(self, lmdb_version_store_v1):
@@ -1515,9 +1523,7 @@ class TestMergeRowrangeUpdate:
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)})
         lib.write("sym", target)
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)})
-        merge_vit = lib.merge_experimental(
-            "sym", source, strategy=self.strategy, metadata=merge_metadata, on=["a"]
-        )
+        merge_vit = lib.merge_experimental("sym", source, strategy=self.strategy, metadata=merge_metadata, on=["a"])
         expected = target
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
@@ -1556,16 +1562,20 @@ class TestMergeRowrangeUpdate:
     @pytest.mark.parametrize("on", [["a"], ["d"], ["a", "d"]])
     def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
-        target = pd.DataFrame({
-            "a": [1, 2, 3, 4, 5],
-            "b": [1.0, 2.0, 3.0, 4.0, 5.0],
-            "c": ["x", "y", "z", "w", "v"],
-            "d": [10, 20, 30, 40, 50],
-        })
-        source = pd.DataFrame({
-            "a": [1, 99, 3, 4, 5],
-            "b": [10.0, 20.0, 30.0, 40.0, 50.0],
-            "c": ["X", "Y", "Z", "W", "V"],
-            "d": [10, 20, 99, 40, 50],
-        })
+        target = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5],
+                "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "c": ["x", "y", "z", "w", "v"],
+                "d": [10, 20, 30, 40, 50],
+            }
+        )
+        source = pd.DataFrame(
+            {
+                "a": [1, 99, 3, 4, 5],
+                "b": [10.0, 20.0, 30.0, 40.0, 50.0],
+                "c": ["X", "Y", "Z", "W", "V"],
+                "d": [10, 20, 99, 40, 50],
+            }
+        )
         generic_merge_test(lib, "sym", target, source, self.strategy, on=on)
