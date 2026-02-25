@@ -52,6 +52,12 @@ def generic_merge_test(
         concat_target = concat_target.reset_index(drop=True)
     expected = merge(concat_target, source, strategy, on=on)
     read_vit = lib.read(sym)
+    print()
+    print(on)
+    print(source)
+    print(concat_target)
+    print(expected)
+    print(read_vit.data)
     assert_frame_equal(read_vit.data, expected)
 
 

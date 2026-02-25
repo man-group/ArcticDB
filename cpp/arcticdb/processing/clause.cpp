@@ -2134,6 +2134,7 @@ void MergeUpdateClause::update_and_insert(
             return std::pair{0, source_->num_rows};
         }
     }();
+    const bool is_timeseries = source_->desc().index().type() == IndexDescriptor::Type::TIMESTAMP;
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
     // updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
@@ -2144,7 +2145,7 @@ void MergeUpdateClause::update_and_insert(
         const int index_fields = source_descriptor.index().field_count();
         for (size_t column_index_in_slice = index_fields; column_index_in_slice < slice_size; ++column_index_in_slice) {
             const Field& target_field = target_segment.descriptor().field(column_index_in_slice);
-            entity::visit_field(target_field, [&](auto tdt) {
+            visit_field(target_field, [&](auto tdt) {
                 using TDT = std::decay_t<decltype(tdt)>;
                 using RawType = TDT::DataTypeTag::raw_type;
                 // All column slices start with the index. Subtract the index field count so that we don't count the
@@ -2208,15 +2209,35 @@ void MergeUpdateClause::update_and_insert(
                         return;
                     }
                     ColumnData target_column_data = target_column.data();
-                    auto target_row_to_update_it = target_column_data.begin<TDT>();
-                    size_t target_row_to_update_idx = 0;
-                    for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
-                        // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
-                        for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
-                            const size_t rows_to_skip = target_row_idx - target_row_to_update_idx;
-                            std::advance(target_row_to_update_it, rows_to_skip);
-                            *target_row_to_update_it = source_data[source_row_idx];
-                            target_row_to_update_idx = target_row_idx;
+                    if (is_timeseries) {
+                        auto target_row_to_update_it = target_column_data.begin<TDT>();
+                        size_t target_row_to_update_idx = 0;
+                        for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
+                            // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
+                            for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
+                                const size_t rows_to_skip = target_row_idx - target_row_to_update_idx;
+                                std::advance(target_row_to_update_it, rows_to_skip);
+                                *target_row_to_update_it = source_data[source_row_idx];
+                                target_row_to_update_idx = target_row_idx;
+                            }
+                        }
+                    } else {
+                        if constexpr (TDT::dimension() == Dimension::Dim0) {
+                            auto target = random_accessor<TDT>(&target_column_data);
+                            for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
+                                // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be
+                                // done
+                                for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
+                                    target[target_row_idx] = source_data[source_row_idx];
+                                }
+                            }
+                        } else {
+                            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                                    "Target column {} has dimension {} but only dimension 0 is supported for merge "
+                                    "update",
+                                    target_field.name(),
+                                    TDT::dimension()
+                            );
                         }
                     }
                 }
@@ -2286,8 +2307,15 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
     if (on.empty()) {
         return index_match;
     }
-    const std::span<const std::shared_ptr<AtomKey>> atom_keys = *proc.atom_keys_;
-    const auto [source_row_start, source_row_end] = source_start_end_for_row_range_.at(atom_keys[0]->time_range());
+
+    const auto [source_row_start, source_row_end] = [&]() -> std::pair<size_t, size_t> {
+        if (target_descriptor.index().type() == IndexDescriptor::Type::TIMESTAMP &&
+            target_descriptor.sorted() == SortedValue::ASCENDING) {
+            return source_start_end_for_row_range_.at(proc.atom_keys_->front()->time_range());
+        } else {
+            return {0, source_->num_rows};
+        }
+    }();
     // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
     // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
     // If such a string is encountered in a column, then the GIL will be held until that whole column has
