@@ -20,10 +20,12 @@ struct IColumnDataRandomAccessor {
     template<class Base>
     struct Interface : Base {
         typename TDT::DataTypeTag::raw_type at(size_t idx) const { return folly::poly_call<0>(*this, idx); };
+        typename TDT::DataTypeTag::raw_type& operator[](size_t idx) { return *folly::poly_call<1>(*this, idx); };
+        typename TDT::DataTypeTag::raw_type* ptr_at(size_t idx) { return folly::poly_call<1>(*this, idx); };
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::at>;
+    using Members = folly::PolyMembers<&T::at, &T::ptr_at>;
 };
 
 template<typename TDT>
