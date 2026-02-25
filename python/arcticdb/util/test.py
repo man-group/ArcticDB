@@ -1314,6 +1314,8 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     """
     Special case of merge when the strategy is MergeStrategy(matched=update, not_matched_by_target=do_nothing)
 
+    Source and target are expected to have the same set of columns.
+
     Parameters
     ----------
     target : pd.DataFrame
@@ -1321,9 +1323,10 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     source : pd.DataFrame
         The source DataFrame containing the new values.
     on : `Optional[List[str]]`, default=None
-        A list of columns to match on, the index is always implicitly included no regardless if the parameter is None or
-        contains values. When a row in source matches a row in target on all these columns, the row in target is updated with
-        the values from source. If None, only the index is used for matching.
+        A list of columns to match on. For datetime indexes, the index is always implicitly included regardless if the
+        parameter is None or contains values. For row range indexes, at least one column must be specified and matching
+        is done purely on column values using pd.merge (the row range index is not used for matching). When a row in
+        source matches a row in target on all these columns, the row in target is updated with the values from source.
         For object dtype columns, None and np.nan are treated as equal for matching purposes.
         The original values in target are preserved (e.g., if target has None and source has np.nan, target keeps None).
 
@@ -1332,46 +1335,64 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     Pandas DataFrame representing the target updated with the values from source.
     """
 
-    assert isinstance(target.index, pd.DatetimeIndex), "Only datetime index is implemented"
+    assert not isinstance(target.index, pd.MultiIndex), "MultiIndex is not supported"
+    is_datetime = isinstance(target.index, pd.DatetimeIndex)
 
-    if on is None or on == []:
+    if not is_datetime:
+        assert on is not None and len(on) > 0, "Row range index requires at least one on column"
+
+    if is_datetime:
+        if on is None or on == []:
+            result = target.copy()
+            common_idx = result.index.intersection(source.index)
+            result.loc[common_idx] = source.loc[common_idx]
+            return result
+
         result = target.copy()
-        common_idx = result.index.intersection(source.index)
-        result.loc[common_idx] = source.loc[common_idx]
+        source_copy = source.copy()
+
+        update_columns = [col for col in result.columns if col not in on]
+
+        # Create copies of "on" columns for indexing. MultiIndex.set_index normalizes None to np.nan for object/string
+        # dtypes, so None and np.nan will match. The original columns remain in the dataframe to preserve original values.
+        all_columns = set(result.columns)
+        index_columns = []
+        for col in on:
+            idx_col = f"_{col}_"
+            while idx_col in all_columns:
+                idx_col = f"_{idx_col}_"
+            index_columns.append(idx_col)
+            all_columns.add(idx_col)
+
+        for col, idx_col in zip(on, index_columns):
+            result[idx_col] = result[col]
+            source_copy[idx_col] = source_copy[col]
+
+        # Append the copied columns to the existing DatetimeIndex to create a MultiIndex
+        result.set_index(index_columns, append=True, inplace=True)
+        source_copy.set_index(index_columns, append=True, inplace=True)
+
+        # Find common indices and update only the non-"on" columns
+        common_idx = result.index.intersection(source_copy.index)
+        result.loc[common_idx, update_columns] = source_copy.loc[common_idx, update_columns]
+
+        # Reset back to just the DatetimeIndex (drop the appended index levels)
+        result.reset_index(level=index_columns, drop=True, inplace=True)
+
         return result
 
-    result = target.copy()
-    source_copy = source.copy()
+    # Row range: match purely on column values using pd.merge (row range index is not used for matching)
+    update_columns = [col for col in target.columns if col not in on]
+    if not update_columns:
+        return target.copy()
 
-    update_columns = [col for col in result.columns if col not in on]
+    merged = target.merge(source, on=on, how="left", suffixes=("", "_src"), indicator=True)
+    matched = merged["_merge"] == "both"
+    for col in update_columns:
+        merged.loc[matched, col] = merged.loc[matched, f"{col}_src"]
+    merged.drop(columns=[f"{c}_src" for c in update_columns] + ["_merge"], inplace=True)
 
-    # Create copies of "on" columns for indexing. MultiIndex.set_index normalizes None to np.nan for object/string
-    # dtypes, so None and np.nan will match. The original columns remain in the dataframe to preserve original values.
-    all_columns = set(result.columns)
-    index_columns = []
-    for col in on:
-        idx_col = f"_{col}_"
-        while idx_col in all_columns:
-            idx_col = f"_{idx_col}_"
-        index_columns.append(idx_col)
-        all_columns.add(idx_col)
-
-    for col, idx_col in zip(on, index_columns):
-        result[idx_col] = result[col]
-        source_copy[idx_col] = source_copy[col]
-
-    # Append the copied columns to the existing DatetimeIndex to create a MultiIndex
-    result.set_index(index_columns, append=True, inplace=True)
-    source_copy.set_index(index_columns, append=True, inplace=True)
-
-    # Find common indices and update only the non-"on" columns
-    common_idx = result.index.intersection(source_copy.index)
-    result.loc[common_idx, update_columns] = source_copy.loc[common_idx, update_columns]
-
-    # Reset back to just the DatetimeIndex (drop the appended index levels)
-    result.reset_index(level=index_columns, drop=True, inplace=True)
-
-    return result
+    return merged
 
 
 def merge(
@@ -1381,7 +1402,6 @@ def merge(
     on: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     assert_schema_match(target, source)
-    assert isinstance(target.index, pd.DatetimeIndex), "Only DateTime index implemented"
     assert normalize_merge_strategy(strategy) == normalize_merge_strategy(
         MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     ), f"Only update on matched is implemented but {strategy} was given"

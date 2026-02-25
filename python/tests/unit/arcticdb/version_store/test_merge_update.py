@@ -45,7 +45,12 @@ def generic_merge_test(
     for df in target:
         lib.append(sym, df)
     lib.merge_experimental(sym, source, strategy=strategy, on=on)
-    expected = merge(pd.concat(target), source, strategy, on=on)
+    concat_target = pd.concat(target)
+    # For row range indexes, reset the index after concat so that the expected DataFrame has a contiguous RangeIndex
+    # matching what ArcticDB returns on read.
+    if not isinstance(concat_target.index, pd.DatetimeIndex):
+        concat_target = concat_target.reset_index(drop=True)
+    expected = merge(concat_target, source, strategy, on=on)
     read_vit = lib.read(sym)
     assert_frame_equal(read_vit.data, expected)
 
@@ -1299,19 +1304,6 @@ class TestMergeTimeseriesUpdateAndInsert:
         with pytest.raises(UserInputException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
-    class TestMergeRowRange:
-        """Not implemented yet"""
-
-        def test_merge_not_implemented_with_row_range_yet(self, lmdb_library, monkeypatch):
-            lib = lmdb_library
-            target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
-            lib.write("sym", target)
-
-            source = pd.DataFrame({"a": [1], "b": [2]})
-            monkeypatch.setattr(lib.__class__, "merge_experimental", raise_wrapper(UserInputException), raising=False)
-            with pytest.raises(UserInputException):
-                lib.merge_experimental("sym", source)
-
     class TestMergeMultiindex:
         """Not implemented yet"""
 
@@ -1325,3 +1317,255 @@ class TestMergeTimeseriesUpdateAndInsert:
             monkeypatch.setattr(lib.__class__, "merge_experimental", raise_wrapper(UserInputException), raising=False)
             with pytest.raises(UserInputException):
                 lib.merge_experimental("sym", source)
+
+
+@pytest.mark.parametrize(
+    "strategy",
+    (
+        MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
+        pytest.param(
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            marks=pytest.mark.xfail(reason="Insert is not implemented"),
+        ),
+        pytest.param(
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+            marks=pytest.mark.xfail(reason="Insert is not implemented"),
+        ),
+    ),
+)
+class TestMergeRowrangeCommon:
+
+    def test_merge_matched_update_with_metadata(self, lmdb_library, strategy):
+        lib = lmdb_library
+
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        write_vit = lib.write("sym", target)
+
+        source = pd.DataFrame({"a": [1, 20, 3], "b": [1.0, 20.0, 3.0]})
+
+        metadata = {"meta": "data"}
+
+        merge_vit = lib.merge_experimental("sym", source, metadata=metadata, strategy=strategy, on=["a"])
+        assert merge_vit.version == 1
+        assert merge_vit.symbol == write_vit.symbol
+        assert merge_vit.metadata == metadata
+        assert merge_vit.library == write_vit.library
+        assert merge_vit.host == write_vit.host
+        assert merge_vit.data is None
+
+        read_vit = lib.read("sym")
+        assert_vit_equals_except_data(merge_vit, read_vit)
+
+        lt = lib._dev_tools.library_tool()
+
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
+
+    @pytest.mark.parametrize("metadata", ({"meta": "data"}, None))
+    def test_merge_does_not_write_new_version_with_empty_source(self, lmdb_library, metadata, strategy):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        write_vit = lib.write("sym", target)
+        merge_vit = lib.merge_experimental("sym", pd.DataFrame(), metadata=metadata, strategy=strategy, on=["a"])
+        # There's a bug in append, update, and merge when there's an empty source. All of them return the passed
+        # metadata even though it's not used.
+        merge_vit.metadata = write_vit.metadata
+        assert_vit_equals_except_data(write_vit, merge_vit)
+        assert merge_vit.data is None and write_vit.data is None
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 1
+
+        read_vit = lib.read("sym")
+        assert read_vit.version == 0
+        assert read_vit.metadata is None
+        assert_frame_equal(read_vit.data, target)
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            # "a" has different type
+            pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.int8), "b": [1.0, 2.0, 3.0]}),
+            # "a" is missing, replaced by "c"
+            pd.DataFrame({"c": np.array([1, 2, 3], dtype=np.int8), "b": [1.0, 2.0, 3.0]}),
+            # "a" is missing
+            pd.DataFrame({"b": [1.0, 2.0, 3.0]}),
+        ],
+    )
+    def test_static_schema_merge_throws_when_schemas_differ(self, lmdb_library, strategy, source):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        lib.write("sym", target)
+        with pytest.raises(SchemaException):
+            lib.merge_experimental("sym", source, strategy=strategy, on=["b"])
+
+    def test_requires_on_column_none(self, lmdb_library, strategy):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [1], "b": [10.0]})
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=strategy, on=None)
+
+    def test_requires_on_column_empty_list(self, lmdb_library, strategy):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [1], "b": [10.0]})
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=strategy, on=[])
+
+    def test_on_nonexistent_column_raises(self, lmdb_library, strategy):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]})
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [1], "b": [10.0]})
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=strategy, on=["nonexistent"])
+
+
+class TestMergeRowrangeUpdate:
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+
+    def test_basic(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
+        source = pd.DataFrame({"a": [1, 99, 3], "b": [10.0, 20.0, 30.0], "c": ["X", "Y", "Z"]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    def test_no_matches(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    def test_all_rows_match(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    def test_multiple_on_columns(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({
+            "a": [1, 2, 3, 4],
+            "b": ["x", "y", "z", "w"],
+            "c": [10.0, 20.0, 30.0, 40.0],
+        })
+        source = pd.DataFrame({
+            "a": [1, 2, 99, 4],
+            "b": ["x", "wrong", "z", "w"],
+            "c": [99.0, 99.0, 99.0, 99.0],
+        })
+        # Must match on both "a" and "b": rows 0 and 3 match, rows 1 and 2 do not
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+
+    def test_one_source_row_matches_multiple_target_rows(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 1, 2], "b": [10.0, 20.0, 30.0]})
+        source = pd.DataFrame({"a": [1], "b": [99.0]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    @pytest.mark.parametrize(
+        "slicing_policy",
+        [{"rows_per_segment": 2}, {"columns_per_segment": 2}, {"rows_per_segment": 2, "columns_per_segment": 2}],
+    )
+    def test_row_and_column_slicing(self, lmdb_library_factory, slicing_policy):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
+        target = pd.DataFrame({
+            "a": [1, 2, 3, 4, 5],
+            "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "c": [True, False, True, False, True],
+            "d": ["a", "b", "c", "d", "e"],
+        })
+        source = pd.DataFrame({
+            "a": [3, 5],
+            "b": [30.1, 50.1],
+            "c": [False, False],
+            "d": ["C", "E"],
+        })
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    def test_match_on_float_nan(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        target = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]})
+        source = pd.DataFrame({"a": [np.nan], "b": [20]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
+        lib = lmdb_version_store_v1
+        target = pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5]})
+        source = pd.DataFrame({"a": ["x", np.nan, None, None, np.nan], "b": [10, 20, 30, 40, 50]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
+    def test_all_columns_in_on(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [1, 2, 3], "b": [99.0, 99.0, 99.0]})
+        # When all columns are in on, there are no columns left to update
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+
+    @pytest.mark.parametrize("merge_metadata", (None, "meta"))
+    def test_target_is_empty(self, lmdb_library, merge_metadata):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": np.array([], dtype=np.int64)})
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)})
+        merge_vit = lib.merge_experimental(
+            "sym", source, strategy=self.strategy, metadata=merge_metadata, on=["a"]
+        )
+        expected = target
+        read_vit = lib.read("sym")
+        assert_vit_equals_except_data(merge_vit, read_vit)
+        assert_frame_equal(read_vit.data, expected)
+
+    def test_target_symbol_does_not_exist(self, lmdb_library):
+        lib = lmdb_library
+        source = pd.DataFrame({"a": [1], "b": [10.0]})
+        with pytest.raises(StorageException):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        lib.write("sym", target)
+        source = pd.DataFrame({"a": [10, 20], "b": [10.0, 20.0]})
+        merge_vit = lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+        assert merge_vit.version == 1
+
+        read_vit = lib.read("sym")
+        assert_vit_equals_except_data(merge_vit, read_vit)
+        assert_frame_equal(read_vit.data, target)
+
+        lt = lib._dev_tools.library_tool()
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
+        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
+
+    @pytest.mark.parametrize(
+        "slicing_policy",
+        [
+            {"columns_per_segment": 2},
+            {"rows_per_segment": 2, "columns_per_segment": 2},
+        ],
+    )
+    @pytest.mark.parametrize("on", [["a"], ["d"], ["a", "d"]])
+    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
+        target = pd.DataFrame({
+            "a": [1, 2, 3, 4, 5],
+            "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "c": ["x", "y", "z", "w", "v"],
+            "d": [10, 20, 30, 40, 50],
+        })
+        source = pd.DataFrame({
+            "a": [1, 99, 3, 4, 5],
+            "b": [10.0, 20.0, 30.0, 40.0, 50.0],
+            "c": ["X", "Y", "Z", "W", "V"],
+            "d": [10, 20, 99, 40, 50],
+        })
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=on)
