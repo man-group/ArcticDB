@@ -2026,10 +2026,10 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                     get_merge_fields_and_column(source_->desc(), source_->desc(), col_name, proc, false);
             result.resize(source_->num_rows);
             visit_field(source_->desc().field(target_info.source_field_position_), [&](auto source_field_tdt) {
-                using SourceTDT = decltype(source_field_tdt);
+                using SourceTDT = std::decay_t<decltype(source_field_tdt)>;
                 using SourceRawType = typename SourceTDT::DataTypeTag::raw_type;
                 visit_field(source_->desc().field(target_info.target_field_position_), [&](auto target_field_tdt) {
-                    using TargetTDT = decltype(target_field_tdt);
+                    using TargetTDT = std::decay_t<decltype(target_field_tdt)>;
                     if constexpr (std::is_same_v<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>> &&
                                   SourceTDT::dimension() == Dimension::Dim0) {
                         using TargetRawType = typename TargetTDT::DataTypeTag::raw_type;
@@ -2134,7 +2134,6 @@ void MergeUpdateClause::update_and_insert(
             return std::pair{0, source_->num_rows};
         }
     }();
-    const bool is_timeseries = source_descriptor.index().type() == IndexDescriptor::Type::TIMESTAMP;
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
     // updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
@@ -2146,7 +2145,7 @@ void MergeUpdateClause::update_and_insert(
         for (size_t column_index_in_slice = index_fields; column_index_in_slice < slice_size; ++column_index_in_slice) {
             const Field& target_field = target_segment.descriptor().field(column_index_in_slice);
             entity::visit_field(target_field, [&](auto tdt) {
-                using TDT = decltype(tdt);
+                using TDT = std::decay_t<decltype(tdt)>;
                 using RawType = TDT::DataTypeTag::raw_type;
                 // All column slices start with the index. Subtract the index field count so that we don't count the
                 // index twice.
