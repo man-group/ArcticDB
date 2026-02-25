@@ -14,6 +14,7 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/version_map.hpp>
+#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/util/key_utils.hpp>
 
 namespace arcticdb {
@@ -150,6 +151,7 @@ struct SetupPipelineContextTask : async::BaseTask {
     const VersionIdentifier version_info_;
     const std::shared_ptr<ReadQuery> read_query_;
     const ReadOptions read_options_;
+    version_store::IndexInformation index_information_;
 
     SetupPipelineContextTask(
             std::shared_ptr<Store> store, VersionIdentifier version_info, std::shared_ptr<ReadQuery> read_query,
@@ -158,9 +160,10 @@ struct SetupPipelineContextTask : async::BaseTask {
         store_(std::move(store)),
         version_info_(std::move(version_info)),
         read_query_(std::move(read_query)),
-        read_options_(std::move(read_options)) {}
+        read_options_(std::move(read_options)),
+        index_information_(std::move(index_information)) {}
 
-    std::shared_ptr<pipelines::PipelineContext> operator()() const;
+    std::shared_ptr<pipelines::PipelineContext> operator()();
 };
 
 struct WriteVersionTask : async::BaseTask {

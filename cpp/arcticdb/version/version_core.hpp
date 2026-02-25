@@ -23,10 +23,19 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <string>
 
 namespace arcticdb::version_store {
+
+struct IndexInformation {
+    ARCTICDB_MOVE_ONLY_DEFAULT(IndexInformation)
+    IndexInformation() = default;
+    IndexInformation(std::pair<VariantKey, SegmentInMemory>&& index, std::optional<SegmentInMemory>&& column_stats);
+    std::pair<VariantKey, SegmentInMemory> index_;
+    std::optional<SegmentInMemory> column_stats_;
+};
 
 using namespace entity;
 using namespace pipelines;
@@ -70,6 +79,8 @@ VersionedItem delete_range_impl(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
         const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
 );
+
+IndexInformation read_index_key(const std::shared_ptr<Store>& store, const AtomKey& key);
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 

@@ -14,8 +14,6 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
-#include <arcticdb/version/version_core.hpp>
-#include <arcticdb/storage/storage_exceptions.hpp>
 #include <processing/query_planner.hpp>
 
 namespace arcticdb {
@@ -39,6 +37,28 @@ std::optional<Value> extract_value_from_column(
 }
 
 } // anonymous namespace
+
+bool is_column_stats_enabled() { return ConfigsMap::instance()->get_int("ColumnStats.UseForQueries", 0) == 1; }
+
+bool should_try_column_stats_read(const ReadQuery& read_query) {
+    if (!is_column_stats_enabled()) {
+        return false;
+    }
+    if (read_query.clauses_.empty()) {
+        return false;
+    }
+    for (const auto& clause : read_query.clauses_) {
+        auto& clause_type = folly::poly_type(*clause);
+        if (clause_type == typeid(DateRangeClause) || clause_type == typeid(RowRangeClause)) {
+            continue;
+        }
+        if (clause_type == typeid(FilterClause)) {
+            return true;
+        }
+        break;
+    }
+    return false;
+}
 
 StatsVariantData resolve_stats_node(
         const VariantNode& node, const ExpressionContext& expression_context, const ColumnStatsRow& stats
@@ -196,20 +216,6 @@ const ColumnStatsRow* ColumnStatsData::find_stats(timestamp start_index, timesta
 
 bool ColumnStatsData::empty() const { return rows_.empty(); }
 
-std::optional<ColumnStatsData> try_load_column_stats(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item
-) {
-    auto column_stats_key = version_store::index_key_to_column_stats_key(versioned_item.key_);
-
-    try {
-        auto column_stats_segment = store->read_sync(column_stats_key).second;
-        return ColumnStatsData{std::move(column_stats_segment)};
-    } catch (const storage::KeyNotFoundException&) {
-        ARCTICDB_DEBUG(log::version(), "No column stats available for segment pruning");
-        return std::nullopt;
-    }
-}
-
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         ColumnStatsData&& column_stats_data, ExpressionContext&& expression_context
 ) {
@@ -271,16 +277,10 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
     };
 }
 
-std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_filter_for_clauses(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
-        const std::vector<std::shared_ptr<Clause>>& clauses
+FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
+        SegmentInMemory&& column_stats_segment, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
-    if (ConfigsMap::instance()->get_int("ColumnStats.UseForQueries", 0) != 1) {
-        // Feature-flagged off by default
-        ARCTICDB_DEBUG(log::version(), "Not using column stats for query - feature flagged off");
-        return std::nullopt;
-    }
-
+    util::check(is_column_stats_enabled(), "Column stats not feature flagged on");
     std::vector<std::shared_ptr<ExpressionContext>> filter_expressions;
 
     for (const auto& clause : clauses) {
@@ -293,11 +293,6 @@ std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_fi
         // Resample, GroupBy, and Projection clauses transform the data so column stats
         // computed on the original segments are no longer valid for any subsequent filters.
         if (clause_type != typeid(FilterClause)) {
-            ARCTICDB_DEBUG(
-                    log::version(),
-                    "Found clause that modifies data {}, not applying any more column stats",
-                    clause_type.name()
-            );
             break;
         }
 
@@ -305,23 +300,15 @@ std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_fi
         filter_expressions.emplace_back(filter.expression_context_);
     }
 
-    if (filter_expressions.empty()) {
-        ARCTICDB_DEBUG(log::version(), "No filter expressions - not pruning");
-        return std::nullopt;
-    }
+    util::check(filter_expressions.size() > 0, "Expected at least one filter expression");
 
-    ARCTICDB_DEBUG(log::version(), "Loading column stats");
-    auto column_stats = try_load_column_stats(store, versioned_item);
-    if (!column_stats.has_value()) {
-        ARCTICDB_DEBUG(log::version(), "No column stats available for pruning");
-        return std::nullopt;
-    }
+    ColumnStatsData column_stats{std::move(column_stats_segment)};
 
     ARCTICDB_DEBUG(log::version(), "AND-ing expression contexts from filters");
     ExpressionContext overall_context = and_filter_expression_contexts(filter_expressions);
 
     ARCTICDB_DEBUG(log::version(), "Creating column stats filter");
-    return create_column_stats_filter({std::move(*column_stats)}, std::move(overall_context));
+    return create_column_stats_filter(std::move(column_stats), std::move(overall_context));
 }
 
 } // namespace arcticdb

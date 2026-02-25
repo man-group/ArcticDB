@@ -7,7 +7,7 @@ from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
-from arcticdb.util.test import config_context
+from arcticdb.util.test import config_context, config_context_multi
 
 
 @pytest.fixture
@@ -675,3 +675,32 @@ def test_column_stats_query_optimisation_index_types(
     lib.read(sym, query_builder=q)
     table_data_reads = get_table_data_read_count()
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 0 only), got {table_data_reads}"
+
+
+def test_column_stats_no_deadlock_single_thread(in_memory_version_store, column_stats_filtering_enabled):
+    """Verify no deadlock with 1 IO and 1 CPU thread when reading with column stats."""
+    lib = in_memory_version_store
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
+        q = QueryBuilder()
+        q = q[q["col_1"] > 2]
+        result = lib.read(sym, query_builder=q).data
+        assert_frame_equal(df1, result)
+
+
+def test_column_stats_no_deadlock_single_thread_no_stats(in_memory_version_store, column_stats_filtering_enabled):
+    """Verify no deadlock when column stats don't exist (KeyNotFoundException path)."""
+    lib = in_memory_version_store
+    df = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    lib.write(sym, df)
+
+    with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
+        q = QueryBuilder()
+        q = q[q["col_1"] > 1]
+        result = lib.read(sym, query_builder=q).data
+        assert len(result) == 1
