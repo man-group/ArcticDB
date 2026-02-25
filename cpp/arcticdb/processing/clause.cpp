@@ -2039,6 +2039,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                         using TargetValueType = std::
                                 conditional_t<is_target_sequence_type, std::optional<std::string_view>, TargetRawType>;
                         ankerl::unordered_dense::map<TargetValueType, std::vector<size_t>> target_values;
+                        std::vector<size_t> nan_target_values;
                         arcticdb::for_each_enumerated<TargetTDT>(target_info.target_column(), [&](const auto& row) {
                             if constexpr (is_target_sequence_type) {
                                 if (is_a_string(row.value())) {
@@ -2046,6 +2047,12 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                                     ));
                                 } else {
                                     target_values[std::nullopt].push_back(row.idx());
+                                }
+                            } else if constexpr (is_floating_point_type(TargetTDT::data_type())) {
+                                if (std::isnan(row.value())) {
+                                    nan_target_values.push_back(row.idx());
+                                } else {
+                                    target_values[row.value()].push_back(row.idx());
                                 }
                             } else {
                                 target_values[row.value()].push_back(row.idx());
@@ -2079,6 +2086,12 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                                                 std::string_view(wrapper.buffer_, wrapper.length_)
                                         }];
                                     }
+                                }
+                            } else if constexpr (is_floating_point_type(source_field_tdt.data_type())) {
+                                if (std::isnan(source_value)) {
+                                    result[source_row_idx] = nan_target_values;
+                                } else {
+                                    result[source_row_idx] = target_values[source_value];
                                 }
                             } else {
                                 result[source_row_idx] = target_values[source_value];

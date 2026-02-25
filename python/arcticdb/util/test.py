@@ -1391,7 +1391,8 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     for col in update_columns:
         merged.loc[matched, col] = merged.loc[matched, f"{col}_src"]
     merged.drop(columns=[f"{c}_src" for c in update_columns] + ["_merge"], inplace=True)
-
+    for column in target.columns:
+        merged[column] = merged[column].astype(target[column].dtype)
     return merged
 
 
