@@ -185,7 +185,7 @@ See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-B
 
 ## Code Review Guidelines
 
-When writing or modifying code, follow the standards in [`.claude/skills/review-pr/SKILL.md`](.claude/skills/review-pr/SKILL.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
+When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
 
 ## Key Development Guidelines
 
