@@ -12,8 +12,6 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/storage/store.hpp>
-#include <arcticdb/entity/versioned_item.hpp>
 
 #include <memory>
 #include <optional>
@@ -73,14 +71,6 @@ class ColumnStatsData {
 };
 
 /**
- * Try to load column stats for a versioned item.
- * Returns std::nullopt if no column stats exist for this version.
- */
-std::optional<ColumnStatsData> try_load_column_stats(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item
-);
-
-/**
  * Evaluates a filter expression against column statistics for a single row-slice.
  * Returns true if the row-slice should be kept (might contain matching data),
  * false if it can be pruned (definitely no matching data).
@@ -103,17 +93,20 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         ColumnStatsData&& column_stats_data, ExpressionContext&& expression_context
 );
 
+bool should_try_column_stats_read(const ReadQuery& read_query);
+
 /**
- * Extract predicates from a FilterClause and create a column stats filter if applicable.
+ * Create a column stats filter from an already-read column stats segment and query clauses.
  *
- * @param store The storage backend
- * @param versioned_item The versioned item being read
- * @param clauses The query clauses (looking for FilterClause)
- * @return A filter query if column stats exist and contain relevant columns, std::nullopt otherwise
+ * Precondition: should_try_column_stats_read(clauses) == true
  */
-std::optional<FilterQuery<index::IndexSegmentReader>> try_create_column_stats_filter_for_clauses(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
-        const std::vector<std::shared_ptr<Clause>>& clauses
+FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
+        SegmentInMemory&& column_stats_segment, const std::vector<std::shared_ptr<Clause>>& clauses
 );
+
+/**
+ * Test whether column stats are feature-flagged on for queries.
+ */
+bool is_column_stats_enabled();
 
 } // namespace arcticdb
