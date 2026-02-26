@@ -254,7 +254,6 @@ class TestMergeTimeseriesUpdate:
         #  changed, we'll create a new index key pointing to the existing data keys and write a new version key which is cheap.
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        write_vit = lib.write("sym", target)
 
         source = pd.DataFrame({"a": [4, 5], "b": [4.0, 5.0]}, index=pd.date_range("2023-01-01", periods=2))
         merge_vit = lib.merge_experimental(
