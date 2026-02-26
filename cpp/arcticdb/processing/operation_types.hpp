@@ -11,6 +11,7 @@
 #include <unordered_set>
 #include <optional>
 #include <cmath>
+#include <limits>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
@@ -38,6 +39,7 @@ enum class OperationType : uint8_t {
     SUB,
     MUL,
     DIV,
+    MOD,
     // Comparison
     EQ,
     NE,
@@ -52,8 +54,6 @@ enum class OperationType : uint8_t {
     AND,
     OR,
     XOR,
-    // Operator (kept here to preserve existing enum values)
-    MOD,
     // Ternary
     TERNARY
 };
@@ -364,8 +364,19 @@ struct ModOperator {
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, ModOperator>::type>
     V apply(T t, U u) {
         if constexpr (std::is_floating_point_v<V>) {
-            return std::fmod(static_cast<V>(t), static_cast<V>(u));
+            const auto lhs = static_cast<V>(t);
+            const auto rhs = static_cast<V>(u);
+            if (rhs == V{0}) {
+                return std::numeric_limits<V>::quiet_NaN();
+            }
+            // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
+            auto result = std::fmod(lhs, rhs);
+            if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
+                result += rhs;
+            }
+            return result;
         } else {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(u != U{0}, "Modulo by zero");
             return static_cast<V>(t) % static_cast<V>(u);
         }
     }

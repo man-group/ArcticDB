@@ -87,6 +87,22 @@ TEST(OperationDispatch, binary_operator_modulo) {
     for (size_t idx = 0; idx < num_rows; idx++) {
         ASSERT_EQ(static_cast<int64_t>(idx) % 7, results_column->scalar_at<int64_t>(idx));
     }
+
+    // Match Python/Pandas behavior for negative floating-point values.
+    auto minus_three = std::make_shared<Value>(-3.0, DataType::FLOAT64);
+    auto plus_two = std::make_shared<Value>(2.0, DataType::FLOAT64);
+    auto variant_data_float = visit_binary_operator(minus_three, plus_two, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<Value>>(variant_data_float));
+    ASSERT_DOUBLE_EQ(std::get<std::shared_ptr<Value>>(variant_data_float)->get<double>(), 1.0);
+
+    auto minus_two = std::make_shared<Value>(-2.0, DataType::FLOAT64);
+    auto variant_data_float_neg_divisor = visit_binary_operator(minus_three, minus_two, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<Value>>(variant_data_float_neg_divisor));
+    ASSERT_DOUBLE_EQ(std::get<std::shared_ptr<Value>>(variant_data_float_neg_divisor)->get<double>(), -1.0);
+
+    // Integral modulo by zero should fail with a user input error instead of UB.
+    auto zero = std::make_shared<Value>(static_cast<int64_t>(0), DataType::INT64);
+    EXPECT_THROW(visit_binary_operator(int_column, zero, ModOperator{}), UserInputException);
 }
 
 TEST(OperationDispatch, binary_comparator) {

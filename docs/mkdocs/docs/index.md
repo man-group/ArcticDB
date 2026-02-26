@@ -244,6 +244,15 @@ _output (the data filtered by date range, columns and the query which filters ba
 2000-01-01 13:00:00      18       8
 ```
 
+For filtering based on components of a timestamp index (for example, selecting rows where the index minute is `10`), you can use modulo with `Timedelta`:
+
+```python
+q = adb.QueryBuilder()
+minute_in_hour = q["index"] % pd.Timedelta(hours=1)
+q = q[(minute_in_hour >= pd.Timedelta(minutes=10)) & (minute_in_hour < pd.Timedelta(minutes=11))]
+library.read("test_frame", query_builder=q).data
+```
+
 ###  Modifications, Versioning (aka Time Travel)
 
 ArcticDB fully supports modifying stored data via two primitives: _update_ and _append_.
@@ -508,5 +517,4 @@ For concurrent access to a local backend, we recommend LMDB connected to tmpfs, 
 - Most analytical workflows can be constructed to run without needing transactions at all
 - So why pay the cost of transactions when they are often not needed?
 - ArcticDB doesn't have transactions because it is designed for high throughput analytical workloads
-
 

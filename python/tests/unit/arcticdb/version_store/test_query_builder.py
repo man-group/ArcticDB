@@ -258,6 +258,23 @@ def test_querybuilder_projection_modulo(lmdb_version_store_tiny_segment, any_out
     assert_frame_equal(expected, received)
 
 
+def test_querybuilder_projection_modulo_float_negative_values(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_projection_modulo_float_negative_values"
+    df = pd.DataFrame({"col": np.array([1.0, 2.0, 3.0, -1.0, -2.0, -3.0], dtype=np.float64)}, index=np.arange(6))
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("mod_col", q["col"] % 2.0)
+
+    expected = df.copy()
+    expected["mod_col"] = expected["col"] % 2.0
+    received = lib.read(symbol, query_builder=q).data
+
+    assert_frame_equal(expected, received)
+
+
 def test_querybuilder_filter_datetime_index_by_minute_with_modulo(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
