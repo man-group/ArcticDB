@@ -354,18 +354,20 @@ class NativeVersionStore:
     )
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
-    _valid_read_kwargs = {
-        "iterate_snapshots_if_tombstoned",
-        "force_string_to_object",
-        "optimise_string_memory",
-        "output_format",
-        "dynamic_schema",
-        "set_tz",
-        "allow_sparse",
-        "incomplete",
-        "arrow_string_format_default",
-        "arrow_string_format_per_column",
-    }
+    _valid_read_kwargs = frozenset(
+        {
+            "iterate_snapshots_if_tombstoned",
+            "force_string_to_object",
+            "optimise_string_memory",
+            "output_format",
+            "dynamic_schema",
+            "set_tz",
+            "allow_sparse",
+            "incomplete",
+            "arrow_string_format_default",
+            "arrow_string_format_per_column",
+        }
+    )
 
     def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
@@ -659,9 +661,9 @@ class NativeVersionStore:
         for arg in kwargs.keys():
             if arg not in valid_kwargs:
                 invalid_args.append(arg)
-        if len(invalid_args):
+        if invalid_args:
             # Log formatting gets confused by curly braces in input string, hence the conversion to a list
-            msg = f"{method} received invalid kwargs {invalid_args}. Supported kwargs are {list(valid_kwargs)}"
+            msg = f"{method} received invalid kwargs {invalid_args}. Supported kwargs are {sorted(list(valid_kwargs))}"
             if os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", None) == "1":
                 log.warning(msg)
             else:
