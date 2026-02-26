@@ -2005,7 +2005,7 @@ class NativeVersionStore:
         """
         self._validate_kwargs(
             "batch_append",
-            {"prune_previous_version", "dynamic_strings", "write_if_missing"},
+            {"dynamic_strings", "write_if_missing"},
             **kwargs,
         )
 

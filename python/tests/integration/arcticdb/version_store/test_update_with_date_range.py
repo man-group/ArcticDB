@@ -141,7 +141,7 @@ def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_ti
 
 @pytest.mark.parametrize("with_timezone_attr,timezone_", [(True, None), (True, timezone.utc), (False, None)])
 @pytest.mark.storage
-def test_append_date_range_non_pandas_dataframe(basic_store_custom_norm, with_timezone_attr, timezone_):
+def test_update_date_range_non_pandas_dataframe(basic_store_custom_norm, with_timezone_attr, timezone_):
     """Check that updates with a daterange work for a simple non-Pandas timeseries.
 
     This simulates a legacy DataFrame equivalent still used occasionally in Man.
