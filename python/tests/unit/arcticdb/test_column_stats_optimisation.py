@@ -704,3 +704,6 @@ def test_column_stats_no_deadlock_single_thread_no_stats(in_memory_version_store
         q = q[q["col_1"] > 1]
         result = lib.read(sym, query_builder=q).data
         assert len(result) == 1
+
+
+# TODO aseaton test that column slicing and row slicing still work!!

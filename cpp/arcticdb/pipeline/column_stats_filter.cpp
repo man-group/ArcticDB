@@ -61,95 +61,118 @@ bool should_try_column_stats_read(const ReadQuery& read_query) {
 }
 
 StatsVariantData resolve_stats_node(
-        const VariantNode& node, const ExpressionContext& expression_context, const ColumnStatsRow& stats
+        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows
 ) {
     return util::variant_match(
             node,
             [&](const ColumnName& column_name) -> StatsVariantData {
-                auto it = stats.stats_for_column.find(column_name.value);
-                if (it != stats.stats_for_column.end()) {
-                    return it->second;
+                std::vector<ColumnStatsValues> result;
+                result.reserve(stats_rows.size());
+                for (const auto& row : stats_rows) {
+                    if (!row) {
+                        result.emplace_back(std::nullopt, std::nullopt);
+                        continue;
+                    }
+                    auto& column_stats_row = row->get();
+                    auto it = column_stats_row.stats_for_column.find(column_name.value);
+                    if (it != column_stats_row.stats_for_column.end()) {
+                        result.push_back(it->second);
+                    } else {
+                        result.emplace_back(std::nullopt, std::nullopt);
+                    }
                 }
-                return StatsComparison::UNKNOWN;
+                util::check(
+                        result.size() == stats_rows.size(), "Expected the result to have the same size as stats_rows"
+                );
+                return result;
             },
             [&](const ValueName& value_name) -> StatsVariantData {
                 return expression_context.values_.get_value(value_name.value);
             },
             [&](const ExpressionName& expression_name) -> StatsVariantData {
                 auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
-                return compute_stats(expression_context, *expr, stats);
+                return compute_stats(expression_context, *expr, stats_rows);
             },
-            [](const auto&) -> StatsVariantData { return StatsComparison::UNKNOWN; }
+            [&](const auto&) -> StatsVariantData { return std::vector(stats_rows.size(), StatsComparison::UNKNOWN); }
     );
 }
 
-StatsComparison dispatch_binary_stats(
+StatsVariantData dispatch_binary_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation
 ) {
     switch (operation) {
     case OperationType::GT:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, GreaterThanOperator{});
+        return column_stats_detail::visit_binary_comparator_stats<GreaterThanOperator>(left, right);
     case OperationType::GE:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, GreaterThanEqualsOperator{});
+        return column_stats_detail::visit_binary_comparator_stats<GreaterThanEqualsOperator>(left, right);
     case OperationType::LT:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, LessThanOperator{});
+        return column_stats_detail::visit_binary_comparator_stats<LessThanOperator>(left, right);
     case OperationType::LE:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, LessThanEqualsOperator{});
+        return column_stats_detail::visit_binary_comparator_stats<LessThanEqualsOperator>(left, right);
     case OperationType::EQ:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, EqualsOperator{});
+        return column_stats_detail::visit_binary_comparator_stats<EqualsOperator>(left, right);
     case OperationType::NE:
-        return column_stats_detail::visit_binary_comparator_stats(left, right, NotEqualsOperator{});
+        return column_stats_detail::visit_binary_comparator_stats<NotEqualsOperator>(left, right);
     case OperationType::AND:
     case OperationType::OR:
     case OperationType::XOR:
         return column_stats_detail::visit_binary_boolean_stats(left, right, operation);
-    default:
+    default: {
         // Not yet implemented: ADD SUB MUL DIV (binary operators) ISIN ISNOTIN (binary membership)
-        return StatsComparison::UNKNOWN;
+        size_t sz =
+                std::max(column_stats_detail::stats_variant_size(left), column_stats_detail::stats_variant_size(right));
+        return std::vector(sz, StatsComparison::UNKNOWN);
+    }
     }
 }
 
-StatsComparison dispatch_unary_stats(const StatsVariantData& left, OperationType operation) {
-    if (!std::holds_alternative<StatsComparison>(left)) {
-        return StatsComparison::UNKNOWN; // TODO aseaton not implemented
+StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation) {
+    if (!std::holds_alternative<std::vector<StatsComparison>>(left)) {
+        return left; // TODO aseaton not implemented
     }
-    auto left_transformed = std::get<StatsComparison>(left);
-    if (left_transformed == StatsComparison::UNKNOWN) {
-        return StatsComparison::UNKNOWN;
-    }
+    const auto& stats_comparisons = std::get<std::vector<StatsComparison>>(left);
     switch (operation) {
-    case OperationType::NOT:
-        return left_transformed == StatsComparison::ALL_MATCH ? StatsComparison::NONE_MATCH
-                                                              : StatsComparison::ALL_MATCH;
+    case OperationType::NOT: {
+        std::vector<StatsComparison> result;
+        result.reserve(stats_comparisons.size());
+        for (StatsComparison comparison : stats_comparisons) {
+            switch (comparison) {
+            case StatsComparison::UNKNOWN:
+                result.push_back(StatsComparison::UNKNOWN);
+                break;
+            case StatsComparison::ALL_MATCH:
+                result.push_back(StatsComparison::NONE_MATCH);
+                break;
+            case StatsComparison::NONE_MATCH:
+                result.push_back(StatsComparison::ALL_MATCH);
+                break;
+            default:
+                util::raise_rte("Unexpected StatsComparison", comparison);
+            }
+        }
+        util::check(result.size() == stats_comparisons.size(), "Expected result.size() == stats_comparison.size()");
+        return result;
+    }
     default:
         // Not implemented: ABS, ISNULL, NOTNULL, IDENTITY, NEG
         ARCTICDB_DEBUG(log::version(), "Unsupported unary operator for stats {}", operation);
-        return StatsComparison::UNKNOWN;
+        return std::vector(stats_comparisons.size(), StatsComparison::UNKNOWN);
     }
 }
 
-StatsComparison compute_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const ColumnStatsRow& stats
+StatsVariantData compute_stats(
+        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowVector& stats_rows
 ) {
     if (is_binary_operation(node.operation_type_)) {
-        auto left = resolve_stats_node(node.left_, expression_context, stats);
-        auto right = resolve_stats_node(node.right_, expression_context, stats);
+        auto left = resolve_stats_node(node.left_, expression_context, stats_rows);
+        auto right = resolve_stats_node(node.right_, expression_context, stats_rows);
         return dispatch_binary_stats(left, right, node.operation_type_);
     }
     if (is_unary_operation(node.operation_type_)) {
-        auto left = resolve_stats_node(node.left_, expression_context, stats);
+        auto left = resolve_stats_node(node.left_, expression_context, stats_rows);
         return dispatch_unary_stats(left, node.operation_type_);
     }
-    // Not yet implemented: unary and ternary operators
-    return StatsComparison::UNKNOWN;
-}
-
-bool evaluate_expression_against_stats(const ExpressionContext& expression_context, const ColumnStatsRow& stats) {
-    auto result = resolve_stats_node(expression_context.root_node_name_, expression_context, stats);
-    if (std::holds_alternative<StatsComparison>(result)) {
-        return std::get<StatsComparison>(result) != StatsComparison::NONE_MATCH;
-    }
-    return true;
+    return std::vector(stats_rows.size(), StatsComparison::UNKNOWN);
 }
 
 ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
@@ -225,54 +248,60 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         using namespace pipelines::index;
 
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
+        res->invert();
+        if (input) {
+            *res &= *input;
+        }
 
         if (column_stats_data.empty()) {
             // No column stats, keep all segments
             ARCTICDB_DEBUG(log::version(), "Empty column stats - keeping all segments");
-            if (input) {
-                return std::move(input);
-            }
-            res->set_range(0, isr.size());
-            return res;
+            return std::move(input);
         }
 
         auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
         auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
 
-        size_t pruned_count = 0;
+        StatsRowVector stats_rows;
+        stats_rows.reserve(isr.size());
         size_t total_count = 0;
-
         for (size_t row = 0; row < isr.size(); ++row) {
-            // Check if this row is already filtered out by a previous filter
             if (input && !input->get_bit(row)) {
+                // Don't bother - we already know we don't need to look at the segment
+                stats_rows.emplace_back(std::nullopt);
                 continue;
             }
-
             total_count++;
-
             timestamp start_idx = *(start_index_col + row);
             timestamp end_idx = *(end_index_col + row);
-
-            ARCTICDB_DEBUG(log::version(), "Looking up stats {} {}", start_idx, end_idx);
-            const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx);
-
-            if (!stats) {
-                ARCTICDB_DEBUG(log::version(), "No stats for this index row - keep it");
-                res->set_bit(row, true);
-                continue;
-            }
-
-            ARCTICDB_DEBUG(log::version(), "Evaluating against stats");
-            bool keep = evaluate_expression_against_stats(expression_context, *stats);
-            if (keep) {
-                res->set_bit(row, true);
+            if (const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx)) {
+                stats_rows.emplace_back(std::cref(*stats));
             } else {
+                stats_rows.emplace_back(std::nullopt);
+            }
+        }
+        util::check(stats_rows.size() == isr.size(), "Expected stats_rows.size() == isr.size()");
+
+        // Evaluate the AST
+        StatsVariantData result =
+                resolve_stats_node(expression_context.root_node_name_, expression_context, stats_rows);
+        util::check(
+                std::holds_alternative<std::vector<StatsComparison>>(result),
+                "resolve_stats_node should evaluate to a vector<StatsComparison>"
+        );
+
+        // Convert to BitSet
+        size_t pruned_count = 0;
+        const auto& comparisons = std::get<std::vector<StatsComparison>>(result);
+        util::check(comparisons.size() == isr.size(), "Expected comparisons.size() == isr.size()");
+        for (size_t row = 0; row < isr.size(); ++row) {
+            if (comparisons.at(row) == StatsComparison::NONE_MATCH) {
+                res->set_bit(row, false);
                 pruned_count++;
             }
         }
 
         ARCTICDB_DEBUG(log::version(), "Column stats filter pruned {} of {} segments", pruned_count, total_count);
-
         return res;
     };
 }
@@ -300,7 +329,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         filter_expressions.emplace_back(filter.expression_context_);
     }
 
-    util::check(filter_expressions.size() > 0, "Expected at least one filter expression");
+    util::check(!filter_expressions.empty(), "Expected at least one filter expression");
 
     ColumnStatsData column_stats{std::move(column_stats_segment)};
 

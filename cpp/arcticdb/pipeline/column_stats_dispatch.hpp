@@ -24,30 +24,43 @@ namespace arcticdb {
 
 using StatsVariantData = std::variant<
         // A result from applying column stats, like q["a"] > 5 -> StatsComparison::NONE_MATCH
-        StatsComparison,
+        std::vector<StatsComparison>,
         // A fixed value, like 5 in q["a"] > 5
         std::shared_ptr<Value>,
         // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
-        ColumnStatsValues>;
+        std::vector<ColumnStatsValues>>;
+
+using StatsRowVector = std::vector<std::optional<std::reference_wrapper<const ColumnStatsRow>>>;
 
 StatsVariantData resolve_stats_node(
-        const VariantNode& node, const ExpressionContext& expression_context, const ColumnStatsRow& stats
+        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows
 );
 
-StatsComparison dispatch_binary_stats(
+StatsVariantData dispatch_binary_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation
 );
 
-StatsComparison compute_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const ColumnStatsRow& stats
+StatsVariantData compute_stats(
+        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowVector& stats_rows
 );
 
 namespace column_stats_detail {
 
+inline size_t stats_variant_size(const StatsVariantData& v) {
+    return std::visit(
+            util::overload{
+                    [](const std::vector<StatsComparison>& vec) -> size_t { return vec.size(); },
+                    [](const std::shared_ptr<Value>&) -> size_t { return 0; },
+                    [](const std::vector<ColumnStatsValues>& vec) -> size_t { return vec.size(); }
+            },
+            v
+    );
+}
+
 inline bool value_is_nan(const Value& val) {
     if (is_floating_point_type(val.data_type())) {
         return details::visit_type(val.data_type(), [&val](auto tag) {
-            using RawType = typename decltype(tag)::raw_type;
+            using RawType = decltype(tag)::raw_type;
             if constexpr (std::is_floating_point_v<RawType>) {
                 return std::isnan(val.get<RawType>());
             }
@@ -110,10 +123,10 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                     using StatsRawType = typename StatsTag::raw_type;
                     using ValRawType = typename ValTag::raw_type;
                     using comp = Comparable<StatsRawType, ValRawType>;
-                    auto minval = static_cast<typename comp::left_type>(stats_lhs.min->get<StatsRawType>());
-                    auto maxval = static_cast<typename comp::left_type>(stats_lhs.max->get<StatsRawType>());
-                    auto qval = static_cast<typename comp::right_type>(val_rhs.get<ValRawType>());
-                    return func(ValueRange<typename comp::left_type>{minval, maxval}, qval);
+                    auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
+                    auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
+                    auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
+                    return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
                 }
             }
 
@@ -123,20 +136,35 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
 }
 
 template<typename Func>
-StatsComparison visit_binary_comparator_stats(
-        const StatsVariantData& left, const StatsVariantData& right, Func&& func
+std::vector<StatsComparison> visit_binary_comparator_stats(
+        const StatsVariantData& left, const StatsVariantData& right
 ) {
     using FuncType = std::remove_reference_t<Func>;
-    using FlippedType = typename FlippedComparator<FuncType>::type;
+    using FlippedType = FlippedComparator<FuncType>::type;
     return std::visit(
             util::overload{
-                    [&func](const ColumnStatsValues& l, const std::shared_ptr<Value>& r) -> StatsComparison {
-                        return stats_comparator(l, *r, std::forward<Func>(func));
+                    [](const std::vector<ColumnStatsValues>& l,
+                       const std::shared_ptr<Value>& r) -> std::vector<StatsComparison> {
+                        std::vector<StatsComparison> result;
+                        result.reserve(l.size());
+                        for (const auto& column_stats_values : l) {
+                            result.emplace_back(stats_comparator(column_stats_values, *r, FuncType{}));
+                        }
+                        return result;
                     },
-                    [](const std::shared_ptr<Value>& l, const ColumnStatsValues& r) -> StatsComparison {
-                        return stats_comparator(r, *l, FlippedType{});
+                    [](const std::shared_ptr<Value>& l,
+                       const std::vector<ColumnStatsValues>& r) -> std::vector<StatsComparison> {
+                        std::vector<StatsComparison> result;
+                        result.reserve(r.size());
+                        for (const auto& column_stats_values : r) {
+                            result.emplace_back(stats_comparator(column_stats_values, *l, FlippedType{}));
+                        }
+                        return result;
                     },
-                    [](const auto&, const auto&) -> StatsComparison { return StatsComparison::UNKNOWN; }
+                    [&left, &right](const auto&, const auto&) -> std::vector<StatsComparison> {
+                        size_t sz = std::max(stats_variant_size(left), stats_variant_size(right));
+                        return std::vector(sz, StatsComparison::UNKNOWN);
+                    }
             },
             left,
             right
@@ -145,7 +173,7 @@ StatsComparison visit_binary_comparator_stats(
 
 StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation);
 
-inline StatsComparison visit_binary_boolean_stats(
+inline std::vector<StatsComparison> visit_binary_boolean_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation
 ) {
     // TODO aseaton remaining cases
@@ -156,12 +184,25 @@ inline StatsComparison visit_binary_boolean_stats(
     // Value & ColumnStatsValues -> Only if a bool
     return std::visit(
             util::overload{
-                    [operation](const StatsComparison l, const StatsComparison r) {
-                        return binary_boolean_stats(l, r, operation);
+                    [operation](const std::vector<StatsComparison>& l, const std::vector<StatsComparison>& r)
+                            -> std::vector<StatsComparison> {
+                        util::check(
+                                l.size() == r.size(),
+                                "Mismatched vector sizes in visit_binary_boolean_stats: {} vs {}",
+                                l.size(),
+                                r.size()
+                        );
+                        std::vector<StatsComparison> result;
+                        result.reserve(l.size());
+                        for (size_t i = 0; i < l.size(); ++i) {
+                            result.push_back(binary_boolean_stats(l.at(i), r.at(i), operation));
+                        }
+                        return result;
                     },
-                    [](const auto&, const auto&) -> StatsComparison {
+                    [&](const auto&, const auto&) -> std::vector<StatsComparison> {
+                        size_t sz = std::max(stats_variant_size(left), stats_variant_size(right));
                         log::version().warn("Unsupported case in visit_binary_boolean_stats");
-                        return StatsComparison::UNKNOWN;
+                        return std::vector(sz, StatsComparison::UNKNOWN);
                     }
             },
             left,

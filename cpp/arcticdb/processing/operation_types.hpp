@@ -901,4 +901,26 @@ struct formatter<arcticdb::RegexMatchOperator> {
     }
 };
 
+template<>
+struct formatter<arcticdb::StatsComparison> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::StatsComparison c, FormatContext& ctx) const {
+        switch (c) {
+        case arcticdb::StatsComparison::ALL_MATCH:
+            return fmt::format_to(ctx.out(), "ALL_MATCH");
+        case arcticdb::StatsComparison::NONE_MATCH:
+            return fmt::format_to(ctx.out(), "NONE_MATCH");
+        case arcticdb::StatsComparison::UNKNOWN:
+            return fmt::format_to(ctx.out(), "UNKNOWN");
+        default:
+            return fmt::format_to(ctx.out(), "INVALID");
+        }
+    }
+};
+
 } // namespace fmt
