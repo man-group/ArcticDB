@@ -38,7 +38,8 @@ dist/
 cmake-build-*/
 dist_release/
 CMakeUserPresets.json
-.claude/
+.claude/*
+!.claude/skills/
 CLAUDE_USER_SETTINGS.md
 
 *_pb2.py
