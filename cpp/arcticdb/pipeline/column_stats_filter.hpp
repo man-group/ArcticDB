@@ -71,17 +71,6 @@ class ColumnStatsData {
 };
 
 /**
- * Evaluates a filter expression against column statistics for a single row-slice.
- * Returns true if the row-slice should be kept (might contain matching data),
- * false if it can be pruned (definitely no matching data).
- *
- * @param expression_context The expression context containing the AST
- * @param stats The column stats for this row-slice
- * @return true if the segment should be kept, false if it can be pruned
- */
-bool evaluate_expression_against_stats(const ExpressionContext& expression_context, const ColumnStatsRow& stats);
-
-/**
  * Create a filter query that uses column stats to prune segments that cannot
  * possibly match predicates in the given expression.
  *
