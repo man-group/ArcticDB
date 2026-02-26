@@ -888,7 +888,7 @@ struct MergeUpdateClause {
 
   private:
     using OnIterator = decltype(on_)::iterator;
-    void update_and_insert(
+    bool update_and_insert(
             const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
             const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
     ) const;

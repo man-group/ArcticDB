@@ -81,11 +81,12 @@ position_t write_py_string_to_pool_or_throw(
 
 template<typename TDT>
 requires util::instantiation_of<TDT, TypeDescriptorTag>
-void merge_update_string_column(
+bool merge_update_string_column(
         Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field,
         const RowRange& row_range, const StringPool& target_string_pool,
         const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
 ) {
+    bool is_column_changed = false;
     if constexpr (is_fixed_string_type(TDT::data_type())) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "Fixed string sequences are not supported for merge update"
@@ -121,6 +122,7 @@ void merge_update_string_column(
                                                        next_target_row_to_update != source_row_it->end() &&
                                                        static_cast<int64_t>(*next_target_row_to_update) == row.idx();
             if (current_target_row_is_matched) {
+                is_column_changed = true;
                 const auto py_string_object = source_column_view[source_row_it - rows_to_update.begin()];
                 row.value() = write_py_string_to_pool_or_throw<TDT>(
                         py_string_object, row.idx(), row_range, gil_lock, new_string_pool, target_field.name()
@@ -134,6 +136,7 @@ void merge_update_string_column(
             }
         });
     }
+    return is_column_changed;
 }
 
 template<
@@ -174,7 +177,7 @@ struct MergeTargetColumnInfo {
     const size_t column_position_in_slice_;
     const size_t source_field_position_;
     const size_t target_field_position_;
-    Column& target_column() { return segment_.column(column_position_in_slice_); }
+    Column& target_column() const { return segment_.column(column_position_in_slice_); }
 };
 
 MergeTargetColumnInfo get_merge_fields_and_column(
@@ -2040,7 +2043,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
                                 conditional_t<is_target_sequence_type, std::optional<std::string_view>, TargetRawType>;
                         ankerl::unordered_dense::map<TargetValueType, std::vector<size_t>> target_values;
                         std::vector<size_t> nan_target_values;
-                        arcticdb::for_each_enumerated<TargetTDT>(target_info.target_column(), [&](const auto& row) {
+                        arcticdb::for_each_enumerated<TargetTDT>(target_info.target_column(), [&](auto row) {
                             if constexpr (is_target_sequence_type) {
                                 if (is_a_string(row.value())) {
                                     target_values[target_info.segment_.string_at_offset(row.value())].push_back(row.idx(
@@ -2118,14 +2121,17 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Arrow format is not supported as input for merge update"
         );
     } else if (source_->has_tensors()) {
-        update_and_insert(source_->field_tensors(), source_->desc(), proc, matched);
+        const bool row_slice_changed = update_and_insert(source_->field_tensors(), source_->desc(), proc, matched);
+        if (row_slice_changed) {
+            return push_entities(*component_manager_, std::move(proc));
+        }
     } else {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Input frame does not contain neither a segment nor tensors");
     }
-    return push_entities(*component_manager_, std::move(proc));
+    return {};
 }
 
-void MergeUpdateClause::update_and_insert(
+bool MergeUpdateClause::update_and_insert(
         const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
         const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
 ) const {
@@ -2147,6 +2153,7 @@ void MergeUpdateClause::update_and_insert(
             return std::pair{0, source_->num_rows};
         }
     }();
+    bool row_slice_changed = false;
     const bool is_timeseries = source_->desc().index().type() == IndexDescriptor::Type::TIMESTAMP;
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
     // updated
@@ -2207,7 +2214,7 @@ void MergeUpdateClause::update_and_insert(
                             }
                         });
                     } else {
-                        merge_update_string_column<TDT>(
+                        row_slice_changed |= merge_update_string_column<TDT>(
                                 target_column,
                                 rows_to_update,
                                 target_field,
@@ -2227,6 +2234,7 @@ void MergeUpdateClause::update_and_insert(
                         size_t target_row_to_update_idx = 0;
                         for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
                             // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
+                            row_slice_changed |= !rows_to_update[source_row_idx].empty();
                             for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
                                 const size_t rows_to_skip = target_row_idx - target_row_to_update_idx;
                                 std::advance(target_row_to_update_it, rows_to_skip);
@@ -2240,6 +2248,7 @@ void MergeUpdateClause::update_and_insert(
                             for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
                                 // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be
                                 // done
+                                row_slice_changed |= !rows_to_update[source_row_idx].empty();
                                 for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
                                     target[target_row_idx] = source_data[source_row_idx];
                                 }
@@ -2260,6 +2269,7 @@ void MergeUpdateClause::update_and_insert(
             target_segment.set_string_pool(std::make_shared<StringPool>(std::move(new_string_pool)));
         }
     }
+    return row_slice_changed;
 }
 
 /// For each row of source that falls in the row slice in proc find all rows whose index matches the source index

@@ -1580,7 +1580,7 @@ class TestMergeRowrangeUpdate:
                 "a": [1, 99, 3, 4, 5],
                 "b": [10.0, 20.0, 30.0, 40.0, 50.0],
                 "c": ["X", "Y", "Z", "W", "V"],
-                "d": [10, 20, 99, 40, 50],
+                "d": [100, 200, 300, 400, 500],
             }
         )
         generic_merge_test(lib, "sym", target, source, self.strategy, on=on)
