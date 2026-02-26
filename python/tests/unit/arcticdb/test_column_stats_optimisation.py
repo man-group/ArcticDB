@@ -706,4 +706,179 @@ def test_column_stats_no_deadlock_single_thread_no_stats(in_memory_version_store
         assert len(result) == 1
 
 
-# TODO aseaton test that column slicing and row slicing still work!!
+DATETIME_INDEXES_THREE_SEGMENTS = [
+    pd.date_range("2000-01-01", periods=2),
+    pd.date_range("2000-01-03", periods=2),
+    pd.date_range("2000-01-05", periods=2),
+]
+
+ROWCOUNT_INDEXES_THREE_SEGMENTS = [
+    np.arange(0, 2, dtype=np.int64),
+    np.arange(2, 4, dtype=np.int64),
+    np.arange(4, 6, dtype=np.int64),
+]
+
+STRING_INDEXES_THREE_SEGMENTS = [["a", "b"], ["c", "d"], ["e", "f"]]
+
+RANGE_INDEXES_THREE_SEGMENTS = [
+    pd.RangeIndex(start=0, stop=2),
+    pd.RangeIndex(start=2, stop=4),
+    pd.RangeIndex(start=4, stop=6),
+]
+
+THREE_SEGMENT_INDEXES = [
+    DATETIME_INDEXES_THREE_SEGMENTS,
+    ROWCOUNT_INDEXES_THREE_SEGMENTS,
+    STRING_INDEXES_THREE_SEGMENTS,
+    RANGE_INDEXES_THREE_SEGMENTS,
+]
+
+THREE_SEGMENT_INDEX_IDS = ["datetime", "rowcount", "string", "range"]
+
+
+@pytest.mark.parametrize("indexes", THREE_SEGMENT_INDEXES, ids=THREE_SEGMENT_INDEX_IDS)
+def test_column_stats_with_column_slicing(
+    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, indexes
+):
+    """Check that column stats pruning works when combined with column slicing.
+
+    Setup: 3 row groups x 3 columns = 9 segments.
+    - columns=["col_1"] means the column filter keeps only 3 segments (one per row group).
+    - col_1 > 4 prunes row groups 0 (max=2) and 1 (max=4), leaving only row group 2.
+    - Expected: 1 TABLE_DATA read.
+    """
+    lib = in_memory_store_factory(column_group_size=1, segment_row_size=10)
+
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20], "col_3": [100, 200]}, index=indexes[0], dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40], "col_3": [300, 400]}, index=indexes[1], dtype=np.int64)
+    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [50, 60], "col_3": [500, 600]}, index=indexes[2], dtype=np.int64)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 4]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q, columns=["col_1"]).data
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+
+    expected = df2[["col_1"]]
+    assert_frame_equal(result, expected)
+
+
+@pytest.mark.parametrize("indexes", THREE_SEGMENT_INDEXES, ids=THREE_SEGMENT_INDEX_IDS)
+def test_column_slicing(
+    in_memory_store_factory, clear_query_stats, indexes
+):
+    """Check that column stats pruning works when combined with column slicing.
+
+    Setup: 3 row groups x 3 columns = 9 segments.
+    - columns=["col_1"] means the column filter keeps only 3 segments (one per row group).
+    - col_1 > 4 prunes row groups 0 (max=2) and 1 (max=4), leaving only row group 2.
+    - Expected: 1 TABLE_DATA read.
+    """
+    lib = in_memory_store_factory(column_group_size=1, segment_row_size=10)
+
+    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20], "col_3": [100, 200]}, index=indexes[0], dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40], "col_3": [300, 400]}, index=indexes[1], dtype=np.int64)
+    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [50, 60], "col_3": [500, 600]}, index=indexes[2], dtype=np.int64)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 4]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q, columns=["col_1"]).data
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 3, f"Expected 3 TABLE_DATA read, got {table_data_reads}"
+
+    expected = df2[["col_1"]]
+    assert_frame_equal(result, expected)
+
+
+@pytest.mark.parametrize("indexes", THREE_SEGMENT_INDEXES, ids=THREE_SEGMENT_INDEX_IDS)
+def test_column_stats_with_row_range(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, indexes
+):
+    """Column stats pruning works when combined with row_range slicing.
+
+    row_range causes a row filter to run before the column stats filter, passing a non-null
+    input bitset. Verifies that both the row slice and column stats pruning are applied.
+
+    Setup: 3 segments of 2 rows each (rows 0-5).
+    - row_range=(0, 4) restricts to segments 0 and 1 (rows 0-3).
+    - col_1 > 2 prunes segment 0 (max=2), leaving only segment 1.
+    - Expected: 1 TABLE_DATA read, result is df1.
+    """
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=indexes[0], dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=indexes[1], dtype=np.int64)
+    df2 = pd.DataFrame({"col_1": [5, 6]}, index=indexes[2], dtype=np.int64)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q, row_range=(0, 4)).data
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+
+    assert_frame_equal(result, df1)
+
+
+def test_column_stats_with_date_range(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """Column stats pruning works when combined with date_range slicing.
+
+    date_range causes an index filter to run before the column stats filter, passing a
+    non-null input bitset. Verifies that both the date range and column stats pruning are
+    applied.
+
+    Setup: 3 segments.
+    - date_range restricts to segments 0 and 1.
+    - col_1 > 2 prunes segment 0 (max=2), leaving only segment 1.
+    - Expected: 1 TABLE_DATA read, result is df1.
+    """
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.int64)
+    df2 = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.int64)
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+
+    date_range = (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04"))
+
+    qs.enable()
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q, date_range=date_range).data
+    table_data_reads = get_table_data_read_count()
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+
+    assert_frame_equal(result, df1)
