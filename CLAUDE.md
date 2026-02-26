@@ -183,6 +183,10 @@ python -m asv run --python=$(which python) -v          # Use current env (faster
 
 See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
 
+## Code Review Guidelines
+
+When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
+
 ## Key Development Guidelines
 
 ### Backwards Compatibility
