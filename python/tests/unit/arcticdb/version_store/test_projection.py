@@ -10,12 +10,17 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb_ext.exceptions import ArcticException, InternalException, UserInputException
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
 pytestmark = pytest.mark.pipeline
+
+
+def _assert_projection_matches(lib, symbol, query_builder, expected):
+    received = regularize_dataframe(lib.read(symbol, query_builder=query_builder).data)
+    assert_frame_equal(regularize_dataframe(expected), received)
 
 
 def test_project_column_not_present(lmdb_version_store_v1, any_output_format):
@@ -108,6 +113,128 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output
 
     df["ADJUSTED"] = df["ASK"] * df["VOL_ACC"] + 7
     assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
+
+
+def test_projection_modulo_value_and_column_operands(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_projection_modulo_value_and_column_operands"
+    df = pd.DataFrame(
+        {
+            "a": np.arange(1, 11, dtype=np.int64),
+            "b": np.arange(11, 21, dtype=np.int64),
+        },
+        index=np.arange(10),
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("a_mod_3", q["a"] % 3)
+    q = q.apply("20_mod_a", 20 % q["a"])
+    q = q.apply("a_mod_b", q["a"] % q["b"])
+
+    expected = df.copy()
+    expected["a_mod_3"] = expected["a"] % 3
+    expected["20_mod_a"] = 20 % expected["a"]
+    expected["a_mod_b"] = expected["a"] % expected["b"]
+
+    _assert_projection_matches(lib, symbol, q, expected)
+
+
+def test_projection_modulo_negative_integers_and_floats(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_projection_modulo_negative_integers_and_floats"
+    df = pd.DataFrame(
+        {
+            "int_col": np.array([-5, -4, -3, 3, 4, 5], dtype=np.int64),
+            "float_col": np.array([-5.5, -4.5, -3.5, 3.5, 4.5, 5.5], dtype=np.float64),
+        },
+        index=np.arange(6),
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("int_mod_pos", q["int_col"] % 2)
+    q = q.apply("int_mod_neg", q["int_col"] % -2)
+    q = q.apply("float_mod_pos", q["float_col"] % 2.0)
+    q = q.apply("float_mod_neg", q["float_col"] % -2.0)
+
+    expected = df.copy()
+    expected["int_mod_pos"] = expected["int_col"] % 2
+    expected["int_mod_neg"] = expected["int_col"] % -2
+    expected["float_mod_pos"] = expected["float_col"] % 2.0
+    expected["float_mod_neg"] = expected["float_col"] % -2.0
+
+    _assert_projection_matches(lib, symbol, q, expected)
+
+
+def test_projection_modulo_special_float_rhs_values(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_projection_modulo_special_float_rhs_values"
+    df = pd.DataFrame({"float_col": np.array([1.0, -1.0, 2.5, -2.5, np.nan], dtype=np.float64)}, index=np.arange(5))
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("mod_zero", q["float_col"] % 0.0)
+    q = q.apply("mod_nan", q["float_col"] % np.nan)
+
+    expected = df.copy()
+    expected["mod_zero"] = expected["float_col"] % 0.0
+    expected["mod_nan"] = expected["float_col"] % np.nan
+
+    _assert_projection_matches(lib, symbol, q, expected)
+
+
+def test_projection_modulo_infinite_rhs_raises():
+    q = QueryBuilder()
+    with pytest.raises(ArcticException, match="Infinite values not supported in queries"):
+        q.apply("mod_inf", q["col"] % np.inf)
+    with pytest.raises(ArcticException, match="Infinite values not supported in queries"):
+        q.apply("mod_neg_inf", q["col"] % -np.inf)
+
+
+def test_projection_modulo_integer_by_zero_raises(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_projection_modulo_integer_by_zero_raises"
+    df = pd.DataFrame({"int_col": np.arange(5, dtype=np.int64)}, index=np.arange(5))
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("mod_zero", q["int_col"] % 0)
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_projection_modulo_mixed_type_non_representable_values(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_projection_modulo_mixed_type_non_representable_values"
+    df = pd.DataFrame(
+        {
+            "u8_nonzero": np.array([10, 255, 1], dtype=np.uint8),
+            "i64_large": np.array([300, 301, 302], dtype=np.int64),
+            "f64_large": np.array([300.25, 301.25, 302.25], dtype=np.float64),
+        },
+        index=np.arange(3),
+    )
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    q = q.apply("u8_mod_i64", q["u8_nonzero"] % q["i64_large"])
+    q = q.apply("i64_mod_u8", q["i64_large"] % q["u8_nonzero"])
+    q = q.apply("u8_mod_f64", q["u8_nonzero"] % q["f64_large"])
+    q = q.apply("f64_mod_u8", q["f64_large"] % q["u8_nonzero"])
+
+    expected = df.copy()
+    expected["u8_mod_i64"] = expected["u8_nonzero"] % expected["i64_large"]
+    expected["i64_mod_u8"] = expected["i64_large"] % expected["u8_nonzero"]
+    expected["u8_mod_f64"] = expected["u8_nonzero"] % expected["f64_large"]
+    expected["f64_mod_u8"] = expected["f64_large"] % expected["u8_nonzero"]
+
+    _assert_projection_matches(lib, symbol, q, expected)
 
 
 ##################################

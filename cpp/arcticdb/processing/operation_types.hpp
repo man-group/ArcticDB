@@ -377,7 +377,16 @@ struct ModOperator {
             return result;
         } else {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(u != U{0}, "Modulo by zero");
-            return static_cast<V>(t) % static_cast<V>(u);
+            auto lhs = static_cast<V>(t);
+            auto rhs = static_cast<V>(u);
+            auto result = lhs % rhs;
+            if constexpr (std::is_signed_v<V>) {
+                // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
+                if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
+                    result += rhs;
+                }
+            }
+            return result;
         }
     }
 };
