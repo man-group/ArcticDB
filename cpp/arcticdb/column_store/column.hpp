@@ -9,9 +9,9 @@
 #pragma once
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/statistics.hpp>
-#include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -27,20 +27,11 @@
 #ifdef __APPLE__
 #include <cstdio>
 #endif
-#include <pybind11/numpy.h>
 #include <concepts>
 #include <numeric>
 #include <optional>
 
-namespace py = pybind11;
-
 namespace arcticdb {
-
-// this is needed to make templates of templates work
-// since py::array_t has more than one template parameter
-// (the rest are defaulted)
-template<class T>
-using py_array_t = py::array_t<T>;
 
 using namespace arcticdb::entity;
 
@@ -341,9 +332,9 @@ class Column {
 
     Buffer&& release_shapes();
 
-    template<class T, template<class> class Tensor>
-    requires std::is_integral_v<T> || std::is_floating_point_v<T>
-    void set_array(ssize_t row_offset, Tensor<T>& val) {
+    template<util::arithmetic_tensor TensorType>
+    void set_array(ssize_t row_offset, TensorType& val) {
+        using value_type = typename TensorType::value_type;
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
         util::check_arg(
@@ -357,32 +348,8 @@ class Column {
         memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
         auto info = val.request();
         util::FlattenHelper flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
-        flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
-        update_offsets(val.nbytes());
-        data_.commit();
-        shapes_.commit();
-        ++last_logical_row_;
-    }
-
-    template<class T>
-    requires std::is_integral_v<T> || std::is_floating_point_v<T>
-    void set_array(ssize_t row_offset, py::array_t<T>& val) {
-        ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
-        magic_.check();
-        util::check_arg(
-                last_logical_row_ + 1 == row_offset,
-                "set_array expected row {}, actual {} ",
-                last_logical_row_ + 1,
-                row_offset
-        );
-        data_.ensure_bytes(val.nbytes());
-        shapes_.ensure<shape_t>(val.ndim());
-        memcpy(shapes_.cursor(), val.shape(), val.ndim() * sizeof(shape_t));
-        auto info = val.request();
-        util::FlattenHelper<T, py_array_t> flatten(val);
-        auto data_ptr = reinterpret_cast<T*>(data_.cursor());
-        flatten.flatten(data_ptr, reinterpret_cast<const T*>(info.ptr));
+        auto data_ptr = reinterpret_cast<value_type*>(data_.cursor());
+        flatten.flatten(data_ptr, reinterpret_cast<const value_type*>(info.ptr));
         update_offsets(val.nbytes());
         data_.commit();
         shapes_.commit();

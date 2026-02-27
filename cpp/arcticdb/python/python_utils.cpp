@@ -1,6 +1,7 @@
-#include <arcticdb/column_store/column_utils.hpp>
+
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <arcticdb/column_store/column_utils_python.hpp>
 
 namespace arcticdb::python_util {
 

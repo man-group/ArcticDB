@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/column_store/buffer_protocol_python_adapters.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/random.h>
 #include <arcticdb/util/timer.hpp>
@@ -64,6 +65,22 @@ TEST(StringPool, StressTest) {
     std::cout << temp << std::endl;
     timer.stop_timer(timer_name);
     GTEST_COUT << " " << timer.display_all() << std::endl;
+}
+
+TEST(StringPool, BufferInfoPayloadAndHeaderAccounting) {
+    StringPool pool;
+    constexpr std::string_view value{"hello"};
+    pool.get(value);
+
+    auto info = python_util::string_pool_as_buffer_info(pool);
+    ASSERT_NE(info.ptr, nullptr);
+    ASSERT_EQ(info.itemsize, 1);
+    ASSERT_EQ(info.ndim, 1);
+    ASSERT_EQ(info.shape.size(), 1u);
+    ASSERT_EQ(info.shape[0], static_cast<ssize_t>(value.size()));
+    ASSERT_EQ(std::string_view(static_cast<const char*>(info.ptr), static_cast<size_t>(info.shape[0])), value);
+
+    ASSERT_EQ(pool.size(), value.size() + sizeof(uint32_t));
 }
 //
 // TEST(StringPool, BitMagicTest) {

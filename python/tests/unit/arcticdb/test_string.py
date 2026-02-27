@@ -13,6 +13,7 @@ import pandas as pd
 import pytest
 
 from arcticdb_ext.exceptions import UserInputException
+from arcticdb_ext.column_store import StringPool
 from arcticdb_ext.types import (
     TypeDescriptor,
     StreamDescriptor,
@@ -24,6 +25,29 @@ from arcticdb_ext.types import (
 )
 from arcticdb_ext.stream import FixedTickRowBuilder, SegmentHolder, FixedTimestampAggregator, TickReader
 from arcticdb.util.test import assert_frame_equal
+
+
+def test_string_pool_binding_smoke():
+    fields = [FieldDescriptor(TypeDescriptor(DataType.NANOSECONDS_UTC64, Dimension.Dim0), "time")]
+    fields.append(FieldDescriptor(TypeDescriptor(DataType.ASCII_DYNAMIC64, Dimension.Dim0), "string"))
+    tsd = StreamDescriptor(123, IndexDescriptor(1, IndexKind.TIMESTAMP), fields)
+
+    sh = SegmentHolder()
+    agg = FixedTimestampAggregator(sh, tsd)
+    with agg.start_row(123) as rb:
+        rb.set_string(1, "hello")
+    agg.commit()
+
+    pool = sh.segment.string_pool()
+    assert isinstance(pool, StringPool)
+    assert pool.nbytes > 0
+    assert sh.segment.string_pool_size > 0
+
+    view = memoryview(pool)
+    assert view is not None
+    assert view.nbytes == len("hello")
+    assert view.tobytes() == b"hello"
+    assert pool.nbytes >= view.nbytes
 
 
 def test_vl_string_simple():

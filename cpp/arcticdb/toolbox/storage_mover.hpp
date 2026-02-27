@@ -3,7 +3,6 @@
 #include <arcticdb/version/version_store_api.hpp>
 
 #include "codec/default_codecs.hpp"
-#include "column_store/column_utils.hpp"
 
 #include "stream/test/stream_test_common.hpp"
 #include "util/variant.hpp"
