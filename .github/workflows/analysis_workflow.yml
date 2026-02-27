@@ -218,6 +218,18 @@ jobs:
         run: |
           python -m pip install -ve .[Testing]
           
+      - name: Build C++ benchmarks (needed for ASV discovery)
+        # cpp_microbenchmarks.py invokes the binary with
+        # --benchmark_list_tests=true at import time to register ASV classes.
+        # asv_checks.py needs those classes so the regenerated benchmarks.json
+        # matches the committed one.
+        shell: bash -l {0}
+        run: |
+          cmake --preset linux-release -DTEST=ON cpp
+          cmake --build cpp/out/linux-release-build --target benchmarks
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
       - name: Run ASV Tests Check script
         run: |
           python python/utils/asv_checks.py
