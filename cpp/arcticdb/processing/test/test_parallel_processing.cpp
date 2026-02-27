@@ -245,10 +245,9 @@ TEST(Clause, ScheduleRowSliceProcessingAndWrite) {
 
     auto clauses = generate_random_clauses<RowSliceClause>(num_clauses);
     auto store = std::make_shared<InMemoryStore>();
-    constexpr static WriteOptions write_options;
-    clauses->push_back(std::make_shared<Clause>(
-            WriteClause(write_options, IndexPartialKey{"target", 0}, std::make_shared<DeDupMap>(), store)
-    ));
+    clauses->push_back(
+            std::make_shared<Clause>(WriteClause(IndexPartialKey{"target", 0}, std::make_shared<DeDupMap>(), store))
+    );
 
     const auto component_manager = set_component_manager(*clauses);
 

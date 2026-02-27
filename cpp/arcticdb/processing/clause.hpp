@@ -809,14 +809,12 @@ struct ConcatClause {
 struct WriteClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
-    WriteOptions write_options_;
     IndexPartialKey index_partial_key_;
     std::shared_ptr<DeDupMap> dedup_map_;
     std::shared_ptr<Store> store_;
 
     WriteClause(
-            const WriteOptions& write_options, const IndexPartialKey& index_partial_key,
-            std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+            const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 
