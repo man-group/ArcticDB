@@ -10,6 +10,7 @@
 #include <variant>
 
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/column_store/segment_reslicer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/stream/merge.hpp>
@@ -514,7 +515,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(
     ARCTICDB_DEBUG_THROW(5)
     // Experimentation shows flattening the entities into a single vector and a single call to
     // component_manager_->get is faster than not flattening and making multiple calls
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
     for (auto [idx, entity_id] : folly::enumerate(entity_ids)) {
         res[buckets[idx]].emplace_back(entity_id);
@@ -956,7 +957,7 @@ template<ResampleBoundary closed_boundary>
 std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     if (entity_ids.empty()) {
         return {};
     }
@@ -1388,7 +1389,7 @@ std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(
     // specify any particular input shape unless a clause is the
     // first one and can use structure_for_processing. Ideally
     // merging should be parallel like resampling
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, std::move(entity_ids)
     );
@@ -1544,7 +1545,7 @@ std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::v
 std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     if (entity_ids.empty()) {
         return {};
     }
@@ -1777,7 +1778,7 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(
         }
     }
     component_manager_->replace_entities<std::shared_ptr<RowRange>>(
-            flatten_entities(std::move(entity_ids_vec)), new_row_ranges
+            flatten_vectors(std::move(entity_ids_vec)), new_row_ranges
     );
     auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
     return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
@@ -2285,6 +2286,185 @@ std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
 bool MergeUpdateClause::is_update_only() const {
     return strategy_ == MergeStrategy{MergeAction::UPDATE, MergeAction::DO_NOTHING};
+}
+
+CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {
+    // Magic range of +-33% chosen so that:
+    // - 2 row slices with < min_rows_per_segment_ cannot be combined into one row slice with > max_rows_per_segment_
+    // - 1 row slice with > max_rows_per_segment_ when split in half will still have >= min_rows_per_segment_ in each
+    //   resulting row slice
+    // If rows_per_segment_ == 1 min_rows_per_segment_ would be 0 without the std::max
+    min_rows_per_segment_ = std::max((2 * rows_per_segment_) / 3, uint64_t(1));
+    max_rows_per_segment_ = 2 * min_rows_per_segment_;
+}
+
+// Given the set of row ranges in the input data, constructs a superset set of the row ranges we need to pass to calls
+// to process.
+std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRange>& row_ranges) const {
+    if (row_ranges.empty()) {
+        return {};
+    }
+    // Greedy algorithm - keep adding row ranges until there are at least min_rows_per_segment_
+    // If possible, keep adding more to get as close as possible to rows_per_segment_
+    // If it is necessary to get above min_rows_per_segment_ in a slice, we may have to exceed max_rows_per_segment_
+    // In this case, CompactDataClause::process will split into multiple row slices
+    std::set<RowRange> res;
+    RowRange current = *row_ranges.cbegin();
+    for (auto row_range = std::next(row_ranges.cbegin()); row_range != row_ranges.cend(); ++row_range) {
+        const bool current_below_min_rows_per_segment = current.diff() < min_rows_per_segment_;
+        const bool below_rows_per_segment_with_this_slice = current.diff() + row_range->diff() <= rows_per_segment_;
+        // This is equivalent to:
+        // (current.diff() + row_range->diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()
+        // but without any subtractions which can underflow with unsigned integers
+        const bool closer_to_rows_per_segment_with_this_slice_than_without =
+                (2 * current.diff()) + row_range->diff() < 2 * rows_per_segment_;
+        if (current_below_min_rows_per_segment || below_rows_per_segment_with_this_slice ||
+            closer_to_rows_per_segment_with_this_slice_than_without) {
+            current.second = row_range->second;
+        } else {
+            res.emplace(current);
+            current = *row_range;
+        }
+    }
+    if (current.diff() >= min_rows_per_segment_ || res.empty()) {
+        res.emplace(current);
+    } else {
+        auto last_it = std::prev(res.end());
+        auto last_row_range = *last_it;
+        last_row_range.second = current.second;
+        res.erase(last_it);
+        res.emplace(last_row_range);
+    }
+    // It is possible that the last slice has fewer than min_rows_per_segment_, so combine with previous slice if this
+    // is the case
+    auto last_it = std::prev(res.end());
+    auto last_row_range = *last_it;
+    if (last_row_range.diff() < min_rows_per_segment_ && last_it != res.begin()) {
+        auto penultimate_it = std::prev(last_it);
+        last_row_range.first = penultimate_it->first;
+        res.erase(penultimate_it, res.end());
+        res.emplace(last_row_range);
+    }
+    return res;
+}
+
+std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
+) {
+    // TODO: Consider where unordered_sets can be used for improved algorithmic complexity
+    // Extract the unique row ranges and col ranges
+    std::set<RowRange> row_ranges;
+    for (const auto& range_and_key : ranges_and_keys) {
+        row_ranges.insert(range_and_key.row_range());
+    }
+    auto processing_row_ranges = structure_row_ranges(row_ranges);
+    // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges unless they are too
+    // big, as this implies those row-slices do not need to change
+    auto retained_processing_row_ranges = processing_row_ranges;
+    std::erase_if(
+            ranges_and_keys,
+            [this, &processing_row_ranges, &retained_processing_row_ranges](const RangesAndKey& range_and_key) {
+                if (processing_row_ranges.contains(range_and_key.row_range()) &&
+                    range_and_key.row_range().diff() <= max_rows_per_segment_) {
+                    retained_processing_row_ranges.erase(range_and_key.row_range());
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+    );
+    if (ranges_and_keys.empty()) {
+        return {};
+    }
+    // Order by column slice (i.e. all segments in first column slice from top to bottom, then second column slice, etc)
+    std::ranges::sort(ranges_and_keys, [](const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.col_range().first, left.row_range().first) <
+               std::tie(right.col_range().first, right.row_range().first);
+    });
+    std::vector<std::vector<size_t>> res;
+    std::vector<size_t> current;
+    auto row_range = retained_processing_row_ranges.cbegin();
+    ColRange col_range = ranges_and_keys.front().col_range();
+    for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
+        // Use first element of col_range rather than equality so that it works with dynamic schema where number of
+        // columns in each row slice can be different
+        if (range_and_key.col_range().first == col_range.first) {
+            if (row_range->contains(range_and_key.row_range().first)) {
+                current.emplace_back(idx);
+            } else {
+                res.emplace_back(std::move(current));
+                current = std::vector<size_t>{idx};
+                ++row_range;
+            }
+        } else {
+            res.emplace_back(std::move(current));
+            current = std::vector<size_t>{idx};
+            col_range = range_and_key.col_range();
+            row_range = retained_processing_row_ranges.cbegin();
+        }
+    }
+    if (!current.empty()) {
+        res.emplace_back(std::move(current));
+    }
+    return res;
+}
+
+std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(std::vector<std::vector<EntityId>>&&) {
+    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("CompactData clause should be the first clause in the pipeline");
+}
+
+std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_ids) const {
+    util::check(!entity_ids.empty(), "Unexpected empty entity_ids in CompactDataClause::process");
+    const auto proc =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager_, entity_ids
+            );
+    // TODO: Add a collection utils file that will turn a collection of shared pointers into the same collection of
+    // non-pointer objects, and vice versa
+    std::vector<SegmentInMemory> segments;
+    segments.reserve(proc.segments_->size());
+    std::ranges::transform(*proc.segments_, std::back_inserter(segments), [](std::shared_ptr<SegmentInMemory> segment) {
+        return std::move(*segment);
+    });
+    SegmentReslicer reslicer{max_rows_per_segment_};
+    segments = reslicer.reslice_segments(std::move(segments));
+
+    ColRange col_range = *proc.col_ranges_->front();
+    std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs;
+    segment_ptrs.reserve(segments.size());
+    std::ranges::transform(segments, std::back_inserter(segment_ptrs), [](SegmentInMemory segment) {
+        return std::make_shared<SegmentInMemory>(std::move(segment));
+    });
+    std::vector<std::shared_ptr<RowRange>> row_ranges;
+    std::vector<std::shared_ptr<ColRange>> col_ranges;
+    auto row_range_start = proc.row_ranges_->front()->first;
+    for (const auto& segment : segment_ptrs) {
+        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        row_ranges.emplace_back(std::make_shared<RowRange>(row_range_start, row_range_start + segment->row_count()));
+        row_range_start += segment->row_count();
+    }
+    ProcessingUnit res;
+    res.set_segments(std::move(segment_ptrs));
+    res.set_row_ranges(std::move(row_ranges));
+    res.set_col_ranges(std::move(col_ranges));
+    return push_entities(*component_manager_, std::move(res));
+}
+
+const ClauseInfo& CompactDataClause::clause_info() const { return clause_info_; }
+
+void CompactDataClause::set_processing_config(const ProcessingConfig&) {}
+
+void CompactDataClause::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+OutputSchema CompactDataClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+
+OutputSchema CompactDataClause::join_schemas(std::vector<OutputSchema>&&) const {
+    util::raise_rte("CompactDataClause::join_schemas should never be called");
+}
+
+std::string CompactDataClause::to_string() const {
+    return fmt::format("COMPACT_DATA(rows_per_segment={})", rows_per_segment_);
 }
 
 } // namespace arcticdb

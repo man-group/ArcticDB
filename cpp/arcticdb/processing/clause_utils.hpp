@@ -198,7 +198,22 @@ ProcessingUnit gather_entities(ComponentManager& component_manager, const std::v
     );
     return res;
 }
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
+
+template<typename T>
+inline std::vector<T> flatten_vectors(std::vector<std::vector<T>>&& vec_of_vecs) {
+    size_t res_size = std::accumulate(
+            vec_of_vecs.cbegin(),
+            vec_of_vecs.cend(),
+            size_t(0),
+            [](size_t acc, const std::vector<T>& vec) { return acc + vec.size(); }
+    );
+    std::vector<T> res;
+    res.reserve(res_size);
+    for (const auto& vec : vec_of_vecs) {
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    return res;
+}
 
 using FutureOrSplitter =
         std::variant<folly::Future<pipelines::SegmentAndSlice>, folly::FutureSplitter<pipelines::SegmentAndSlice>>;
