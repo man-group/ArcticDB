@@ -297,6 +297,11 @@ class PythonVersionStore : public LocalVersionedEngine {
             std::vector<std::string> on
     );
 
+    VersionedItem compact_data(
+            const StreamId& stream_id, std::optional<size_t> rows_per_segment, std::optional<double> tolerance,
+            bool prune_previous_versions
+    );
+
   private:
     void delete_snapshot_sync(const SnapshotId& snap_name, const VariantKey& snap_key);
 };

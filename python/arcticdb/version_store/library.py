@@ -3185,6 +3185,15 @@ class Library:
         """
         return self._nvs.compact_symbol_list()
 
+    def compact_data(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+        tolerance: float = 0.5,
+        prune_previous_versions: bool = False,
+    ) -> VersionedItem:
+        return self._nvs.compact_data(symbol, rows_per_segment, tolerance, prune_previous_versions)
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
