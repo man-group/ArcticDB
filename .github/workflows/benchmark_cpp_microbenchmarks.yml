@@ -1,0 +1,149 @@
+name: __benchmark_cpp_microbenchmarks
+on:
+  workflow_call:
+    inputs:
+      benchmark_all_tags: {required: true, type: boolean, description: Run benchmarks for all tags or just the given commit}
+      commit:             {required: true, type: string, description: commit hash that will be benchmarked}
+      dev_image_tag:      {required: false, default: 'latest', type: string, description: Tag of the ArcticDB development image}
+jobs:
+  start_ec2_runner:
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: start
+
+  benchmark_commit:
+    timeout-minutes: 1200
+    needs: [start_ec2_runner]
+    if: |
+      always() &&
+      !cancelled() &&
+      needs.start_ec2_runner.result == 'success'
+    runs-on: ${{ needs.start_ec2_runner.outputs.label }}
+    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
+    env:
+      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
+      SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
+      SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
+      SCCACHE_REGION: eu-west-1
+      SCCACHE_S3_USE_SSL: false
+      AWS_ACCESS_KEY_ID: ${{secrets.AWS_S3_ACCESS_KEY}}
+      AWS_SECRET_ACCESS_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      ARCTICDB_REAL_S3_ACCESS_KEY: ${{secrets.AWS_S3_ACCESS_KEY}}
+      ARCTICDB_REAL_S3_SECRET_KEY: ${{secrets.AWS_S3_SECRET_KEY}}
+      ARCTICDB_REAL_S3_REGION: eu-west-1
+      ARCTICDB_REAL_S3_ENDPOINT: s3.eu-west-1.amazonaws.com
+      ASV_RESULTS_BUCKET: arcticdb-ci-benchmark-results
+      VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
+      VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
+      VCPKG_MAN_NUGET_USER: ${{secrets.VCPKG_MAN_NUGET_USER}}
+      VCPKG_MAN_NUGET_TOKEN: ${{secrets.VCPKG_MAN_NUGET_TOKEN}}
+      CMAKE_C_COMPILER_LAUNCHER: sccache
+      CMAKE_CXX_COMPILER_LAUNCHER: sccache
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run: {shell: bash}
+    steps:
+      - uses: actions/checkout@v3.3.0
+        with:
+          lfs: 'true'
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.ARCTICDB_TEST_PAT }}
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          disable_annotations: 'true'  # suppress noisy report that pollutes the summary page
+
+      - name: Environment setup
+        shell: bash -l {0}
+        run: |
+          . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
+          echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
+          yum install -y awscli
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+      - name: Build C++ benchmarks binary
+        shell: bash -l {0}
+        run: |
+          cmake --preset linux-release -DTEST=ON cpp
+          cmake --build cpp/out/linux-release-build --target benchmarks
+          # Expose the absolute binary path so ASV can find it regardless of checkout location.
+          echo "ARCTICDB_CPP_BENCHMARKS_BINARY=$(pwd)/cpp/out/linux-release-build/arcticdb/benchmarks" >> $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+      # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          micromamba-version: 2.1.0-0
+
+      - name: Install libmambapy
+        shell: bash -el {0}
+        run: |
+          micromamba install -y -c conda-forge "libmambapy<2"
+
+      - name: Install deps
+        shell: bash -el {0}
+        run: |
+          git config --global --add safe.directory .
+          python -m pip install --upgrade pip
+          pip install asv virtualenv
+          python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+
+          # Make a separate venv to run our build_tooling/ scripts, else ASV's venv creation wastes time uninstalling from the "python" installation
+          python -m venv ./tooling_venv
+          # pytz and pandas<3 can go once latest ArcticDB release has these dependencies
+          ./tooling_venv/bin/pip install "ArcticDB[Testing]" "pytz" "pandas<3"
+
+      - name: Benchmark given commit
+        if: github.event_name != 'pull_request' || inputs.benchmark_all_tags == true
+        shell: bash -l {0}
+        run: |
+          git config --global --add safe.directory .
+          python -m asv run --show-stderr --durations all --bench "^cpp_microbenchmarks\." ${{ inputs.commit }}^!
+
+      - name: Benchmark against master
+        if: github.event_name == 'pull_request'
+        shell: bash -l {0}
+        run: |
+          # Look up the most recent master commit stored in our ASV database and compare against it.
+          ARCTICDB_REAL_S3_BUCKET=${ASV_RESULTS_BUCKET} ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent --arcticdb_library cpp_microbenchmarks_asv_results || exit 1
+          python -m asv run --show-stderr --durations all --bench "^cpp_microbenchmarks\." HEAD^! || exit 1
+          MASTER_HASH=$(cat master_commit_hash.txt)
+          python -m asv compare -s -f 1.15 "$MASTER_HASH" HEAD > results.txt || exit 1
+
+          # Get rid of the master results so we don't re-add them to the database.
+          rm python/.asv/results/**/"${MASTER_HASH}"*.json || exit 1
+
+          grep -q "Benchmarks that have got worse" results.txt
+          grep_exit_code=$?
+          any_worse=$(( ! grep_exit_code ))
+
+          cat results.txt
+          exit $any_worse
+
+      - name: Add results to ArcticDB database
+        if: always()
+        shell: bash -el {0}
+        run: |
+          ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save \
+            --arcticdb_library ${{ github.ref == 'refs/heads/master' && 'cpp_microbenchmarks_asv_results' || format('{0}_cpp_microbenchmarks_asv_results', github.ref_name) }}
+        env:
+          ARCTICDB_REAL_S3_BUCKET: ${{ env.ASV_RESULTS_BUCKET }}
+
+  stop-ec2-runner:
+    needs: [start_ec2_runner, benchmark_commit]
+    if: |
+      always()
+    uses: ./.github/workflows/ec2_runner_jobs.yml
+    secrets: inherit
+    with:
+      job_type: stop
+      label: ${{ needs.start_ec2_runner.outputs.label }}
+      ec2-instance-id: ${{ needs.start_ec2_runner.outputs.ec2-instance-id }}
