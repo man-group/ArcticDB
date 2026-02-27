@@ -429,8 +429,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(0, 5));
     ASSERT_EQ(*(*proc.row_ranges_)[1], RowRange(0, 5));
-    ASSERT_EQ(*(*proc.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc.col_ranges_)[1], ColRange(4, 6));
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
@@ -473,8 +473,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(5, 10));
     ASSERT_EQ(*(*proc.row_ranges_)[1], RowRange(5, 10));
-    ASSERT_EQ(*(*proc.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc.col_ranges_)[1], ColRange(4, 6));
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
@@ -518,8 +518,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(10, 14));
     ASSERT_EQ(*(*proc.row_ranges_)[1], RowRange(10, 14));
-    ASSERT_EQ(*(*proc.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc.col_ranges_)[1], ColRange(4, 6));
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
@@ -569,8 +569,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
     ASSERT_EQ(*(*proc_0.segments_)[1], expected_segments_0[1]);
     ASSERT_EQ(*(*proc_0.row_ranges_)[0], RowRange(0, 5));
     ASSERT_EQ(*(*proc_0.row_ranges_)[1], RowRange(0, 5));
-    ASSERT_EQ(*(*proc_0.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc_0.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc_0.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc_0.col_ranges_)[1], ColRange(4, 6));
 
     const std::vector<EntityId> result_entities_1 = clause.process(std::move(structured_entities[1]));
     auto proc_1 =
@@ -593,8 +593,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
     ASSERT_EQ(*(*proc_1.segments_)[1], expected_segments_1[1]);
     ASSERT_EQ(*(*proc_1.row_ranges_)[0], RowRange(10, 14));
     ASSERT_EQ(*(*proc_1.row_ranges_)[1], RowRange(10, 14));
-    ASSERT_EQ(*(*proc_1.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc_1.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc_1.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc_1.col_ranges_)[1], ColRange(4, 6));
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
@@ -644,8 +644,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
     ASSERT_EQ(*(*proc_0.segments_)[1], expected_segments_0[1]);
     ASSERT_EQ(*(*proc_0.row_ranges_)[0], RowRange(0, 5));
     ASSERT_EQ(*(*proc_0.row_ranges_)[1], RowRange(0, 5));
-    ASSERT_EQ(*(*proc_0.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc_0.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc_0.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc_0.col_ranges_)[1], ColRange(4, 6));
 
     const std::vector<EntityId> result_entities_1 = clause.process(std::move(structured_entities[1]));
     auto proc_1 =
@@ -668,8 +668,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
     ASSERT_EQ(*(*proc_1.segments_)[1], expected_segments_1[1]);
     ASSERT_EQ(*(*proc_1.row_ranges_)[0], RowRange(5, 10));
     ASSERT_EQ(*(*proc_1.row_ranges_)[1], RowRange(5, 10));
-    ASSERT_EQ(*(*proc_1.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc_1.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc_1.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc_1.col_ranges_)[1], ColRange(4, 6));
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
@@ -719,8 +719,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
     ASSERT_EQ(*(*proc_0.segments_)[1], expected_segments_0[1]);
     ASSERT_EQ(*(*proc_0.row_ranges_)[0], RowRange(5, 10));
     ASSERT_EQ(*(*proc_0.row_ranges_)[1], RowRange(5, 10));
-    ASSERT_EQ(*(*proc_0.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc_0.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc_0.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc_0.col_ranges_)[1], ColRange(4, 6));
 
     const std::vector<EntityId> result_entities_1 = clause.process(std::move(structured_entities[1]));
     auto proc_1 =
@@ -743,8 +743,8 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
     ASSERT_EQ(*(*proc_1.segments_)[1], expected_segments_1[1]);
     ASSERT_EQ(*(*proc_1.row_ranges_)[0], RowRange(10, 14));
     ASSERT_EQ(*(*proc_1.row_ranges_)[1], RowRange(10, 14));
-    ASSERT_EQ(*(*proc_1.col_ranges_)[0], RowRange(1, 4));
-    ASSERT_EQ(*(*proc_1.col_ranges_)[1], RowRange(4, 6));
+    ASSERT_EQ(*(*proc_1.col_ranges_)[0], ColRange(1, 4));
+    ASSERT_EQ(*(*proc_1.col_ranges_)[1], ColRange(4, 6));
 }
 
 TEST(IndexValueSpansMultipleSegments, SegmetStartsWithTheSameValueAsAnotherEnds) {
