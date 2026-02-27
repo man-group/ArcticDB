@@ -1228,6 +1228,790 @@
         "version": "3cd2c7d90725498da459157638eb15b5a3fcc68aa91684951717ed5ab1c8ca63",
         "warmup_time": 0
     },
+    "cpp_microbenchmarks.BM_arrow_convert_multiple_record_batches_to_segment.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_arrow_convert_multiple_record_batches_to_segment.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'10/100000/10/1'",
+                "'10000000/10/100/1'",
+                "'10000000/10/10000/1'",
+                "'1000/10/1000/1'",
+                "'10/100000/10/0'",
+                "'10000000/10/100/0'",
+                "'10000000/10/10000/0'",
+                "'1000/10/1000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_arrow_convert_single_record_batch_to_segment.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_arrow_convert_single_record_batch_to_segment.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'10/100000/-1/1'",
+                "'10/100000/0/1'",
+                "'10/100000/50000/1'",
+                "'10000000/10/-1/1'",
+                "'10000000/10/0/1'",
+                "'10000000/10/5/1'",
+                "'10/100000/-1/0'",
+                "'10/100000/0/0'",
+                "'10/100000/50000/0'",
+                "'10000000/10/-1/0'",
+                "'10000000/10/0/0'",
+                "'10000000/10/5/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_arrow_string_handler.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_arrow_string_handler.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'10000/1/0/0/0'",
+                "'100000/1/0/0/0'",
+                "'10000/10000/0/0/0'",
+                "'100000/100000/0/0/0'",
+                "'10000/1/5000/0/0'",
+                "'100000/1/50000/0/0'",
+                "'10000/1/10000/0/0'",
+                "'100000/1/100000/0/0'",
+                "'10000/1/0/1/0'",
+                "'100000/1/0/1/0'",
+                "'10000/10000/0/1/0'",
+                "'100000/100000/0/1/0'",
+                "'10000/1/5000/1/0'",
+                "'100000/1/50000/1/0'",
+                "'10000/1/10000/1/0'",
+                "'100000/1/100000/1/0'",
+                "'10000/1/0/2/0'",
+                "'100000/1/0/2/0'",
+                "'10000/10000/0/2/0'",
+                "'100000/100000/0/2/0'",
+                "'10000/1/5000/2/0'",
+                "'100000/1/50000/2/0'",
+                "'10000/1/10000/2/0'",
+                "'100000/1/100000/2/0'",
+                "'10000/1/0/0/1'",
+                "'100000/1/0/0/1'",
+                "'10000/10000/0/0/1'",
+                "'100000/100000/0/0/1'",
+                "'10000/1/0/1/1'",
+                "'100000/1/0/1/1'",
+                "'10000/10000/0/1/1'",
+                "'100000/100000/0/1/1'",
+                "'10000/1/0/2/1'",
+                "'100000/1/0/2/1'",
+                "'10000/10000/0/2/1'",
+                "'100000/100000/0/2/1'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_chunked_buffer_allocate_with_ensure.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_chunked_buffer_allocate_with_ensure.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/203/1/0'",
+                "'100000/203/0/0'",
+                "'100000/203/0/2'",
+                "'10000/2003/1/0'",
+                "'10000/2003/0/0'",
+                "'10000/2003/0/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_chunked_buffer_random_access.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_chunked_buffer_random_access.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/203/1/0'",
+                "'100000/203/0/0'",
+                "'100000/203/0/2'",
+                "'10000/2003/1/0'",
+                "'10000/2003/0/0'",
+                "'10000/2003/0/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_hash_grouping_int_int16_t_.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_hash_grouping_int_int16_t_.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/10/2'",
+                "'100000/10000/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_hash_grouping_int_int32_t_.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_hash_grouping_int_int32_t_.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/10/2'",
+                "'100000/100000/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_hash_grouping_int_int64_t_.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_hash_grouping_int_int64_t_.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/10/2'",
+                "'100000/100000/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_hash_grouping_int_int8_t_.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_hash_grouping_int_int8_t_.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/10/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_hash_grouping_string.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_hash_grouping_string.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/10/2/10'",
+                "'100000/100000/2/10'",
+                "'100000/10/2/100'",
+                "'100000/100000/2/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_iterate_with_iterator.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_iterate_with_iterator.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_iterate_with_scalar_at.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_iterate_with_scalar_at.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_merge_interleaved.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_merge_interleaved.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'10000/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_merge_ordered.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_merge_ordered.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'10000/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_packed_bits_to_buffer.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_packed_bits_to_buffer.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'",
+                "'1000000'",
+                "'10000000'",
+                "'100000000'",
+                "'1000000000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_regex_match.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_regex_match.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1000/1'",
+                "'100000/1000/0'",
+                "'100000/10000/1'",
+                "'100000/10000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_search_sorted_random.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_search_sorted_random.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_search_sorted_single_value.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_search_sorted_single_value.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_sort_ordered.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_sort_ordered.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_sort_shuffled.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_sort_shuffled.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100'",
+                "'1000000/1'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_sort_sparse.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_sort_sparse.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_bitset_bitset.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_bitset_bitset.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_bitset_bool.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_bitset_bool.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1/1'",
+                "'100000/1/0'",
+                "'100000/0/1'",
+                "'100000/0/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_bool_bool.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_bool_bool.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1/1'",
+                "'100000/1/0'",
+                "'100000/0/1'",
+                "'100000/0/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_dense_col_dense_col.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_dense_col_dense_col.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_dense_col_empty.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_dense_col_empty.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_dense_col_sparse_col.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_dense_col_sparse_col.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_dense_col_val.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_dense_col_val.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_sparse_col_empty.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_sparse_col_empty.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_sparse_col_sparse_col.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_sparse_col_sparse_col.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_sparse_col_val.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_sparse_col_val.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_val_empty.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_val_empty.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_numeric_val_val.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_numeric_val_val.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_dense_col_dense_col.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_dense_col_dense_col.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100000/1'",
+                "'100000/100000/0'",
+                "'100000/2/1'",
+                "'100000/2/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_dense_col_empty.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_dense_col_empty.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1/100000'",
+                "'100000/0/100000'",
+                "'100000/1/2'",
+                "'100000/0/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_dense_col_sparse_col.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_dense_col_sparse_col.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100000/1'",
+                "'100000/100000/0'",
+                "'100000/2/1'",
+                "'100000/2/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_dense_col_val.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_dense_col_val.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1/100000'",
+                "'100000/0/100000'",
+                "'100000/1/2'",
+                "'100000/0/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_sparse_col_empty.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_sparse_col_empty.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1/100000'",
+                "'100000/0/100000'",
+                "'100000/1/2'",
+                "'100000/0/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_sparse_col_sparse_col.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_sparse_col_sparse_col.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/100000/1'",
+                "'100000/100000/0'",
+                "'100000/2/1'",
+                "'100000/2/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_sparse_col_val.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_sparse_col_val.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1/100000'",
+                "'100000/0/100000'",
+                "'100000/1/2'",
+                "'100000/0/2'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_val_empty.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_val_empty.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000/1'",
+                "'100000/0'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
+    "cpp_microbenchmarks.BM_ternary_string_val_val.track_time_ms": {
+        "code": "class <locals>:\n    def track_time_ms(self, params):\n        if not CPP_BENCHMARKS_BINARY.exists():\n            raise FileNotFoundError(\n                f\"C++ benchmark binary not found: {CPP_BENCHMARKS_BINARY}\\n\"\n                f\"Build it with:\\n\"\n                f\"  cmake --preset linux-release -DTEST=ON cpp\\n\"\n                f\"  cmake --build cpp/out/linux-release-build --target benchmarks\\n\"\n                f\"or set ARCTICDB_CPP_BENCHMARKS_BINARY to the correct path.\"\n            )\n        full_name = f\"{func_name}/{params}\" if params is not None else func_name\n        return run_benchmark(full_name, func_name)",
+        "name": "cpp_microbenchmarks.BM_ternary_string_val_val.track_time_ms",
+        "param_names": [
+            "params"
+        ],
+        "params": [
+            [
+                "'100000'"
+            ]
+        ],
+        "timeout": 3600,
+        "type": "track",
+        "unit": "ms",
+        "version": "e8c576f1d487f7f7331a39fb79564e75f17ca0faf14620a4c2dd8c5fb841ff70"
+    },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
         "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",

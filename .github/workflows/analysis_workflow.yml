@@ -75,10 +75,32 @@ jobs:
       storage: ${{  github.ref_name == 'master' && 'ALL' || inputs.storage || 'LMDB'}}
       suite_overwrite: ${{ inputs.suite_overwrite || ''}}
 
-  publish_benchmark_results_to_gh_pages:  
+  benchmark_cpp_microbenchmarks:
+    needs: [get_commits_to_benchmark]
+    strategy:
+      fail-fast: false
+      matrix:
+        commits: ${{ fromJson(needs.get_commits_to_benchmark.outputs.matrix) }}
+    name: C++ Microbenchmarks ${{ matrix.commits }}
+    continue-on-error: true
+    uses: ./.github/workflows/benchmark_cpp_microbenchmarks.yml
+    secrets: inherit
+    with:
+      commit: ${{ matrix.commits }}
+      benchmark_all_tags: ${{ inputs.benchmark_all_tags || false }}
+      dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
+
+  publish_benchmark_results_to_gh_pages:
     name: Publish benchmark results to gh-pages
-    if: ${{ github.event_name == 'schedule' }} # only publish for the scheduled master builds
-    needs: [benchmark_commits]
+    # Run on schedule when Python benchmarks succeeded.
+    # always() bypasses the default "skip if any need failed" behaviour so that a
+    # C++ microbenchmark regression does not prevent publishing Python results.
+    if: |
+      always() &&
+      github.event_name == 'schedule' &&
+      !cancelled() &&
+      needs.benchmark_commits.result == 'success'
+    needs: [benchmark_commits, benchmark_cpp_microbenchmarks]
     runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below
@@ -96,7 +118,7 @@ jobs:
         run: |
           apt update
           apt install -y git
-          python -m pip install arcticdb[Testing] "protobuf<6"
+          python -m pip install arcticdb[Testing] asv "protobuf<6"
 
       - name: Setup softlink for SSL
         shell: bash -el {0}
@@ -217,7 +239,21 @@ jobs:
       - name: Build project for ASV
         run: |
           python -m pip install -ve .[Testing]
-          
+
+      - name: Build C++ benchmarks binary
+        # cpp_microbenchmarks.py discovers benchmark names by running the binary
+        # at import time. Without it, no C++ classes are registered and
+        # asv_checks.py would rewrite benchmarks.json without C++ entries,
+        # causing the hash-change check to fail on every PR that has C++ entries
+        # committed.
+        shell: bash -l {0}
+        run: |
+          cmake --preset linux-release -DTEST=ON cpp
+          cmake --build cpp/out/linux-release-build --target benchmarks
+          echo "ARCTICDB_CPP_BENCHMARKS_BINARY=$(pwd)/cpp/out/linux-release-build/arcticdb/benchmarks" >> $GITHUB_ENV
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
       - name: Run ASV Tests Check script
         run: |
           python python/utils/asv_checks.py
