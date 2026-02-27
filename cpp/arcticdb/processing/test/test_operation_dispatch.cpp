@@ -73,6 +73,55 @@ TEST(OperationDispatch, binary_operator) {
     EXPECT_THROW(visit_binary_operator(empty_column, value, PlusOperator{}), SchemaException);
     // val + empty col
     EXPECT_THROW(visit_binary_operator(value, empty_column, PlusOperator{}), SchemaException);
+
+    // int col % val
+    auto modulo_value = std::make_shared<Value>(static_cast<int64_t>(7), DataType::INT64);
+    auto variant_data = visit_binary_operator(int_column, modulo_value, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<ColumnWithStrings>(variant_data));
+    auto results_column = std::get<ColumnWithStrings>(variant_data).column_;
+    for (size_t idx = 0; idx < num_rows; idx++) {
+        ASSERT_EQ(static_cast<int64_t>(idx) % 7, results_column->scalar_at<int64_t>(idx));
+    }
+
+    auto one = std::make_shared<Value>(static_cast<int64_t>(1), DataType::INT64);
+    auto nonzero_column_variant = visit_binary_operator(int_column, one, PlusOperator{});
+    ASSERT_TRUE(std::holds_alternative<ColumnWithStrings>(nonzero_column_variant));
+    auto nonzero_column = std::get<ColumnWithStrings>(nonzero_column_variant);
+
+    // int col % int col (with non-zero divisor column)
+    auto variant_data_col_col = visit_binary_operator(int_column, nonzero_column, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<ColumnWithStrings>(variant_data_col_col));
+    auto results_column_col_col = std::get<ColumnWithStrings>(variant_data_col_col).column_;
+    for (size_t idx = 0; idx < num_rows; idx++) {
+        ASSERT_EQ(static_cast<int64_t>(idx), results_column_col_col->scalar_at<int64_t>(idx));
+    }
+
+    // val % int col.
+    auto variant_data_val_col = visit_binary_operator(modulo_value, nonzero_column, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<ColumnWithStrings>(variant_data_val_col));
+    auto results_column_val_col = std::get<ColumnWithStrings>(variant_data_val_col).column_;
+    for (size_t idx = 0; idx < num_rows; idx++) {
+        ASSERT_EQ(
+                static_cast<int64_t>(7) % static_cast<int64_t>(idx + 1),
+                results_column_val_col->scalar_at<int64_t>(idx)
+        );
+    }
+
+    // Match Python/Pandas behavior for negative floating-point values.
+    auto minus_three = std::make_shared<Value>(-3.0, DataType::FLOAT64);
+    auto plus_two = std::make_shared<Value>(2.0, DataType::FLOAT64);
+    auto variant_data_float = visit_binary_operator(minus_three, plus_two, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<Value>>(variant_data_float));
+    ASSERT_DOUBLE_EQ(std::get<std::shared_ptr<Value>>(variant_data_float)->get<double>(), 1.0);
+
+    auto minus_two = std::make_shared<Value>(-2.0, DataType::FLOAT64);
+    auto variant_data_float_neg_divisor = visit_binary_operator(minus_three, minus_two, ModOperator{});
+    ASSERT_TRUE(std::holds_alternative<std::shared_ptr<Value>>(variant_data_float_neg_divisor));
+    ASSERT_DOUBLE_EQ(std::get<std::shared_ptr<Value>>(variant_data_float_neg_divisor)->get<double>(), -1.0);
+
+    // Integral modulo by zero should fail with a user input error instead of UB.
+    auto zero = std::make_shared<Value>(static_cast<int64_t>(0), DataType::INT64);
+    EXPECT_THROW(visit_binary_operator(int_column, zero, ModOperator{}), UserInputException);
 }
 
 TEST(OperationDispatch, binary_comparator) {

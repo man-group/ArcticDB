@@ -10,6 +10,8 @@
 
 #include <unordered_set>
 #include <optional>
+#include <cmath>
+#include <limits>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
@@ -37,6 +39,7 @@ enum class OperationType : uint8_t {
     SUB,
     MUL,
     DIV,
+    MOD,
     // Comparison
     EQ,
     NE,
@@ -70,6 +73,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(SUB)
         TO_STR(MUL)
         TO_STR(DIV)
+        TO_STR(MOD)
         TO_STR(EQ)
         TO_STR(NE)
         TO_STR(LT)
@@ -353,6 +357,37 @@ struct DivideOperator {
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, DivideOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) / static_cast<V>(u);
+    }
+};
+
+struct ModOperator {
+    template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, ModOperator>::type>
+    V apply(T t, U u) {
+        if constexpr (std::is_floating_point_v<V>) {
+            const auto lhs = static_cast<V>(t);
+            const auto rhs = static_cast<V>(u);
+            if (rhs == V{0}) {
+                return std::numeric_limits<V>::quiet_NaN();
+            }
+            // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
+            auto result = std::fmod(lhs, rhs);
+            if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
+                result += rhs;
+            }
+            return result;
+        } else {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(u != U{0}, "Modulo by zero");
+            auto lhs = static_cast<V>(t);
+            auto rhs = static_cast<V>(u);
+            auto result = lhs % rhs;
+            if constexpr (std::is_signed_v<V>) {
+                // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
+                if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
+                    result += rhs;
+                }
+            }
+            return result;
+        }
     }
 };
 
@@ -712,6 +747,19 @@ struct formatter<arcticdb::DivideOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::DivideOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "/");
+    }
+};
+
+template<>
+struct formatter<arcticdb::ModOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::ModOperator, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "%");
     }
 };
 
