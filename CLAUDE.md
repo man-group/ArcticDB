@@ -221,7 +221,7 @@ asv run --python=$(which python) -v --show-stderr --bench "QueryBuilder|Resample
 
 Note: `--python=$(which python)` uses the active virtualenv directly, avoiding a full wheel build. Do **not** combine this with a commit range (`HEAD^!`) — they are mutually exclusive.
 
-**Available benchmark suites**: `BasicFunctions`, `Arrow`, `QueryBuilder`, `Resample`, `ModificationFunctions`, `ListSymbols`, `ListVersions`, `ListSnapshots`, `VersionChain`, `RecursiveNormalizer`, `FinalizeStagedData`.
+**Available benchmark suites**: `BasicFunctions`, `Arrow`, `QueryBuilder`, `Resample`, `ModificationFunctions`, `ListSymbols`, `ListVersions`, `Snapshots`, `VersionChain`, `RecursiveNormalizer`, `FinalizeStagedData`.
 
 By default only LMDB storage is tested. Set `ARCTICDB_STORAGE_AWS_S3=1` with appropriate credentials to include S3. Set `ARCTICDB_SLOW_TESTS=1` for additional slow benchmarks.
 
