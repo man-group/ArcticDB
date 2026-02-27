@@ -161,7 +161,7 @@ def test_symbol_list_delete(basic_store):
 def test_symbol_list_delete_incremental(basic_store):
     lib = basic_store
     lib.write("a", 1)
-    lib.write("a", 2, prune_previous=False)
+    lib.write("a", 2)
     lib.write("b", 1)
     lib.delete_version("a", 0)
     assert sorted(lib.list_symbols()) == ["a", "b"]
@@ -173,7 +173,7 @@ def test_symbol_list_delete_incremental(basic_store):
 def test_symbol_list_delete_multiple_versions(basic_store):
     lib = basic_store
     lib.write("a", 1)
-    lib.write("a", 2, prune_previous=False)
+    lib.write("a", 2)
     lib.write("b", 1)
     lib.delete_versions("a", [0, 1])
     assert lib.list_symbols() == ["b"]
@@ -185,8 +185,8 @@ def test_symbol_list_delete_multiple_versions_symbol_alive(basic_store, versions
     lib = basic_store
 
     lib.write("a", 1)
-    lib.write("a", 2, prune_previous=False)
-    lib.write("a", 3, prune_previous=False)
+    lib.write("a", 2)
+    lib.write("a", 3)
     lib.write("b", 1)
     lib.delete_versions("a", versions_to_delete)
     assert sorted(lib.list_symbols()) == ["a", "b"]
