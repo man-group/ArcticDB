@@ -71,6 +71,17 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
+      - name: Build C++ benchmarks
+        # cpp_microbenchmarks.py shells out to this binary for both discovery
+        # (at ASV import) and per-variant timing. No results JSON is produced
+        # here; the binary is invoked by ASV during `asv run` below.
+        shell: bash -l {0}
+        run: |
+          cmake --preset linux-release -DTEST=ON cpp
+          cmake --build cpp/out/linux-release-build --target benchmarks
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
       - name: Create test bucket
         shell: bash -el {0}
         run: |
