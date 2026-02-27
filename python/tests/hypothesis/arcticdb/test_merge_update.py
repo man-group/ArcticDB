@@ -75,7 +75,12 @@ def source_for_merge(
     else:
         source.index = pd.RangeIndex(len(source))
     source.index.name = "index"
-    return source[~source.reset_index().duplicated(subset=drop_duplicates_on, keep="first").values]
+    result = source[~source.reset_index().duplicated(subset=drop_duplicates_on, keep="first").values]
+    if index_type == DataframeStrategyIndexType.ROWRANGE:
+        result = result.copy()
+        result.index = pd.RangeIndex(len(result))
+        result.index.name = "index"
+    return result
 
 
 @st.composite

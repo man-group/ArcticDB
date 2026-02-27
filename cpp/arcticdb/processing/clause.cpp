@@ -79,9 +79,50 @@ position_t write_py_string_to_pool_or_throw(
     return std::get<position_t>(string_pool_entry);
 }
 
+/// @param rows_to_update If not nullptr will update only the rows whose bit is set to 1
 template<typename TDT>
 requires util::instantiation_of<TDT, TypeDescriptorTag>
-bool merge_update_string_column(
+void rebuild_sequence_column_in_new_pool(
+        Column& target_column, const StringPool& old_string_pool, StringPool& new_string_pool,
+        const util::BitSet* rows_to_update = nullptr
+) {
+    if (!rows_to_update) {
+        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
+            if (is_a_string(row.value())) {
+                const std::string_view string_value = old_string_pool.get_const_view(row.value());
+                const OffsetString& new_offset = new_string_pool.get(string_value);
+                row.value() = new_offset.offset();
+            }
+        });
+    } else {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                rows_to_update->size() == target_column.row_count(),
+                "Row bitmat must have the same length as the column"
+        );
+        ColumnData column_data = target_column.data();
+        auto target_column_accessor = random_accessor<TDT>(&column_data);
+        for (auto it = rows_to_update->first(); it != rows_to_update->end(); ++it) {
+            const unsigned int target_row_index = *it;
+            if (is_a_string(target_column_accessor[target_row_index])) {
+                const std::string_view string_value =
+                        old_string_pool.get_const_view(target_column_accessor[target_row_index]);
+                const OffsetString& new_offset = new_string_pool.get(string_value);
+                target_column_accessor[target_row_index] = new_offset.offset();
+            }
+        }
+    }
+}
+
+/// When merge update is performed on a string column the string pool is rebuild from scratch, thus we must iterate over
+/// all rows in the column. When the column is a part of a timeseries all target rows stored in rows_to_update will be
+/// ordered (i.e. sorted(flatten(rows_to_update)) = true). This means we can iterate over the target column row and
+/// at the same time forward iterate on the source rows. It's a nested loop but the complexity is O(n + m + k)
+/// where n is the total number of rows in the target, m are the rows in the source, and k are the total matches between
+/// source and target (i.e. sum(rows_to_update[i] for i in range(len(rows_to_update))))
+template<typename TDT>
+requires util::instantiation_of<TDT, TypeDescriptorTag>
+bool merge_update_string_column_timeseries(
         Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field,
         const RowRange& row_range, const StringPool& target_string_pool,
         const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
@@ -137,6 +178,92 @@ bool merge_update_string_column(
         });
     }
     return is_column_changed;
+}
+
+/// When merge update is performed on a string column the string pool is rebuild from scratch, thus we must iterate over
+/// all rows in the column. When the column is *not* part of a timeseries the rows in rows_to_update are in random
+/// order. To avoid having quadratic complexity (i.e. O(n * k) where n are the rows in the target and k are all matches
+/// i.e. sum(rows_to_update[i] for i in range(len(rows_to_update)))) we invert the loops and iterate over all
+/// rows_to_update perform the update and then add additional loop over all rows in target to rebuild the string pool.
+/// Asymptotically this will yield the same complexity as the timeseries case but practically is a bit slower.
+template<typename TDT>
+requires util::instantiation_of<TDT, TypeDescriptorTag>
+bool merge_update_string_column_rowrange(
+        Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field,
+        const RowRange& row_range, const StringPool& target_string_pool,
+        const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
+) {
+    bool is_column_changed = false;
+    if constexpr (is_fixed_string_type(TDT::data_type())) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Fixed string sequences are not supported for merge update"
+        );
+    } else if constexpr (is_dynamic_string_type(TDT::data_type())) {
+        // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
+        // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
+        // If such a string is encountered in a column, then the GIL will be held until that whole column has
+        // been processed, on the assumption that if a column has one such string it will probably have many.
+        std::optional<ScopedGILLock> gil_lock;
+        ColumnData target_column_data = target_column.data();
+        auto target_column_accessor = random_accessor<TDT>(&target_column_data);
+        util::BitSet changed_rows(target_column.row_count());
+        for (size_t source_row = 0; source_row < rows_to_update.size(); ++source_row) {
+            for (size_t target_row : rows_to_update[source_row]) {
+                const auto py_string_object = source_column_view[source_row];
+                target_column_accessor[target_row] = write_py_string_to_pool_or_throw<TDT>(
+                        py_string_object, target_row, row_range, gil_lock, new_string_pool, target_field.name()
+                );
+                is_column_changed = true;
+                changed_rows.set(target_row);
+            }
+        }
+        changed_rows.invert();
+        rebuild_sequence_column_in_new_pool<TDT>(target_column, target_string_pool, new_string_pool, &changed_rows);
+    }
+    return is_column_changed;
+}
+
+struct MergeUpdateStringColumnFlags {
+    /// The column is part of a timeseries dataframe
+    bool is_timeseries = false;
+    /// Only move the data to a new string pool.
+    bool repool = false;
+};
+
+template<typename TDT>
+requires util::instantiation_of<TDT, TypeDescriptorTag>
+bool merge_update_string_column(
+        Column& target_column, const MergeUpdateStringColumnFlags& flags,
+        const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field, const RowRange& row_range,
+        const StringPool& target_string_pool, const std::span<PyObject* const> source_column_view,
+        StringPool& new_string_pool
+) {
+    if (flags.repool) {
+        rebuild_sequence_column_in_new_pool<TDT>(target_column, target_string_pool, new_string_pool);
+        return false;
+    } else {
+        if (flags.is_timeseries) {
+            return merge_update_string_column_timeseries<TDT>(
+                    target_column,
+                    rows_to_update,
+                    target_field,
+                    row_range,
+                    target_string_pool,
+                    source_column_view,
+                    new_string_pool
+            );
+        } else {
+            return merge_update_string_column_rowrange<TDT>(
+                    target_column,
+                    rows_to_update,
+                    target_field,
+                    row_range,
+                    target_string_pool,
+                    source_column_view,
+                    new_string_pool
+            );
+        }
+    }
 }
 
 template<
@@ -2165,9 +2292,9 @@ bool MergeUpdateClause::update_and_insert(
         const int index_fields = source_descriptor.index().field_count();
         for (size_t column_index_in_slice = index_fields; column_index_in_slice < slice_size; ++column_index_in_slice) {
             const Field& target_field = target_segment.descriptor().field(column_index_in_slice);
-            visit_field(target_field, [&](auto tdt) {
-                using TDT = std::decay_t<decltype(tdt)>;
-                using RawType = TDT::DataTypeTag::raw_type;
+            details::visit_type(target_field.type().data_type(), [&]<typename DataTypeTag>(DataTypeTag) {
+                using RawType = DataTypeTag::raw_type;
+                using ScalarType = ScalarTagType<DataTypeTag>;
                 // All column slices start with the index. Subtract the index field count so that we don't count the
                 // index twice.
                 const size_t column_position_in_ts_descriptor =
@@ -2187,7 +2314,8 @@ bool MergeUpdateClause::update_and_insert(
                 );
                 Column& target_column = target_segment.column(column_index_in_slice);
                 const NativeTensor& source_tensor = source_tensors[column_position_in_source];
-                using SourceType = std::conditional_t<is_sequence_type(tdt.data_type()), PyObject* const, RawType>;
+                using SourceType =
+                        std::conditional_t<is_sequence_type(DataTypeTag::data_type), PyObject* const, RawType>;
                 const std::span source_data(
                         static_cast<const SourceType*>(source_tensor.data()) + source_row_start,
                         source_row_end - source_row_start
@@ -2198,39 +2326,33 @@ bool MergeUpdateClause::update_and_insert(
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
                 );
-                if constexpr (is_sequence_type(tdt.data_type())) {
+                if constexpr (is_sequence_type(DataTypeTag::data_type)) {
                     // String columns are always recreated from scratch regardless if an update or insert is
                     // happening. This is done because the string pool must be updated. With data read from disk,
                     // the map_ member of the pool is not populated. Which means that the mapping between a string
                     // and offset in the pool is missing. To get it, we need to rebuild the pool anyway.
                     segment_contains_string_column = true;
-                    if (on_.contains(target_field.name()) && is_update_only()) {
-                        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
-                            if (is_a_string(row.value())) {
-                                const std::string_view string_value =
-                                        target_segment.string_pool().get_const_view(row.value());
-                                const OffsetString& new_offset = new_string_pool.get(string_value);
-                                row.value() = new_offset.offset();
-                            }
-                        });
-                    } else {
-                        row_slice_changed |= merge_update_string_column<TDT>(
-                                target_column,
-                                rows_to_update,
-                                target_field,
-                                *row_ranges[segment_idx],
-                                target_segment.string_pool(),
-                                source_data,
-                                new_string_pool
-                        );
-                    }
+                    const MergeUpdateStringColumnFlags colum_update_flags{
+                            .is_timeseries = is_timeseries,
+                            .repool = on_.contains(target_field.name()) && is_update_only()
+                    };
+                    row_slice_changed |= merge_update_string_column<ScalarType>(
+                            target_column,
+                            colum_update_flags,
+                            rows_to_update,
+                            target_field,
+                            *row_ranges[segment_idx],
+                            target_segment.string_pool(),
+                            source_data,
+                            new_string_pool
+                    );
                 } else {
                     if (on_.contains(target_field.name()) && is_update_only()) {
                         return;
                     }
                     ColumnData target_column_data = target_column.data();
                     if (is_timeseries) {
-                        auto target_row_to_update_it = target_column_data.begin<TDT>();
+                        auto target_row_to_update_it = target_column_data.begin<ScalarType>();
                         size_t target_row_to_update_idx = 0;
                         for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
                             // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
@@ -2243,23 +2365,13 @@ bool MergeUpdateClause::update_and_insert(
                             }
                         }
                     } else {
-                        if constexpr (TDT::dimension() == Dimension::Dim0) {
-                            auto target = random_accessor<TDT>(&target_column_data);
-                            for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
-                                // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be
-                                // done
-                                row_slice_changed |= !rows_to_update[source_row_idx].empty();
-                                for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
-                                    target[target_row_idx] = source_data[source_row_idx];
-                                }
+                        auto target = random_accessor<ScalarType>(&target_column_data);
+                        for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
+                            // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
+                            row_slice_changed |= !rows_to_update[source_row_idx].empty();
+                            for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
+                                target[target_row_idx] = source_data[source_row_idx];
                             }
-                        } else {
-                            schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                                    "Target column {} has dimension {} but only dimension 0 is supported for merge "
-                                    "update",
-                                    target_field.name(),
-                                    TDT::dimension()
-                            );
                         }
                     }
                 }
