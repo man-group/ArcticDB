@@ -35,6 +35,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     VersionId oldest_loaded_undeleted_index = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp = std::numeric_limits<timestamp>::max();
     timestamp earliest_loaded_undeleted_timestamp = std::numeric_limits<timestamp>::max();
+    timestamp latest_loaded_timestamp = std::numeric_limits<timestamp>::min();
 
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
@@ -44,10 +45,11 @@ inline std::optional<AtomKey> read_segment_with_keys(
             entry.keys_.push_back(key);
             oldest_loaded_index = std::min(oldest_loaded_index, key.version_id());
             earliest_loaded_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+            latest_loaded_timestamp = std::max(latest_loaded_timestamp, key.creation_ts());
 
             if (!entry.is_tombstoned(key)) {
                 oldest_loaded_undeleted_index = std::min(oldest_loaded_undeleted_index, key.version_id());
-                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_undeleted_timestamp, key.creation_ts());
             }
 
         } else if (key.type() == KeyType::TOMBSTONE) {
@@ -74,6 +76,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
             std::min(load_progress.earliest_loaded_timestamp_, earliest_loaded_timestamp);
     load_progress.earliest_loaded_undeleted_timestamp_ =
             std::min(load_progress.earliest_loaded_undeleted_timestamp_, earliest_loaded_undeleted_timestamp);
+    load_progress.latest_loaded_timestamp_ = std::max(load_progress.latest_loaded_timestamp_, latest_loaded_timestamp);
     load_progress.is_earliest_version_loaded = !next.has_value();
     return next;
 }

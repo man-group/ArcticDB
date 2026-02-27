@@ -209,6 +209,7 @@ struct LoadProgress {
     VersionId oldest_loaded_undeleted_index_version_ = std::numeric_limits<VersionId>::max();
     timestamp earliest_loaded_timestamp_ = std::numeric_limits<timestamp>::max();
     timestamp earliest_loaded_undeleted_timestamp_ = std::numeric_limits<timestamp>::max();
+    timestamp latest_loaded_timestamp_ = std::numeric_limits<timestamp>::min();
     bool is_earliest_version_loaded{false};
 };
 
