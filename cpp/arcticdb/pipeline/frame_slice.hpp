@@ -342,3 +342,19 @@ struct formatter<arcticdb::pipelines::RangesAndKey> {
 };
 
 } // namespace fmt
+
+namespace std {
+template<>
+struct hash<arcticdb::pipelines::RowRange> {
+    inline arcticdb::HashedValue operator()(const arcticdb::pipelines::RowRange& row_range) const noexcept {
+        return folly::hash::hash_combine(row_range.first, row_range.second);
+    }
+};
+
+template<>
+struct hash<arcticdb::pipelines::ColRange> {
+    inline arcticdb::HashedValue operator()(const arcticdb::pipelines::ColRange& col_range) const noexcept {
+        return folly::hash::hash_combine(col_range.first, col_range.second);
+    }
+};
+} // namespace std

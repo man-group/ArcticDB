@@ -914,4 +914,38 @@ struct MergeUpdateClause {
     ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
             source_start_end_for_row_range_;
 };
+
+struct CompactDataClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    uint64_t rows_per_segment_;
+    uint64_t min_rows_per_segment_;
+    uint64_t max_rows_per_segment_;
+
+    explicit CompactDataClause(uint64_t rows_per_segment);
+    ARCTICDB_MOVE_COPY_DEFAULT(CompactDataClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    );
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const;
+
+    void set_processing_config(const ProcessingConfig&);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+
+    [[nodiscard]] std::string to_string() const;
+
+    // Public only for testing purposes
+    [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
+};
 } // namespace arcticdb
