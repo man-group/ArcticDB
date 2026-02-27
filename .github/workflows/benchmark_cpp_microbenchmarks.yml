@@ -17,7 +17,8 @@ jobs:
     needs: [start_ec2_runner]
     if: |
       always() &&
-      !cancelled()
+      !cancelled() &&
+      needs.start_ec2_runner.result == 'success'
     runs-on: ${{ needs.start_ec2_runner.outputs.label }}
     container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
     env:
@@ -53,7 +54,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
+          disable_annotations: 'true'  # suppress noisy report that pollutes the summary page
 
       - name: Environment setup
         shell: bash -l {0}
@@ -114,10 +115,11 @@ jobs:
           # Look up the most recent master commit stored in our ASV database and compare against it.
           ARCTICDB_REAL_S3_BUCKET=${ASV_RESULTS_BUCKET} ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode extract-recent --arcticdb_library cpp_microbenchmarks_asv_results || exit 1
           python -m asv run --show-stderr --durations all --bench "^cpp_microbenchmarks\." HEAD^! || exit 1
-          python -m asv compare -s -f 1.15 $(cat master_commit_hash.txt) HEAD > results.txt || exit 1
+          MASTER_HASH=$(cat master_commit_hash.txt)
+          python -m asv compare -s -f 1.15 "$MASTER_HASH" HEAD > results.txt || exit 1
 
           # Get rid of the master results so we don't re-add them to the database.
-          rm python/.asv/results/**/$(cat master_commit_hash.txt)*.json || exit 1
+          rm python/.asv/results/**/"${MASTER_HASH}"*.json || exit 1
 
           grep -q "Benchmarks that have got worse" results.txt
           grep_exit_code=$?

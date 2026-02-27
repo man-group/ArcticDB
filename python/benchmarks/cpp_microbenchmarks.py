@@ -154,7 +154,8 @@ def discover_benchmark_names() -> list[str]:
         text=True,
         timeout=60,
     )
-    result.check_returncode()
+    if result.returncode != 0:
+        return []
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 

@@ -188,7 +188,7 @@ jobs:
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
         with:
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
+          disable_annotations: 'true'  # suppress noisy report that pollutes the summary page
                   
       - name: Extra envs
         shell: bash -l {0}
