@@ -1763,10 +1763,8 @@ OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schema
 std::string ConcatClause::to_string() const { return "CONCAT"; }
 
 WriteClause::WriteClause(
-        const WriteOptions& write_options, const IndexPartialKey& index_partial_key,
-        std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+        const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
 ) :
-    write_options_(write_options),
     index_partial_key_(index_partial_key),
     dedup_map_(std::move(dedup_map)),
     store_(std::move(store)) {}
