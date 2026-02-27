@@ -324,6 +324,11 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, const VersionQuery& version_query
     );
 
+    VersionedItem compact_data_internal(
+            const StreamId& stream_id, std::optional<size_t> rows_per_segment, double tolerance,
+            bool prune_previous_versions
+    ) override;
+
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
     VersionedItem defragment_symbol_data(

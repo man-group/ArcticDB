@@ -1275,6 +1275,28 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
     return versioned_item;
 }
 
+VersionedItem LocalVersionedEngine::compact_data_internal(
+        const StreamId& stream_id, std::optional<size_t> rows_per_segment, double tolerance,
+        bool prune_previous_versions
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
+    py::gil_scoped_release release_gil;
+    UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
+            update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
+    );
+    rows_per_segment = rows_per_segment.value_or(get_write_options().segment_row_size);
+    auto versioned_item = compact_data_impl(
+            store(),
+            VersionedItem{*update_info.previous_index_key_},
+            IndexPartialKey{stream_id, update_info.next_version_id_},
+            *rows_per_segment,
+            tolerance
+    );
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
+    return versioned_item;
+}
+
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto options = get_write_options();

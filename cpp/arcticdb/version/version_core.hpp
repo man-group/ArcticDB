@@ -197,6 +197,11 @@ folly::Future<VersionedItem> merge_update_impl(
         std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
 );
 
+folly::Future<VersionedItem> compact_data_impl(
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
+        const IndexPartialKey& target_partial_index_key, size_t rows_per_segment, double tolerance
+);
+
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
         const ReadOptions& read_options

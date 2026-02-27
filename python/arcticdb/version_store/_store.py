@@ -3780,6 +3780,21 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
+    # TODO: Add option to change the metadata? Or always maintain it as-is?
+    # Either way the returned metadata field should be right
+    def compact_data(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+        tolerance: float = 0.5,
+        prune_previous_version: Optional[bool] = None,
+    ) -> VersionedItem:
+        cxx_versioned_item = self.version_store.compact_data(
+            symbol, rows_per_segment, tolerance, prune_previous_version
+        )
+        return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
+
+    # TODO: Mark these and Library methods as deprecated
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
