@@ -190,6 +190,7 @@ set(arcticdb_srcs
         arrow/arrow_handlers.hpp
         arrow/arrow_output_frame.hpp
         arrow/arrow_output_options.hpp
+        arrow/lazy_record_batch_iterator.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -254,6 +255,7 @@ set(arcticdb_srcs
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_stats.hpp
+        pipeline/filter_range.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -416,6 +418,7 @@ set(arcticdb_srcs
         util/type_traits.hpp
         util/variant.hpp
         version/de_dup_map.hpp
+        pipeline/lazy_read_helpers.hpp
         version/op_log.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
@@ -435,6 +438,7 @@ set(arcticdb_srcs
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_output_frame.cpp
+        arrow/lazy_record_batch_iterator.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -571,6 +575,7 @@ set(arcticdb_srcs
         util/format_date.cpp
         version/key_block.hpp
         version/key_block.cpp
+        pipeline/lazy_read_helpers.cpp
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
@@ -1007,6 +1012,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
+            arrow/test/test_lazy_record_batch_iterator.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -1092,6 +1098,7 @@ if(${TEST})
             util/test/input_frame_utils.hpp
             util/test/segment_generation_utils.hpp
             util/test/segment_generation_utils.cpp
+            pipeline/test/test_lazy_read_helpers.cpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
@@ -1198,6 +1205,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
+            arrow/test/benchmark_lazy_iterator.cpp
             column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp

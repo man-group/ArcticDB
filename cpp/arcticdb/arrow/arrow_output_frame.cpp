@@ -8,8 +8,6 @@
 
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 
-#include <vector>
-
 #include <sparrow/record_batch.hpp>
 
 namespace arcticdb {
@@ -25,6 +23,11 @@ size_t ArrowOutputFrame::num_blocks() const {
 }
 
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
+    util::check(
+            !data_consumed_, "Cannot extract record batches: data has already been consumed by extract_record_batches()"
+    );
+    data_consumed_ = true;
+
     std::vector<RecordBatchData> output;
     if (!data_) {
         return output;

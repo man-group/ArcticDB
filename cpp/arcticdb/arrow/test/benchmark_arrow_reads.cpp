@@ -11,8 +11,10 @@
 
 #include <arcticdb/arrow/test/arrow_test_utils.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
+#include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/stream/test/stream_test_common.hpp>
 
 using namespace arcticdb;
 
@@ -154,3 +156,77 @@ BENCHMARK(BM_arrow_string_handler)
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 2, 1})
         ->Args({100'000, 100'000, 0, 2, 1});
+
+namespace {
+
+// Create a numeric segment with DETACHABLE allocation (matching the real read pipeline).
+// num_blocks controls how many blocks per column (simulates multiple segments merged into one frame).
+// Args: total_rows, num_data_cols, num_blocks
+SegmentInMemory make_detachable_numeric_segment(size_t total_rows, size_t num_data_cols, size_t num_blocks) {
+    std::vector<FieldRef> fields;
+    fields.reserve(num_data_cols);
+    for (size_t c = 0; c < num_data_cols; ++c) {
+        fields.push_back(scalar_field(DataType::FLOAT64, fmt::format("col{}", c)));
+    }
+    auto desc = get_test_descriptor<stream::TimeseriesIndex>("bench", std::span(fields.data(), fields.size()));
+
+    // Allocate with DETACHABLE (like allocate_chunked_frame does for Arrow output)
+    SegmentInMemory seg(std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+
+    const size_t rows_per_block = total_rows / num_blocks;
+    const size_t total_cols = num_data_cols + 1; // +1 for index
+
+    for (size_t col_idx = 0; col_idx < total_cols; ++col_idx) {
+        auto& column = seg.column(static_cast<position_t>(col_idx));
+        for (size_t b = 0; b < num_blocks; ++b) {
+            size_t block_rows =
+                    (b == num_blocks - 1) ? (total_rows - rows_per_block * (num_blocks - 1)) : rows_per_block;
+            size_t bytes = block_rows * sizeof(double);
+            column.allocate_data(bytes);
+            // Fill with data
+            auto data = column.data().buffer().last_block()->data();
+            auto typed = reinterpret_cast<double*>(data);
+            for (size_t i = 0; i < block_rows; ++i) {
+                typed[i] = static_cast<double>(b * rows_per_block + i) + 0.5;
+            }
+            column.advance_data(bytes);
+        }
+        column.set_inflated(total_rows);
+    }
+    seg.set_row_data(total_rows - 1);
+    return seg;
+}
+
+} // anonymous namespace
+
+// Benchmark: segment_to_arrow_data — measures pure Arrow conversion cost (no I/O, no decode).
+// This isolates the sparrow type construction and zero-copy buffer transfer overhead.
+// Args: total_rows, num_data_cols, num_blocks
+static void BM_segment_to_arrow_data(benchmark::State& state) {
+    const auto total_rows = static_cast<size_t>(state.range(0));
+    const auto num_data_cols = static_cast<size_t>(state.range(1));
+    const auto num_blocks = static_cast<size_t>(state.range(2));
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto seg = make_detachable_numeric_segment(total_rows, num_data_cols, num_blocks);
+        state.ResumeTiming();
+        auto result = segment_to_arrow_data(seg);
+        benchmark::DoNotOptimize(result);
+    }
+
+    state.SetItemsProcessed(state.iterations() * static_cast<int64_t>(total_rows * num_data_cols));
+    state.SetBytesProcessed(state.iterations() * static_cast<int64_t>(total_rows * num_data_cols * sizeof(double)));
+}
+
+BENCHMARK(BM_segment_to_arrow_data)
+        // Small frame: 100K rows, 10 cols, single block
+        ->Args({100'000, 10, 1})
+        // 1M rows, 10 cols, single block (contiguous allocation)
+        ->Args({1'000'000, 10, 1})
+        // 1M rows, 10 cols, 10 blocks (simulates 10 merged segments — matches real eager path)
+        ->Args({1'000'000, 10, 10})
+        // Wide frame: 100K rows, 100 cols, 1 block
+        ->Args({100'000, 100, 1})
+        // Small segments: 10K rows, 10 cols, 1 block (typical lazy path per-segment)
+        ->Args({10'000, 10, 1});
