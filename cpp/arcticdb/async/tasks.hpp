@@ -459,12 +459,16 @@ struct DecodeSliceTask : BaseTask {
 
     pipelines::RangesAndKey ranges_and_key_;
     std::shared_ptr<std::unordered_set<std::string>> columns_to_decode_;
+    entity::AllocationType allocation_type_;
 
     explicit DecodeSliceTask(
-            pipelines::RangesAndKey&& ranges_and_key, std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
+            pipelines::RangesAndKey&& ranges_and_key,
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode,
+            entity::AllocationType allocation_type = entity::AllocationType::DYNAMIC
     ) :
         ranges_and_key_(std::move(ranges_and_key)),
-        columns_to_decode_(std::move(columns_to_decode)) {}
+        columns_to_decode_(std::move(columns_to_decode)),
+        allocation_type_(allocation_type) {}
 
     pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
         ARCTICDB_SAMPLE(DecodeSliceTask, 0)
