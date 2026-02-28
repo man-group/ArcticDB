@@ -9,7 +9,8 @@ from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge
+from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
@@ -476,6 +477,89 @@ def test_compat_date_range_old_updated_data(
             else:
                 result = curr.lib.read(sym, date_range=date_range, output_format=any_output_format).data
             assert_frame_equal_with_arrow(result, expected_df)
+
+
+@pytest.mark.parametrize(
+    "source_index, source_values",
+    [
+        pytest.param(
+            # Source matches rows across all segments including those with broken end_index
+            ["2025-01-02 00:02:00", "2025-01-03 00:04:00", "2025-01-05 22:00:00"],
+            [10, 11, 12],
+            id="update_across_all_segments",
+        ),
+        pytest.param(
+            # Source matches rows only in the two segments with broken end_index
+            ["2025-01-02 00:02:00", "2025-01-03 00:04:00"],
+            [10, 11],
+            id="update_only_broken_segments",
+        ),
+        pytest.param(
+            # Source matches the actual last timestamp of each segment. For segments with broken
+            # end_index the actual last value differs from what the key metadata indicates.
+            ["2025-01-02 00:02:00", "2025-01-03 00:04:00", "2025-01-05 23:00:00"],
+            [10, 11, 12],
+            id="update_last_row_of_each_segment",
+        ),
+        pytest.param(
+            # Source timestamps fall in the phantom range between actual segment data end and the
+            # broken end_index value. No actual data exists at these timestamps so nothing should match.
+            ["2025-01-02 12:00:00", "2025-01-03 12:00:00"],
+            [99, 99],
+            id="no_match_in_phantom_range",
+        ),
+        pytest.param(
+            # Source at exact broken end_index values (2025-01-03 00:00:00 and 2025-01-04 00:00:00).
+            # No actual data exists at these timestamps so nothing should match.
+            ["2025-01-03 00:00:00", "2025-01-04 00:00:00"],
+            [99, 99],
+            id="no_match_at_broken_end_index",
+        ),
+    ],
+)
+def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, source_index, source_values):
+    # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
+    # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
+    # instead contained the start of the date_range passed into the update call.
+    # We want to verify merge_experimental works correctly with such data.
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+    with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
+        sym = "sym"
+        df_0 = pd.DataFrame(
+            {"col": [0, 0]}, index=[pd.Timestamp("2025-01-02 00:02:00"), pd.Timestamp("2025-01-03 00:01:00")]
+        )
+        df_1 = pd.DataFrame(
+            {"col": [1, 1]}, index=[pd.Timestamp("2025-01-03 00:04:00"), pd.Timestamp("2025-01-04 00:01:00")]
+        )
+        df_2 = pd.DataFrame(
+            {"col": [2, 2]}, index=[pd.Timestamp("2025-01-05 22:00:00"), pd.Timestamp("2025-01-05 23:00:00")]
+        )
+        # Write to library using old version to produce broken end_index values
+        compat.old_lib.write(sym, df_0)
+        compat.old_lib.update(sym, df_1, '(pd.Timestamp("2025-01-03 00:00:00"), None)')
+        compat.old_lib.update(sym, df_2, '(pd.Timestamp("2025-01-04 00:00:00"), None)')
+
+        with compat.current_version() as curr:
+            # Verify the broken index state
+            index_df = curr.lib._nvs.read_index(sym)
+            assert len(index_df) == 3
+            assert index_df["end_index"].iloc[0] == pd.Timestamp("2025-01-03 00:00:00")
+            assert index_df["end_index"].iloc[1] == pd.Timestamp("2025-01-04 00:00:00")
+            assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
+
+            strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+            source = pd.DataFrame(
+                {"col": source_values},
+                index=pd.DatetimeIndex([pd.Timestamp(t) for t in source_index]),
+            )
+
+            target = curr.lib.read(sym).data
+            expected = merge(target, source, strategy)
+
+            curr.lib.merge_experimental(sym, source, strategy=strategy)
+
+            result = curr.lib.read(sym).data
+            assert_frame_equal(result, expected)
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):
