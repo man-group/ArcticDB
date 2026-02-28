@@ -79,100 +79,266 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
     return seg;
 }
 
-Column WriteToSegmentTask::slice_column(
-        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
-) const {
-    const auto& source_column = frame.column(col_idx);
-    const auto type_size = get_type_size(source_column.type().data_type());
-    const auto first_pos = (slice_.rows().first - offset) * type_size;
-    const auto bytes = ((slice_.rows().second - offset) * type_size) - first_pos;
+struct ArrowInputContiguousSlice {
+    // Both start_pos and size refer to logical pos and size in the respective blocks
+    // E.g if we have a 40 byte block consisting of 5 int64s and we care about the middle 3 values we would have
+    // start_pos = 1 and size = 3
+    size_t start_pos;
+    size_t size;
+    IMemBlock* block;
+    std::optional<ExternalPackedMemBlock*> bitmap_block;
+    std::optional<ExternalMemBlock*> strings_block;
+};
 
-    if (is_bool_type(source_column.type().data_type())) {
-        // Bool columns from arrow come as packed bitsets and are stored in `MemBlockType::EXTERNAL_PACKED` memory.
-        // We need special handling to unpack them because our internal representation is unpacked.
-        // We do the unpacking inside `WriteToSegmentTask` so the CPU intensive unpacking can happen in parallel.
-        Column res(
-                make_scalar_type(DataType::BOOL8),
-                slice_.rows().diff(),
-                AllocationType::PRESIZED,
-                Sparsity::NOT_PERMITTED
-        );
-        res.set_row_data(slice_.rows().diff() - 1);
-        auto dest_ptr = res.data().buffer().data();
+std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Column& col, size_t from, size_t to) {
+    auto slices = std::vector<ArrowInputContiguousSlice>();
+    const auto& buffer = col.data().buffer();
+    const auto type_size = get_type_size(col.type().data_type());
+    const auto from_byte = from * type_size;
+    const auto to_byte = to * type_size;
 
-        const auto& buffer = source_column.data().buffer();
-        auto [_, offset_in_block, block_index] = buffer.block_and_offset(first_pos);
-        auto pos_in_res = 0u;
-        while (pos_in_res < bytes) {
-            const auto block = buffer.blocks()[block_index++];
+    // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
+    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
+    // multiples of the type size
+    auto [_, offset_in_block, block_index] = buffer.block_and_offset(from_byte);
+    auto current_byte = from_byte;
+    while (current_byte < to_byte) {
+        const auto block_offset = buffer.block_offsets()[block_index];
+        const auto block = buffer.blocks()[block_index++];
+        auto num_bytes_in_block = std::min(block->logical_size() - offset_in_block, to_byte - current_byte);
+        auto slice = ArrowInputContiguousSlice{
+                offset_in_block / type_size, num_bytes_in_block / type_size, block, std::nullopt, std::nullopt
+        };
+        if (col.has_extra_buffer(block_offset, ExtraBufferType::BITMAP)) {
+            const auto& bitmap_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::BITMAP);
+            util::check(
+                    bitmap_buffer.num_blocks() == 1,
+                    "Expected exactly one bitmap block but got {}",
+                    bitmap_buffer.num_blocks()
+            );
+            auto block = bitmap_buffer.blocks()[0];
             util::check(
                     block->get_type() == MemBlockType::EXTERNAL_PACKED,
                     "Expected to see a packed external block but got: {}",
                     block->get_type()
             );
-            const auto packed_block = static_cast<ExternalPackedMemBlock*>(block);
-            auto num_bits = std::min(packed_block->logical_size() - offset_in_block, bytes - pos_in_res);
-            auto offset_in_bits = packed_block->shift() + offset_in_block;
-            packed_bits_to_buffer(packed_block->data(), num_bits, offset_in_bits, dest_ptr + pos_in_res);
-            offset_in_block = 0;
-            pos_in_res += num_bits;
+            slice.bitmap_block = static_cast<ExternalPackedMemBlock*>(block);
         }
-        return res;
+        if (col.has_extra_buffer(block_offset, ExtraBufferType::STRING)) {
+            const auto& strings_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::STRING);
+            util::check(
+                    strings_buffer.num_blocks() == 1,
+                    "Expected exactly one bitmap block but got {}",
+                    strings_buffer.num_blocks()
+            );
+            auto block = strings_buffer.blocks()[0];
+            util::check(
+                    block->get_type() == MemBlockType::EXTERNAL_WITH_EXTRA_BYTES,
+                    "Expected to see an external block but got: {}",
+                    block->get_type()
+            );
+            slice.strings_block = static_cast<ExternalMemBlock*>(block);
+        }
+        slices.emplace_back(std::move(slice));
+        current_byte += num_bytes_in_block;
+        offset_in_block = 0;
     }
-    // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
-    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
-    // multiples of the type size
-    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_pos, bytes);
-    if (is_sequence_type(source_column.type().data_type())) {
-        const auto& block_offsets = source_column.data().buffer().block_offsets();
-        auto first_block_offset = source_column.data().buffer().block_and_offset(first_pos).block_index_;
-        auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
-        Column res(
-                make_scalar_type(DataType::UTF_DYNAMIC64),
-                slice_.rows().diff(),
-                AllocationType::PRESIZED,
-                Sparsity::NOT_PERMITTED
-        );
-        res.set_row_data(slice_.rows().diff() - 1);
-        auto col_data = res.data();
-        // String columns use int64_t as the offsets
-        auto col_it = col_data.begin<ScalarTagType<DataTypeTag<DataType::INT64>>>();
-        details::visit_type(source_column.type().data_type(), [&](auto tag) {
-            using type_info = ScalarTypeInfo<decltype(tag)>;
-            using Rawtype = type_info::RawType;
-            // Already checked the data type above, this is just to reduce code generation
-            if constexpr (is_sequence_type(type_info::data_type)) {
-                for (const auto& offset_ptr_and_size : byte_blocks_at) {
-                    // The extra string buffer is always one block by construction, so use a raw pointer into it to
-                    // avoid block_and_offset calculations
-                    char* string_data = reinterpret_cast<char*>(
-                            source_column.get_extra_buffer(*block_offsets_it++, ExtraBufferType::STRING).data()
-                    );
-                    auto offset_ptr = reinterpret_cast<const Rawtype*>(offset_ptr_and_size.first);
-                    auto num_elements = offset_ptr_and_size.second / sizeof(Rawtype);
-                    for (size_t idx = 0; idx < num_elements; ++idx, ++offset_ptr) {
-                        auto strings_buffer_offset = *offset_ptr;
-                        // Note that in arrow_data_to_segment we store the last value from the offsets buffer as extra
-                        // bytes. So when idx == size - 1, (ptr + 1) is still within the ExternalMemBlock.
-                        auto string_length = *(offset_ptr + 1) - strings_buffer_offset;
-                        std::string_view str(&string_data[strings_buffer_offset], string_length);
-                        *col_it++ = string_pool.get(str).offset();
-                    }
+    return slices;
+}
+
+util::BitSet construct_sparse_map(const std::vector<ArrowInputContiguousSlice>& slices, size_t num_rows) {
+    // Construct sparse map by populating inverse bitset
+    // This way construction for fully dense columns is fast
+    util::BitSet dest_bitset;
+    util::BitSet::bulk_insert_iterator inserter(dest_bitset);
+    auto dest_pos = 0u;
+    for (const auto& slice : slices) {
+        if (slice.bitmap_block.has_value()) {
+            for (auto i = 0u; i < slice.size; ++i) {
+                auto pos_in_bitmap_block = slice.bitmap_block.value()->shift() + slice.start_pos + i;
+                auto is_set = get_bit_at(slice.bitmap_block.value()->data(), pos_in_bitmap_block);
+                if (!is_set) {
+                    inserter = dest_pos + i;
                 }
             }
-        });
-        return res;
-    } else { // Numeric types
-        ChunkedBuffer chunked_buffer;
-        if (byte_blocks_at.size() == 1) {
-            // All required bytes lie within a single block, so we can avoid a copy by adding an external block
-            chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
-        } else {
-            // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
-            chunked_buffer = truncate(source_column.data().buffer(), first_pos, first_pos + bytes);
         }
-        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        dest_pos += slice.size;
     }
+    inserter.flush();
+    dest_bitset.invert();
+    dest_bitset.resize(num_rows);
+    return dest_bitset;
+}
+
+template<typename DestTypeInfo>
+requires(!is_bool_type(DestTypeInfo::data_type) && !is_sequence_type(DestTypeInfo::data_type))
+void merge_arrow_slices_into_column(
+        const Column& source_column, const std::vector<ArrowInputContiguousSlice>& slices, Column& dest,
+        [[maybe_unused]] StringPool& string_pool
+) {
+    using DestType = typename DestTypeInfo::RawType;
+    const auto type_size = get_type_size(source_column.type().data_type());
+    auto dest_dense_ptr = reinterpret_cast<DestType*>(dest.data().buffer().data());
+    auto logical_pos = 0u;
+    for (const auto& slice : slices) {
+        if (slice.bitmap_block.has_value() && dest.is_sparse()) {
+            // We need to iterate over sparse only when the slice is sparse and destination is sparse
+            iterate_over_set_positions(
+                    dest.sparse_map(),
+                    logical_pos,
+                    logical_pos + slice.size,
+                    [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                        auto pos_in_block = (pos - logical_pos + slice.start_pos) * type_size;
+                        *dest_dense_ptr++ = *reinterpret_cast<DestType*>(slice.block->ptr(pos_in_block));
+                    }
+            );
+        } else {
+            // If slice is non sparse we can memcpy the entire slice
+            memcpy(dest_dense_ptr, slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
+            dest_dense_ptr += slice.size;
+        }
+        logical_pos += slice.size;
+    }
+}
+
+template<typename DestTypeInfo>
+requires(is_bool_type(DestTypeInfo::data_type))
+void merge_arrow_slices_into_column(
+        [[maybe_unused]] const Column& source_column, const std::vector<ArrowInputContiguousSlice>& slices,
+        Column& dest, [[maybe_unused]] StringPool& string_pool
+) {
+    using DestType = typename DestTypeInfo::RawType;
+    auto dest_dense_ptr = reinterpret_cast<DestType*>(dest.data().buffer().data());
+    // Bool columns from arrow come as packed bitsets and are stored in `MemBlockType::EXTERNAL_PACKED` memory.
+    // We need special handling to unpack them because our internal representation is unpacked.
+    // We do the unpacking inside `WriteToSegmentTask` so the CPU intensive unpacking can happen in parallel.
+    auto logical_pos = 0u;
+    for (const auto& slice : slices) {
+        util::check(
+                slice.block->get_type() == MemBlockType::EXTERNAL_PACKED,
+                "Expected to see a packed external block but got: {}",
+                slice.block->get_type()
+        );
+        const auto packed_block = static_cast<ExternalPackedMemBlock*>(slice.block);
+        if (slice.bitmap_block.has_value() && dest.is_sparse()) {
+            // We need to iterate over sparse only when the slice is sparse and destination is sparse
+            iterate_over_set_positions(
+                    dest.sparse_map(),
+                    logical_pos,
+                    logical_pos + slice.size,
+                    [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                        auto bit_in_block = (pos - logical_pos) + slice.start_pos + packed_block->shift();
+                        *dest_dense_ptr++ = get_bit_at(packed_block->data(), bit_in_block);
+                    }
+            );
+        } else {
+            // If slice is dense we can use the more efficient
+            packed_bits_to_buffer(
+                    packed_block->data(),
+                    slice.size,
+                    slice.start_pos + packed_block->shift(),
+                    reinterpret_cast<uint8_t*>(dest_dense_ptr)
+            );
+            dest_dense_ptr += slice.size;
+        }
+        logical_pos += slice.size;
+    }
+}
+
+template<typename DestTypeInfo>
+requires(is_sequence_type(DestTypeInfo::data_type))
+void merge_arrow_slices_into_column(
+        const Column& source_column, const std::vector<ArrowInputContiguousSlice>& slices, Column& dest,
+        StringPool& string_pool
+) {
+    using DestType = typename DestTypeInfo::RawType;
+    auto dest_dense_ptr = reinterpret_cast<DestType*>(dest.data().buffer().data());
+    details::visit_type(source_column.type().data_type(), [&](auto tag) {
+        using source_type_info = ScalarTypeInfo<decltype(tag)>;
+        using SourceType = typename source_type_info::RawType;
+        // Already checked the data type above, this is just to reduce code generation
+        if constexpr (is_sequence_type(source_type_info::data_type)) {
+            auto logical_pos = 0u;
+            for (const auto& slice : slices) {
+                util::check(
+                        slice.block->physical_bytes() == slice.block->logical_size() + sizeof(SourceType),
+                        "Expected offsets buffer to have one extra offset value but instead got physical: {}, "
+                        "logical: {}",
+                        slice.block->physical_bytes(),
+                        slice.block->logical_size()
+                );
+                auto offsets = reinterpret_cast<SourceType*>(slice.block->data());
+                util::check(slice.strings_block.has_value(), "Expected to have strings block in strings arrow column");
+                auto strings = reinterpret_cast<char*>(slice.strings_block.value()->data());
+                auto add_dense_string = [&] ARCTICDB_LAMBDA_INLINE(size_t pos) {
+                    auto pos_in_offsets = (pos - logical_pos) + slice.start_pos;
+                    auto strings_buffer_offset = offsets[pos_in_offsets];
+                    // offsets[pos_in_offsets + 1] is not out of bounds because that is an ExternalMemBlock with
+                    // extra bytes as asserted above.
+                    auto string_length = offsets[pos_in_offsets + 1] - strings_buffer_offset;
+                    std::string_view str(&strings[strings_buffer_offset], string_length);
+                    *dest_dense_ptr++ = string_pool.get(str).offset();
+                };
+                if (slice.bitmap_block.has_value() && dest.is_sparse()) {
+                    iterate_over_set_positions(
+                            dest.sparse_map(), logical_pos, logical_pos + slice.size, std::move(add_dense_string)
+                    );
+                } else {
+                    for (auto pos = logical_pos; pos < logical_pos + slice.size; ++pos) {
+                        add_dense_string(pos);
+                    }
+                }
+                logical_pos += slice.size;
+            }
+        }
+    });
+}
+
+Column WriteToSegmentTask::slice_column(
+        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
+) const {
+    const auto& source_column = frame.column(col_idx);
+    const auto type_size = get_type_size(source_column.type().data_type());
+    const auto begin_pos = (slice_.rows().first - offset);
+    const auto end_pos = (slice_.rows().second - offset);
+
+    auto contiguous_slices = arrow_contiguous_slices_in_range(source_column, begin_pos, end_pos);
+
+    auto dest_bitset = construct_sparse_map(contiguous_slices, slice_.rows().diff());
+    const auto num_set = dest_bitset.count();
+    const auto num_nulls = slice_.rows().diff() - num_set;
+
+    auto dest_column_type = source_column.type();
+    if (is_bool_type(source_column.type().data_type())) {
+        dest_column_type = make_scalar_type(DataType::BOOL8);
+    } else if (is_sequence_type(source_column.type().data_type())) {
+        dest_column_type = make_scalar_type(DataType::UTF_DYNAMIC64);
+    } else {
+        if (num_nulls == 0 && contiguous_slices.size() == 1) {
+            // Dense numeric column consisting of a single congtiguous slice of memory is the only
+            // case where we can zero copy construct the result column.
+            const auto& slice = contiguous_slices.front();
+            ChunkedBuffer chunked_buffer;
+            chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
+            return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        }
+    }
+    Column dest(
+            dest_column_type,
+            num_set,
+            AllocationType::PRESIZED,
+            num_nulls == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED
+    );
+    if (num_nulls > 0) {
+        dest.set_sparse_map(std::move(dest_bitset));
+    }
+    dest.set_row_data(slice_.rows().diff() - 1);
+
+    details::visit_type(dest.type().data_type(), [&](auto tag) {
+        using dest_type_info = ScalarTypeInfo<decltype(tag)>;
+        merge_arrow_slices_into_column<dest_type_info>(source_column, contiguous_slices, dest, string_pool);
+    });
+    return dest;
 }
 
 SegmentInMemory WriteToSegmentTask::slice_tensors() const {

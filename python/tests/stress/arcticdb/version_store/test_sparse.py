@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_frame_equal
 
 
 def get_dataframe_dense_till(total_size=100, dense_till=50):
@@ -54,3 +55,11 @@ def test_sparse_segmented(version_store_factory, sym):
 
     assert dd["float"][2] == df["float"][2]
     assert np.isnan(dd["float"][1])
+
+
+def test_sparse_all_nulls(sym, lmdb_version_store):
+    lib = lmdb_version_store
+    df = pd.DataFrame({"all_nulls": [np.nan, np.nan, np.nan]})
+    lib.write(sym, df, sparsify_floats=True)
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
