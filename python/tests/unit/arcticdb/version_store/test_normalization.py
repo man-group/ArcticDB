@@ -46,6 +46,7 @@ from arcticdb.version_store._normalization import (
     DataFrameNormalizer,
     NdArrayNormalizer,
     NPDDataFrame,
+    _accept_array_string,
 )
 from arcticdb.version_store._common import TimeFrame
 from arcticdb.util.test import (
@@ -376,6 +377,27 @@ def test_timestamp_without_tz():
 
     rt_dt = _from_tz_timestamp(ts, tz)
     assert rt_dt == dt
+
+
+def test_accept_array_string_with_numpy_types():
+    """Test that _accept_array_string correctly accepts numpy string types.
+
+    Regression test for https://github.com/man-group/ArcticDB/issues/2800
+    """
+    # Regular Python types should be accepted
+    assert _accept_array_string("hello") is True
+    assert _accept_array_string(b"hello") is True
+
+    # NumPy string types should also be accepted
+    assert _accept_array_string(np.str_("hello")) is True
+    assert _accept_array_string(np.bytes_(b"hello")) is True
+
+    # Non-string types should be rejected
+    assert _accept_array_string(123) is False
+    assert _accept_array_string(12.34) is False
+    assert _accept_array_string([1, 2, 3]) is False
+    assert _accept_array_string({"key": "value"}) is False
+    assert _accept_array_string(None) is False
 
 
 def test_column_with_mixed_types():
@@ -899,6 +921,42 @@ def test_arrays_throw_without_pickling(lmdb_version_store_v1):
 
     with pytest.raises(Exception):
         lib.write(sym, df)
+
+
+def test_numpy_str_type_normalization(lmdb_version_store, sym):
+    """Test that np.str_ types are correctly normalized.
+
+    Regression test for https://github.com/man-group/ArcticDB/issues/2800
+    """
+    lib = lmdb_version_store
+
+    # Test np.str_ values in DataFrame
+    df = pd.DataFrame({"col": [np.str_("hello"), np.str_("world")]})
+    lib.write(sym, df)
+    result = lib.read(sym).data
+    # np.str_ values should be read back as regular strings
+    assert result["col"][0] == "hello"
+    assert result["col"][1] == "world"
+
+    # Test mixed np.str_ and regular str values
+    df_mixed = pd.DataFrame({"col": [np.str_("numpy_str"), "regular_str"]})
+    lib.write(sym + "_mixed", df_mixed)
+    result_mixed = lib.read(sym + "_mixed").data
+    assert result_mixed["col"][0] == "numpy_str"
+    assert result_mixed["col"][1] == "regular_str"
+
+
+def test_numpy_bytes_type_normalization(lmdb_version_store, sym):
+    """Test that np.bytes_ types are correctly normalized."""
+    lib = lmdb_version_store
+
+    # Test np.bytes_ values in DataFrame
+    df = pd.DataFrame({"col": [np.bytes_(b"hello"), np.bytes_(b"world")]})
+    lib.write(sym, df)
+    result = lib.read(sym).data
+    # np.bytes_ values should be read back as regular bytes
+    assert result["col"][0] == b"hello"
+    assert result["col"][1] == b"world"
 
 
 def test_series_zero_name(lmdb_version_store, sym):
