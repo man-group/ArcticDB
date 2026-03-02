@@ -75,7 +75,8 @@ def _suppress_moto_server_stdio() -> None:
     if _is_truthy_env("ARCTICDB_MOTO_VERBOSE"):
         return
 
-    devnull = open(os.devnull, "w")
+    with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+        pass  # caller must restructure to wrap the werkzeug.run_simple call
     sys.stdout = devnull
     sys.stderr = devnull
 
@@ -88,6 +89,7 @@ class _QuietMotoRequestHandler(WSGIRequestHandler):
         return
 
     def log_error(self, format, *args):
+        super().log_error(format, *args)
         return
 
 
@@ -806,7 +808,10 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
 def run_s3_server(port, key_file, cert_file):
     _configure_moto_server_logging()
     _suppress_moto_server_stdio()
-    request_handler = None if _is_truthy_env("ARCTICDB_MOTO_VERBOSE") else _QuietMotoRequestHandler
+    verbose = _is_truthy_env("ARCTICDB_MOTO_VERBOSE")
+    _configure_moto_server_logging(verbose)
+    _suppress_moto_server_stdio(verbose)
+    request_handler = None if verbose else _QuietMotoRequestHandler
     werkzeug.run_simple(
         "0.0.0.0",
         port,
