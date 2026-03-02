@@ -106,40 +106,30 @@ TEST_ENCODING_V1 = getenv_strip("ARCTICDB_TEST_ENCODING_V1", "1") == "1"
 TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "1") == "1"
 
 
-def _log_table(title: str, rows):
-    if not rows:
-        return
-    key_width = max(len(k) for k, _ in rows)
-    logger.info(f"{title}:")
-    for key, value in rows:
-        logger.info(f"  {key:<{key_width}} | {value}")
-
-
 if not SHORTER_LOGS:
-    arcticdb_env_rows = sorted((name, value) for name, value in os.environ.items() if name.startswith("ARCTICDB_"))
-    storage_status_rows = [
-        ("RUNS_ON_GITHUB", RUNS_ON_GITHUB),
-        ("LOCAL_STORAGE_TESTS_ENABLED", LOCAL_STORAGE_TESTS_ENABLED),
-        ("STORAGE_LMDB", STORAGE_LMDB),
-        ("STORAGE_MEM", STORAGE_MEM),
-        ("STORAGE_S3 (SIMULATED)", STORAGE_SIM_S3),
-        ("STORAGE_GCP (SIMULATED)", STORAGE_SIM_GCP),
-        ("STORAGE_AZURITE", STORAGE_AZURITE),
-        ("STORAGE_NFS", STORAGE_NFS),
-        ("STORAGE_MONGO", STORAGE_MONGO),
-        ("PERSISTENT_STORAGE_TESTS_ENABLED", PERSISTENT_STORAGE_TESTS_ENABLED),
-        ("STORAGE_AWS_S3", STORAGE_AWS_S3),
-        ("STORAGE_GCP", STORAGE_GCP),
-        ("STORAGE_AZURE", STORAGE_AZURE),
-        ("Enc.V1", TEST_ENCODING_V1),
-        ("Enc.V2", TEST_ENCODING_V2),
-    ]
-
-    logger.info("-" * 80)
-    _log_table("ARCTICDB ENVIRONMENT VARIABLES", arcticdb_env_rows)
-    logger.info("-" * 80)
-    _log_table("STORAGE STATUS", storage_status_rows)
-    logger.info("-" * 80)
+    logger.info("-" * 120)
+    logger.info("  ARCTICDB ENVIRONMENT VARIABLES:")
+    for name, value in os.environ.items():
+        if name.startswith("ARCTICDB_"):
+            logger.info(f"{name}={value}")
+    logger.info("-" * 120)
+    logger.info("  STORAGE STATUS:")
+    logger.info(f"RUNS_ON_GITHUB                   ={RUNS_ON_GITHUB}")
+    logger.info(f"LOCAL_STORAGE_TESTS_ENABLED      ={LOCAL_STORAGE_TESTS_ENABLED}")
+    logger.info(f"STORAGE_LMDB                     ={STORAGE_LMDB}")
+    logger.info(f"STORAGE_MEM                      ={STORAGE_MEM}")
+    logger.info(f"STORAGE_S3  (SIMULATED)          ={STORAGE_SIM_S3}")
+    logger.info(f"STORAGE_GCP (SIMULATED)          ={STORAGE_SIM_GCP}")
+    logger.info(f"STORAGE_AZURITE                  ={STORAGE_AZURITE}")
+    logger.info(f"STORAGE_NFS                      ={STORAGE_NFS}")
+    logger.info(f"STORAGE_MONGO                    ={STORAGE_MONGO}")
+    logger.info(f"PERSISTENT_STORAGE_TESTS_ENABLED ={PERSISTENT_STORAGE_TESTS_ENABLED}")
+    logger.info(f"STORAGE_AWS_S3                   ={STORAGE_AWS_S3}")
+    logger.info(f"STORAGE_GCP                      ={STORAGE_GCP}")
+    logger.info(f"STORAGE_AZURE                    ={STORAGE_AZURE}")
+    logger.info(f"Enc.V1                           ={TEST_ENCODING_V1}")
+    logger.info(f"Enc.V2                           ={TEST_ENCODING_V2}")
+    logger.info("-" * 120)
 
 
 _MACOS_AZURE_TESTS_SKIP_REASON = (
