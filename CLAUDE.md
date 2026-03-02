@@ -175,10 +175,7 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ### Test-Driven Development
 
-**Every code change must be accompanied by a failing test that the change fixes.** This ensures:
-- The bug or missing feature is properly understood before fixing
-- The fix actually addresses the issue
-- Regressions are caught if the code is modified later
+**Every code change must be accompanied by a failing test that the change fixes.** 
 
 When fixing a bug or adding a feature:
 1. Write a test that demonstrates the bug or missing functionality
@@ -188,11 +185,7 @@ When fixing a bug or adding a feature:
 
 ### Git Workflow
 
-**Always confirm with the developer before committing and pushing changes upstream.** Do not assume that passing tests means the changes are ready for review. The developer may want to:
-- Review the implementation approach
-- Make additional changes or refinements
-- Squash or reorganize commits
-- Add to the commit message or PR description
+**Always confirm with the developer before committing and pushing changes upstream.** 
 
 Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
 
@@ -208,7 +201,6 @@ When working on a feature branch, maintain a work log in `docs/claude/plans/<bra
 ### Code Style
 
 Code style is enforced by `make lint` **Always run `make lint` after making code changes.**
-
 
 ### Git Commits
 
