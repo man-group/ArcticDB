@@ -6,25 +6,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
-## Claude-Maintained Documentation
+## Documentation
+
+### User-Facing Documentation (`docs/mkdocs/docs/`)
+
+**New features must include documentation:**
+
+- **Tutorials** (`tutorials/`): Step-by-step guides for features (e.g., `sql_queries.md`)
+- **API Reference** (`api/`): Auto-generated from docstrings via mkdocstrings
+- **Technical docs** (`technical/`): Architecture and implementation details
+
+When adding a new feature:
+
+1. **Add/update docstrings** in the Python code (NumPy format)
+2. **Create a tutorial** if the feature has multiple use cases or nuances
+3. **Update `mkdocs.yml`** nav section to include new pages
+4. **Build docs locally** to verify: `cd docs/mkdocs && mkdocs serve`
+
+Documentation checklist:
+- [ ] Public API has complete docstrings (Parameters, Returns, Raises, Examples)
+- [ ] Complex features have a tutorial with code examples
+- [ ] Edge cases and limitations are documented
+- [ ] When to use feature A vs feature B is explained (if applicable)
+
+### Claude-Maintained Technical Docs (`docs/claude/`)
 
 Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
-
-### When to Read/Update Documentation
 
 - **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
 - **Update** the doc only when making changes to that area
 - Do NOT proactively read or update docs for unrelated areas
 
-### Documentation Style
-
-Keep documentation **high-level and terse**:
-- Reference `file_path:ClassName:method_name` instead of copying code
-- Use tables and bullet points over code blocks
-- Keep conceptual diagrams; remove implementation details
-- Avoid duplicating what's already in source code
-
-### Documentation Index
+Keep documentation **high-level and terse**: reference `file_path:ClassName:method_name` instead of copying code; use tables and bullet points over code blocks; avoid duplicating what's already in source code.
 
 | Area | Document |
 |------|----------|
@@ -160,6 +173,33 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ## Key Development Guidelines
 
+### Test-Driven Development
+
+**Every code change must be accompanied by a failing test that the change fixes.** This ensures:
+- The bug or missing feature is properly understood before fixing
+- The fix actually addresses the issue
+- Regressions are caught if the code is modified later
+
+When fixing a bug or adding a feature:
+1. Write a test that demonstrates the bug or missing functionality
+2. Verify the test fails
+3. Implement the fix
+4. Verify the test passes
+
+### Git Workflow
+
+**Always confirm with the developer before committing and pushing changes upstream.** Do not assume that passing tests means the changes are ready for review. The developer may want to:
+- Review the implementation approach
+- Make additional changes or refinements
+- Squash or reorganize commits
+- Add to the commit message or PR description
+
+Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
+
+### Branch Work Logs
+
+When working on a feature branch, maintain a work log in `docs/claude/plans/<branch-name>/branch-work-log.md`. Update it at the end of each task with a few bullet points summarizing what was done. This provides continuity across sessions and helps with PR descriptions.
+
 ### Backwards Compatibility
 
 - Data written by newer clients should be readable by older clients - document breaking changes clearly
@@ -168,6 +208,7 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 ### Code Style
 
 Code style is enforced by `make lint` **Always run `make lint` after making code changes.**
+
 
 ### Git Commits
 

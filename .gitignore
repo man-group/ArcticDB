@@ -49,7 +49,7 @@ Makefile.local
 .DS_Store
 
 docs/mkdocs/site/
-docs/mkdocs/docs/notebooks/.ipynb_checkpoints/
+.ipynb_checkpoints/
 
 # Ignore automatically generated stub files (*.pyi)
 **/*.pyi
