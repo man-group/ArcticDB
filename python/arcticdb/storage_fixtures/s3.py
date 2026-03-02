@@ -30,6 +30,7 @@ from moto.server import DomainDispatcherApplication, create_backend_app
 
 from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
 from arcticdb.util.logger import get_logger
+from arcticdb.util.utils import strtobool
 
 from .api import *
 from .utils import (
@@ -55,10 +56,6 @@ _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be s
 
 logging.getLogger("botocore").setLevel(logging.INFO)
 logger = logging.getLogger("S3 Storage Fixture")
-
-
-def _is_truthy_env(var_name: str) -> bool:
-    return os.getenv(var_name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _configure_moto_server_logging(verbose: bool) -> None:
@@ -804,7 +801,7 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
 
 
 def run_s3_server(port, key_file, cert_file):
-    verbose = _is_truthy_env("ARCTICDB_MOTO_VERBOSE")
+    verbose = strtobool("ARCTICDB_MOTO_VERBOSE")
     _configure_moto_server_logging(verbose)
     _suppress_moto_server_stdio(verbose)
     request_handler = None if verbose else _QuietMotoRequestHandler
@@ -819,7 +816,7 @@ def run_s3_server(port, key_file, cert_file):
 
 
 def run_gcp_server(port, key_file, cert_file):
-    verbose = _is_truthy_env("ARCTICDB_MOTO_VERBOSE")
+    verbose = strtobool("ARCTICDB_MOTO_VERBOSE")
     _configure_moto_server_logging(verbose)
     _suppress_moto_server_stdio(verbose)
     request_handler = None if verbose else _QuietMotoRequestHandler
