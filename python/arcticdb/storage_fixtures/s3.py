@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import contextlib
 import logging
 import multiprocessing
 import json
@@ -62,9 +61,8 @@ def _is_truthy_env(var_name: str) -> bool:
     return os.getenv(var_name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _configure_moto_server_logging() -> None:
-    # Disabled by default to keep test output clean. Enable with ARCTICDB_MOTO_VERBOSE=1.
-    if _is_truthy_env("ARCTICDB_MOTO_VERBOSE"):
+def _configure_moto_server_logging(verbose: bool) -> None:
+    if verbose:
         return
 
     werkzeug_logger = logging.getLogger("werkzeug")
@@ -72,14 +70,13 @@ def _configure_moto_server_logging() -> None:
     werkzeug_logger.setLevel(logging.ERROR)
 
 
-def _suppress_moto_server_stdio() -> None:
-    if _is_truthy_env("ARCTICDB_MOTO_VERBOSE"):
+def _suppress_moto_server_stdio(verbose: bool) -> None:
+    if verbose:
         return
 
-    with open(os.devnull, "w") as devnull, contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
-        pass  # caller must restructure to wrap the werkzeug.run_simple call
-    sys.stdout = devnull
-    sys.stderr = devnull
+    with open(os.devnull, "w") as devnull:
+        os.dup2(devnull.fileno(), sys.stdout.fileno())
+        os.dup2(devnull.fileno(), sys.stderr.fileno())
 
 
 class _QuietMotoRequestHandler(WSGIRequestHandler):
@@ -807,8 +804,6 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
 
 
 def run_s3_server(port, key_file, cert_file):
-    _configure_moto_server_logging()
-    _suppress_moto_server_stdio()
     verbose = _is_truthy_env("ARCTICDB_MOTO_VERBOSE")
     _configure_moto_server_logging(verbose)
     _suppress_moto_server_stdio(verbose)
@@ -824,9 +819,10 @@ def run_s3_server(port, key_file, cert_file):
 
 
 def run_gcp_server(port, key_file, cert_file):
-    _configure_moto_server_logging()
-    _suppress_moto_server_stdio()
-    request_handler = None if _is_truthy_env("ARCTICDB_MOTO_VERBOSE") else _QuietMotoRequestHandler
+    verbose = _is_truthy_env("ARCTICDB_MOTO_VERBOSE")
+    _configure_moto_server_logging(verbose)
+    _suppress_moto_server_stdio(verbose)
+    request_handler = None if verbose else _QuietMotoRequestHandler
     werkzeug.run_simple(
         "0.0.0.0",
         port,
