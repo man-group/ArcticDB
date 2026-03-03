@@ -99,7 +99,7 @@ static FailureAction::FunctionWrapper maybe_execute(double probability, FailureA
             return;
         }
 
-        thread_local std::uniform_int_distribution<size_t> dist(0.0, 1.0);
+        thread_local std::uniform_real_distribution<double> dist(0.0, 1.0);
         thread_local std::mt19937 gen(std::random_device{}());
         double rnd = dist(gen);
         if (rnd < probability) {

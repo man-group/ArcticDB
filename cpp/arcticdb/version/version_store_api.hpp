@@ -18,6 +18,7 @@
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/arrow/lazy_record_batch_iterator.hpp>
 
 namespace arcticdb::version_store {
 
@@ -122,6 +123,23 @@ class PythonVersionStore : public LocalVersionedEngine {
     ReadResult read_dataframe_version(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::any& handler_data
+    );
+
+    // Creates a lazy record batch iterator that reads segments on-demand from storage.
+    // Only reads the index (segment metadata) upfront; actual segment data is fetched
+    // incrementally as next() is called, with a configurable prefetch buffer.
+    // Optional filter_clause provides a per-segment FilterClause (from SQL WHERE pushdown).
+    // Also returns version info and metadata (VersionedItem, norm_meta, user_meta).
+    struct LazyReadResult {
+        VersionedItem versioned_item;
+        arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta;
+        std::shared_ptr<LazyRecordBatchIterator> iterator;
+    };
+
+    LazyReadResult create_lazy_record_batch_iterator_with_metadata(
+            const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+            const ReadOptions& read_options, std::shared_ptr<FilterClause> filter_clause, size_t prefetch_size = 2
     );
 
     VersionedItem read_modify_write(

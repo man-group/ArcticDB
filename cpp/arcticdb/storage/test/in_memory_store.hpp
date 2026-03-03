@@ -42,10 +42,33 @@ class InMemoryStore : public Store {
 
     bool fast_delete() override { return false; }
 
-    std::vector<folly::Future<pipelines::SegmentAndSlice>>
-    batch_read_uncompressed(std::vector<pipelines::RangesAndKey>&&, std::shared_ptr<std::unordered_set<std::string>>)
-            override {
-        throw std::runtime_error("Not implemented for tests");
+    std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
+            std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode,
+            entity::AllocationType allocation_type = entity::AllocationType::DYNAMIC
+    ) override {
+        std::vector<folly::Future<pipelines::SegmentAndSlice>> output;
+        for (auto&& rk : ranges_and_keys) {
+            auto [_, segment] = read_sync(rk.key_, storage::ReadKeyOpts{});
+            if (columns_to_decode && !columns_to_decode->empty()) {
+                // Filter to requested columns only
+                SegmentInMemory filtered{segment.descriptor().clone(), segment.row_count(), allocation_type};
+                for (size_t col = 0; col < segment.num_columns(); ++col) {
+                    auto& field = segment.field(col);
+                    if (columns_to_decode->count(std::string(field.name()))) {
+                        filtered.add_column(field, segment.column_ptr(col));
+                    }
+                }
+                filtered.set_row_data(segment.row_count() - 1);
+                if (segment.has_string_pool()) {
+                    filtered.set_string_pool(segment.string_pool_ptr());
+                }
+                output.emplace_back(folly::makeFuture(pipelines::SegmentAndSlice(std::move(rk), std::move(filtered))));
+            } else {
+                output.emplace_back(folly::makeFuture(pipelines::SegmentAndSlice(std::move(rk), std::move(segment))));
+            }
+        }
+        return output;
     }
 
     std::vector<folly::Future<VariantKey>>

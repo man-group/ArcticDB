@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 from dataclasses import dataclass
 import datetime
+import logging
 import os
 import sys
 from warnings import warn
@@ -71,7 +72,12 @@ from arcticdb.options import (
 )
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticNativeException,
+    InternalException,
+    MissingKeysInStageResultsError,
+)
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -107,6 +113,9 @@ FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred",
 class MergeStrategy(NamedTuple):
     matched: Union[MergeAction, str] = MergeAction.UPDATE
     not_matched_by_target: Union[MergeAction, str] = MergeAction.INSERT
+
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_merge_action(action: Union[MergeAction, str]) -> MergeAction:
@@ -2161,15 +2170,13 @@ class NativeVersionStore:
 
         return read_queries
 
-    def _get_read_options_and_output_format(
-        self, **kwargs
-    ) -> Tuple[_PythonVersionStoreReadOptions, Union[OutputFormat, str]]:
+    def _get_read_options_and_output_format(self, **kwargs) -> Tuple[_PythonVersionStoreReadOptions, OutputFormat]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        output_format = self.resolve_runtime_defaults(
-            "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
+        output_format = OutputFormat.resolve(
+            self.resolve_runtime_defaults("output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs)
         )
         read_options.set_output_format(output_format_to_internal(output_format))
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
@@ -2437,6 +2444,88 @@ class NativeVersionStore:
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
+
+    def read_as_lazy_record_batch_iterator(
+        self,
+        symbol: str,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        query_builder: Optional["QueryBuilder"] = None,
+        prefetch_size: int = 2,
+        **kwargs,
+    ):
+        """
+        Read data and return a lazy streaming record batch iterator.
+
+        Only reads segment metadata upfront and fetches actual segment data
+        on-demand as next() is called, with a configurable prefetch buffer
+        for latency hiding.
+
+        Supports row-level truncation for date_range/row_range and per-segment
+        FilterClause application for WHERE pushdown from SQL queries.
+
+        This is used by Library.sql() and Library.duckdb() for memory-efficient
+        streaming of large datasets from remote storage backends.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name to read.
+        as_of : Optional[VersionQueryInput], default=None
+            Version to read.
+        date_range : Optional[DateRangeInput], default=None
+            Date range filter.
+        row_range : Optional[Tuple[int, int]], default=None
+            Row range filter.
+        columns : Optional[List[str]], default=None
+            Columns to read.
+        query_builder : Optional[QueryBuilder], default=None
+            Query builder with FilterClause for WHERE pushdown.
+        prefetch_size : int, default=2
+            Number of segments to prefetch ahead of the current position.
+            Higher values hide more storage latency but use more memory.
+
+        Returns
+        -------
+        tuple[LazyRecordBatchIterator, int]
+            Tuple of (C++ iterator that reads and yields Arrow record batches on-demand,
+            resolved version number).
+        """
+        # Force Arrow output format
+        kwargs["output_format"] = OutputFormat.PYARROW
+
+        # Build the read query WITHOUT query_builder so that _get_read_query doesn't
+        # prepend DateRangeClause/RowRangeClause into clauses_ (the lazy iterator
+        # handles date_range/row_range via row-level truncation, not clause processing).
+        version_query, read_options, read_query, _ = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=None,
+            **kwargs,
+        )
+
+        # Extract FilterClause from query_builder (if any) to pass directly to C++.
+        # SQL pushdown only produces FilterClause (from WHERE); other clause types
+        # (aggregation, groupby, etc.) are handled by DuckDB, not pushed into ArcticDB.
+        filter_clause = None
+        if query_builder is not None:
+            from arcticdb_ext.version_store import FilterClause as _FilterClause
+
+            for clause in query_builder.clauses:
+                if isinstance(clause, _FilterClause):
+                    filter_clause = clause
+                    break
+
+        versioned_item, _norm, _user_meta, iterator = (
+            self.version_store.create_lazy_record_batch_iterator_with_metadata(
+                symbol, version_query, read_query, read_options, filter_clause, prefetch_size
+            )
+        )
+        return iterator, versioned_item.version
 
     def _read_modify_write(
         self,
@@ -2754,7 +2843,7 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if output_format == OutputFormat.POLARS:
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
