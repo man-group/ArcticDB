@@ -481,7 +481,9 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 );
                 ChunkedBuffer bitmap_buffer;
                 // arrow_array_buffers[0] is the validity bitmap
-                bitmap_buffer.add_external_packed_block(arrow_array_buffers[0].data<uint8_t>(), array.size(), 0);
+                bitmap_buffer.add_external_packed_block(
+                        arrow_array_buffers[0].data<uint8_t>(), array.size(), array.offset()
+                );
                 column.set_extra_buffer(
                         start_row * get_type_size(data_type), ExtraBufferType::BITMAP, std::move(bitmap_buffer)
                 );
