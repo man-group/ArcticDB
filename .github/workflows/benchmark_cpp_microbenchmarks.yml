@@ -1,4 +1,6 @@
 name: __benchmark_cpp_microbenchmarks
+permissions:
+  contents: read
 on:
   workflow_call:
     inputs:
