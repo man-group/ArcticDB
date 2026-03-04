@@ -1032,8 +1032,12 @@ def test_sparse_write_different_types(lmdb_version_store_arrow, data, arrow_type
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
-def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+@pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5])
+@pytest.mark.parametrize("cols_per_slice", [1, 2, 3, 5])
+def test_sparse_write_multiple_columns_different_types(version_store_factory, rows_per_slice, cols_per_slice):
+    lib = version_store_factory(segment_row_size=rows_per_slice, column_group_size=cols_per_slice)
+    lib.set_output_format("pyarrow")
+    lib._set_allow_arrow_input()
     sym = "test_sparse_write_multiple_columns"
     table = pa.table(
         {
@@ -1175,10 +1179,6 @@ def test_sparse_write_view(lmdb_version_store_arrow, offset, length):
     view = table.slice(offset, length)
     lib.write(sym, view)
     received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
-    import polars as pl
-
-    print(pl.from_arrow(received))
-    print(pl.from_arrow(view))
     assert view.equals(received)
 
 
