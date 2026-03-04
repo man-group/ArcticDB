@@ -135,7 +135,7 @@ jobs:
         shell: bash -el {0}
         run: |
           ./tooling_venv/bin/python build_tooling/transform_asv_results.py --mode save \
-            --arcticdb_library ${{ github.ref == 'refs/heads/master' && 'cpp_microbenchmarks_asv_results' || format('{0}_cpp_microbenchmarks_asv_results', github.ref_name) }}
+            --arcticdb_library ${{ github.ref == 'refs/heads/master' && 'cpp_microbenchmarks_asv_results' || format('{0}_cpp_microbenchmarks_asv_results', replace(github.ref_name, '/', '_')) }}
         env:
           ARCTICDB_REAL_S3_BUCKET: ${{ env.ASV_RESULTS_BUCKET }}
 
