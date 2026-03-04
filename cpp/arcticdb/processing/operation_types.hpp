@@ -107,6 +107,7 @@ struct PlusOperator;
 struct MinusOperator;
 struct TimesOperator;
 struct DivideOperator;
+struct ModOperator;
 struct MembershipOperator;
 
 namespace arithmetic_promoted_type::details {
@@ -232,6 +233,41 @@ struct binary_operation_promoted_type {
                                                             // type, so both can be exactly represented
                                                             arithmetic_promoted_type::details::signed_width_t<
                                                                     2 * max_width>>>>>>>>;
+};
+
+template<class LHS, class RHS>
+struct binary_operation_promoted_type<LHS, RHS, ModOperator> {
+    static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
+    static constexpr bool lhs_signed_rhs_unsigned = std::is_signed_v<LHS> && std::is_unsigned_v<RHS>;
+    static constexpr bool lhs_unsigned_rhs_signed = std::is_unsigned_v<LHS> && std::is_signed_v<RHS>;
+    static constexpr bool signed_is_wider =
+            (lhs_signed_rhs_unsigned && sizeof(LHS) > sizeof(RHS)) ||
+            (lhs_unsigned_rhs_signed && sizeof(RHS) > sizeof(LHS));
+    static constexpr bool mixed_int64_uint64 =
+            (std::is_same_v<LHS, int64_t> && std::is_same_v<RHS, uint64_t>) ||
+            (std::is_same_v<LHS, uint64_t> && std::is_same_v<RHS, int64_t>);
+    using float_type = std::conditional_t<
+            std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
+            std::conditional_t<max_width == 8, double, float>,
+            double>;
+    using mixed_integral_type = std::conditional_t<
+            signed_is_wider,
+            arithmetic_promoted_type::details::signed_width_t<max_width>,
+            std::conditional_t<
+                    mixed_int64_uint64,
+                    double,
+                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>>>;
+    using integral_type = std::conditional_t<
+            std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
+            arithmetic_promoted_type::details::unsigned_width_t<max_width>,
+            std::conditional_t<
+                    std::is_signed_v<LHS> && std::is_signed_v<RHS>,
+                    arithmetic_promoted_type::details::signed_width_t<max_width>,
+                    mixed_integral_type>>;
+    using type = std::conditional_t<
+            std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
+            float_type,
+            integral_type>;
 };
 
 template<class LHS, class RHS>

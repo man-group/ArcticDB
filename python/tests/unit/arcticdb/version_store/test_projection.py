@@ -217,6 +217,8 @@ def test_projection_modulo_mixed_type_non_representable_values(lmdb_version_stor
             "u8_nonzero": np.array([10, 255, 1], dtype=np.uint8),
             "i64_large": np.array([300, 301, 302], dtype=np.int64),
             "f64_large": np.array([300.25, 301.25, 302.25], dtype=np.float64),
+            "u64_small": np.array([2, 3, 4], dtype=np.uint64),
+            "i64_negative": np.array([-1, -2, -3], dtype=np.int64),
         },
         index=np.arange(3),
     )
@@ -227,12 +229,16 @@ def test_projection_modulo_mixed_type_non_representable_values(lmdb_version_stor
     q = q.apply("i64_mod_u8", q["i64_large"] % q["u8_nonzero"])
     q = q.apply("u8_mod_f64", q["u8_nonzero"] % q["f64_large"])
     q = q.apply("f64_mod_u8", q["f64_large"] % q["u8_nonzero"])
+    q = q.apply("i64_neg_mod_u64", q["i64_negative"] % q["u64_small"])
+    q = q.apply("u64_mod_i64_neg", q["u64_small"] % q["i64_negative"])
 
     expected = df.copy()
     expected["u8_mod_i64"] = expected["u8_nonzero"] % expected["i64_large"]
     expected["i64_mod_u8"] = expected["i64_large"] % expected["u8_nonzero"]
     expected["u8_mod_f64"] = expected["u8_nonzero"] % expected["f64_large"]
     expected["f64_mod_u8"] = expected["f64_large"] % expected["u8_nonzero"]
+    expected["i64_neg_mod_u64"] = expected["i64_negative"] % expected["u64_small"]
+    expected["u64_mod_i64_neg"] = expected["u64_small"] % expected["i64_negative"]
 
     _assert_projection_matches(lib, symbol, q, expected)
 
