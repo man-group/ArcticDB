@@ -43,7 +43,10 @@ class InMemoryStore : public Store {
 
     bool fast_delete() override { return false; }
 
-    storage::OpenMode open_mode() const override { return storage::OpenMode::DELETE; }
+    storage::OpenMode open_mode() const override {
+        // Test store always has full permissions
+        return storage::OpenMode::DELETE;
+    }
 
     std::vector<folly::Future<pipelines::SegmentAndSlice>>
     batch_read_uncompressed(std::vector<pipelines::RangesAndKey>&&, std::shared_ptr<std::unordered_set<std::string>>)

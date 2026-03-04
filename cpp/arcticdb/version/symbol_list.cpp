@@ -50,10 +50,10 @@ bool is_new_style_key(const AtomKey& key) {
 }
 
 std::vector<SymbolListEntry> load_previous_from_version_keys(
-        const std::shared_ptr<Store>& store, SymbolListData& data, bool will_attempt_compact
+        const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
     std::vector<StreamId> stream_ids;
-    store->iterate_type(KeyType::VERSION_REF, [&data, &stream_ids, will_attempt_compact](const auto& key) {
+    store->iterate_type(KeyType::VERSION_REF, [&data, &stream_ids, will_attempt_compaction](const auto& key) {
         auto id = variant_key_id(key);
         stream_ids.push_back(id);
 
@@ -67,9 +67,7 @@ std::vector<SymbolListEntry> load_previous_from_version_keys(
                     "Note: write access to storage is required for compaction. "
                     "{}.\n"
                     "Note: This warning will only appear once.\n",
-                    will_attempt_compact ? "Compaction will be attempted within this call."
-                                         : "Compaction is disabled (library opened without write access or compaction "
-                                           "explicitly disabled)."
+                    will_attempt_compaction
             );
 
             data.warned_expected_slowdown_ = true;
@@ -94,13 +92,13 @@ std::vector<SymbolListEntry> load_previous_from_version_keys(
 }
 
 std::vector<AtomKey> get_all_symbol_list_keys(
-        const std::shared_ptr<StreamSource>& store, SymbolListData& data, bool will_attempt_compact
+        const std::shared_ptr<StreamSource>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
     std::vector<AtomKey> output;
     uint64_t uncompacted_keys_found = 0;
     store->iterate_type(
             KeyType::SYMBOL_LIST,
-            [&data, &output, &uncompacted_keys_found, will_attempt_compact](auto&& key) {
+            [&data, &output, &uncompacted_keys_found, will_attempt_compaction](auto&& key) {
                 auto atom_key = to_atom(std::forward<decltype(key)>(key));
                 if (atom_key.id() != compaction_id) {
                     uncompacted_keys_found++;
@@ -115,9 +113,7 @@ std::vector<AtomKey> get_all_symbol_list_keys(
                             "Note: write access to storage is required for compaction. "
                             "{}.\n"
                             "Note: This warning will only appear once.\n",
-                            will_attempt_compact ? "Compaction will be attempted within this call."
-                                                 : "Compaction is disabled (library opened without write access or "
-                                                   "compaction explicitly disabled)."
+                            will_attempt_compaction
                     );
 
                     data.warned_expected_slowdown_ = true;
@@ -505,20 +501,20 @@ CollectionType load_from_symbol_list_keys(
 
 CollectionType load_from_version_keys(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
-        const std::vector<AtomKey>& keys, SymbolListData& data, bool will_attempt_compact
+        const std::vector<AtomKey>& keys, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from version keys");
-    auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compact);
+    auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compaction);
     return merge_existing_with_journal_keys(version_map, store, keys, std::move(previous_entries));
 }
 
 LoadResult attempt_load(
         const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data,
-        bool will_attempt_compact
+        WillAttemptCompaction will_attempt_compaction
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Symbol list load attempt");
     LoadResult load_result;
-    load_result.symbol_list_keys_ = get_all_symbol_list_keys(store, data, will_attempt_compact);
+    load_result.symbol_list_keys_ = get_all_symbol_list_keys(store, data, will_attempt_compaction);
     load_result.maybe_previous_compaction = last_compaction(load_result.symbol_list_keys_);
 
     if (load_result.maybe_previous_compaction)
@@ -526,8 +522,9 @@ LoadResult attempt_load(
                 version_map, store, load_result.symbol_list_keys_, *load_result.maybe_previous_compaction
         );
     else {
-        load_result.symbols_ =
-                load_from_version_keys(version_map, store, load_result.symbol_list_keys_, data, will_attempt_compact);
+        load_result.symbols_ = load_from_version_keys(
+                version_map, store, load_result.symbol_list_keys_, data, will_attempt_compaction
+        );
         std::unordered_set<StreamId> keys_in_versions;
         for (const auto& entry : load_result.symbols_)
             keys_in_versions.emplace(entry.stream_id_);
@@ -820,7 +817,7 @@ bool has_recent_compaction(
 size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
     auto version_map = data_.version_map_;
     LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
-        return attempt_load(version_map, store, data_, true);
+        return attempt_load(version_map, store, data_, WillAttemptCompaction::YES);
     });
     auto num_symbol_list_keys = load_result.symbol_list_keys_.size();
 
@@ -835,12 +832,17 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
 }
 
 void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
-    if (!has_recent_compaction(store, load_result.maybe_previous_compaction)) {
+    if (has_recent_compaction(store, load_result.maybe_previous_compaction)) {
+        // legacy arcticc symbol list entries don't get correctly listed when doing `iterate_type`, so can mess
+        // up racing symbol list compaction detection.
+        ARCTICDB_RUNTIME_DEBUG(
+                log::symbol(),
+                "Symbol list compaction will be skipped: either a concurrent compaction was detected "
+                "or there are legacy arcticc symbol list entries that cannot be verified."
+        );
+    } else {
         auto written = write_symbols(store, load_result.symbols_, compaction_id, data_.type_holder_);
         delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written));
-    } else {
-        log::symbol().info("Symbol list compaction will be skipped: either a concurrent compaction was detected "
-                           "or there are legacy arcticc symbol list entries that cannot be verified.");
     }
 }
 
