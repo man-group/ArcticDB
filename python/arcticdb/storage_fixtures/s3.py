@@ -24,11 +24,13 @@ import requests
 from typing import Optional, Any, Type
 
 import werkzeug
+from werkzeug.serving import WSGIRequestHandler
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
 from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
 from arcticdb.util.logger import get_logger
+from arcticdb.util.utils import strtobool
 
 from .api import *
 from .utils import (
@@ -54,6 +56,36 @@ _PermissionCapableFactory: Type["MotoS3StorageFixtureFactory"] = None  # To be s
 
 logging.getLogger("botocore").setLevel(logging.INFO)
 logger = logging.getLogger("S3 Storage Fixture")
+
+
+def _configure_moto_server_logging(verbose: bool) -> None:
+    if verbose:
+        return
+
+    werkzeug_logger = logging.getLogger("werkzeug")
+    werkzeug_logger.propagate = False
+    werkzeug_logger.setLevel(logging.ERROR)
+
+
+def _suppress_moto_server_stdio(verbose: bool) -> None:
+    if verbose:
+        return
+
+    with open(os.devnull, "w") as devnull:
+        os.dup2(devnull.fileno(), sys.stdout.fileno())
+        os.dup2(devnull.fileno(), sys.stderr.fileno())
+
+
+class _QuietMotoRequestHandler(WSGIRequestHandler):
+    def log(self, type, message, *args):
+        return
+
+    def log_request(self, code="-", size="-"):
+        return
+
+    def log_error(self, format, *args):
+        super().log_error(format, *args)
+        return
 
 
 class Key:
@@ -769,22 +801,32 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
 
 
 def run_s3_server(port, key_file, cert_file):
+    verbose = strtobool("ARCTICDB_MOTO_VERBOSE")
+    _configure_moto_server_logging(verbose)
+    _suppress_moto_server_stdio(verbose)
+    request_handler = None if verbose else _QuietMotoRequestHandler
     werkzeug.run_simple(
         "0.0.0.0",
         port,
         HostDispatcherApplication(create_backend_app),
         threaded=True,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
+        request_handler=request_handler,
     )
 
 
 def run_gcp_server(port, key_file, cert_file):
+    verbose = strtobool("ARCTICDB_MOTO_VERBOSE")
+    _configure_moto_server_logging(verbose)
+    _suppress_moto_server_stdio(verbose)
+    request_handler = None if verbose else _QuietMotoRequestHandler
     werkzeug.run_simple(
         "0.0.0.0",
         port,
         GcpHostDispatcherApplication(create_backend_app),
         threaded=True,
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
+        request_handler=request_handler,
     )
 
 
