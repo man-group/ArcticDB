@@ -29,6 +29,8 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 
+#include <boost/regex.hpp>
+
 #include <ranges>
 
 namespace {
@@ -134,6 +136,40 @@ void merge_update_string_column(
             }
         });
     }
+}
+
+size_t find_column_for_match(std::string_view column_name, const StreamDescriptor& descriptor) {
+    static const boost::regex pattern(R"(__col_(\w+)__(\d+))");
+    const std::optional<std::string_view> index_name =
+            descriptor.index().field_count() ? std::optional(descriptor.field(0).name()) : std::nullopt;
+    for (size_t i = descriptor.field_count() - 1; i >= descriptor.index().field_count(); --i) {
+        const std::string_view field_name = descriptor.field(i).name();
+        if (field_name == column_name) {
+            return i;
+        } else {
+            boost::cmatch match;
+            if (boost::regex_match(field_name.begin(), field_name.end(), match, pattern) &&
+                std::string_view(match[1].first, match[1].length()) == column_name) {
+                if (index_name && *index_name == column_name) {
+                    // Fields are iterated in reverse order, the suffix indicating the repetition count will go down
+                    // if the column is repeated twice (in the index and one more place) this will pass, otherwise if
+                    // the column is repeated 3 or more times it'll throw.
+                    if (std::stoi(match[2]) == 0) {
+                        return i;
+                    }
+                }
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        "Column name \"{}\" is repeated multiple times in the dataframe. This makes its use in "
+                        "matching for merge ambiguous for the stream descriptor: {}",
+                        column_name,
+                        descriptor
+                );
+            }
+        }
+    }
+    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            "Trying to match on column \"{}\" that does not exist in descriptor {}", column_name, descriptor
+    );
 }
 } // namespace
 
@@ -790,8 +826,8 @@ std::string ResampleClause<closed_boundary>::rule() const {
 
 template<ResampleBoundary closed_boundary>
 void ResampleClause<closed_boundary>::set_date_range(timestamp date_range_start, timestamp date_range_end) {
-    // Start and end need to read the first and last segments of the date range. At the moment buckets are set up before
-    // reading and processing the data.
+    // Start and end need to read the first and last segments of the date range. At the moment buckets are set up
+    // before reading and processing the data.
     constexpr static std::array unsupported_origin{"start", "end", "start_day", "end_day"};
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             util::variant_match(
@@ -993,14 +1029,14 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
             EntityFetchCount>(*component_manager_, std::move(entity_ids));
     ARCTICDB_RUNTIME_DEBUG(log::memory(), "ResampleClause: processing entities {}", entity_ids);
     auto row_slices = split_by_row_slice(std::move(proc));
-    // If the entity fetch counts for the entities in the first row slice are 2, the first bucket overlapping this row
-    // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
-    // should do it
+    // If the entity fetch counts for the entities in the first row slice are 2, the first bucket overlapping this
+    // row slice is being computed by the call to process dealing with the row slices above these. Otherwise, this
+    // call should do it
     const auto& front_slice = row_slices.front();
     const bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
-    // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to
-    // process is responsible for calculating All segments in a given row slice contain the same index column, so just
-    // grab info from the first one
+    // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call
+    // to process is responsible for calculating All segments in a given row slice contain the same index column, so
+    // just grab info from the first one
     const auto& index_column_name = front_slice.segments_->at(0)->field(0).name();
     const auto& first_row_slice_index_col = front_slice.segments_->at(0)->column(0);
     // Resampling only makes sense for timestamp indexes
@@ -1009,9 +1045,9 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
             "Cannot resample data with index column of non-timestamp type"
     );
     const auto first_ts = first_row_slice_index_col.template scalar_at<timestamp>(0).value();
-    // If there is only one row slice, then the last index value of interest is just the last index value for this row
-    // slice. If there is more than one, then the first index value from the second row slice must be used to calculate
-    // the buckets of interest, due to an old bug in update. See
+    // If there is only one row slice, then the last index value of interest is just the last index value for this
+    // row slice. If there is more than one, then the first index value from the second row slice must be used to
+    // calculate the buckets of interest, due to an old bug in update. See
     // test_compatibility.py::test_compat_resample_updated_data for details
     const auto last_ts =
             row_slices.size() == 1
@@ -1028,8 +1064,8 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
     }
     const auto output_index_column = generate_output_index_column(input_index_columns, bucket_boundaries);
-    // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets here
-    // if necessary
+    // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets
+    // here if necessary
     bucket_boundaries.front(
     ) = std::max(bucket_boundaries.front(), date_range_->first - (closed_boundary == ResampleBoundary::RIGHT ? 1 : 0));
     bucket_boundaries.back(
@@ -1128,8 +1164,8 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_bucket_boundari
         ++last_it;
     }
     std::vector<timestamp> bucket_boundaries(first_it, last_it);
-    // There used to be a check here that there was at least one bucket to process. However, this is not always the case
-    // for data written by old versions of Arctic using update. See
+    // There used to be a check here that there was at least one bucket to process. However, this is not always the
+    // case for data written by old versions of Arctic using update. See
     // test_compatibility.py::test_compat_resample_updated_data for more explanation
     return bucket_boundaries;
 }
@@ -1657,7 +1693,8 @@ std::vector<EntityId> DateRangeClause::process(std::vector<EntityId>&& entity_id
             *component_manager_, std::move(entity_ids)
     );
     std::vector<EntityId> output;
-    // We are only interested in the index, which is in every SegmentInMemory in proc.segments_, so just use the first
+    // We are only interested in the index, which is in every SegmentInMemory in proc.segments_, so just use the
+    // first
     auto row_range = proc.row_ranges_->at(0);
     auto start_index = std::get<timestamp>(stream::TimeseriesIndex::start_value_for_segment(*proc.segments_->at(0)));
     auto end_index = std::get<timestamp>(stream::TimeseriesIndex::end_value_for_segment(*proc.segments_->at(0)));
@@ -1698,8 +1735,8 @@ ConcatClause::ConcatClause(JoinType join_type) {
 std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols it
-    // is slightly different
+    // Similar logic to RowRangeClause::structure_for_processing but as input row ranges come from multiple symbols
+    // it is slightly different
     std::vector<RangesAndEntity> ranges_and_entities;
     std::vector<std::shared_ptr<RowRange>> new_row_ranges;
     bool first_range{true};
@@ -1916,9 +1953,9 @@ std::vector<std::vector<EntityId>> MergeUpdateClause::structure_for_processing(s
 }
 
 /// Decide which rows of should be updated and which rows from source should be inserted.
-/// 1. If there's a timestamp index  use MergeUpdateClause::filter_index_match this will produce a vector of size equal
-/// to the number of rows from the source that fall into the processed slice. Each vector will contain a vector of
-/// row-indexes in target that match the corresponding source index value.
+/// 1. If there's a timestamp index  use MergeUpdateClause::filter_index_match this will produce a vector of size
+/// equal to the number of rows from the source that fall into the processed slice. Each vector will contain a
+/// vector of row-indexes in target that match the corresponding source index value.
 /// 2. For each column in MergeUpdateClause::on_ iterate over the vector of vectors produced in the previous step.
 /// Checking for match only the target rows that are in the inner vector. If there is no match for this particular
 /// column remove the target row index.
@@ -1933,7 +1970,8 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             std::shared_ptr<RowRange>,
             std::shared_ptr<ColRange>,
             std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
-    // TODO: Add exception handling two source rows matching the same target row. This should be done in the function
+    // TODO: Add exception handling two source rows matching the same target row. This should be done in the
+    // function
     //  handling the "on" parameter matching multiple columns. Monday 10655943156
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
@@ -1992,12 +2030,13 @@ void MergeUpdateClause::update_and_insert(
                 // index twice.
                 const size_t column_position_in_ts_descriptor =
                         col_ranges[segment_idx]->start() + column_index_in_slice - index_fields;
-                // For pandas input the index NativeTensor is stored separately from the field NativeTensors. Subtract
-                // the index fields to get the correct position in the source descriptor
+                // For pandas input the index NativeTensor is stored separately from the field NativeTensors.
+                // Subtract the index fields to get the correct position in the source descriptor
                 const size_t column_position_in_source = column_position_in_ts_descriptor - index_fields;
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         util::is_cstyle_array<RawType>(source_tensors[column_position_in_source]),
-                        "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type {} of "
+                        "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type "
+                        "{} of "
                         "size {} bytes but the stride is {} bytes",
                         target_field.name(),
                         target_field.type(),
@@ -2018,10 +2057,10 @@ void MergeUpdateClause::update_and_insert(
                         !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
                 );
                 if constexpr (is_sequence_type(tdt.data_type())) {
-                    // String columns are always recreated from scratch regardless if an update or insert is happening.
-                    // This is done because the string pool must be updated. With data read from disk, the map_ member
-                    // of the pool is not populated. Which means that the mapping between a string and offset in the
-                    // pool is missing. To get it, we need to rebuild the pool anyway.
+                    // String columns are always recreated from scratch regardless if an update or insert is
+                    // happening. This is done because the string pool must be updated. With data read from disk,
+                    // the map_ member of the pool is not populated. Which means that the mapping between a string
+                    // and offset in the pool is missing. To get it, we need to rebuild the pool anyway.
                     segment_contains_string_column = true;
                     if (on_.contains(target_field.name()) && is_update_only()) {
                         arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
@@ -2113,7 +2152,9 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
             matched_rows[source_row - source_row_start].push_back(target_row);
             ++target_row;
         }
-        source_row++;
+        while (++source_row < source_row_end && source_index[source_row] == source_ts) {
+            matched_rows[source_row - source_row_start] = matched_rows[source_row - 1];
+        }
     }
     return matched_rows;
 }
@@ -2134,11 +2175,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
     // been processed, on the assumption that if a column has one such string it will probably have many.
     std::optional<ScopedGILLock> scoped_gil_lock;
     for (std::string_view column_name : on_) {
-        const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                source_field_position.has_value(), "Column {} does not exist in source", column_name
-        );
-        const Field& field = source_descriptor.field(*source_field_position);
+        const size_t source_field_position = find_column_for_match(column_name, source_descriptor);
+        const Field& field = source_descriptor.field(source_field_position);
         visit_field(field, [&](auto source_tdt) {
             using SourceTDT = decltype(source_tdt);
             using SourceType = std::conditional_t<
@@ -2146,27 +2184,22 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                     PyObject* const*,
                     const typename SourceTDT::DataTypeTag::raw_type*>;
             const size_t column_position_in_source_tensors =
-                    *source_field_position - source_descriptor.index().field_count();
+                    source_field_position - source_descriptor.index().field_count();
             std::span source_data(
                     static_cast<SourceType>(source_tensors[column_position_in_source_tensors].data()) +
                             source_row_start,
                     source_row_end - source_row_start
             );
-            // TODO: Dynamic schema will require the following lookup in target instead of using the index in source
-            //  descriptor: const std::optional<size_t> target_field_position = target_descriptor.find_field(column);
-            const std::optional<size_t> target_field_position = source_field_position;
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    target_field_position.has_value(), "Column {} does not exist in target", column_name
-            );
+            const size_t target_field_position = find_column_for_match(column_name, target_descriptor);
             const auto target_column_slice =
                     ranges::find_if(col_ranges, [&](const std::shared_ptr<ColRange>& col_range) {
-                        return col_range->contains(*target_field_position);
+                        return col_range->contains(target_field_position);
                     });
             const size_t position_in_slice =
-                    *target_field_position - (*target_column_slice)->first + target_descriptor.index().field_count();
+                    target_field_position - (*target_column_slice)->first + target_descriptor.index().field_count();
             const SegmentInMemory& target_segment = *target_segments[target_column_slice - col_ranges.begin()];
             ColumnData target_data = target_segment.column(position_in_slice).data();
-            const Field& target_field = target_descriptor.field(*target_field_position);
+            const Field& target_field = target_descriptor.field(target_field_position);
             visit_field(target_field, [&](auto target_tdt) {
                 using TargetTDT = decltype(target_tdt);
                 using TargetRawType = TargetTDT::DataTypeTag::raw_type;
@@ -2184,11 +2217,9 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                                 } else if (!is_a_string(target_value)) {
                                     return true;
                                 } else {
-                                    std::variant<convert::StringEncodingError, convert::PyStringWrapper>
-                                            wrapper_or_error =
-                                                    create_py_object_wrapper_or_error<target_tdt.data_type()>(
-                                                            py_string_object, scoped_gil_lock
-                                                    );
+                                    auto wrapper_or_error = create_py_object_wrapper_or_error<target_tdt.data_type()>(
+                                            py_string_object, scoped_gil_lock
+                                    );
                                     if (auto* err = std::get_if<convert::StringEncodingError>(&wrapper_or_error); err) {
                                         err->row_index_in_slice_ = row_ranges[0]->start() + source_row_idx;
                                         err->raise(column_name, row_ranges[0]->start());

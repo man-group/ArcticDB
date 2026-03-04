@@ -1335,13 +1335,13 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     assert isinstance(target.index, pd.DatetimeIndex), "Only datetime index is implemented"
 
     if on is None or on == []:
-        result = target.copy()
+        result = target.copy(deep=True)
         common_idx = result.index.intersection(source.index)
         result.loc[common_idx] = source.loc[common_idx]
         return result
 
-    result = target.copy()
-    source_copy = source.copy()
+    result = target.copy(deep=True)
+    source_copy = source.copy(deep=True)
 
     update_columns = [col for col in result.columns if col not in on]
 
