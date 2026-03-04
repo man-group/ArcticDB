@@ -93,7 +93,6 @@ template<DataType dt>
 std::variant<convert::StringEncodingError, convert::PyStringWrapper> create_py_object_wrapper_or_error(
         PyObject* py_string_object, std::optional<ScopedGILLock>& scoped_gil_lock
 ) {
-    std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
     if constexpr (is_utf_type(slice_value_type(dt))) {
         return convert::py_unicode_to_buffer(py_string_object, scoped_gil_lock);
     } else {
