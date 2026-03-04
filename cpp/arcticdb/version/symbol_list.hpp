@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/version/version_map.hpp>
+#include <arcticdb/storage/open_mode.hpp>
 #include <folly/futures/Future.h>
 #include <set>
 #include <util/storage_lock.hpp>
@@ -125,7 +126,8 @@ ProblematicResult is_problematic(
 ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
 
 LoadResult attempt_load(
-        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data,
+        bool will_attempt_compact
 );
 
 class SymbolList {
@@ -139,26 +141,25 @@ class SymbolList {
 
     template<StreamIdSet R>
     R load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction) {
-        LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
-            return attempt_load(version_map, store, data_);
-        });
+        const bool will_attempt_compact = !no_compaction && store->open_mode() >= storage::OpenMode::WRITE;
+        LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go(
+                [this, &version_map, &store, will_attempt_compact]() {
+                    return attempt_load(version_map, store, data_, will_attempt_compact);
+                }
+        );
 
-        if (!no_compaction && needs_compaction(load_result)) {
+        if (will_attempt_compact && needs_compaction(load_result)) {
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
             try {
                 if (StorageLock lock{StringId{CompactionLockName}}; lock.try_lock(store)) {
                     OnExit x([&lock, &store] { lock.unlock(store); });
 
-                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Checking whether we still need to compact under lock");
+                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Running compaction under lock");
                     compact_internal(store, load_result);
                 } else {
-                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Not compacting the symbol list due to lock contention");
+                    log::symbol().info("Symbol list compaction will be skipped: failed to acquire the compaction lock, "
+                                       "indicating another process is currently compacting.");
                 }
-            } catch (const storage::LibraryPermissionException& ex) {
-                // Note: this only reflects AN's permission check and is not thrown by the Storage
-                ARCTICDB_RUNTIME_DEBUG(
-                        log::symbol(), "Not compacting the symbol list due to lack of permission", ex.what()
-                );
             } catch (const std::exception& ex) {
                 log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
             }

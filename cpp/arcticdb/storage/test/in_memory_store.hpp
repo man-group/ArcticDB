@@ -10,6 +10,7 @@
 
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
@@ -41,6 +42,8 @@ class InMemoryStore : public Store {
     bool supports_atomic_writes() const override { return true; }
 
     bool fast_delete() override { return false; }
+
+    storage::OpenMode open_mode() const override { return storage::OpenMode::DELETE; }
 
     std::vector<folly::Future<pipelines::SegmentAndSlice>>
     batch_read_uncompressed(std::vector<pipelines::RangesAndKey>&&, std::shared_ptr<std::unordered_set<std::string>>)
