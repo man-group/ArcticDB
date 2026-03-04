@@ -348,7 +348,7 @@ class TestMergeTimeseriesUpdate:
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame(
             {"a": [10, 20], "b": [10.0, 20.0]},
-            index=pd.DatetimeIndex(["2024-01-01", "2024-01-02"]),
+            index=pd.DatetimeIndex(["2024-01-01", "2024-01-05"]),
         )
         generic_merge_test(lib, "sym", target, source, self.strategy, on=[])
 
@@ -641,7 +641,14 @@ class TestMergeTimeseriesUpdate:
             {"a": ["a", np.nan, None, None, np.nan], "b": [10, 20, 30, 40, 50]},
             index=pd.date_range("2024-01-01", periods=5),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        expected = pd.DataFrame(
+            {"a": ["a", np.nan, None, np.nan, None], "b": [10, 20, 30, 40, 50]},
+            index=pd.date_range("2024-01-01", periods=5),
+        )
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+        assert_frame_equal(expected, merge(target, source, self.strategy))
+        assert_frame_equal(expected, lib.read("sym").data)
 
     def test_match_on_float_nan(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
@@ -660,6 +667,23 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame({"a": [1], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
 
+    def test_on_column_one_source_row_matches_multiple_target_rows_across_segments(self, lmdb_library):
+        lib = lmdb_library
+        target = [
+            pd.DataFrame(
+                {"a": [1, 1, 2], "b": [10.0, 20.0, 30.0]},
+                index=pd.DatetimeIndex(
+                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+                ),
+            ),
+            pd.DataFrame(
+                {"a": [2, 3], "b": [40.0, 50.0]},
+                index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]),
+            ),
+        ]
+        source = pd.DataFrame({"a": [2], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+
     def test_on_nonexistent_column_raises(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2))
@@ -667,6 +691,55 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
         with pytest.raises(UserInputException):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["nonexistent"])
+
+    def test_on_with_repeated_index_values(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 5.0], "c": ["a", "b", "c", "d", "e"]},
+            index=pd.DatetimeIndex(
+                [pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]
+            ),
+        )
+        source = pd.DataFrame(
+            {"a": [2, 100, 4], "b": [100.0, 101.0, 102.0], "c": ["B", "c", "d"]},
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+
+    def test_on_columns_with_repeated_name(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            [[1, 2], [3, 4]],
+            columns=["my_duplicated_column", "my_duplicated_column"],
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
+        )
+        source = pd.DataFrame(
+            [[1, 2], [3, 4]],
+            columns=["my_duplicated_column", "my_duplicated_column"],
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException) as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+            assert '"my_duplicated_column"' in str(exc_info.value)
+            assert "multiple" in str(exc_info.value)
+
+    @pytest.mark.parametrize("index_name", (None, "index"))
+    def test_on_column_is_named_as_the_index(self, lmdb_library, index_name):
+        lib = lmdb_library
+        repeated_column = "index" if index_name is None else index_name
+        target = pd.DataFrame(
+            {repeated_column: [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        source = pd.DataFrame(
+            {repeated_column: [1, 20, 3], "b": [10.0, 20.0, 30.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        if index_name is not None:
+            target.index.name = index_name
+            source.index.name = index_name
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=[repeated_column])
 
 
 class TestMergeTimeseriesInsert:
