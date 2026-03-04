@@ -1,4 +1,6 @@
 name: Build with analysis tools
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
