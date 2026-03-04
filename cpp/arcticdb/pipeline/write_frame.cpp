@@ -105,9 +105,13 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
     while (current_byte < to_byte) {
         const auto block_offset = buffer.block_offsets()[block_index];
         const auto block = buffer.blocks()[block_index++];
-        auto num_bytes_in_block = std::min(block->logical_size() - offset_in_block, to_byte - current_byte);
+        auto num_bytes_in_arrow_slice = std::min(block->logical_size() - offset_in_block, to_byte - current_byte);
         auto slice = ArrowInputContiguousSlice{
-                offset_in_block / type_size, num_bytes_in_block / type_size, block, std::nullopt, std::nullopt
+                .start_pos = offset_in_block / type_size,
+                .size = num_bytes_in_arrow_slice / type_size,
+                .block = block,
+                .bitmap_block = std::nullopt,
+                .strings_block = std::nullopt
         };
         if (col.has_extra_buffer(block_offset, ExtraBufferType::BITMAP)) {
             const auto& bitmap_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::BITMAP);
@@ -116,31 +120,31 @@ std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Co
                     "Expected exactly one bitmap block but got {}",
                     bitmap_buffer.num_blocks()
             );
-            auto block = bitmap_buffer.blocks()[0];
+            const auto bitmap_block = bitmap_buffer.blocks()[0];
             util::check(
-                    block->get_type() == MemBlockType::EXTERNAL_PACKED,
+                    bitmap_block->get_type() == MemBlockType::EXTERNAL_PACKED,
                     "Expected to see a packed external block but got: {}",
-                    block->get_type()
+                    bitmap_block->get_type()
             );
-            slice.bitmap_block = static_cast<ExternalPackedMemBlock*>(block);
+            slice.bitmap_block = static_cast<ExternalPackedMemBlock*>(bitmap_block);
         }
         if (col.has_extra_buffer(block_offset, ExtraBufferType::STRING)) {
             const auto& strings_buffer = col.get_extra_buffer(block_offset, ExtraBufferType::STRING);
             util::check(
                     strings_buffer.num_blocks() == 1,
-                    "Expected exactly one bitmap block but got {}",
+                    "Expected exactly one strings block but got {}",
                     strings_buffer.num_blocks()
             );
-            auto block = strings_buffer.blocks()[0];
+            auto strings_block = strings_buffer.blocks()[0];
             util::check(
-                    block->get_type() == MemBlockType::EXTERNAL_WITH_EXTRA_BYTES,
+                    strings_block->get_type() == MemBlockType::EXTERNAL_WITH_EXTRA_BYTES,
                     "Expected to see an external block but got: {}",
-                    block->get_type()
+                    strings_block->get_type()
             );
-            slice.strings_block = static_cast<ExternalMemBlock*>(block);
+            slice.strings_block = static_cast<ExternalMemBlock*>(strings_block);
         }
         slices.emplace_back(std::move(slice));
-        current_byte += num_bytes_in_block;
+        current_byte += num_bytes_in_arrow_slice;
         offset_in_block = 0;
     }
     return slices;
@@ -313,15 +317,13 @@ Column WriteToSegmentTask::slice_column(
         dest_column_type = make_scalar_type(DataType::BOOL8);
     } else if (is_sequence_type(source_column.type().data_type())) {
         dest_column_type = make_scalar_type(DataType::UTF_DYNAMIC64);
-    } else {
-        if (num_nulls == 0 && contiguous_slices.size() == 1) {
-            // Dense numeric column consisting of a single congtiguous slice of memory is the only
-            // case where we can zero copy construct the result column.
-            const auto& slice = contiguous_slices.front();
-            ChunkedBuffer chunked_buffer;
-            chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
-            return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
-        }
+    } else if (num_nulls == 0 && contiguous_slices.size() == 1) {
+        // Dense numeric column consisting of a single contiguous slice of memory is the only
+        // case where we can zero copy construct the result column.
+        const auto& slice = contiguous_slices.front();
+        ChunkedBuffer chunked_buffer;
+        chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
+        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
     }
     Column dest(
             dest_column_type,

@@ -61,8 +61,9 @@ void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t o
 }
 
 bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos) {
-    size_t byte_idx = bit_pos / 8;
-    size_t bit_idx = bit_pos % 8;
+    auto dv = std::div(bit_pos, 8);
+    size_t byte_idx = dv.quot;
+    size_t bit_idx = dv.rem;
     return (packed_bits[byte_idx] >> bit_idx) & 1;
 }
 

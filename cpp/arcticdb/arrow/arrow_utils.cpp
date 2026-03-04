@@ -446,7 +446,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             // arrow_array_buffers[0] is the validity bitmap. It may be nullptr if there are no null values
             // arrow_array_buffers[1] is the actual column data buffer.
             // arrow_array_buffers[i] for i>1 are extra buffers used only for certain types.
-            // E.g. the strings buffer for a variable lenght encoded string array.
+            // E.g. the strings buffer for a variable length encoded string array.
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
             const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
