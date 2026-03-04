@@ -16,6 +16,11 @@
 #include <arcticdb/util/thread_cached_int.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
 
+#if defined(__linux__) && defined(__GLIBC__)
+// Necessary for `malloc_trim` to be declared.
+#include <malloc.h>
+#endif
+
 namespace arcticdb {
 
 uint8_t* allocate_detachable_memory(size_t size) { return get_detachable_allocator().allocate(size); }
