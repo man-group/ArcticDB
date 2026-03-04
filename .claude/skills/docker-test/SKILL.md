@@ -6,6 +6,8 @@ argument-hint: "[command]"
 
 Run commands or tests inside the arcticdb Docker container.
 
+The image is a **build environment only** — ArcticDB is not pre-installed. On first use, you need to build it inside the container (e.g. `pip install -ve .`). The repo is bind-mounted at `/workspace`, so build artifacts persist across container restarts.
+
 ## Usage
 
 - `/docker-test` — start the container if not running, then open an interactive prompt for what to run
@@ -27,7 +29,7 @@ First, check if `$ARGUMENTS` starts with `--name <name>`. If so:
 
 If no `--name` was provided, generate a random name on **first invocation only**:
 ```bash
-_ARC_CONTAINER="arc-dev-$(head -c4 /dev/urandom | xxd -p)"
+_ARC_CONTAINER="arc-dev-$(openssl rand -hex 4)"
 ```
 
 **Important**: Once determined, reuse the same container name for all subsequent `/docker-test` invocations in this conversation. Do NOT re-derive.
@@ -41,9 +43,9 @@ Check if the image exists:
 docker image inspect arcticdb-env >/dev/null 2>&1
 ```
 
-If it doesn't exist, build it from the repo root:
+If it doesn't exist, build it. Use `docker/` as the build context (not `.`) to avoid sending the entire repo tree to the Docker daemon:
 ```bash
-docker build -f docker/Dockerfile -t arcticdb-env .
+docker build -t arcticdb-env docker/
 ```
 
 ### 2. Ensure the container is running
@@ -70,16 +72,11 @@ docker inspect --format '{{.State.Status}}' "$_ARC_CONTAINER" 2>/dev/null
 
 ### 3. Execute the command
 
-Run the user's command inside the container. For simple commands pass them directly:
-```bash
-docker exec -w /workspace "$_ARC_CONTAINER" $ARGUMENTS
-```
-
-If the command uses shell operators (pipes `|`, redirects `>`, `&&`, etc.), wrap it with `bash -c`:
+Always use `bash -c` to avoid word-splitting issues with paths containing spaces:
 ```bash
 docker exec -w /workspace "$_ARC_CONTAINER" bash -c "$ARGUMENTS"
 ```
-When using `bash -c`, escape any inner quotes appropriately.
+Escape any inner double quotes in `$ARGUMENTS` appropriately.
 
 If no command was provided, ask the user what they want to run.
 
