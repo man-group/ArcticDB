@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/version/version_map.hpp>
+#include <arcticdb/storage/open_mode.hpp>
 #include <folly/futures/Future.h>
 #include <set>
 #include <util/storage_lock.hpp>
@@ -23,6 +24,12 @@ using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
 using Compaction = std::vector<AtomKey>::const_iterator;
 using MaybeCompaction = std::optional<Compaction>;
 using CollectionType = std::vector<SymbolListEntry>;
+
+enum class WillAttemptCompaction : uint8_t {
+    YES,                         // write access available and compaction not explicitly disabled
+    NO_INSUFFICIENT_PERMISSIONS, // library opened without delete access
+    NO_DISABLED                  // compaction explicitly disabled by caller
+};
 
 struct LoadResult {
     std::vector<AtomKey> symbol_list_keys_;
@@ -125,7 +132,8 @@ ProblematicResult is_problematic(
 ProblematicResult is_problematic(const std::vector<SymbolEntryData>& updated, timestamp min_allowed_interval);
 
 LoadResult attempt_load(
-        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, SymbolListData& data,
+        WillAttemptCompaction will_attempt_compaction
 );
 
 class SymbolList {
@@ -139,26 +147,34 @@ class SymbolList {
 
     template<StreamIdSet R>
     R load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction) {
-        LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go([this, &version_map, &store]() {
-            return attempt_load(version_map, store, data_);
-        });
+        const WillAttemptCompaction will_attempt_compaction = [&]() {
+            if (no_compaction)
+                return WillAttemptCompaction::NO_DISABLED;
+            if (store->open_mode() < storage::OpenMode::DELETE)
+                return WillAttemptCompaction::NO_INSUFFICIENT_PERMISSIONS;
+            return WillAttemptCompaction::YES;
+        }();
+        LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go(
+                [this, &version_map, &store, will_attempt_compaction]() {
+                    return attempt_load(version_map, store, data_, will_attempt_compaction);
+                }
+        );
 
-        if (!no_compaction && needs_compaction(load_result)) {
+        if (will_attempt_compaction == WillAttemptCompaction::YES && needs_compaction(load_result)) {
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
             try {
                 if (StorageLock lock{StringId{CompactionLockName}}; lock.try_lock(store)) {
                     OnExit x([&lock, &store] { lock.unlock(store); });
 
-                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Checking whether we still need to compact under lock");
+                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Running compaction under lock");
                     compact_internal(store, load_result);
                 } else {
-                    ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Not compacting the symbol list due to lock contention");
+                    ARCTICDB_RUNTIME_DEBUG(
+                            log::symbol(),
+                            "Symbol list compaction will be skipped: failed to acquire the compaction lock, "
+                            "indicating another process is currently compacting."
+                    );
                 }
-            } catch (const storage::LibraryPermissionException& ex) {
-                // Note: this only reflects AN's permission check and is not thrown by the Storage
-                ARCTICDB_RUNTIME_DEBUG(
-                        log::symbol(), "Not compacting the symbol list due to lack of permission", ex.what()
-                );
             } catch (const std::exception& ex) {
                 log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
             }
@@ -272,6 +288,28 @@ struct formatter<arcticdb::SymbolEntryData> {
     template<typename FormatContext>
     auto format(const arcticdb::SymbolEntryData& s, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "[{},{}@{}]", s.reference_id_, s.action_, s.timestamp_);
+    }
+};
+
+template<>
+struct formatter<arcticdb::WillAttemptCompaction> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(arcticdb::WillAttemptCompaction t, FormatContext& ctx) const {
+        switch (t) {
+        case arcticdb::WillAttemptCompaction::YES:
+            return fmt::format_to(ctx.out(), "Compaction will be attempted within this call");
+        case arcticdb::WillAttemptCompaction::NO_INSUFFICIENT_PERMISSIONS:
+            return fmt::format_to(ctx.out(), "Compaction is disabled (library opened with insufficient permissions)");
+        case arcticdb::WillAttemptCompaction::NO_DISABLED:
+            return fmt::format_to(ctx.out(), "Compaction is explicitly disabled for this call");
+        default:
+            arcticdb::util::raise_rte("Unrecognized WillAttemptCompaction {}", int(t));
+        }
     }
 };
 
