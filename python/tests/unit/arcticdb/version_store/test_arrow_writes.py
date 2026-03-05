@@ -12,8 +12,6 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-import random
-
 from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
 from arcticdb.options import ArrowOutputStringFormat
 from arcticdb.util.arrow import cast_string_columns
@@ -338,13 +336,18 @@ def test_write_view(lmdb_version_store_arrow):
         {
             "numeric": pa.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], pa.uint16()),
             "bool": pa.array(5 * [True, False], pa.bool_()),
+            "string": pa.array(["a", "bb", "ccc", "dddd", "eeeee", "ffffff", "ggggggg", "hh", "i", "jj"], pa.string()),
         }
     )
     view = table.slice(3, 3)
     lib.write(sym, view)
-    received = lib.read(sym).data
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     expected = pa.table(
-        {"numeric": pa.array([3, 4, 5], pa.uint16()), "bool": pa.array([False, True, False], pa.bool_())}
+        {
+            "numeric": pa.array([3, 4, 5], pa.uint16()),
+            "bool": pa.array([False, True, False], pa.bool_()),
+            "string": pa.array(["dddd", "eeeee", "ffffff"], pa.string()),
+        }
     )
     assert expected.equals(received)
 
@@ -898,9 +901,16 @@ num_supported_types = len(supported_types)
     max_record_batches=st.integers(1, 100),
     max_row_slices=st.integers(1, 100),
     max_col_slices=st.integers(1, num_supported_types),
+    null_percentage=st.integers(0, 100),
 )
 def test_arrow_writes_hypothesis(
-    lmdb_version_store_big_map, df_length, index_position, max_record_batches, max_row_slices, max_col_slices
+    lmdb_version_store_big_map,
+    df_length,
+    index_position,
+    max_record_batches,
+    max_row_slices,
+    max_col_slices,
+    null_percentage,
 ):
     rng = np.random.default_rng()
     lib = lmdb_version_store_big_map
@@ -913,6 +923,7 @@ def test_arrow_writes_hypothesis(
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     naughty_strings = read_big_list_of_naughty_strings()
+    null_fraction = null_percentage / 100.0
     data = {}
     for idx, supported_type in enumerate(supported_types):
         if idx == index_position:
@@ -920,11 +931,14 @@ def test_arrow_writes_hypothesis(
                 pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
             )
         if supported_type in {pa.string(), pa.large_string()}:
-            data[str(supported_type)] = pa.array(
-                [random.choice(naughty_strings) for _ in range(df_length)], supported_type
-            )
+            values = rng.choice(naughty_strings, df_length).tolist()
+        elif supported_type == pa.bool_():
+            values = rng.choice([True, False], df_length).tolist()
         else:
-            data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
+            values = rng.integers(0, 100, size=df_length).tolist()
+        null_mask = rng.random(df_length) < null_fraction
+        values = [None if null_mask[i] else values[i] for i in range(df_length)]
+        data[str(supported_type)] = pa.array(values, supported_type)
     if index_position == num_supported_types:
         data["ts"] = pa.Array.from_pandas(
             pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
@@ -1013,24 +1027,25 @@ def test_sparse_write_different_types(lmdb_version_store_arrow, data, arrow_type
     lib.write(sym, table)
     arrow_string_format = arrow_type if arrow_type in (pa.string(), pa.large_string()) else None
     received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
-    # TODO(Monday #8995352594): sparse string arrow read not yet working. Remove the if when addressing to assert reading as arrow is also correct
-    if arrow_string_format is None:
-        assert table.equals(received)
+    assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
-def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+@pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5])
+@pytest.mark.parametrize("cols_per_slice", [1, 2, 3, 5])
+def test_sparse_write_multiple_columns_different_types(version_store_factory, rows_per_slice, cols_per_slice):
+    lib = version_store_factory(segment_row_size=rows_per_slice, column_group_size=cols_per_slice)
+    lib.set_output_format("pyarrow")
+    lib._set_allow_arrow_input()
     sym = "test_sparse_write_multiple_columns"
     table = pa.table(
         {
             "int_col": pa.array([1, None, 3, None, 5], pa.int64()),
             "float_col": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
             "bool_col": pa.array([True, None, None, False, True], pa.bool_()),
-            # TODO(Monday #8995352594): sparse string arrow read not yet working
-            # "string_col": pa.array([None, "a", "b", None, "c"], pa.string()),
-            # "large_string_col": pa.array([None, "a", "b", None, "c"], pa.large_string()),
+            "string_col": pa.array([None, "a", "b", None, "c"], pa.string()),
+            "large_string_col": pa.array([None, "a", "b", None, "c"], pa.large_string()),
         }
     )
     lib.write(sym, table)
@@ -1051,18 +1066,8 @@ def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow)
         pytest.param(3, pa.uint8(), id="uint8"),
         pytest.param(3.14, pa.float32(), id="float32"),
         pytest.param(True, pa.bool_(), id="bool"),
-        pytest.param(
-            "hello",
-            pa.string(),
-            id="string",
-            marks=pytest.mark.skip(reason="Monday #8995352594: sparse string arrow read not yet working"),
-        ),
-        pytest.param(
-            "hello",
-            pa.large_string(),
-            id="large_string",
-            marks=pytest.mark.skip(reason="Monday #8995352594: sparse string arrow read not yet working"),
-        ),
+        pytest.param("hello", pa.string(), id="string"),
+        pytest.param("hello", pa.large_string(), id="large_string"),
     ],
 )
 def test_sparse_many_different_size_batches(version_store_factory, rows_per_slice, value, arrow_type):
@@ -1081,7 +1086,8 @@ def test_sparse_many_different_size_batches(version_store_factory, rows_per_slic
     ]
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym).data
+    arrow_string_format = arrow_type if arrow_type in (pa.string(), pa.large_string()) else None
+    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
@@ -1133,8 +1139,8 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
                     "int_col": int_arr,
                     "float_col": float_arr,
                     "bool_col": bool_arr,
-                    # TODO(Monday #8995352594): sparse string arrow read not yet working
-                    # "string_col": string_arr, "large_string_col": large_string_arr,
+                    "string_col": string_arr,
+                    "large_string_col": large_string_arr,
                 }
             )
         )
@@ -1148,6 +1154,32 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
+
+
+@pytest.mark.parametrize(
+    "offset,length",
+    [
+        pytest.param(3, 4, id="mixed_nulls_and_values"),
+        pytest.param(0, 5, id="all_values_set"),
+        pytest.param(5, 5, id="all_nulls"),
+        pytest.param(3, 0, id="empty_slice"),
+    ],
+)
+def test_sparse_write_view(lmdb_version_store_arrow, offset, length):
+    lib = lmdb_version_store_arrow
+    sym = "test_sparse_write_view"
+    table = pa.table(
+        {
+            "int_col": pa.array([1, 2, 3, 4, 5, None, None, None, None, None], pa.int64()),
+            "float_col": pa.array([1.0, 2.0, 3.0, 4.0, 5.0, None, None, None, None, None], pa.float64()),
+            "bool_col": pa.array([True, False, True, False, True, None, None, None, None, None], pa.bool_()),
+            "string_col": pa.array(["a", "b", "c", "d", "e", None, None, None, None, None], pa.string()),
+        }
+    )
+    view = table.slice(offset, length)
+    lib.write(sym, view)
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
+    assert view.equals(received)
 
 
 def test_sparse_index_column_raises(lmdb_version_store_arrow):
@@ -1178,9 +1210,8 @@ def test_sparse_write_with_index(lmdb_version_store_arrow):
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=5), type=pa.timestamp("ns")),
             "int_col": pa.array([1, None, 3, None, 5], pa.int64()),
-            # TODO(Monday #8995352594): sparse string arrow read not yet working
-            # "string_col": pa.array([None, "a", None, "c", None], pa.string()),
-            # "large_string_col": pa.array([None, "a", None, "c", None], pa.large_string()),
+            "string_col": pa.array([None, "a", None, "c", None], pa.string()),
+            "large_string_col": pa.array([None, "a", None, "c", None], pa.large_string()),
         }
     )
     lib.write(sym, table, index_column="ts")
