@@ -304,7 +304,7 @@ struct formatter<arcticdb::WillAttemptCompaction> {
         case arcticdb::WillAttemptCompaction::YES:
             return fmt::format_to(ctx.out(), "Compaction will be attempted within this call");
         case arcticdb::WillAttemptCompaction::NO_INSUFFICIENT_PERMISSIONS:
-            return fmt::format_to(ctx.out(), "Compaction is disabled (library opened without write access)");
+            return fmt::format_to(ctx.out(), "Compaction is disabled (library opened with insufficient permissions)");
         case arcticdb::WillAttemptCompaction::NO_DISABLED:
             return fmt::format_to(ctx.out(), "Compaction is explicitly disabled for this call");
         default:
