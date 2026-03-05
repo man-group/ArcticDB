@@ -13,6 +13,7 @@
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/storage/open_mode.hpp>
 
 namespace arcticdb {
 /*
@@ -41,6 +42,8 @@ class Store : public stream::StreamSink, public stream::StreamSource, public std
     ) = 0;
 
     virtual std::string name() const = 0;
+
+    virtual storage::OpenMode open_mode() const = 0;
 };
 
 } // namespace arcticdb
