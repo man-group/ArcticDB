@@ -17,7 +17,11 @@ import random
 from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
 from arcticdb.options import ArrowOutputStringFormat
 from arcticdb.util.arrow import cast_string_columns
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
+from arcticdb.util.test import (
+    assert_frame_equal,
+    assert_frame_equal_with_arrow,
+    assert_frame_equal_with_arrow_for_sparse,
+)
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
@@ -972,7 +976,7 @@ def test_basic_sparse_write(lmdb_version_store_arrow):
     received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 def test_sparse_write_all_nulls_column(lmdb_version_store_arrow):
@@ -988,7 +992,7 @@ def test_sparse_write_all_nulls_column(lmdb_version_store_arrow):
     received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 @pytest.mark.parametrize(
@@ -1013,7 +1017,7 @@ def test_sparse_write_different_types(lmdb_version_store_arrow, data, arrow_type
     if arrow_string_format is None:
         assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow):
@@ -1036,7 +1040,7 @@ def test_sparse_write_multiple_columns_different_types(lmdb_version_store_arrow)
     ).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7, 15, 100])
@@ -1080,7 +1084,7 @@ def test_sparse_many_different_size_batches(version_store_factory, rows_per_slic
     received = lib.read(sym).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
@@ -1143,7 +1147,7 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
     ).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 def test_sparse_index_column_raises(lmdb_version_store_arrow):
@@ -1186,7 +1190,7 @@ def test_sparse_write_with_index(lmdb_version_store_arrow):
     ).data
     assert table.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data.reset_index()
-    assert_frame_equal_with_arrow(table, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
 def test_sparse_append(lmdb_version_store_arrow):
@@ -1201,7 +1205,7 @@ def test_sparse_append(lmdb_version_store_arrow):
     expected = pa.concat_tables([write_table, append_table])
     assert expected.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data
-    assert_frame_equal_with_arrow(expected, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(expected, pandas_received)
 
 
 def test_sparse_update(lmdb_version_store_arrow):
@@ -1231,4 +1235,4 @@ def test_sparse_update(lmdb_version_store_arrow):
     )
     assert expected.equals(received)
     pandas_received = lib.read(sym, output_format="PANDAS").data.reset_index()
-    assert_frame_equal_with_arrow(expected, pandas_received)
+    assert_frame_equal_with_arrow_for_sparse(expected, pandas_received)
