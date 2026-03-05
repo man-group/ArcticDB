@@ -27,8 +27,8 @@ def get_interleaved_dataframe(size=100):
 def test_sparse_interleaved(sym, lmdb_version_store):
     lib = lmdb_version_store
     df = get_interleaved_dataframe(100)
-    lib.write(sym, df, dynamic_schema=True)
-    dd = lib.read(sym, dynamic_schema=True).data
+    lib.write(sym, df)
+    dd = lib.read(sym).data
 
     assert dd["float"][2] == df["float"][2]
     assert np.isnan(dd["float"][1])
@@ -37,8 +37,8 @@ def test_sparse_interleaved(sym, lmdb_version_store):
 def test_sparse_chunked(sym, lmdb_version_store):
     lib = lmdb_version_store
     df = get_dataframe_dense_till(100, 30)
-    lib.write(sym, df, allow_sparse=True)
-    dd = lib.read(sym, allow_sparse=True).data
+    lib.write(sym, df, sparsify_floats=True)
+    dd = lib.read(sym).data
 
     assert dd["float"][2] == df["float"][2]
     assert dd["float"][1] == 1.0
@@ -49,8 +49,8 @@ def test_sparse_segmented(version_store_factory, sym):
     lib = version_store_factory(column_group_size=100, segment_row_size=100)
 
     df = get_interleaved_dataframe(100)
-    lib.write(sym, df, allow_sparse=True)
-    dd = lib.read(sym, allow_sparse=True).data
+    lib.write(sym, df, sparsify_floats=True)
+    dd = lib.read(sym).data
 
     assert dd["float"][2] == df["float"][2]
     assert np.isnan(dd["float"][1])
