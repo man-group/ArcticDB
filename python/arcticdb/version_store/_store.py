@@ -789,8 +789,6 @@ class NativeVersionStore:
             "write",
             {
                 "dynamic_strings",
-                "pickle_on_failure",
-                "prune_previous_version",
                 "parallel",
                 "incomplete",
                 "recursive_normalizers",
@@ -982,7 +980,6 @@ class NativeVersionStore:
             {
                 "dynamic_strings",
                 "coerce_columns",
-                "prune_previous_version",
                 "write_if_missing",
             },
             **kwargs,
@@ -1113,7 +1110,6 @@ class NativeVersionStore:
                 "dynamic_strings",
                 "dynamic_schema",
                 "coerce_columns",
-                "prune_previous_version",
             },
             **kwargs,
         )
@@ -1798,7 +1794,7 @@ class NativeVersionStore:
         """
         self._validate_kwargs(
             "batch_write",
-            {"dynamic_strings", "pickle_on_failure", "norm_failure_options_msg"},
+            {"dynamic_strings", "norm_failure_options_msg"},
             **kwargs,
         )
 
