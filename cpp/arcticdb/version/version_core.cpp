@@ -2777,12 +2777,11 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
 folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
-        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        const std::shared_ptr<PipelineContext>& pipeline_context
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context
 ) {
-    read_query->clauses_.push_back(std::make_shared<Clause>(
-            WriteClause(write_options, target_partial_index_key, std::make_shared<DeDupMap>(), store)
-    ));
+    read_query->clauses_.push_back(
+            std::make_shared<Clause>(WriteClause(target_partial_index_key, std::make_shared<DeDupMap>(), store))
+    );
 
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
@@ -2813,9 +2812,7 @@ folly::Future<VersionedItem> read_modify_write_impl(
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context,
         std::optional<proto::descriptors::UserDefinedMetadata>&& user_meta_proto
 ) {
-    return read_modify_write_data_keys(
-                   store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
-    )
+    return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([&](std::vector<SliceAndKey>&& data_keys_and_slices) {
                 ARCTICDB_DEBUG_CHECK(
                         ErrorCode::E_ASSERTION_FAILURE,
@@ -2878,9 +2875,7 @@ folly::Future<VersionedItem> merge_update_impl(
                     pipeline_context->descriptor().sorted() == SortedValue::ASCENDING,
             "Only timeseries ascending indexed target data is supported for merge update"
     );
-    return read_modify_write_data_keys(
-                   store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
-    )
+    return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context),
                         store,
                         write_options,
