@@ -115,7 +115,9 @@ void PythonBoolHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
-    decoded_data.set_row_data(m.num_rows_ - 1);
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
@@ -193,7 +195,9 @@ void PythonStringHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
-    decoded_data.set_row_data(m.num_rows_ - 1);
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     if (is_dynamic_string_type(m.dest_type_desc_.data_type())) {
         convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
@@ -247,7 +251,9 @@ void PythonArrayHandler::handle_type(
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
     Column column{m.source_type_desc_, Sparsity::PERMITTED};
     data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), encoding_version);
-    column.set_row_data(m.num_rows_ - 1);
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    column.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(column, dest_column, m, shared_data, any, string_pool, read_options);
 }
