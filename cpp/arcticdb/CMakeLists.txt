@@ -514,6 +514,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_binary_operator_mod.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
