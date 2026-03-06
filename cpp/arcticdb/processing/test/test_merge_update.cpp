@@ -813,30 +813,8 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_IndexMatchesButColumnDiffer
 
     std::vector<EntityId> entities = push_entities();
     auto structured = structure_entities(structure_indices, entities);
-    const auto result = clause.process(std::move(structured[0]));
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-            *component_manager_, result
-    );
-
-    // Target is unchanged
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
-            non_string_fields_ts_index_descriptor(),
-            rows_per_segment_,
-            cols_per_segment_,
-            std::array<timestamp, num_rows_>{0, 1, 1, 1, 3, 3, 3, 3, 4, 5},
-            iota_view(static_cast<int8_t>(0), static_cast<int8_t>(num_rows_)),
-            iota_view(static_cast<unsigned>(0), static_cast<unsigned>(num_rows_)),
-            iota_view(0, num_rows_) | views::transform([](auto x) -> bool { return x % 2 == 1; }),
-            iota_view(0, num_rows_) | views::transform([](auto x) { return static_cast<float>(x); }),
-            iota_view(timestamp{0}, timestamp{num_rows_})
-    );
-    sort_by_rowslice(expected_row_ranges, expected_col_ranges, expected_segs);
-    ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(0, 5));
-    ASSERT_EQ(*(*proc.row_ranges_)[1], RowRange(0, 5));
-    ASSERT_EQ(*(*proc.col_ranges_)[0], ColRange(1, 4));
-    ASSERT_EQ(*(*proc.col_ranges_)[1], ColRange(4, 6));
-    ASSERT_EQ(*(*proc.segments_)[0], expected_segs[0]);
-    ASSERT_EQ(*(*proc.segments_)[1], expected_segs[1]);
+    const std::vector<EntityId> result = clause.process(std::move(structured[0]));
+    ASSERT_TRUE(result.empty());
 }
 
 /// Both the index and the single on_ column ("int8") match at ts=3.

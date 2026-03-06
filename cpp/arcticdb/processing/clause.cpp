@@ -179,7 +179,7 @@ size_t find_column_for_match(std::string_view column_name, const StreamDescripto
     static const boost::regex pattern(R"(__col_(\w+)__(\d+))");
     const std::optional<std::string_view> index_name =
             descriptor.index().field_count() ? std::optional(descriptor.field(0).name()) : std::nullopt;
-    for (size_t i = descriptor.field_count() - 1; i >= descriptor.index().field_count(); --i) {
+    for (int64_t i = descriptor.field_count() - 1; i >= descriptor.index().field_count(); --i) {
         const std::string_view field_name = descriptor.field(i).name();
         if (field_name == column_name) {
             return i;
