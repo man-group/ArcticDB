@@ -91,13 +91,45 @@ class DynamicStringReducer {
             const std::optional<util::BitSet>& sparse_map
     ) {
         std::pair<size_t, size_t> counts;
-        if (sparse_map) {
+        // if (sparse_map) {
+        //     prefill_with_none(ptr_dest_, num_rows, 0, handler_data_, python_util::IncrementRefCount::OFF);
+        //     counts = write_strings_to_column_sparse(num_rows, source_column, py_strings, *sparse_map);
+        // } else {
+        //     counts = write_strings_to_column_dense(num_rows, source_column, py_strings);
+        // }
+        if (source_column.is_sparse()) {
             prefill_with_none(ptr_dest_, num_rows, 0, handler_data_, python_util::IncrementRefCount::OFF);
-            counts = write_strings_to_column_sparse(num_rows, source_column, py_strings, *sparse_map);
-        } else {
-            counts = write_strings_to_column_dense(num_rows, source_column, py_strings);
         }
-        return counts;
+        auto none_count = 0UL;
+        auto nan_count = 0UL;
+        details::visit_type(source_column.type().data_type(), [&](auto source_tag){
+            using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
+            if constexpr (is_dynamic_string_type(source_type_info::data_type)) {
+                for_each_enumerated<typename source_type_info::TDT>(
+                    source_column, 
+                    [&](const auto& en){
+                        const auto offset = en.value();
+                        if (offset == not_a_string()) {
+                            ptr_dest_[en.idx()] = Py_None;
+                            ++none_count;
+                        } else if (offset == nan_placeholder()) {
+                            ptr_dest_[en.idx()] = handler_data_.non_owning_nan_handle();
+                            ++nan_count;
+                        } else {
+                            ptr_dest_[en.idx()] = py_strings.at(offset);
+                        }
+                    }
+                );
+            } else {
+                util::raise_rte("Unexpected");
+            }
+        });
+        ptr_dest_ += num_rows;
+        row_ += num_rows;
+        if (sparse_map) {
+            none_count += num_rows - sparse_map.value().count();
+        }
+        return {none_count, nan_count};
     }
 
     template<typename StringCreator>
