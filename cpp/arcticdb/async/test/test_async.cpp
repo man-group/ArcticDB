@@ -597,3 +597,78 @@ TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailure) {
     ASSERT_EQ(std::get<RefKey>(read_result_2.first), key);
     ASSERT_EQ(read_result_2.second.row_count(), row_count);
 }
+
+TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailureWithRetry) {
+    using namespace arcticdb::async;
+
+    // Given - same setup as CopyCompressedInterStoreKeyExistsCheckFailure
+    as::EnvironmentName environment_name{"research"};
+    as::StorageName storage_name("storage_name");
+    as::LibraryPath library_path{"a", "b"};
+
+    auto config = proto::nfs_backed_storage::Config();
+    config.set_use_mock_storage_for_testing(true);
+
+    auto env_config = arcticdb::get_test_environment_config(
+            library_path, storage_name, environment_name, std::make_optional(config)
+    );
+    auto config_resolver = as::create_in_memory_resolver(env_config);
+    as::LibraryIndex library_index{environment_name, config_resolver};
+
+    auto failed_config = proto::s3_storage::Config();
+    failed_config.set_use_mock_storage_for_testing(true);
+
+    auto failed_env_config = arcticdb::get_test_environment_config(
+            library_path, storage_name, environment_name, std::make_optional(failed_config)
+    );
+    auto failed_config_resolver = as::create_in_memory_resolver(failed_env_config);
+    as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
+
+    as::UserAuth user_auth{"abc"};
+    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+
+    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+
+    std::string failureSymbol = as::s3::S3ClientTestWrapper::get_failure_trigger(
+            "sym", storage::StorageOperation::EXISTS, Aws::S3::S3Errors::INTERNAL_FAILURE
+    );
+
+    // 1 target fails on key_exists (S3-backed), 2 succeed (NFS-backed)
+    auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
+            create_store(library_path, library_index, user_auth, codec_opt),
+            create_store(library_path, failed_library_index, user_auth, codec_opt),
+            create_store(library_path, library_index, user_auth, codec_opt)
+    };
+
+    const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{failureSymbol, KeyType::VERSION_REF};
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto row_count = segment_in_memory.row_count();
+    ASSERT_GT(row_count, 0);
+    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
+    (void)segment.calculate_size();
+    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+
+    // make sure that retry_on_failure=true (4th param)
+    CopyCompressedInterStoreTask task{
+            key, std::nullopt, true, true, source_store, targets, std::shared_ptr<BitRateStats>()
+    };
+
+    arcticdb::async::TaskScheduler sched{1};
+    auto res = sched.submit_io_task(std::move(task)).get();
+
+    // The first copy() removes target[1] from its local targets copy (fails key_exists check)
+    // and successfully writes to target[0] and target[2].
+    // The retry re-copies target_stores_ and must still report the failed target[1].
+    ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::FailedTargets>(res));
+    auto failed_targets = std::get<CopyCompressedInterStoreTask::FailedTargets>(res);
+    ASSERT_EQ(failed_targets.size(), 1);
+
+    // Non-failing targets should still have the data
+    auto read_result_0 = targets[0]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_0.first), key);
+    ASSERT_EQ(read_result_0.second.row_count(), row_count);
+
+    auto read_result_2 = targets[2]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_2.first), key);
+    ASSERT_EQ(read_result_2.second.row_count(), row_count);
+}
