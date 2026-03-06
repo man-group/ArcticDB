@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import os
+import sys
 from contextlib import contextmanager
 from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
@@ -25,6 +26,11 @@ from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 
 from arcticdb.util.marks import SHORTER_LOGS
+from arcticdb.util._versions import IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
+
+PYARROW_WINDOWS_SPARSE_FILL_BROKEN = (
+    sys.platform.lower().startswith("win32") and not IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
+)
 
 try:
     from pandas.errors import UndefinedVariableError
@@ -263,6 +269,14 @@ def assert_frame_equal_with_arrow(left, right, **kwargs):
         right = right.to_pandas()
 
     assert_frame_equal(left, right, **kwargs)
+
+
+def assert_frame_equal_with_arrow_for_sparse(left, right, **kwargs):
+    if PYARROW_WINDOWS_SPARSE_FILL_BROKEN:
+        # Skipping assertion because conversion from arrow to pandas may be broken for old version of pyarrow
+        # https://github.com/apache/arrow/issues/47234
+        return
+    assert_frame_equal_with_arrow(left, right, **kwargs)
 
 
 def random_ascii_string(length: int) -> str:

@@ -145,13 +145,14 @@ using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1
                 );
             } else {
                 util::check(
-                        !must_contain_data(column_data.type()),
-                        "Column {} of type {} contains no blocks",
+                        !must_contain_data(column_data.type()) || column_data.bit_vector() != nullptr,
+                        "Column {} of type {} contains no blocks and is not sparse",
                         column_index,
                         column_data.type()
                 );
                 auto* ndarray = column_field->mutable_ndarray();
                 ndarray->set_items_count(0);
+                encode_sparse_map(column_data, *column_field, *out_buffer, pos);
             }
             column_field->set_statistics(column.get_statistics());
         }
