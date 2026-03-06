@@ -656,9 +656,9 @@ TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailureWithRetry) {
     arcticdb::async::TaskScheduler sched{1};
     auto res = sched.submit_io_task(std::move(task)).get();
 
-    // The first copy() removes target[1] from target_stores_ (fails key_exists check)
+    // The first copy() removes target[1] from its local targets copy (fails key_exists check)
     // and successfully writes to target[0] and target[2].
-    // The retry must still report the failed target[1].
+    // The retry re-copies target_stores_ and must still report the failed target[1].
     ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::FailedTargets>(res));
     auto failed_targets = std::get<CopyCompressedInterStoreTask::FailedTargets>(res);
     ASSERT_EQ(failed_targets.size(), 1);
