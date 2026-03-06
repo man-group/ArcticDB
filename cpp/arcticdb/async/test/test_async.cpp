@@ -648,7 +648,7 @@ TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailureWithRetry) {
     (void)segment.calculate_size();
     source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
 
-    // check_key_exists_on_targets=true (3rd param)
+    // make sure that retry_on_failure=true (4th param)
     CopyCompressedInterStoreTask task{
             key, std::nullopt, true, true, source_store, targets, std::shared_ptr<BitRateStats>()
     };
