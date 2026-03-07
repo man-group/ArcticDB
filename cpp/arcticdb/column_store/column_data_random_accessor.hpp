@@ -11,6 +11,7 @@
 #include <folly/Poly.h>
 
 #include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 namespace arcticdb {
 
@@ -29,5 +30,6 @@ template<typename TDT>
 using ColumnDataRandomAccessor = folly::Poly<IColumnDataRandomAccessor<TDT>>;
 
 template<typename TDT>
+requires(util::instantiation_of<TDT, TypeDescriptorTag> && (TDT::dimension() == Dimension::Dim0))
 ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent);
 } // namespace arcticdb
