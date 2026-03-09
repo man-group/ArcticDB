@@ -495,6 +495,8 @@ class AsyncStore : public Store {
 
     std::string name() const override { return library_->name(); }
 
+    storage::OpenMode open_mode() const override { return library_->open_mode(); }
+
   private:
     friend class arcticdb::toolbox::apy::LibraryTool;
     std::shared_ptr<storage::Library> library_;
