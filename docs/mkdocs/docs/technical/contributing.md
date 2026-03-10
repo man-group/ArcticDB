@@ -456,3 +456,13 @@ Any read-like method should be able to handle both types of stored column.
 When data that cannot be normalized to a supported data type in ArcticDB, it can still be stored using `write_pickle` and similar.
 There are many operations that cannot be performed on pickled data, such as `append`, `update`, `date_range` search, and many more.
 It is important that if a user attempts an operation that is not supported with pickled data, that they receive a helpful error message.
+
+AI Policy
+=========
+
+We welcome contributions, and recognise that AI plays an important role in many developers' workflows.
+However, the developer opening the PR is responsible for the quality of the submitted code, and the ensuing interaction with the maintainers through comments on said PR.
+
+If using AI to generate code or respond to comments, we expect you to ensure that all of the comments have been fully addressed before asking for maintainers to re-review.
+
+Failure to adhere to this policy will result in the PR being closed to protect the time of the maintainers, and may result in future pull requests from the same author being closed without review.
