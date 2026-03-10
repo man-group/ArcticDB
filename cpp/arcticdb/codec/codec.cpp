@@ -616,11 +616,11 @@ HashedValue get_segment_hash(Segment& seg) {
 void add_bitmagic_compressed_size(
         const ColumnData& column_data, size_t& max_compressed_bytes, size_t& uncompressed_bytes
 ) {
-    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0) {
+    if (column_data.bit_vector() != nullptr) {
         bm::serializer<util::BitMagic>::statistics_type stat{};
         column_data.bit_vector()->calc_stat(&stat);
         uncompressed_bytes += stat.memory_used;
-        max_compressed_bytes += stat.max_serialize_mem;
+        max_compressed_bytes += stat.max_serialize_mem + util::combined_bit_magic_delimiters_size();
     }
 }
 
@@ -645,7 +645,7 @@ void add_bitmagic_compressed_size(
 }
 
 void encode_sparse_map(ColumnData& column_data, EncodedFieldImpl& field, Buffer& out, std::ptrdiff_t& pos) {
-    if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0) {
+    if (column_data.bit_vector() != nullptr) {
         util::check(!is_empty_type(column_data.type().data_type()), "Empty typed columns should not have sparse maps");
         ARCTICDB_DEBUG(log::codec(), "Sparse map count = {} pos = {}", column_data.bit_vector()->count(), pos);
         const size_t sparse_bm_bytes = encode_bitmap(*column_data.bit_vector(), out, pos);
