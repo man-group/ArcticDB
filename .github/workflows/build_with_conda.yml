@@ -858,7 +858,7 @@ jobs:
       # Note: mongo tests are skipped in the macos workflow
       - name: Install MongoDB
         run: |
-          curl -LO https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
+          curl --retry 5 --retry-delay 5 --retry-connrefused -LO https://fastdl.mongodb.org/linux/mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
           tar -xzf mongodb-linux-aarch64-ubuntu2204-7.0.0.tgz
           cp mongodb-linux-aarch64-ubuntu2204-7.0.0/bin/* /usr/local/bin/
           mongod --version
