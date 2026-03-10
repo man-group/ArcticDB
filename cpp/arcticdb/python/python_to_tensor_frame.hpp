@@ -56,7 +56,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN StringEncodingError {
     StringEncodingError() = default;
     explicit StringEncodingError(std::string_view error_message) : error_message_(error_message) {}
 
-    void raise(std::string_view column_name, size_t offset_in_frame = 0) {
+    [[noreturn]] void raise(std::string_view column_name, size_t offset_in_frame = 0) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 "String encoding failed in column '{}', row {}, error '{}'",
                 column_name,

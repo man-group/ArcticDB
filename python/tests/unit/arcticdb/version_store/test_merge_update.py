@@ -741,6 +741,18 @@ class TestMergeTimeseriesUpdate:
             source.index.name = index_name
         generic_merge_test(lib, "sym", target, source, self.strategy, on=[repeated_column])
 
+    def test_on_list_contains_the_same_column_twice(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        source = pd.DataFrame(
+            {"a": [1, 20, 3], "b": [10.0, 20.0, 30.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "a"])
+
 
 class TestMergeTimeseriesInsert:
     @pytest.mark.parametrize(
