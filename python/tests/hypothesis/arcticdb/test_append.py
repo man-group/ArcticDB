@@ -115,14 +115,14 @@ def test_incomplete_append_partial_read(version_store_factory, colnum, periods, 
     "initial, append, match",
     [
         # (InputFactories.DF_RC_NON_RANGE, InputFactories.DF_DTI, "TODO(AN-722)"),
-        (InputFactories.DF_RC, InputFactories.ND_ARRAY_1D, "(Pandas|ndarray)"),
-        (InputFactories.DF_RC, InputFactories.DF_MULTI_RC, "index type incompatible"),
+        (InputFactories.DF_RC, InputFactories.ND_ARRAY_1D, "DataFrame"),
+        (InputFactories.DF_RC, InputFactories.DF_MULTI_RC, "incompatible"),
         (
             InputFactories.DF_RC,
             InputFactories.DF_RC_NON_RANGE,
-            "range.*index which is incompatible",
+            "range",
         ),
-        (InputFactories.DF_RC, InputFactories.DF_RC_STEP, "different.*step"),
+        (InputFactories.DF_RC, InputFactories.DF_RC_STEP, "step"),
     ],
 )
 @pytest.mark.parametrize("swap", ["swap", ""])
@@ -140,8 +140,9 @@ def test_(
     lib.write("s", init_data)
 
     to_append, _ = append.make(abs(next_start), 1)
-    with pytest.raises(NormalizationException):
-        lib.append("s", to_append, match=match)
+    with pytest.raises(NormalizationException) as e:
+        lib.append("s", to_append)
+    assert match in str(e.value)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked

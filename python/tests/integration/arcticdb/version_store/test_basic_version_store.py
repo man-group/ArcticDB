@@ -1092,7 +1092,7 @@ def test_get_info_non_timestamp_index_date_range(basic_store):
     assert np.isnat(info["date_range"][0])
     assert np.isnat(info["date_range"][1])
     # int64 indexed
-    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}), index=pd.Index([4, 5, 6], dtype=np.int64))
+    lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}, index=pd.Index([4, 5, 6], dtype=np.int64)))
     info = lib.get_info(sym)
     assert np.isnat(info["date_range"][0])
     assert np.isnat(info["date_range"][1])
