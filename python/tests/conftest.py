@@ -1583,6 +1583,21 @@ def in_memory_version_store_tiny_segment_dynamic(in_memory_store_factory) -> Nat
 
 
 @pytest.fixture
+def in_memory_library() -> Library:
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst")
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_dynamic() -> Library:
+    library_options = LibraryOptions(dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
 def in_memory_library_tiny_segment() -> Library:
     library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2)
     ac = Arctic("mem://")
@@ -1598,8 +1613,25 @@ def in_memory_library_tiny_segment_dynamic() -> Library:
     return lib
 
 
+@pytest.fixture(params=["in_memory_library", "in_memory_library_dynamic"])
+def in_memory_library_static_dynamic(request) -> NativeVersionStore:
+    return request.getfixturevalue(request.param)
+
+
 @pytest.fixture(params=["in_memory_library_tiny_segment", "in_memory_library_tiny_segment_dynamic"])
 def in_memory_library_tiny_segment_static_dynamic(request) -> NativeVersionStore:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "in_memory_library_tiny_segment",
+        "in_memory_library_tiny_segment_dynamic",
+        "in_memory_library",
+        "in_memory_library_dynamic",
+    ]
+)
+def in_memory_library_static_dynamic_different_segments(request) -> NativeVersionStore:
     return request.getfixturevalue(request.param)
 
 

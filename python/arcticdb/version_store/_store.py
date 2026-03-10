@@ -2484,8 +2484,12 @@ class NativeVersionStore:
                     row_range = (0, head)
                 elif tail:
                     row_range = (-tail, None)
-                elif read_query.row_filter is not None:
-                    row_range = self._compute_filter_start_end_row(read_result, read_query)
+                elif isinstance(read_query.row_filter, _RowRange):
+                    # Compute n_rows from the filter, clamped to the total symbol row count.
+                    # This helps us to match _denormalize_single_index.
+                    total_rows = read_result.frame_data.row_count
+                    n_rows = max(0, min(read_query.row_filter.end, total_rows) - read_query.row_filter.start)
+                    row_range = (0, n_rows)
                 return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
             if read_query.row_filter is not None and read_query.needs_post_processing:
