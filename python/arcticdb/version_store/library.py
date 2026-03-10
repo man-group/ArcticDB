@@ -3185,7 +3185,7 @@ class Library:
         """
         return self._nvs.compact_symbol_list()
 
-    def compact_data(
+    def compact_data_experimental(
         self,
         symbol: str,
         rows_per_segment: Optional[int] = None,

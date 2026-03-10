@@ -3782,14 +3782,18 @@ class NativeVersionStore:
 
     # TODO: Add option to change the metadata? Or always maintain it as-is?
     # Either way the returned metadata field should be right
-    def compact_data(
+    def compact_data_experimental(
         self,
         symbol: str,
         rows_per_segment: Optional[int] = None,
         tolerance: float = 0.5,
         prune_previous_version: Optional[bool] = None,
     ) -> VersionedItem:
-        cxx_versioned_item = self.version_store.compact_data(
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        cxx_versioned_item = self.version_store._compact_data(
             symbol, rows_per_segment, tolerance, prune_previous_version
         )
         return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)

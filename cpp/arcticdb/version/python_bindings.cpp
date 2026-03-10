@@ -691,7 +691,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_library,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact the whole library wherever necessary")
-            .def("compact_data",
+            .def("_compact_data",
                  &PythonVersionStore::compact_data,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact data segments into larger data segments")

@@ -1281,6 +1281,9 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
     py::gil_scoped_release release_gil;
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            0 <= tolerance && tolerance <= 1, "compact_data tolerance must be in [0, 1], received {}", tolerance
+    );
     UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
             update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
