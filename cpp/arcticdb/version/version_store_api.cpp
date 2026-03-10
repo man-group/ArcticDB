@@ -1498,7 +1498,7 @@ VersionedItem PythonVersionStore::merge(
     );
 }
 
-VersionedItem compact_data(
+VersionedItem PythonVersionStore::compact_data(
         const StreamId& stream_id, std::optional<size_t> rows_per_segment, double tolerance,
         bool prune_previous_versions
 ) {

@@ -298,7 +298,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     VersionedItem compact_data(
-            const StreamId& stream_id, std::optional<size_t> rows_per_segment, std::optional<double> tolerance,
+            const StreamId& stream_id, std::optional<size_t> rows_per_segment, double tolerance,
             bool prune_previous_versions
     );
 

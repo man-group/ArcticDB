@@ -1287,12 +1287,14 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
     );
     rows_per_segment = rows_per_segment.value_or(get_write_options().segment_row_size);
     auto versioned_item = compact_data_impl(
-            store(),
-            VersionedItem{*update_info.previous_index_key_},
-            IndexPartialKey{stream_id, update_info.next_version_id_},
-            *rows_per_segment,
-            tolerance
-    );
+                                  store(),
+                                  VersionedItem{*update_info.previous_index_key_},
+                                  get_write_options(),
+                                  IndexPartialKey{stream_id, update_info.next_version_id_},
+                                  *rows_per_segment,
+                                  tolerance
+    )
+                                  .get();
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
     return versioned_item;
 }

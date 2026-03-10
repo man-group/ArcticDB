@@ -1151,10 +1151,10 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    const ProcessingConfig processing_config{
-            opt_false(read_options.dynamic_schema()),
-            pipeline_context->rows_,
-            pipeline_context->descriptor().index().type()
+    const ProcessingConfig processing_config{// This looks wrong
+                                             opt_false(read_options.dynamic_schema()),
+                                             pipeline_context->rows_,
+                                             pipeline_context->descriptor().index().type()
     };
     for (auto& clause : read_query->clauses_) {
         clause->set_processing_config(processing_config);
@@ -2919,22 +2919,17 @@ folly::Future<VersionedItem> merge_update_impl(
 }
 
 folly::Future<VersionedItem> compact_data_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
+        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const WriteOptions& write_options,
         const IndexPartialKey& target_partial_index_key, size_t rows_per_segment, double tolerance
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment, tolerance)));
     std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, version_info, *read_query, {});
-    return read_modify_write_data_keys(
-                   store, read_query, read_options, write_options, target_partial_index_key, pipeline_context
-    )
-            .thenValue([pipeline_context = std::move(pipeline_context),
-                        store,
-                        write_options,
-                        source = std::move(source),
-                        target_partial_index_key](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can create
-                // new segments and shift row slices.
+    return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
+            .thenValue([pipeline_context = std::move(pipeline_context), store, write_options, target_partial_index_key](
+                               std::vector<SliceAndKey>&& data_keys_and_slices
+                       ) {
+                // TODO: Currently copy-pasted from merge update, needs custom implementation
                 ranges::sort(data_keys_and_slices);
                 std::vector<SliceAndKey> merged_ranges_and_keys;
                 auto new_slice = data_keys_and_slices.begin();
@@ -2955,7 +2950,8 @@ folly::Future<VersionedItem> compact_data_impl(
                         row_count,
                         pipeline_context->descriptor(),
                         std::move(*pipeline_context->norm_meta_),
-                        pipeline_context->user_meta_ ? std::make_optional(std::move(source->user_meta)) : std::nullopt,
+                        pipeline_context->user_meta_ ? std::make_optional(std::move(*pipeline_context->user_meta_))
+                                                     : std::nullopt,
                         std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic

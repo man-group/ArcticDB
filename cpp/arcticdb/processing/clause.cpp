@@ -2139,4 +2139,41 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
+CompactDataClause::CompactDataClause(size_t rows_per_segment, double tolerance) :
+    rows_per_segment_(rows_per_segment),
+    tolerance_(tolerance) {}
+
+std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
+) {
+    // TODO: Implement properly
+    return structure_by_row_slice(ranges_and_keys);
+}
+
+std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(std::vector<std::vector<EntityId>>&&) {
+    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("CompactData clause should be the first clause in the pipeline");
+}
+
+std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_ids) const {
+    // TODO: Implement properly
+    return entity_ids;
+}
+
+const ClauseInfo& CompactDataClause::clause_info() const { return clause_info_; }
+
+void CompactDataClause::set_processing_config(const ProcessingConfig&) {}
+
+void CompactDataClause::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+OutputSchema CompactDataClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+
+OutputSchema CompactDataClause::join_schemas(std::vector<OutputSchema>&&) const {
+    util::raise_rte("CompactDataClause::join_schemas should never be called");
+}
+
+std::string CompactDataClause::to_string() const {
+    return fmt::format("COMPACT_DATA(rows_per_segment={}, tolerance={})", rows_per_segment_, tolerance_);
+}
+
 } // namespace arcticdb
