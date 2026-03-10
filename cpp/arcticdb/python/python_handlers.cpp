@@ -115,6 +115,9 @@ void PythonBoolHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
@@ -192,6 +195,17 @@ void PythonStringHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    // If all missing values in a sparse column are at the end we might not encode the `sparse_map` and hence
+    // `sparse_map_bytes()==0`. If that's the case we will reuse the `dest_column`'s buffer as per `else` above.
+    // We do not call `set_row_data` because that would populate a `sparse_map` but we explicitly handle the
+    // missing values in the end with `string_reducer.finelize()`
+    // TODO: The extra complexity around this is not worth the extra allocation saved in this very rare sparse case
+    // We should refactor and simplify.
+    if (decoded_data.opt_sparse_map().has_value()) {
+        // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+        // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+        decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
+    }
 
     if (is_dynamic_string_type(m.dest_type_desc_.data_type())) {
         convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
@@ -245,6 +259,9 @@ void PythonArrayHandler::handle_type(
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
     Column column{m.source_type_desc_, Sparsity::PERMITTED};
     data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), encoding_version);
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    column.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(column, dest_column, m, shared_data, any, string_pool, read_options);
 }
