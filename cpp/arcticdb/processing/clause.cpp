@@ -148,7 +148,7 @@ size_t find_column_for_match(std::string_view column_name, const StreamDescripto
             return i;
         } else {
             boost::cmatch match;
-            if (boost::regex_match(field_name.begin(), field_name.end(), match, pattern) &&
+            if (boost::regex_match(field_name.data(), field_name.data() + field_name.size(), match, pattern) &&
                 std::string_view(match[1].first, match[1].length()) == column_name) {
                 if (index_name && *index_name == column_name) {
                     // Fields are iterated in reverse order, the suffix indicating the repetition count will go down
@@ -2150,6 +2150,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
             matched_rows[source_row - source_row_start].push_back(target_row);
             ++target_row;
         }
+        // Optimizes the case of repeated index values. All matched rows corresponding to a particular index value must
+        // be the same, so just copy the matched rows in case index values are repeated.
         while (++source_row < source_row_end && source_index[source_row] == source_ts) {
             matched_rows[source_row - source_row_start] = matched_rows[source_row - 1];
         }
