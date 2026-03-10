@@ -801,7 +801,7 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
 
 
 def run_s3_server(port, key_file, cert_file):
-    verbose = strtobool("ARCTICDB_MOTO_VERBOSE")
+    verbose = strtobool(os.getenv("ARCTICDB_MOTO_VERBOSE", ""))
     _configure_moto_server_logging(verbose)
     _suppress_moto_server_stdio(verbose)
     request_handler = None if verbose else _QuietMotoRequestHandler
@@ -816,7 +816,7 @@ def run_s3_server(port, key_file, cert_file):
 
 
 def run_gcp_server(port, key_file, cert_file):
-    verbose = strtobool("ARCTICDB_MOTO_VERBOSE")
+    verbose = strtobool(os.getenv("ARCTICDB_MOTO_VERBOSE", ""))
     _configure_moto_server_logging(verbose)
     _suppress_moto_server_stdio(verbose)
     request_handler = None if verbose else _QuietMotoRequestHandler
