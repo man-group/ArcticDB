@@ -240,7 +240,10 @@ inline py::list node_results_to_python_list(std::vector<NodeReadResult>&& node_r
     py::list node_results_list;
     for (auto& node_result : node_results) {
         node_results_list.append(py::make_tuple(
-                node_result.symbol_, std::move(node_result.frame_data_), pb_to_python(node_result.norm_meta_)
+                node_result.symbol_,
+                std::move(node_result.frame_data_),
+                pb_to_python(node_result.norm_meta_),
+                static_cast<int>(node_result.sorted_)
         ));
     }
     return node_results_list;
@@ -269,7 +272,8 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                             pynorm,
                             pyuser_meta,
                             multi_key_meta,
-                            std::move(node_results)
+                            std::move(node_results),
+                            static_cast<int>(read_result.sorted)
                     ));
                     util::check(
                             !output_format.has_value() || output_format.value() == read_result.output_format,

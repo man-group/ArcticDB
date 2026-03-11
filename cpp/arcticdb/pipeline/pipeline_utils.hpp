@@ -102,13 +102,19 @@ inline ReadResult create_python_read_result(
         metadata = std::move(desc_proto.user_meta());
     }
 
+    auto sorted = result.desc_.sorted();
+
     std::vector<NodeReadResult> node_results;
     for (auto& node_output : node_outputs) {
         auto& node_fd = node_output.frame_and_descriptor_;
         auto node_python_frame = get_python_frame(node_fd);
         auto node_metadata = node_fd.desc_.proto().normalization();
+        auto node_sorted = node_fd.desc_.sorted();
         node_results.emplace_back(
-                node_output.versioned_item_.symbol(), std::move(node_python_frame), std::move(node_metadata)
+                node_output.versioned_item_.symbol(),
+                std::move(node_python_frame),
+                std::move(node_metadata),
+                node_sorted
         );
     }
     return {version,
@@ -117,7 +123,8 @@ inline ReadResult create_python_read_result(
             desc_proto.normalization(),
             metadata,
             desc_proto.multi_key_meta(),
-            std::move(node_results)};
+            std::move(node_results),
+            sorted};
 }
 
 inline ReadResult read_result_from_single_frame(
