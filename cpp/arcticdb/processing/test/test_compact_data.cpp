@@ -13,6 +13,7 @@
 
 using namespace arcticdb;
 
+// TODO: Parametrize all of these tests
 TEST(CompactDataStructureRowRanges, NoOp) {
     CompactDataClause clause{10};
     // A single slice of any size is always just returned as is
@@ -45,6 +46,15 @@ TEST(CompactDataStructureRowRanges, SmallAppend) {
     // slice
     std::set<RowRange> row_ranges{{0, 10}, {10, 20}, {20, 30}, {30, 35}};
     std::set<RowRange> expected{{0, 10}, {10, 20}, {20, 35}};
+    auto res = clause.structure_row_ranges(row_ranges);
+    ASSERT_EQ(res, expected);
+}
+
+TEST(CompactDataStructureRowRanges, SmallUpdate) {
+    CompactDataClause clause{10};
+    // Everything is already perfectly sliced except for a small row slice inserted into the middle
+    std::set<RowRange> row_ranges{{0, 10}, {10, 11}, {11, 21}};
+    std::set<RowRange> expected{{0, 10}, {10, 21}};
     auto res = clause.structure_row_ranges(row_ranges);
     ASSERT_EQ(res, expected);
 }
