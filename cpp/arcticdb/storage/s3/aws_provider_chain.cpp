@@ -8,6 +8,7 @@
 
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/auth/STSCredentialsProvider.h>
 #include <aws/identity-management/auth/STSProfileCredentialsProvider.h>
 #include <aws/core/auth/SSOCredentialsProvider.h>
 #include <aws/core/platform/Environment.h>
@@ -19,6 +20,8 @@ static const char AWS_ECS_CONTAINER_CREDENTIALS_RELATIVE_URI[] = "AWS_CONTAINER_
 static const char AWS_ECS_CONTAINER_CREDENTIALS_FULL_URI[] = "AWS_CONTAINER_CREDENTIALS_FULL_URI";
 static const char AWS_ECS_CONTAINER_AUTHORIZATION_TOKEN[] = "AWS_CONTAINER_AUTHORIZATION_TOKEN";
 static const char AWS_EC2_METADATA_DISABLED[] = "AWS_EC2_METADATA_DISABLED";
+static const char AWS_WEB_IDENTITY_TOKEN_FILE[] = "AWS_WEB_IDENTITY_TOKEN_FILE";
+static const char AWS_ROLE_ARN[] = "AWS_ROLE_ARN";
 static const char DefaultCredentialsProviderChainTag[] = "DefaultAWSCredentialsProviderChain";
 
 // Custom credentials provider chain used for the DEFAULT_CREDENTIALS_PROVIDER_CHAIN auth method (_RBAC_ path).
@@ -32,6 +35,26 @@ MyAWSCredentialsProviderChain::MyAWSCredentialsProviderChain() : Aws::Auth::AWSC
     AddProvider(Aws::MakeShared<EnvironmentAWSCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<ProfileConfigFileAWSCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<ProcessCredentialsProvider>(DefaultCredentialsProviderChainTag));
+    // Only add the STS web identity provider when the required env vars are present (EKS IRSA).
+    // The SDK's default chain adds it unconditionally, but on aws-sdk-cpp >= 1.11.622 (PR #3505)
+    // the CRT-based implementation can hang or crash during initialization when the env vars
+    // are absent. By gating on the env vars, EKS IRSA users still get the provider while
+    // non-EKS environments avoid the broken CRT initialization path.
+    const auto webIdentityTokenFile = Aws::Environment::GetEnv(AWS_WEB_IDENTITY_TOKEN_FILE);
+    const auto roleArn = Aws::Environment::GetEnv(AWS_ROLE_ARN);
+    if (!webIdentityTokenFile.empty() && !roleArn.empty()) {
+        AddProvider(Aws::MakeShared<STSAssumeRoleWebIdentityCredentialsProvider>(DefaultCredentialsProviderChainTag));
+        AWS_LOGSTREAM_INFO(
+                DefaultCredentialsProviderChainTag,
+                "Added STS web identity credentials provider to the provider chain."
+        );
+    } else {
+        AWS_LOGSTREAM_DEBUG(
+                DefaultCredentialsProviderChainTag,
+                "Skipping STS web identity credentials provider: "
+                        << AWS_WEB_IDENTITY_TOKEN_FILE << " or " << AWS_ROLE_ARN << " not set."
+        );
+    }
     AddProvider(Aws::MakeShared<SSOCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<STSProfileCredentialsProvider>(DefaultCredentialsProviderChainTag));
 

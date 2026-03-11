@@ -215,7 +215,7 @@ def test_library_get_key_path(lib_name, s3_and_nfs_storage_bucket, test_prefix):
     assert keys_count > 0
 
 
-def test_custom_credentials_provider_chain(lib_name):
+def test_custom_credentials_provider_chain(lib_name, monkeypatch):
     """Test that the _RBAC_ credentials path (DEFAULT_CREDENTIALS_PROVIDER_CHAIN) uses our
     custom MyAWSCredentialsProviderChain which excludes the problematic CRT-based
     STSAssumeRoleWebIdentityCredentialsProvider (see aws-sdk-cpp PR #3505, issues #3531, #3558).
@@ -224,6 +224,12 @@ def test_custom_credentials_provider_chain(lib_name):
     1. S3Storage construction with _RBAC_ credentials doesn't hang or crash
     2. Basic read/write operations work through the custom chain against moto
     """
+    # Set AWS env vars so that the EnvironmentAWSCredentialsProvider (the first provider
+    # in our custom chain) picks up valid credentials for moto. This still exercises the
+    # _RBAC_ → MyAWSCredentialsProviderChain code path in C++.
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "awd")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "awd")
+
     native_config = NativeVariantStorage(
         NativeS3Settings(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "", False)
     )
@@ -236,7 +242,7 @@ def test_custom_credentials_provider_chain(lib_name):
         with factory.create_fixture() as bucket:
             # Override the key to _RBAC_ so the C++ layer takes the custom chain path
             # instead of the explicit credentials path. The bucket was already created by
-            # the factory's admin client, so moto will serve requests regardless of auth.
+            # the factory's admin client with real moto credentials.
             bucket.key = Key(id="_RBAC_", secret="_RBAC_", user_name="rbac_test")
             lib = bucket.create_version_store_factory(lib_name)()
             df = pd.DataFrame({"a": [1, 2, 3]})
