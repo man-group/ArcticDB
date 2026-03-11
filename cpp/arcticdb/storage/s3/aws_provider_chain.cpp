@@ -8,7 +8,6 @@
 
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/core/auth/STSCredentialsProvider.h>
 #include <aws/identity-management/auth/STSProfileCredentialsProvider.h>
 #include <aws/core/auth/SSOCredentialsProvider.h>
 #include <aws/core/platform/Environment.h>
@@ -22,8 +21,9 @@ static const char AWS_ECS_CONTAINER_AUTHORIZATION_TOKEN[] = "AWS_CONTAINER_AUTHO
 static const char AWS_EC2_METADATA_DISABLED[] = "AWS_EC2_METADATA_DISABLED";
 static const char DefaultCredentialsProviderChainTag[] = "DefaultAWSCredentialsProviderChain";
 
-// Definition of own chain to work around https://github.com/aws/aws-sdk-cpp/issues/150
-// NOTE: These classes are not currently in use and may only be required if we need the STSProfileCred provider.
+// Custom credentials provider chain used for the DEFAULT_CREDENTIALS_PROVIDER_CHAIN auth method (_RBAC_ path).
+// This avoids regressions in the SDK's default chain (see aws-sdk-cpp PR #3505, issues #3531, #3558)
+// where the CRT-based STSAssumeRoleWebIdentityCredentialsProvider has caching and threading bugs.
 namespace arcticdb::storage::s3 {
 
 using namespace Aws::Auth;
@@ -32,7 +32,6 @@ MyAWSCredentialsProviderChain::MyAWSCredentialsProviderChain() : Aws::Auth::AWSC
     AddProvider(Aws::MakeShared<EnvironmentAWSCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<ProfileConfigFileAWSCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<ProcessCredentialsProvider>(DefaultCredentialsProviderChainTag));
-    AddProvider(Aws::MakeShared<STSAssumeRoleWebIdentityCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<SSOCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<STSProfileCredentialsProvider>(DefaultCredentialsProviderChainTag));
 
