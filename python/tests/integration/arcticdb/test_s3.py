@@ -13,6 +13,7 @@ from multiprocessing import Queue, Process
 import pytest
 import pandas as pd
 import sys
+import arcticdb as adb
 
 from arcticdb_ext.exceptions import StorageException
 
@@ -262,8 +263,6 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
     Credentials are supplied via AWS_SHARED_CREDENTIALS_FILE so that the
     ProfileConfigFileAWSCredentialsProvider in our custom chain picks them up.
     """
-    import arcticdb as adb
-
     s3_endpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, _, _ = real_s3_credentials(shared_path=False)
 
     # Write credentials to a temp file for the ProfileConfigFileAWSCredentialsProvider
