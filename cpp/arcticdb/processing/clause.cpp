@@ -2169,7 +2169,7 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
             }
         }
     }
-    if (current.diff() >= min_rows_per_segment_) {
+    if (current.diff() >= min_rows_per_segment_ || res.empty()) {
         res.emplace(current);
     } else if (current.diff() > 0) {
         auto last_it = std::prev(res.end());
