@@ -724,7 +724,7 @@ class TestMergeTimeseriesUpdate:
             assert '"my_duplicated_column"' in str(exc_info.value)
             assert "multiple" in str(exc_info.value)
 
-    @pytest.mark.parametrize("index_name", (None, "index"))
+    @pytest.mark.parametrize("index_name", (None, "index_name"))
     def test_on_column_is_named_as_the_index(self, lmdb_library, index_name):
         lib = lmdb_library
         repeated_column = "index" if index_name is None else index_name

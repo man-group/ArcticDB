@@ -139,33 +139,40 @@ void merge_update_string_column(
 }
 
 size_t find_column_for_match(std::string_view column_name, const StreamDescriptor& descriptor) {
-    static const boost::regex pattern(R"(__col_(\w+)__(\d+))");
+    static const boost::regex pattern(R"(__col_(.+)__(\d+))");
     const std::optional<std::string_view> index_name =
             descriptor.index().field_count() ? std::optional(descriptor.field(0).name()) : std::nullopt;
-    for (int64_t i = descriptor.field_count() - 1; i >= descriptor.index().field_count(); --i) {
+    // If the DatetimeIndex is the same as the column name we allow one repetition so that if there's a column named
+    // "index" and the DatetimeIndex is not named, it'll work. This'll also work if the index has the same name as the
+    // column.
+    bool can_name_be_repeated = index_name ? column_name == *index_name : false;
+    std::optional<size_t> repeated_column_index;
+    for (size_t i = descriptor.index().field_count(); i < descriptor.field_count(); ++i) {
         const std::string_view field_name = descriptor.field(i).name();
         if (field_name == column_name) {
             return i;
         } else {
             boost::cmatch match;
-            if (boost::regex_match(field_name.data(), field_name.data() + field_name.size(), match, pattern) &&
-                std::string_view(match[1].first, match[1].length()) == column_name) {
-                if (index_name && *index_name == column_name) {
-                    // Fields are iterated in reverse order, the suffix indicating the repetition count will go down
-                    // if the column is repeated twice (in the index and one more place) this will pass, otherwise if
-                    // the column is repeated 3 or more times it'll throw.
-                    if (std::stoi(match[2]) == 0) {
-                        return i;
+            if (boost::regex_match(field_name.data(), field_name.data() + field_name.size(), match, pattern)) {
+                const std::string_view matched_name(match[1].first, match[1].length());
+                if (matched_name == column_name) {
+                    if (can_name_be_repeated) {
+                        can_name_be_repeated = false;
+                        repeated_column_index = i;
+                    } else {
+                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                "Column name \"{}\" is repeated multiple times in the dataframe. This makes its use in "
+                                "matching for merge ambiguous for the stream descriptor: {}",
+                                column_name,
+                                descriptor
+                        );
                     }
                 }
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        "Column name \"{}\" is repeated multiple times in the dataframe. This makes its use in "
-                        "matching for merge ambiguous for the stream descriptor: {}",
-                        column_name,
-                        descriptor
-                );
             }
         }
+    }
+    if (repeated_column_index) {
+        return *repeated_column_index;
     }
     user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
             "Trying to match on column \"{}\" that does not exist in descriptor {}", column_name, descriptor
