@@ -249,3 +249,44 @@ def test_custom_credentials_provider_chain(lib_name, monkeypatch):
             lib.write("test_symbol", df)
             result = lib.read("test_symbol").data
             assert_frame_equal(result, df)
+
+
+@REAL_S3_TESTS_MARK
+@pytest.mark.storage
+@pytest.mark.authentication
+def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypatch):
+    """Test the custom MyAWSCredentialsProviderChain against real S3.
+
+    Uses aws_auth=true in the URI which triggers the _RBAC_ → custom chain code path.
+    Credentials are supplied via AWS_SHARED_CREDENTIALS_FILE so that the
+    ProfileConfigFileAWSCredentialsProvider in our custom chain picks them up.
+    """
+    import arcticdb as adb
+
+    s3_endpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, _, _ = real_s3_credentials(shared_path=False)
+
+    # Write credentials to a temp file for the ProfileConfigFileAWSCredentialsProvider
+    creds_file = tmp_path / "credentials"
+    creds_file.write_text(
+        f"[default]\n"
+        f"aws_access_key_id = {s3_access_key}\n"
+        f"aws_secret_access_key = {s3_secret_key}\n"
+    )
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
+
+    if "amazonaws.com" in (s3_endpoint or ""):
+        host = f"s3.{s3_region}.amazonaws.com"
+    else:
+        host = s3_endpoint.replace("https://", "").replace("http://", "")
+
+    uri = f"s3://{host}:{s3_bucket}?aws_auth=true&path_prefix=test_custom_chain_{lib_name}"
+
+    ac = adb.Arctic(uri)
+    try:
+        lib = ac.create_library(lib_name)
+        df = pd.DataFrame({"a": [1, 2, 3]})
+        lib.write("test_symbol", df)
+        result = lib.read("test_symbol").data
+        assert_frame_equal(result, df)
+    finally:
+        ac.delete_library(lib_name)
