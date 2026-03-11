@@ -2141,12 +2141,56 @@ std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
 CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {
     // TODO: Check if rounding gives the correct behaviour for edge cases
+    // Magic range of +-33% chosen chosen such that:
+    // - 2 row slices with < min_rows_per_segment_ cannot be combined into one row slice with > max_rows_per_segment_
+    // - 1 row slice with > max_rows_per_segment_ when split in half will still have >= min_rows_per_segment_ in each
+    //   resulting row slice
     min_rows_per_segment_ = (2 * rows_per_segment_) / 3;
     max_rows_per_segment_ = 2 * min_rows_per_segment_;
 }
 
+std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRange>& row_ranges) const {
+    // Greedy algorithm - keep adding row ranges until there are at least min_rows_per_segment_
+    // If possible, keep adding more to get as close as possible to rows_per_segment_
+    // If it is necessary to get above min_rows_per_segment_ in a slice, we may have to exceed max_rows_per_segment_
+    // In this case, process will split into 2 row slices
+    std::set<RowRange> res;
+    RowRange current{0, 0};
+    for (const auto& row_range : row_ranges) {
+        if (current.diff() == 0) {
+            current = row_range;
+        } else {
+            if (current.diff() < min_rows_per_segment_ || current.diff() + row_range.diff() <= rows_per_segment_ ||
+                (current.diff() + row_range.diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()) {
+                current.second = row_range.second;
+            } else {
+                res.emplace(current);
+                current = row_range;
+            }
+        }
+    }
+    if (current.diff() >= min_rows_per_segment_) {
+        res.emplace(current);
+    } else if (current.diff() > 0) {
+        auto last_it = std::prev(res.end());
+        auto last_row_range = *last_it;
+        last_row_range.second = current.second;
+        res.erase(last_it);
+        res.emplace(last_row_range);
+    }
+    return res;
+}
+
 std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
+    // Extract the unique row ranges and col ranges
+    std::set<RowRange> row_ranges;
+    std::set<ColRange> col_ranges;
+    for (const auto& range_and_key : ranges_and_keys) {
+        row_ranges.insert(range_and_key.row_range());
+        col_ranges.insert(range_and_key.col_range());
+    }
+    auto processing_row_ranges = structure_row_ranges(row_ranges);
     // TODO: Implement properly
     return structure_by_row_slice(ranges_and_keys);
 }

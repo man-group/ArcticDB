@@ -932,7 +932,11 @@ struct CompactDataClause {
 
     [[nodiscard]] std::string to_string() const;
 
+    // Public only for testing purposes
+    [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
+
   private:
+    // TODO@ Consider renaming to *_per_slice_
     uint64_t rows_per_segment_;
     uint64_t min_rows_per_segment_;
     uint64_t max_rows_per_segment_;
