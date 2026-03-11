@@ -535,6 +535,7 @@ set(arcticdb_srcs
         storage/mongo/mongo_storage.cpp
         storage/s3/nfs_backed_storage.cpp
         storage/s3/ec2_utils.cpp
+        storage/s3/aws_provider_chain.cpp
         storage/s3/s3_api.cpp
         storage/s3/s3_client_impl.cpp
         storage/mock/s3_mock_client.cpp
