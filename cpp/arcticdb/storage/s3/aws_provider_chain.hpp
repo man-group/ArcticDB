@@ -5,10 +5,35 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
  * will be governed by the Apache License, version 2.0.
  */
-#pragma once
+
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/core/auth/AWSCredentialsProvider.h>
+
+#include <mutex>
 
 namespace arcticdb::storage::s3 {
+
+// Custom STS Web Identity provider that calls AssumeRoleWithWebIdentity directly,
+// bypassing the CRT-based STSAssumeRoleWebIdentityCredentialsProvider which has
+// caching/threading bugs (aws-sdk-cpp PR #3505, issues #3531, #3558, #3562).
+// On STS failure, returns empty credentials so the chain continues to the next provider.
+class SafeSTSWebIdentityCredentialsProvider : public Aws::Auth::AWSCredentialsProvider {
+  public:
+    SafeSTSWebIdentityCredentialsProvider();
+    Aws::Auth::AWSCredentials GetAWSCredentials() override;
+
+  private:
+    void RefreshIfExpired();
+    bool ExpiresSoon() const;
+
+    Aws::String m_roleArn;
+    Aws::String m_tokenFile;
+    Aws::String m_sessionName;
+    Aws::String m_region;
+    Aws::Auth::AWSCredentials m_credentials;
+    std::mutex m_credsMutex;
+    bool m_initialized;
+};
 
 class MyAWSCredentialsProviderChain : public Aws::Auth::AWSCredentialsProviderChain {
   public:
