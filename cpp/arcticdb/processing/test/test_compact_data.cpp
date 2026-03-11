@@ -32,7 +32,7 @@ TEST(CompactDataStructureRowRanges, NoOp) {
     row_ranges = std::set<RowRange>{{0, 10}, {10, 20}, {20, 30}, {30, 36}};
     res = clause.structure_row_ranges(row_ranges);
     ASSERT_EQ(res, row_ranges);
-    // Everything is within the acceptable range, which is 6-12 rows inclusive with rows_per_segment_ at 10 and will not
+    // Everything is within the acceptable range, which is 6-12 rows inclusive with rows_per_segment_ == 10 and will not
     // get better through re-slicing
     row_ranges = std::set<RowRange>{{0, 9}, {9, 15}, {15, 23}, {23, 33}};
     res = clause.structure_row_ranges(row_ranges);

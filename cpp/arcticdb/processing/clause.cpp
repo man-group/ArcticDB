@@ -2150,28 +2150,27 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
 }
 
 std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRange>& row_ranges) const {
+    if (row_ranges.empty()) {
+        return {};
+    }
     // Greedy algorithm - keep adding row ranges until there are at least min_rows_per_segment_
     // If possible, keep adding more to get as close as possible to rows_per_segment_
     // If it is necessary to get above min_rows_per_segment_ in a slice, we may have to exceed max_rows_per_segment_
     // In this case, process will split into 2 row slices
     std::set<RowRange> res;
-    RowRange current{0, 0};
-    for (const auto& row_range : row_ranges) {
-        if (current.diff() == 0) {
-            current = row_range;
+    RowRange current = *row_ranges.cbegin();
+    for (auto row_range = std::next(row_ranges.cbegin()); row_range != row_ranges.cend(); ++row_range) {
+        if (current.diff() < min_rows_per_segment_ || current.diff() + row_range->diff() <= rows_per_segment_ ||
+            (current.diff() + row_range->diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()) {
+            current.second = row_range->second;
         } else {
-            if (current.diff() < min_rows_per_segment_ || current.diff() + row_range.diff() <= rows_per_segment_ ||
-                (current.diff() + row_range.diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()) {
-                current.second = row_range.second;
-            } else {
-                res.emplace(current);
-                current = row_range;
-            }
+            res.emplace(current);
+            current = *row_range;
         }
     }
     if (current.diff() >= min_rows_per_segment_ || res.empty()) {
         res.emplace(current);
-    } else if (current.diff() > 0) {
+    } else {
         auto last_it = std::prev(res.end());
         auto last_row_range = *last_it;
         last_row_range.second = current.second;
