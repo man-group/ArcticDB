@@ -168,10 +168,10 @@ static void assign_strings_shared(
                 const auto sv = get_string_from_pool(offset, string_pool);
                 if (auto shared = shared_map.find(get_string_from_pool(offset, string_pool));
                     shared != shared_map.end()) {
+                    obj = shared->second;
+                } else {
                     obj = StringCreator::create(sv, has_type_conversion);
                     shared_map.try_emplace(sv, obj);
-                } else {
-                    obj = shared->second;
                 }
 
                 allocated.try_emplace(offset, obj);
