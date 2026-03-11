@@ -207,7 +207,7 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
     } else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN &&
                creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms with custom credentials provider chain");
-        auto cred_provider = Aws::MakeShared<MyAWSCredentialsProviderChain>("DefaultAWSCredentialsProviderChain");
+        auto cred_provider = Aws::MakeShared<Aws::Auth::DefaultAWSCredentialsProviderChain>("DefaultAWSCredentialsProviderChain");
         s3_client_ = std::make_unique<S3ClientImpl>(
                 cred_provider,
                 get_s3_config_and_set_env_var(conf),
