@@ -12,11 +12,13 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
+#include <arcticdb/storage/s3/aws_provider_chain.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 
+#include <chrono>
 #include <aws/core/Aws.h>
 
 struct EnvFunctionShim : ::testing::Test {
@@ -430,6 +432,25 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
     }
     ASSERT_EQ(list_in_store(store, KeyType::TABLE_DATA, prefix), symbols);
     ASSERT_TRUE(store.directory_bucket());
+}
+
+// Verify that MyAWSCredentialsProviderChain can be constructed and that GetAWSCredentials()
+// completes quickly. On SDK versions >= 1.11.622 where the CRT-based
+// STSAssumeRoleWebIdentityCredentialsProvider was introduced (aws-sdk-cpp PR #3505),
+// the default chain could hang for 10+ seconds or crash. Our custom chain excludes
+// that provider, so this should complete near-instantly.
+TEST(TestS3Storage, custom_credentials_provider_chain_completes_quickly) {
+    auto api = S3ApiInstance::instance();
+    auto start = std::chrono::steady_clock::now();
+    auto chain = MyAWSCredentialsProviderChain();
+    auto creds = chain.GetAWSCredentials();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    // Without real AWS credentials configured, the chain should return empty credentials.
+    // The key property: it must complete in well under 10 seconds (the CRT STS timeout).
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
+    // In a CI environment with no AWS credentials, we expect empty credentials.
+    // We don't assert emptiness because some environments may have credentials configured.
 }
 
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {

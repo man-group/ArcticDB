@@ -21,9 +21,10 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, Key
 
 from arcticdb.util.test import config_context, config_context_string
+from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, S3Settings as NativeS3Settings
 from tests.util.mark import SKIP_CONDA_MARK
 
 pytestmark = pytest.mark.skipif(
@@ -212,3 +213,33 @@ def test_library_get_key_path(lib_name, s3_and_nfs_storage_bucket, test_prefix):
             assert path.startswith(test_prefix)
 
     assert keys_count > 0
+
+
+def test_custom_credentials_provider_chain(lib_name):
+    """Test that the _RBAC_ credentials path (DEFAULT_CREDENTIALS_PROVIDER_CHAIN) uses our
+    custom MyAWSCredentialsProviderChain which excludes the problematic CRT-based
+    STSAssumeRoleWebIdentityCredentialsProvider (see aws-sdk-cpp PR #3505, issues #3531, #3558).
+
+    This test verifies that:
+    1. S3Storage construction with _RBAC_ credentials doesn't hang or crash
+    2. Basic read/write operations work through the custom chain against moto
+    """
+    native_config = NativeVariantStorage(
+        NativeS3Settings(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "", False)
+    )
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False,
+        ssl_test_support=False,
+        bucket_versioning=False,
+        native_config=native_config,
+    ) as factory:
+        with factory.create_fixture() as bucket:
+            # Override the key to _RBAC_ so the C++ layer takes the custom chain path
+            # instead of the explicit credentials path. The bucket was already created by
+            # the factory's admin client, so moto will serve requests regardless of auth.
+            bucket.key = Key(id="_RBAC_", secret="_RBAC_", user_name="rbac_test")
+            lib = bucket.create_version_store_factory(lib_name)()
+            df = pd.DataFrame({"a": [1, 2, 3]})
+            lib.write("test_symbol", df)
+            result = lib.read("test_symbol").data
+            assert_frame_equal(result, df)
