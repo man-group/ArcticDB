@@ -19,6 +19,23 @@ from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothes
 from arcticdb.util.test import assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
 
+# In all tests in this file we test all string formats as part of a single table.
+# Since arrow writes do not support writing categorical columns we write `cat_str_col` as `large_string`
+# and then use `undictionarify_table` to convert it back to large string so we can compare.
+STRING_FORMAT_PER_COLUMN = {
+    "str_col": pa.string(),
+    "large_str_col": pa.large_string(),
+    "cat_str_col": pa.dictionary(pa.int32(), pa.large_string()),
+}
+
+
+def undictionarify_table(table):
+    for i, name in enumerate(table.column_names):
+        typ = table.column(i).type
+        if pa.types.is_dictionary(typ):
+            table = table.set_column(i, name, table.column(i).cast(typ.value_type))
+    return table
+
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("use_query_builder", [True, False])
@@ -32,6 +49,7 @@ def test_sparse_arrow_row_range(
     lib._set_allow_arrow_input()
     sym = "test_sparse_arrow_row_range"
     # Three segments of 5 rows with complementary null patterns across dtypes
+    str_data = [None, "a", None, "b", None, "c", None, None, None, None, None, None, "d", "e", "f"]
     table = pa.table(
         {
             "int_col": pa.array([1, None, 2, None, 3, 4, None, None, None, None, None, 5, 6, 7, 8], pa.int64()),
@@ -43,10 +61,9 @@ def test_sparse_arrow_row_range(
                 [True, None, False, None, True, None, None, None, True, False, None, True, False, True, None],
                 pa.bool_(),
             ),
-            "str_col": pa.array(
-                [None, "a", None, "b", None, "c", None, None, None, None, None, None, "d", "e", "f"],
-                pa.string(),
-            ),
+            "str_col": pa.array(str_data, pa.string()),
+            "large_str_col": pa.array(str_data, pa.large_string()),
+            "cat_str_col": pa.array(str_data, pa.large_string()),
         }
     )
     lib.write(sym, table)
@@ -54,12 +71,12 @@ def test_sparse_arrow_row_range(
     expected = table.slice(offset=row_range_start, length=row_range_width)
     if use_query_builder:
         q = QueryBuilder().row_range(row_range)
-        received = lib.read(sym, query_builder=q, arrow_string_format_per_column={"str_col": pa.string()}).data
+        received = lib.read(sym, query_builder=q, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
         received_pandas = lib.read(sym, query_builder=q, output_format="PANDAS").data
     else:
-        received = lib.read(sym, row_range=row_range, arrow_string_format_per_column={"str_col": pa.string()}).data
+        received = lib.read(sym, row_range=row_range, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
         received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
-    assert expected.equals(received)
+    assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
@@ -76,6 +93,7 @@ def test_sparse_arrow_date_range(
     sym = "test_sparse_arrow_date_range"
     # Three segments of 5 rows with complementary null patterns across dtypes
     dates = pd.date_range("2025-01-01", periods=15)
+    str_data = [None, "a", None, "b", None, "c", None, None, None, None, None, None, "d", "e", "f"]
     table = pa.table(
         {
             "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
@@ -88,10 +106,9 @@ def test_sparse_arrow_date_range(
                 [True, None, False, None, True, None, None, None, True, False, None, True, False, True, None],
                 pa.bool_(),
             ),
-            "str_col": pa.array(
-                [None, "a", None, "b", None, "c", None, None, None, None, None, None, "d", "e", "f"],
-                pa.string(),
-            ),
+            "str_col": pa.array(str_data, pa.string()),
+            "large_str_col": pa.array(str_data, pa.large_string()),
+            "cat_str_col": pa.array(str_data, pa.large_string()),
         }
     )
     lib.write(sym, table, index_column="ts")
@@ -100,12 +117,12 @@ def test_sparse_arrow_date_range(
     expected = table.slice(offset=offset, length=date_range_width)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
-        received = lib.read(sym, query_builder=q, arrow_string_format_per_column={"str_col": pa.string()}).data
+        received = lib.read(sym, query_builder=q, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
         received_pandas = lib.read(sym, query_builder=q, output_format="PANDAS").data.reset_index()
     else:
-        received = lib.read(sym, date_range=date_range, arrow_string_format_per_column={"str_col": pa.string()}).data
+        received = lib.read(sym, date_range=date_range, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
         received_pandas = lib.read(sym, date_range=date_range, output_format="PANDAS").data.reset_index()
-    assert expected.equals(received)
+    assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
@@ -129,19 +146,31 @@ def test_sparse_arrow_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, u
     vals = float_array.to_pylist()
     int_col = pa.array([None if v is None else round(v) for v in vals], pa.int64())
     bool_col = pa.array([None if v is None else v > 500.0 for v in vals], pa.bool_())
-    str_col = pa.array([None if v is None else str(round(v)) for v in vals], pa.string())
-    table = pa.table({"float_col": float_array, "int_col": int_col, "bool_col": bool_col, "str_col": str_col})
+    str_data = [None if v is None else str(round(v)) for v in vals]
+    str_col = pa.array(str_data, pa.string())
+    large_str_col = pa.array(str_data, pa.large_string())
+    cat_str_col = pa.array(str_data, pa.large_string())
+    table = pa.table(
+        {
+            "float_col": float_array,
+            "int_col": int_col,
+            "bool_col": bool_col,
+            "str_col": str_col,
+            "large_str_col": large_str_col,
+            "cat_str_col": cat_str_col,
+        }
+    )
     lib.write(sym, table)
     if use_row_range:
         row_range = (row_count // 3, (2 * row_count) // 3)
         expected = table.slice(offset=row_range[0], length=row_range[1] - row_range[0])
-        received = lib.read(sym, row_range=row_range, arrow_string_format_per_column={"str_col": pa.string()}).data
+        received = lib.read(sym, row_range=row_range, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
         received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
     else:
         expected = table
-        received = lib.read(sym, arrow_string_format_per_column={"str_col": pa.string()}).data
+        received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
         received_pandas = lib.read(sym, output_format="PANDAS").data
-    assert expected.equals(received)
+    assert expected.equals(undictionarify_table(received))
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
@@ -368,46 +397,58 @@ def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_
     lib = lmdb_version_store_arrow
     sym = "test_sparse_append_roundtrip"
     if write_sparse:
+        str_data_1 = [None, "b", None]
         t1 = pa.table(
             {
                 "int_col": pa.array([1, None, 3], pa.int64()),
                 "float_col": pa.array([None, 2.0, None], pa.float64()),
                 "bool_col": pa.array([True, None, False], pa.bool_()),
-                "str_col": pa.array([None, "b", None], pa.string()),
+                "str_col": pa.array(str_data_1, pa.string()),
+                "large_str_col": pa.array(str_data_1, pa.large_string()),
+                "cat_str_col": pa.array(str_data_1, pa.large_string()),
             }
         )
     else:
+        str_data_1 = ["a", "b", "c"]
         t1 = pa.table(
             {
                 "int_col": pa.array([1, 2, 3], pa.int64()),
                 "float_col": pa.array([1.0, 2.0, 3.0], pa.float64()),
                 "bool_col": pa.array([True, False, True], pa.bool_()),
-                "str_col": pa.array(["a", "b", "c"], pa.string()),
+                "str_col": pa.array(str_data_1, pa.string()),
+                "large_str_col": pa.array(str_data_1, pa.large_string()),
+                "cat_str_col": pa.array(str_data_1, pa.large_string()),
             }
         )
     if append_sparse:
+        str_data_2 = ["d", None, "f"]
         t2 = pa.table(
             {
                 "int_col": pa.array([None, 5, None], pa.int64()),
                 "float_col": pa.array([4.0, None, 6.0], pa.float64()),
                 "bool_col": pa.array([None, True, None], pa.bool_()),
-                "str_col": pa.array(["d", None, "f"], pa.string()),
+                "str_col": pa.array(str_data_2, pa.string()),
+                "large_str_col": pa.array(str_data_2, pa.large_string()),
+                "cat_str_col": pa.array(str_data_2, pa.large_string()),
             }
         )
     else:
+        str_data_2 = ["d", "e", "f"]
         t2 = pa.table(
             {
                 "int_col": pa.array([4, 5, 6], pa.int64()),
                 "float_col": pa.array([4.0, 5.0, 6.0], pa.float64()),
                 "bool_col": pa.array([False, True, False], pa.bool_()),
-                "str_col": pa.array(["d", "e", "f"], pa.string()),
+                "str_col": pa.array(str_data_2, pa.string()),
+                "large_str_col": pa.array(str_data_2, pa.large_string()),
+                "cat_str_col": pa.array(str_data_2, pa.large_string()),
             }
         )
     lib.write(sym, t1)
     lib.append(sym, t2)
-    received = lib.read(sym, arrow_string_format_per_column={"str_col": pa.string()}).data
+    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
     expected = pa.concat_tables([t1, t2])
-    assert expected.equals(received)
+    assert expected.equals(undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
@@ -448,43 +489,55 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
     dates = pd.date_range("2025-01-01", periods=6)
     update_dates = pd.date_range("2025-01-03", periods=2)  # replaces rows 2 and 3
     if write_sparse:
+        write_str_data = [None, "b", None, "d", None, "f"]
         write_table = pa.table(
             {
                 "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
                 "int_col": pa.array([1, None, 3, None, 5, 6], pa.int64()),
                 "float_col": pa.array([None, 2.0, None, 4.0, None, None], pa.float64()),
                 "bool_col": pa.array([True, None, False, None, True, False], pa.bool_()),
-                "str_col": pa.array([None, "b", None, "d", None, "f"], pa.string()),
+                "str_col": pa.array(write_str_data, pa.string()),
+                "large_str_col": pa.array(write_str_data, pa.large_string()),
+                "cat_str_col": pa.array(write_str_data, pa.large_string()),
             }
         )
     else:
+        write_str_data = ["a", "b", "c", "d", "e", "f"]
         write_table = pa.table(
             {
                 "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
                 "int_col": pa.array([1, 2, 3, 4, 5, 6], pa.int64()),
                 "float_col": pa.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], pa.float64()),
                 "bool_col": pa.array([True, False, True, False, True, False], pa.bool_()),
-                "str_col": pa.array(["a", "b", "c", "d", "e", "f"], pa.string()),
+                "str_col": pa.array(write_str_data, pa.string()),
+                "large_str_col": pa.array(write_str_data, pa.large_string()),
+                "cat_str_col": pa.array(write_str_data, pa.large_string()),
             }
         )
     if update_sparse:
+        update_str_data = ["C", None]
         update_table = pa.table(
             {
                 "ts": pa.Array.from_pandas(update_dates, type=pa.timestamp("ns")),
                 "int_col": pa.array([None, 40], pa.int64()),
                 "float_col": pa.array([30.0, None], pa.float64()),
                 "bool_col": pa.array([None, True], pa.bool_()),
-                "str_col": pa.array(["C", None], pa.string()),
+                "str_col": pa.array(update_str_data, pa.string()),
+                "large_str_col": pa.array(update_str_data, pa.large_string()),
+                "cat_str_col": pa.array(update_str_data, pa.large_string()),
             }
         )
     else:
+        update_str_data = ["C", "D"]
         update_table = pa.table(
             {
                 "ts": pa.Array.from_pandas(update_dates, type=pa.timestamp("ns")),
                 "int_col": pa.array([30, 40], pa.int64()),
                 "float_col": pa.array([30.0, 40.0], pa.float64()),
                 "bool_col": pa.array([False, True], pa.bool_()),
-                "str_col": pa.array(["C", "D"], pa.string()),
+                "str_col": pa.array(update_str_data, pa.string()),
+                "large_str_col": pa.array(update_str_data, pa.large_string()),
+                "cat_str_col": pa.array(update_str_data, pa.large_string()),
             }
         )
     lib.write(sym, write_table, index_column="ts")
@@ -500,8 +553,8 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
     applied_update = update_table.filter(pa.array([start <= t <= end for t in update_ts]))
     expected = pa.concat_tables([write_before, applied_update, write_after])
 
-    received = lib.read(sym, arrow_string_format_per_column={"str_col": pa.string()}).data
-    assert expected.equals(received)
+    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+    assert expected.equals(undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
@@ -550,10 +603,13 @@ def test_sparse_dynamic_schema_combined(version_store_factory):
         }
     )
     # Segment 2: int_col as float64 (sparse, upgrades int64 from segment 1) + str_col (sparse), no bool_col
+    str_data_2 = ["d", None, "f"]
     t2 = pa.table(
         {
             "int_to_float_col": pa.array([None, 5.0, None], pa.float64()),
-            "str_col": pa.array(["d", None, "f"], pa.string()),
+            "str_col": pa.array(str_data_2, pa.string()),
+            "large_str_col": pa.array(str_data_2, pa.large_string()),
+            "cat_str_col": pa.array(str_data_2, pa.large_string()),
         }
     )
     # Segment 3: only bool_col
@@ -565,15 +621,18 @@ def test_sparse_dynamic_schema_combined(version_store_factory):
     lib.write(sym, t1)
     lib.append(sym, t2)
     lib.append(sym, t3)
-    received = lib.read(sym, arrow_string_format_per_column={"str_col": pa.string()}).data
+    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+    str_data_expected = [None, None, None, "d", None, "f", None, None]
     expected = pa.table(
         {
             "int_to_float_col": pa.array([1.0, None, 3.0, None, 5.0, None, None, None], pa.float64()),
             "bool_col": pa.array([True, None, False, None, None, None, None, False], pa.bool_()),
-            "str_col": pa.array([None, None, None, "d", None, "f", None, None], pa.string()),
+            "str_col": pa.array(str_data_expected, pa.string()),
+            "large_str_col": pa.array(str_data_expected, pa.large_string()),
+            "cat_str_col": pa.array(str_data_expected, pa.large_string()),
         }
     )
-    assert expected.equals(received)
+    assert expected.equals(undictionarify_table(received))
     # TODO: Reading as pandas populates the missing values of Segment 1 `int_to_float_col` with 0.0 instead of NaN (monday: 11458614876)
     # received_pandas = lib.read(sym, output_format="PANDAS").data
     # assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
