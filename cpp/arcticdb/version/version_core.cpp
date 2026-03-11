@@ -2920,10 +2920,10 @@ folly::Future<VersionedItem> merge_update_impl(
 
 folly::Future<VersionedItem> compact_data_impl(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, size_t rows_per_segment, double tolerance
+        const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
 ) {
     auto read_query = std::make_shared<ReadQuery>();
-    read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment, tolerance)));
+    read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
     std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, version_info, *read_query, {});
     return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context), store, write_options, target_partial_index_key](

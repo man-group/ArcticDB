@@ -30,15 +30,6 @@ def test_compact_data_negative_rows_per_segment(lmdb_version_store_v1):
         lib.compact_data_experimental(sym, rows_per_segment=-1)
 
 
-@pytest.mark.parametrize("tolerance", [-0.1, 1.01])
-def test_compact_data_invalid_tolerance(lmdb_version_store_v1, tolerance):
-    lib = lmdb_version_store_v1
-    sym = "test_compact_data_invalid_tolerance"
-    lib.write(sym, 0)
-    with pytest.raises(UserInputException):
-        lib.compact_data_experimental(sym, tolerance=tolerance)
-
-
 def test_compact_data_noop(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_compact_data_noop"

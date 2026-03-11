@@ -1499,10 +1499,9 @@ VersionedItem PythonVersionStore::merge(
 }
 
 VersionedItem PythonVersionStore::compact_data(
-        const StreamId& stream_id, std::optional<size_t> rows_per_segment, double tolerance,
-        bool prune_previous_versions
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
 ) {
-    return compact_data_internal(stream_id, rows_per_segment, tolerance, prune_previous_versions);
+    return compact_data_internal(stream_id, rows_per_segment, prune_previous_versions);
 }
 
 } // namespace arcticdb::version_store

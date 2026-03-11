@@ -3786,16 +3786,19 @@ class NativeVersionStore:
         self,
         symbol: str,
         rows_per_segment: Optional[int] = None,
-        tolerance: float = 0.5,
         prune_previous_version: Optional[bool] = None,
     ) -> VersionedItem:
         check(
             rows_per_segment is None or rows_per_segment > 0,
             f"rows_per_segment must be >0, received {rows_per_segment}",
         )
-        cxx_versioned_item = self.version_store._compact_data(
-            symbol, rows_per_segment, tolerance, prune_previous_version
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
         )
+        cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
 
     # TODO: Mark these and Library methods as deprecated

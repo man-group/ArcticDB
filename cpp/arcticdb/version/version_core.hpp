@@ -199,7 +199,7 @@ folly::Future<VersionedItem> merge_update_impl(
 
 folly::Future<VersionedItem> compact_data_impl(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, size_t rows_per_segment, double tolerance
+        const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(

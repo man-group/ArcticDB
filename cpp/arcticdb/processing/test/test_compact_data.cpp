@@ -24,7 +24,7 @@ TEST(CompactData, StructureForProcessingNoOp) {
     RangesAndKey bottom(row_range_2, col_range, {});
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    CompactDataClause compact_data_clause{10, 0.5};
+    CompactDataClause compact_data_clause{10};
     auto proc_unit_ids = compact_data_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 0);
     std::vector<std::vector<size_t>> expected_proc_unit_ids{};
@@ -43,7 +43,7 @@ TEST(CompactData, StructureForProcessingBasic) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    CompactDataClause compact_data_clause{100, 1};
+    CompactDataClause compact_data_clause{100};
     auto proc_unit_ids = compact_data_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -66,7 +66,7 @@ TEST(CompactData, StructureForProcessingColumnSlicing) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom_left, top_right, bottom_right, top_left};
 
-    CompactDataClause compact_data_clause{100, 1};
+    CompactDataClause compact_data_clause{100};
     auto proc_unit_ids = compact_data_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 4);
     ASSERT_EQ(ranges_and_keys[0], top_left);

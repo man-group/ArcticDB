@@ -2139,9 +2139,11 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
-CompactDataClause::CompactDataClause(size_t rows_per_segment, double tolerance) :
-    rows_per_segment_(rows_per_segment),
-    tolerance_(tolerance) {}
+CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {
+    // TODO: Check if rounding gives the correct behaviour for edge cases
+    min_rows_per_segment_ = (2 * rows_per_segment_) / 3;
+    max_rows_per_segment_ = 2 * min_rows_per_segment_;
+}
 
 std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
@@ -2173,7 +2175,7 @@ OutputSchema CompactDataClause::join_schemas(std::vector<OutputSchema>&&) const 
 }
 
 std::string CompactDataClause::to_string() const {
-    return fmt::format("COMPACT_DATA(rows_per_segment={}, tolerance={})", rows_per_segment_, tolerance_);
+    return fmt::format("COMPACT_DATA(rows_per_segment={})", rows_per_segment_);
 }
 
 } // namespace arcticdb

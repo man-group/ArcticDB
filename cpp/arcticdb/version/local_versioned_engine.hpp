@@ -325,8 +325,7 @@ class LocalVersionedEngine : public VersionedEngine {
     );
 
     VersionedItem compact_data_internal(
-            const StreamId& stream_id, std::optional<size_t> rows_per_segment, double tolerance,
-            bool prune_previous_versions
+            const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
     ) override;
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
