@@ -25,7 +25,8 @@ from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, Key
 
 from arcticdb.util.test import config_context, config_context_string
 from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, S3Settings as NativeS3Settings
-from tests.util.mark import SKIP_CONDA_MARK
+from tests.util.mark import SKIP_CONDA_MARK, REAL_S3_TESTS_MARK
+from tests.util.storage_test import real_s3_credentials
 
 pytestmark = pytest.mark.skipif(
     sys.version_info.major == 3 and sys.version_info.minor == 6 and sys.platform == "linux",
@@ -230,25 +231,25 @@ def test_custom_credentials_provider_chain(lib_name, monkeypatch):
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "awd")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "awd")
 
-    native_config = NativeVariantStorage(
-        NativeS3Settings(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "", False)
-    )
+    native_config = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "", False))
     with MotoS3StorageFixtureFactory(
         use_ssl=False,
         ssl_test_support=False,
         bucket_versioning=False,
         native_config=native_config,
     ) as factory:
-        with factory.create_fixture() as bucket:
-            # Override the key to _RBAC_ so the C++ layer takes the custom chain path
-            # instead of the explicit credentials path. The bucket was already created by
-            # the factory's admin client with real moto credentials.
-            bucket.key = Key(id="_RBAC_", secret="_RBAC_", user_name="rbac_test")
+        with factory.create_fixture(key=Key(id="_RBAC_", secret="_RBAC_", user_name="rbac_test")) as bucket:
+            start = time.monotonic()
             lib = bucket.create_version_store_factory(lib_name)()
             df = pd.DataFrame({"a": [1, 2, 3]})
             lib.write("test_symbol", df)
             result = lib.read("test_symbol").data
+            elapsed = time.monotonic() - start
             assert_frame_equal(result, df)
+            # The CRT-based STS provider hang takes 10+ seconds. If library creation
+            # and a round-trip write/read complete well under that, the custom chain
+            # is working correctly and not hitting the problematic CRT path.
+            assert elapsed < 10, f"Custom credentials provider chain took {elapsed:.1f}s (expected < 10s)"
 
 
 @REAL_S3_TESTS_MARK
@@ -268,16 +269,16 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
     # Write credentials to a temp file for the ProfileConfigFileAWSCredentialsProvider
     creds_file = tmp_path / "credentials"
     creds_file.write_text(
-        f"[default]\n"
-        f"aws_access_key_id = {s3_access_key}\n"
-        f"aws_secret_access_key = {s3_secret_key}\n"
+        f"[default]\n" f"aws_access_key_id = {s3_access_key}\n" f"aws_secret_access_key = {s3_secret_key}\n"
     )
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
 
-    if "amazonaws.com" in (s3_endpoint or ""):
+    from urllib.parse import urlparse
+
+    if s3_endpoint and urlparse(s3_endpoint).hostname.endswith(".amazonaws.com"):
         host = f"s3.{s3_region}.amazonaws.com"
     else:
-        host = s3_endpoint.replace("https://", "").replace("http://", "")
+        host = urlparse(s3_endpoint).hostname if s3_endpoint else ""
 
     uri = f"s3://{host}:{s3_bucket}?aws_auth=true&path_prefix=test_custom_chain_{lib_name}"
 

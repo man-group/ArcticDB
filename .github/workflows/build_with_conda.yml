@@ -20,6 +20,9 @@ on:
   # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
   pull_request:
 
+  schedule:
+    - cron: '0 23 * * 6'  # Every Saturday at 23:00 UTC
+
   workflow_dispatch:
     inputs:
       run_on_arm_mac:
@@ -63,6 +66,23 @@ on:
         default: ""
 
 jobs:
+
+  storage_type:
+    runs-on: ubuntu-latest
+    outputs:
+      storage: ${{ steps.set-storage.outputs.storage }}
+    steps:
+      - name: Determine Storage Type
+        id: set-storage
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" ]]; then
+            echo "storage=AWS_S3" >> $GITHUB_OUTPUT
+          elif [[ -n "${{ inputs.persistent_storage }}" ]]; then
+            echo "storage=${{ inputs.persistent_storage }}" >> $GITHUB_OUTPUT
+          else
+            echo "storage=no" >> $GITHUB_OUTPUT
+          fi
 
   compile_linux_64:
     name: Compile (linux_64)
@@ -512,7 +532,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    needs: [compile_linux_64]
+    needs: [compile_linux_64, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -604,7 +624,7 @@ jobs:
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ inputs.persistent_storage != 'no' }}
+        if: ${{ needs.storage_type.outputs.storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -613,7 +633,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
+          persistent_storage: ${{ needs.storage_type.outputs.storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}
@@ -652,7 +672,7 @@ jobs:
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_linux
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
-          STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
+          STORAGE_TYPE: ${{ needs.storage_type.outputs.storage == 'no' && 'LMDB' || needs.storage_type.outputs.storage }}
           NODE_OPTIONS: --openssl-legacy-provider
 
   python_tests_osx_arm64:
@@ -660,7 +680,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    needs: [compile_osx_arm64]
+    needs: [compile_osx_arm64, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -739,7 +759,7 @@ jobs:
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ inputs.persistent_storage != 'no' }}
+        if: ${{ needs.storage_type.outputs.storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -748,7 +768,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
+          persistent_storage: ${{ needs.storage_type.outputs.storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}
@@ -785,7 +805,7 @@ jobs:
           COMMANDLINE: ${{ inputs.run_commandline }}
           HYPOTHESIS_PROFILE: ci_macos
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
-          STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
+          STORAGE_TYPE: ${{ needs.storage_type.outputs.storage == 'no' && 'LMDB' || needs.storage_type.outputs.storage }}
           NODE_OPTIONS: --openssl-legacy-provider
 
   python_tests_linux_aarch64:
@@ -793,7 +813,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    needs: [compile_linux_aarch64]
+    needs: [compile_linux_aarch64, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -883,7 +903,7 @@ jobs:
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ inputs.persistent_storage != 'no' }}
+        if: ${{ needs.storage_type.outputs.storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -892,7 +912,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
+          persistent_storage: ${{ needs.storage_type.outputs.storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}
@@ -928,7 +948,7 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{ inputs.run_commandline }}
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
-          STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
+          STORAGE_TYPE: ${{ needs.storage_type.outputs.storage == 'no' && 'LMDB' || needs.storage_type.outputs.storage }}
 
   compile_win_64:
     name: Compile (win_64)
@@ -1107,7 +1127,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    needs: [compile_win_64]
+    needs: [compile_win_64, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -1196,7 +1216,7 @@ jobs:
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ inputs.persistent_storage != 'no' }}
+        if: ${{ needs.storage_type.outputs.storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -1205,7 +1225,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
+          persistent_storage: ${{ needs.storage_type.outputs.storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}

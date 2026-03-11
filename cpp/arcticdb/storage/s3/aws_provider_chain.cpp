@@ -45,14 +45,13 @@ MyAWSCredentialsProviderChain::MyAWSCredentialsProviderChain() : Aws::Auth::AWSC
     if (!webIdentityTokenFile.empty() && !roleArn.empty()) {
         AddProvider(Aws::MakeShared<STSAssumeRoleWebIdentityCredentialsProvider>(DefaultCredentialsProviderChainTag));
         AWS_LOGSTREAM_INFO(
-                DefaultCredentialsProviderChainTag,
-                "Added STS web identity credentials provider to the provider chain."
+                DefaultCredentialsProviderChainTag, "Added STS web identity credentials provider to the provider chain."
         );
     } else {
         AWS_LOGSTREAM_DEBUG(
                 DefaultCredentialsProviderChainTag,
-                "Skipping STS web identity credentials provider: "
-                        << AWS_WEB_IDENTITY_TOKEN_FILE << " or " << AWS_ROLE_ARN << " not set."
+                "Skipping STS web identity credentials provider: " << AWS_WEB_IDENTITY_TOKEN_FILE << " or "
+                                                                   << AWS_ROLE_ARN << " not set."
         );
     }
     AddProvider(Aws::MakeShared<SSOCredentialsProvider>(DefaultCredentialsProviderChainTag));

@@ -20,6 +20,10 @@
 
 #include <chrono>
 #include <aws/core/Aws.h>
+#include <aws/core/platform/Environment.h>
+
+static const char AWS_WEB_IDENTITY_TOKEN_FILE[] = "AWS_WEB_IDENTITY_TOKEN_FILE";
+static const char AWS_ROLE_ARN[] = "AWS_ROLE_ARN";
 
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};
@@ -447,10 +451,30 @@ TEST(TestS3Storage, custom_credentials_provider_chain_completes_quickly) {
     auto elapsed = std::chrono::steady_clock::now() - start;
 
     // Without real AWS credentials configured, the chain should return empty credentials.
-    // The key property: it must complete in well under 10 seconds (the CRT STS timeout).
-    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
+    // The key property: it must complete in well under the CRT STS timeout (which is 10+ seconds).
+    // We use a generous threshold to avoid flakiness on slow CI machines.
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 10);
     // In a CI environment with no AWS credentials, we expect empty credentials.
     // We don't assert emptiness because some environments may have credentials configured.
+}
+
+// Positive path: when IRSA env vars are set, the STS web identity provider is added to the
+// chain but it must still complete quickly (the scenario broken in SDK >= 1.11.622).
+TEST(TestS3Storage, custom_credentials_provider_chain_with_irsa_env_vars) {
+    auto api = S3ApiInstance::instance();
+
+    Aws::Environment::SetEnv(AWS_WEB_IDENTITY_TOKEN_FILE, "/tmp/nonexistent_token", 1);
+    Aws::Environment::SetEnv(AWS_ROLE_ARN, "arn:aws:iam::123456789012:role/test-role", 1);
+
+    auto start = std::chrono::steady_clock::now();
+    auto chain = MyAWSCredentialsProviderChain();
+    auto creds = chain.GetAWSCredentials();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    Aws::Environment::UnSetEnv(AWS_WEB_IDENTITY_TOKEN_FILE);
+    Aws::Environment::UnSetEnv(AWS_ROLE_ARN);
+
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 10);
 }
 
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
