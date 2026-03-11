@@ -10,12 +10,6 @@ import pandas as pd
 from arcticdb.util.test import config_context, config_context_multi
 
 
-@pytest.fixture
-def column_stats_filtering_enabled():
-    with config_context("ColumnStats.UseForQueries", 1):
-        yield
-
-
 def get_table_data_read_count():
     """Get the number of TABLE_DATA keys read from query stats."""
     stats = qs.get_query_stats()
@@ -766,43 +760,14 @@ def test_column_stats_with_column_slicing(
     qs.reset_stats()
     result = lib.read(sym, query_builder=q, columns=["col_1"]).data
     table_data_reads = get_table_data_read_count()
-    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
+    # The index is stored in its own block for string and rowcount indexes
+    expected_reads = 1 if isinstance(indexes[0], pd.DatetimeIndex) or isinstance(indexes[0], pd.RangeIndex) else 2
+    assert table_data_reads == expected_reads, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
 
     expected = df2[["col_1"]]
-    assert_frame_equal(result, expected)
 
-
-@pytest.mark.parametrize("indexes", THREE_SEGMENT_INDEXES, ids=THREE_SEGMENT_INDEX_IDS)
-def test_column_slicing(
-    in_memory_store_factory, clear_query_stats, indexes
-):
-    """Check that column stats pruning works when combined with column slicing.
-
-    Setup: 3 row groups x 3 columns = 9 segments.
-    - columns=["col_1"] means the column filter keeps only 3 segments (one per row group).
-    - col_1 > 4 prunes row groups 0 (max=2) and 1 (max=4), leaving only row group 2.
-    - Expected: 1 TABLE_DATA read.
-    """
-    lib = in_memory_store_factory(column_group_size=1, segment_row_size=10)
-
-    df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20], "col_3": [100, 200]}, index=indexes[0], dtype=np.int64)
-    df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40], "col_3": [300, 400]}, index=indexes[1], dtype=np.int64)
-    df2 = pd.DataFrame({"col_1": [5, 6], "col_2": [50, 60], "col_3": [500, 600]}, index=indexes[2], dtype=np.int64)
-
-    lib.write(sym, df0)
-    lib.append(sym, df1)
-    lib.append(sym, df2)
-
-    q = QueryBuilder()
-    q = q[q["col_1"] > 4]
-
-    qs.enable()
-    qs.reset_stats()
-    result = lib.read(sym, query_builder=q, columns=["col_1"]).data
-    table_data_reads = get_table_data_read_count()
-    assert table_data_reads == 3, f"Expected 3 TABLE_DATA read, got {table_data_reads}"
-
-    expected = df2[["col_1"]]
+    if isinstance(indexes[0], pd.RangeIndex):
+        expected.index = pd.RangeIndex(0, 2)
     assert_frame_equal(result, expected)
 
 
@@ -841,12 +806,13 @@ def test_column_stats_with_row_range(
     table_data_reads = get_table_data_read_count()
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
 
-    assert_frame_equal(result, df1)
+    expected = df1
+    if isinstance(indexes[0], pd.RangeIndex):
+        expected.index = pd.RangeIndex(0, 2, 1)
+    assert_frame_equal(result, expected)
 
 
-def test_column_stats_with_date_range(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
-):
+def test_column_stats_with_date_range(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
     """Column stats pruning works when combined with date_range slicing.
 
     date_range causes an index filter to run before the column stats filter, passing a
