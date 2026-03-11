@@ -460,19 +460,16 @@ TEST(TestS3Storage, custom_credentials_provider_chain_completes_quickly) {
 
 // Positive path: when IRSA env vars are set, the STS web identity provider is added to the
 // chain but it must still complete quickly (the scenario broken in SDK >= 1.11.622).
-TEST(TestS3Storage, custom_credentials_provider_chain_with_irsa_env_vars) {
+TEST_F(EnvFunctionShim, custom_credentials_provider_chain_with_irsa_env_vars) {
     auto api = S3ApiInstance::instance();
 
-    Aws::Environment::SetEnv(AWS_WEB_IDENTITY_TOKEN_FILE, "/tmp/nonexistent_token", 1);
-    Aws::Environment::SetEnv(AWS_ROLE_ARN, "arn:aws:iam::123456789012:role/test-role", 1);
+    setenv(AWS_WEB_IDENTITY_TOKEN_FILE, "/tmp/nonexistent_token", false);
+    setenv(AWS_ROLE_ARN, "arn:aws:iam::123456789012:role/test-role", false);
 
     auto start = std::chrono::steady_clock::now();
     auto chain = MyAWSCredentialsProviderChain();
     auto creds = chain.GetAWSCredentials();
     auto elapsed = std::chrono::steady_clock::now() - start;
-
-    Aws::Environment::UnSetEnv(AWS_WEB_IDENTITY_TOKEN_FILE);
-    Aws::Environment::UnSetEnv(AWS_ROLE_ARN);
 
     ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 10);
 }
