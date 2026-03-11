@@ -6,9 +6,14 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#pragma once
+
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/client/ClientConfiguration.h>
+#include <aws/sts/STSClient.h>
 
+#include <memory>
 #include <mutex>
 
 namespace arcticdb::storage::s3 {
@@ -31,6 +36,8 @@ class SafeSTSWebIdentityCredentialsProvider : public Aws::Auth::AWSCredentialsPr
     Aws::String m_sessionName;
     Aws::String m_region;
     Aws::Auth::AWSCredentials m_credentials;
+    Aws::Client::ClientConfiguration m_stsConfig;
+    std::unique_ptr<Aws::STS::STSClient> m_stsClient;
     std::mutex m_credsMutex;
     bool m_initialized;
 };

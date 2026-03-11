@@ -44,7 +44,8 @@ SafeSTSWebIdentityCredentialsProvider::SafeSTSWebIdentityCredentialsProvider() :
     m_sessionName = Aws::Environment::GetEnv("AWS_ROLE_SESSION_NAME");
     m_region = Aws::Environment::GetEnv("AWS_DEFAULT_REGION");
 
-    // Fall back to config profile if env vars are incomplete (matches legacy STSAssumeRoleWebIdentityCredentialsProvider)
+    // Fall back to config profile if env vars are incomplete (matches legacy
+    // STSAssumeRoleWebIdentityCredentialsProvider)
     if (m_roleArn.empty() || m_tokenFile.empty() || m_region.empty()) {
         auto profile = Aws::Config::GetCachedConfigProfile(Aws::Auth::GetConfigProfileName());
         if (m_region.empty()) {
@@ -106,9 +107,7 @@ void SafeSTSWebIdentityCredentialsProvider::RefreshIfExpired() {
     // Read the web identity token from file (re-read each time as IRSA rotates tokens).
     std::ifstream tokenStream(m_tokenFile.c_str());
     if (!tokenStream.is_open()) {
-        AWS_LOGSTREAM_ERROR(
-                SafeSTSWebIdentityTag, "Can't open token file: " << m_tokenFile
-        );
+        AWS_LOGSTREAM_ERROR(SafeSTSWebIdentityTag, "Can't open token file: " << m_tokenFile);
         return; // Keep old cached credentials
     }
     Aws::String token((std::istreambuf_iterator<char>(tokenStream)), std::istreambuf_iterator<char>());
@@ -125,16 +124,14 @@ void SafeSTSWebIdentityCredentialsProvider::RefreshIfExpired() {
     request.SetRoleSessionName(m_sessionName);
     request.SetWebIdentityToken(token);
 
-    // Use anonymous credentials for the STS client — the web identity token is the authentication.
-    Aws::Client::ClientConfiguration config;
-    config.scheme = Aws::Http::Scheme::HTTPS;
-    config.region = m_region;
+    // Lazy-initialize the STS client (with its HTTP stack and thread pool) once.
+    if (!m_stsClient) {
+        m_stsConfig.scheme = Aws::Http::Scheme::HTTPS;
+        m_stsConfig.region = m_region;
+        m_stsClient = Aws::MakeUnique<Aws::STS::STSClient>(SafeSTSWebIdentityTag, Aws::Auth::AWSCredentials(), m_stsConfig);
+    }
 
-    auto stsClient = Aws::MakeUnique<Aws::STS::STSClient>(
-            SafeSTSWebIdentityTag, Aws::Auth::AWSCredentials(), config
-    );
-
-    auto outcome = stsClient->AssumeRoleWithWebIdentity(request);
+    auto outcome = m_stsClient->AssumeRoleWithWebIdentity(request);
     if (!outcome.IsSuccess()) {
         AWS_LOGSTREAM_WARN(
                 SafeSTSWebIdentityTag,

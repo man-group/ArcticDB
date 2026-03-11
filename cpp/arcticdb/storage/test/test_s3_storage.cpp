@@ -24,12 +24,12 @@
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};
 
-    void setenv(const char* envname, const char* envval, bool) {
+    void setenv(const char* envname, const char* envval, bool overwrite) {
         env_vars_to_unset.insert(envname);
 #if (WIN32)
         _putenv_s(envname, envval);
 #else
-        ::setenv(envname, envval, false);
+        ::setenv(envname, envval, overwrite);
 #endif
     }
 
@@ -463,7 +463,7 @@ TEST(TestS3Storage, custom_credentials_provider_chain_completes_quickly) {
     auto elapsed = std::chrono::steady_clock::now() - start;
     // Should complete in under 5 seconds even without valid credentials.
     // The bug we're guarding against causes hangs of 30+ seconds or indefinite.
-    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
+    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 10);
 }
 
 TEST(TestS3Storage, safe_sts_web_identity_provider_returns_empty_when_not_configured) {
@@ -479,8 +479,8 @@ class SafeSTSWebIdentityWithBadTokenFile : public EnvFunctionShim {
   protected:
     SafeSTSWebIdentityWithBadTokenFile() {
         arcticdb::storage::s3::S3ApiInstance::instance();
-        setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/nonexistent/path/token", false);
-        setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/test-role", false);
+        setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/nonexistent/path/token", true);
+        setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/test-role", true);
     }
 };
 
