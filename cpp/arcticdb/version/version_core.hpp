@@ -29,14 +29,6 @@
 
 namespace arcticdb::version_store {
 
-struct IndexInformation {
-    ARCTICDB_MOVE_ONLY_DEFAULT(IndexInformation)
-    IndexInformation() = default;
-    IndexInformation(std::pair<VariantKey, SegmentInMemory>&& index, std::optional<SegmentInMemory>&& column_stats);
-    std::pair<VariantKey, SegmentInMemory> index_;
-    std::optional<SegmentInMemory> column_stats_;
-};
-
 using namespace entity;
 using namespace pipelines;
 
@@ -210,7 +202,7 @@ folly::Future<VersionedItem> merge_update_impl(
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
-        const ReadOptions& read_options
+        const ReadOptions& read_options, std::optional<IndexInformation>&& index_information
 );
 } // namespace arcticdb::version_store
 
