@@ -6,21 +6,22 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from arcticdb_ext.version_store import PandasOutputFrame
+from arcticdb_ext.version_store import PandasOutputFrame, SortedValue
 from arcticdb.version_store._normalization import FrameData
 
 
 class NodeReadResult:
-    def __init__(self, sym, frame_data, norm):
+    def __init__(self, sym, frame_data, norm, sorted=SortedValue.UNKNOWN):
         self.sym = sym
         self.frame_data = (
             FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
         )
         self.norm = norm
+        self.sorted = SortedValue(sorted) if isinstance(sorted, int) else sorted
 
 
 class ReadResult:
-    def __init__(self, version, frame_data, norm, udm, mmeta, node_read_results):
+    def __init__(self, version, frame_data, norm, udm, mmeta, node_read_results, sorted=SortedValue.UNKNOWN):
         self.version = version
         self.frame_data = (
             FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
@@ -28,6 +29,7 @@ class ReadResult:
         self.norm = norm
         self.udm = udm
         self.mmeta = mmeta
+        self.sorted = SortedValue(sorted) if isinstance(sorted, int) else sorted
         self.node_read_results = (
             [NodeReadResult(*node_read_result) for node_read_result in node_read_results]
             if node_read_results is not None
