@@ -252,7 +252,7 @@ class Column {
     [[nodiscard]] util::BitMagic& sparse_map();
     [[nodiscard]] const util::BitMagic& sparse_map() const;
     [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
-    [[nodiscard]] std::optional<util::BitMagic> opt_sparse_map() const;
+    [[nodiscard]] const std::optional<util::BitMagic>& opt_sparse_map() const;
 
     template<typename TagType>
     auto begin() const {
