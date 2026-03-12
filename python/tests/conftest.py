@@ -91,6 +91,7 @@ from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
 )
+from arcticdb.util.test import config_context, config_context_multi
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -1577,6 +1578,64 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory) -> NativeVersi
     return in_memory_store_factory(column_group_size=2, segment_row_size=2)
 
 
+@pytest.fixture
+def in_memory_version_store_tiny_segment_dynamic(in_memory_store_factory) -> NativeVersionStore:
+    return in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+
+
+@pytest.fixture
+def in_memory_library() -> Library:
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst")
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_dynamic() -> Library:
+    library_options = LibraryOptions(dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_tiny_segment() -> Library:
+    library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_tiny_segment_dynamic() -> Library:
+    library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2, dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture(params=["in_memory_library", "in_memory_library_dynamic"])
+def in_memory_library_static_dynamic(request) -> NativeVersionStore:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(params=["in_memory_library_tiny_segment", "in_memory_library_tiny_segment_dynamic"])
+def in_memory_library_tiny_segment_static_dynamic(request) -> NativeVersionStore:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "in_memory_library_tiny_segment",
+        "in_memory_library_tiny_segment_dynamic",
+        "in_memory_library",
+        "in_memory_library_dynamic",
+    ]
+)
+def in_memory_library_static_dynamic_different_segments(request) -> NativeVersionStore:
+    return request.getfixturevalue(request.param)
+
+
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
 def lmdb_or_in_memory_version_store_tiny_segment(request) -> NativeVersionStore:
     return request.getfixturevalue(request.param)
@@ -1659,6 +1718,23 @@ def all_recursive_metastructure_versions(request):
     set_config_int("VersionStore.RecursiveNormalizerMetastructure", request.param)
     yield request.param
     unset_config_int("VersionStore.RecursiveNormalizerMetastructure")
+
+
+@pytest.fixture
+def column_stats_filtering_enabled():
+    with config_context("ColumnStats.UseForQueries", 1):
+        yield
+
+
+@pytest.fixture
+def column_stats_filtering_disabled():
+    with config_context("ColumnStats.UseForQueries", 0):
+        yield
+
+
+@pytest.fixture(params=["column_stats_filtering_enabled", "column_stats_filtering_disabled"])
+def column_stats_filtering_enabled_and_disabled(request):
+    yield request.getfixturevalue(request.param)
 
 
 # region Pytest special xfail handling

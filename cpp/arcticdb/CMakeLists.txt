@@ -584,6 +584,10 @@ set(arcticdb_srcs
         version/version_tasks.cpp
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
+        pipeline/column_stats_filter.hpp
+        pipeline/column_stats_filter.cpp
+        pipeline/column_stats_dispatch.hpp
+        pipeline/column_stats_dispatch.cpp
 )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
@@ -1031,6 +1035,7 @@ if(${TEST})
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
             pipeline/test/test_value.cpp
+            pipeline/test/test_column_stats_dispatch.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
