@@ -17,12 +17,10 @@
 
 using namespace arcticdb;
 
-RC_GTEST_PROP(CompactData, StructureRowRanges, (uint64_t rows_per_segment)) {
-    RC_PRE(rows_per_segment > 0);
-    // Avoid overflow
-    RC_PRE(rows_per_segment < std::numeric_limits<uint64_t>::max() / 2);
+RC_GTEST_PROP(CompactData, StructureRowRanges, ()) {
+    auto rows_per_segment = *rc::gen::inRange<uint64_t>(1, 1'000'000'000);
     auto row_range_boundaries =
-            *rc::gen::unique<std::vector<uint64_t>>(rc::gen::inRange(uint64_t(1), uint64_t(rows_per_segment)));
+            *rc::gen::unique<std::vector<uint64_t>>(rc::gen::inRange<uint64_t>(1, rows_per_segment));
     row_range_boundaries.emplace_back(0);
     std::ranges::sort(row_range_boundaries);
     RC_PRE(row_range_boundaries.size() >= 2);
@@ -35,9 +33,8 @@ RC_GTEST_PROP(CompactData, StructureRowRanges, (uint64_t rows_per_segment)) {
     }
     CompactDataClause clause{rows_per_segment};
     auto res = clause.structure_row_ranges(row_ranges);
-    // TODO: Make these public in CompactDataClause and just access them here?
-    auto min_rows_per_segment = std::max((2 * rows_per_segment) / 3, uint64_t(1));
-    auto max_rows_per_segment = 2 * min_rows_per_segment;
+    auto min_rows_per_segment = clause.min_rows_per_segment_;
+    auto max_rows_per_segment = clause.max_rows_per_segment_;
     min_rows_per_segment = std::min(min_rows_per_segment, row_range_boundaries.back());
     for (const auto& row_range : res) {
         auto rows = row_range.diff();

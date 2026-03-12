@@ -909,6 +909,10 @@ struct MergeUpdateClause {
 struct CompactDataClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
+    uint64_t rows_per_segment_;
+    uint64_t min_rows_per_segment_;
+    uint64_t max_rows_per_segment_;
+
     explicit CompactDataClause(uint64_t rows_per_segment);
     ARCTICDB_MOVE_COPY_DEFAULT(CompactDataClause)
 
@@ -934,11 +938,5 @@ struct CompactDataClause {
 
     // Public only for testing purposes
     [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
-
-  private:
-    // TODO: Consider renaming to *_per_slice_
-    uint64_t rows_per_segment_;
-    uint64_t min_rows_per_segment_;
-    uint64_t max_rows_per_segment_;
 };
 } // namespace arcticdb
