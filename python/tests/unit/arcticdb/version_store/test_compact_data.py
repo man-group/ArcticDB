@@ -35,6 +35,7 @@ def test_compact_data_noop(lmdb_version_store_v1):
     sym = "test_compact_data_noop"
     df = pd.DataFrame({"col": np.arange(200_000)})
     lib.write(sym, df)
+    lib.append(sym, df[:50_000])
     lib.compact_data_experimental(sym)
     assert_frame_equal(df, lib.read(sym).data)
     index = lib.read_index(sym)

@@ -2140,8 +2140,7 @@ OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const 
 std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
 CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {
-    // TODO: Check if rounding gives the correct behaviour for edge cases
-    // Magic range of +-33% chosen chosen such that:
+    // Magic range of +-33% chosen so that:
     // - 2 row slices with < min_rows_per_segment_ cannot be combined into one row slice with > max_rows_per_segment_
     // - 1 row slice with > max_rows_per_segment_ when split in half will still have >= min_rows_per_segment_ in each
     //   resulting row slice
@@ -2150,6 +2149,8 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
     max_rows_per_segment_ = 2 * min_rows_per_segment_;
 }
 
+// Given the set of row ranges in the input data, constructs a superset set of the row ranges to we need to pass to
+// calls to process.
 std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRange>& row_ranges) const {
     if (row_ranges.empty()) {
         return {};
@@ -2183,16 +2184,49 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
 
 std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
+    // TODO: Consider where unordered_sets can be used for improved algorithmic complexity
     // Extract the unique row ranges and col ranges
     std::set<RowRange> row_ranges;
-    std::set<ColRange> col_ranges;
     for (const auto& range_and_key : ranges_and_keys) {
         row_ranges.insert(range_and_key.row_range());
-        col_ranges.insert(range_and_key.col_range());
     }
     auto processing_row_ranges = structure_row_ranges(row_ranges);
-    // TODO: Implement properly
-    return structure_by_row_slice(ranges_and_keys);
+    // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges, as this implies
+    // those row-slices do not need to change
+    std::erase_if(ranges_and_keys, [&processing_row_ranges](const RangesAndKey& range_and_key) {
+        return processing_row_ranges.contains(range_and_key.row_range());
+    });
+    if (ranges_and_keys.empty()) {
+        return {};
+    }
+    // Order by column slice (i.e. all segments in first column slice from top to bottom, then second column slice, etc)
+    std::ranges::sort(ranges_and_keys, [](const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.col_range().first, left.row_range().first) <
+               std::tie(right.col_range().first, right.row_range().first);
+    });
+    std::vector<std::vector<size_t>> res;
+    std::vector<size_t> current;
+    auto row_range = row_ranges.cbegin();
+    ColRange col_range = ranges_and_keys.front().col_range();
+    for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
+        // Use first element of col_range rather than equality so that it works with dynamic schema where number of
+        // columns in each row slice can be different
+        if (range_and_key.col_range().first == col_range.first) {
+            if (row_range->contains(range_and_key.row_range().first)) {
+                current.emplace_back(idx);
+            } else {
+                res.emplace_back(current);
+                current = std::vector<size_t>{1, idx};
+                ++row_range;
+            }
+        } else {
+            res.emplace_back(current);
+            current = std::vector<size_t>{1, idx};
+            col_range = range_and_key.col_range();
+            row_range = row_ranges.cbegin();
+        }
+    }
+    return res;
 }
 
 std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(std::vector<std::vector<EntityId>>&&) {
