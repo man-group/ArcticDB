@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from operator import add
 import re
 import time
 from multiprocessing import Queue, Process
@@ -223,6 +222,7 @@ def test_library_get_key_path(lib_name, s3_and_nfs_storage_bucket, test_prefix):
     assert keys_count > 0
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="monkeypatch.setenv does not propagate to C++ AWS SDK on Windows")
 def test_custom_credentials_provider_chain(lib_name, monkeypatch):
     """Test that the _RBAC_ credentials path (DEFAULT_CREDENTIALS_PROVIDER_CHAIN) uses our
     custom MyAWSCredentialsProviderChain which excludes the problematic CRT-based
