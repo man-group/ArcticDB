@@ -2193,9 +2193,19 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     auto processing_row_ranges = structure_row_ranges(row_ranges);
     // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges, as this implies
     // those row-slices do not need to change
-    std::erase_if(ranges_and_keys, [&processing_row_ranges](const RangesAndKey& range_and_key) {
-        return processing_row_ranges.contains(range_and_key.row_range());
-    });
+    auto retained_processing_row_ranges = processing_row_ranges;
+    std::erase_if(
+            ranges_and_keys,
+            [&processing_row_ranges, &retained_processing_row_ranges](const RangesAndKey& range_and_key) {
+                if (processing_row_ranges.contains(range_and_key.row_range())) {
+                    retained_processing_row_ranges.erase(range_and_key.row_range());
+                    return true;
+                } else {
+                    return false;
+                }
+                //        return processing_row_ranges.contains(range_and_key.row_range());
+            }
+    );
     if (ranges_and_keys.empty()) {
         return {};
     }
@@ -2206,7 +2216,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     });
     std::vector<std::vector<size_t>> res;
     std::vector<size_t> current;
-    auto row_range = row_ranges.cbegin();
+    auto row_range = retained_processing_row_ranges.cbegin();
     ColRange col_range = ranges_and_keys.front().col_range();
     for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
         // Use first element of col_range rather than equality so that it works with dynamic schema where number of
@@ -2220,11 +2230,14 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
                 ++row_range;
             }
         } else {
-            res.emplace_back(current);
+            res.emplace_back(std::move(current));
             current = std::vector<size_t>{1, idx};
             col_range = range_and_key.col_range();
-            row_range = row_ranges.cbegin();
+            row_range = retained_processing_row_ranges.cbegin();
         }
+    }
+    if (!current.empty()) {
+        res.emplace_back(std::move(current));
     }
     return res;
 }
