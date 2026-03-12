@@ -281,6 +281,75 @@ void decode_index_field(
     }
 }
 
+// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
+// We have decoded the column of source type directly onto the output buffer above
+// We therefore need to iterate backwards through the source values, static casting them to the destination
+// type to avoid overriding values we haven't cast yet.
+template<typename SrcType, typename DestType>
+requires(sizeof(SrcType) <= sizeof(DestType))
+void promote_integral_type(const ColumnMapping& m, Column& column) {
+    const auto src_data_type_size = data_type_size(m.source_type_desc_);
+    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
+
+    const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
+    const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
+
+    auto src_ptr = reinterpret_cast<SrcType*>(column.bytes_at(m.offset_bytes_ + src_ptr_offset, 0UL)
+    ); // No bytes required as we are at the end
+    auto dest_ptr = reinterpret_cast<DestType*>(column.bytes_at(m.offset_bytes_ + dest_ptr_offset, 0UL));
+    for (auto i = 0u; i < m.num_rows_; ++i) {
+        *dest_ptr-- = static_cast<DestType>(*src_ptr--);
+    }
+}
+
+bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
+
+// Scatter dense source-type values in-place to their bitmap positions, casting to DestinationType.
+// buf contains bv.count() SrcType values packed at the start. We reverse-iterate the set bits to guarantee
+// that we don't overwrite any source values that haven't been cast yet (dest writes are always at higher
+// byte offsets than the remaining unread source values). For non-Arrow output (write_null_default=true),
+// vacated source slots are filled with null_val so that null positions have the correct default.
+//
+// Example: int16 -> float32, 5 logical rows, bitmap = [0, 1, 1, 0, 1] (3 dense values)
+//
+//   After decode (3 int16 values packed at start, rest pre-filled with NaN for non-Arrow):
+//     int16 view:   [ 10, 20, 30,  ?,  ?,  ?,  ?,  ?,  ?,  ?]
+//     float32 view: [   ?   ,   ?   ,  NaN  ,  NaN  ,  NaN  ]
+//                    ^-int16 data-^ ^----- pre-filled -----^
+//
+//   Reverse iteration (pos_dense=2..0, pos_sparse from last set bit to first):
+//     pos_dense=2, pos_sparse=4: dst[4]=float(src[2])=30.0, dst[2]=NaN (vacated)
+//     pos_dense=1, pos_sparse=2: dst[2]=float(src[1])=20.0, dst[1]=NaN (vacated)
+//     pos_dense=0, pos_sparse=1: dst[1]=float(src[0])=10.0, dst[0]=NaN (vacated)
+//
+//   Result:
+//     float32 view: [NaN, 10.0, 20.0, NaN, 30.0]
+template<typename SrcType, typename DestType, bool write_null_default>
+requires(sizeof(SrcType) <= sizeof(DestType))
+void expand_and_promote_type(const util::BitMagic& bv, uint8_t* buf, DestType null_val = {}) {
+    const auto num_sparse = bv.count();
+    if (num_sparse == 0) {
+        return;
+    }
+    auto src = reinterpret_cast<const SrcType*>(buf);
+    auto dst = reinterpret_cast<DestType*>(buf);
+    // Collect set-bit positions using the fast forward enumerator, then iterate backward.
+    std::vector<bm::bvector<>::size_type> positions;
+    positions.reserve(num_sparse);
+    for (auto en = bv.first(); en < bv.end(); ++en) {
+        positions.emplace_back(*en);
+    }
+    for (auto pos_dense = static_cast<ssize_t>(num_sparse) - 1; pos_dense >= 0; --pos_dense) {
+        const auto pos_sparse = positions[pos_dense];
+        dst[pos_sparse] = static_cast<DestType>(src[pos_dense]);
+        if constexpr (write_null_default) {
+            if (static_cast<ssize_t>(pos_sparse) > pos_dense) {
+                dst[pos_dense] = null_val;
+            }
+        }
+    }
+}
+
 void decode_or_expand(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
@@ -305,45 +374,78 @@ void decode_or_expand(
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
         const auto dest_bytes = mapping.dest_bytes_;
         std::optional<util::BitMagic> bv;
-        if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
-            const auto& ndarray = encoded_field_info.ndarray();
-            const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+        util::check(encoded_field_info.has_ndarray(), "Unsupported encoding for field {}", encoded_field_info);
+        const auto uncompressed_bytes = encoding_sizes::data_uncompressed_size(encoded_field_info.ndarray());
+        const auto dense_num_rows = uncompressed_bytes / source_type_desc.get_type_bytes();
+        // In some cases (stage and finalize) no sparse map is encoded if all dense values are in the begging,
+        // hence `ndarray().sparse_map_bytes() > 0` is not enough. We check whether the uncompressed size matches
+        // the expected number of rows.
+        const bool is_sparse = dense_num_rows < mapping.num_rows_;
+        const bool is_arrow = read_options.output_format() == OutputFormat::ARROW;
+        const bool requires_type_promotion = !trivially_compatible_types(source_type_desc, dest_type_desc) &&
+                                             !is_empty_type(source_type_desc.data_type());
 
-            ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
-            SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, &read_options](auto tdt) {
-                using TagType = decltype(tdt);
-                using RawType = typename TagType::DataTypeTag::raw_type;
-                if (read_options.output_format() != OutputFormat::ARROW) {
-                    // Arrow doesn't care what values are at indices where the validity bitmap is zero
-                    util::default_initialize<TagType>(dest, dest_bytes);
-                }
-                util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
+        if (is_sparse && !is_arrow) {
+            // Pre-fill with dest-type defaults so null positions beyond the packed area get the correct
+            // value (e.g. NaN for floats). This guarantees that any positions not touched by `expand_and_promote_types`
+            // will be correctly set.
+            // For arrow we don't need to initialize missing values because they are marked by the bitmap.
+            dest_type_desc.visit_tag([dest, dest_bytes](auto tdt) {
+                util::default_initialize<decltype(tdt)>(dest, dest_bytes);
             });
-
-            // For arrow we must apply the truncation to the bitmap and set it as an extra buffer.
-            if (read_options.output_format() == OutputFormat::ARROW) {
-                bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
-                handle_truncation(*bv, mapping.truncate_);
-                if (bv->count() != bv->size()) {
-                    auto first_offset_after_truncation = mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0
-                                                                                 ) * dest_type_desc.get_type_bytes();
-                    create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE);
-                }
-            }
-        } else {
-            SliceDataSink sink(dest, dest_bytes);
-            const auto& ndarray = encoded_field_info.ndarray();
-            if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
-                ARCTICDB_TRACE(log::version(), "Default initializing as only have {} bytes of {}", bytes, dest_bytes);
-                source_type_desc.visit_tag([dest, bytes, dest_bytes](auto tdt) {
-                    using TagType = decltype(tdt);
-                    util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
-                });
-            }
-            data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
         }
+
+        SliceDataSink sink(dest, dest_bytes);
+        data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
+
+        if (is_sparse || requires_type_promotion) {
+            // For sparse columns or type promotions we require expanding the decoded column
+            dest_type_desc.visit_tag([&](auto dest_tdt) {
+                using DestType = typename decltype(dest_tdt)::DataTypeTag::raw_type;
+                source_type_desc.visit_tag([&](auto src_tdt) {
+                    using SrcType = typename decltype(src_tdt)::DataTypeTag::raw_type;
+                    constexpr auto are_arithmetic = std::is_arithmetic_v<SrcType> && std::is_arithmetic_v<DestType>;
+                    util::check(
+                            !requires_type_promotion || are_arithmetic,
+                            "Cannot promote non arithmetic types {} and {}",
+                            source_type_desc,
+                            dest_type_desc
+                    );
+                    if constexpr (sizeof(SrcType) > sizeof(DestType)) {
+                        util::raise_rte(
+                                "Can't promote from a bigger {} type to a smaller {} type",
+                                source_type_desc,
+                                dest_type_desc
+                        );
+                    } else {
+                        if (is_sparse) {
+                            using DestTagType = decltype(dest_tdt);
+                            if (is_arrow) {
+                                expand_and_promote_type<SrcType, DestType, false>(*bv, dest);
+                            } else {
+                                expand_and_promote_type<SrcType, DestType, true>(
+                                        *bv, dest, util::null_value<DestTagType>()
+                                );
+                            }
+                        } else {
+                            promote_integral_type<SrcType, DestType>(mapping, dest_column);
+                        }
+                    }
+                });
+            });
+        }
+
+        if (is_sparse && is_arrow) {
+            // For Arrow output, apply truncation to the bitmap and set it as an extra buffer.
+            bv->resize(mapping.num_rows_);
+            handle_truncation(*bv, mapping.truncate_);
+            if (bv->count() != bv->size()) {
+                auto first_offset_after_truncation =
+                        mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0) * dest_type_desc.get_type_bytes();
+                create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE);
+            }
+        }
+
         handle_truncation(dest_column, mapping.truncate_);
     }
 }
@@ -673,49 +775,6 @@ void check_mapping_type_compatibility(const ColumnMapping& m) {
     );
 }
 
-// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
-// We have decoded the column of source type directly onto the output buffer above
-// We therefore need to iterate backwards through the source values, static casting them to the destination
-// type to avoid overriding values we haven't cast yet.
-template<typename SourceType, typename DestinationType>
-void promote_integral_type(const ColumnMapping& m, Column& column) {
-    const auto src_data_type_size = data_type_size(m.source_type_desc_);
-    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
-
-    const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
-    const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
-
-    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_ + src_ptr_offset, 0UL)
-    ); // No bytes required as we are at the end
-    auto dest_ptr = reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_ + dest_ptr_offset, 0UL));
-    for (auto i = 0u; i < m.num_rows_; ++i) {
-        *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
-    }
-}
-
-bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
-
-void handle_type_promotion(const ColumnMapping& m, const DecodePathData& shared_data, Column& column) {
-    if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
-        m.dest_type_desc_.visit_tag([&column, &m, shared_data](auto dest_desc_tag) {
-            using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            m.source_type_desc_.visit_tag([&column, &m](auto src_desc_tag) {
-                using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    promote_integral_type<SourceType, DestinationType>(m, column);
-                } else {
-                    util::raise_rte(
-                            "Can't promote type {} to type {} in field {}",
-                            m.source_type_desc_,
-                            m.dest_type_desc_,
-                            m.frame_field_descriptor_.name()
-                    );
-                }
-            });
-        });
-    }
-}
-
 void decode_into_frame_dynamic(
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
@@ -788,8 +847,6 @@ void decode_into_frame_dynamic(
                     context.string_pool_ptr(),
                     read_options
             );
-
-            handle_type_promotion(mapping, shared_data, column);
             ARCTICDB_TRACE(
                     log::codec(),
                     "Decoded or expanded dynamic column {} to position {}",

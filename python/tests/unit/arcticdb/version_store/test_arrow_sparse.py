@@ -633,6 +633,57 @@ def test_sparse_dynamic_schema_combined(version_store_factory):
         }
     )
     assert expected.equals(undictionarify_table(received))
-    # TODO: Reading as pandas populates the missing values of Segment 1 `int_to_float_col` with 0.0 instead of NaN (monday: 11458614876)
-    # received_pandas = lib.read(sym, output_format="PANDAS").data
-    # assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
+    received_pandas = lib.read(sym, output_format="PANDAS").data
+    # TODO: Broken assertion, debug logs for debugging
+    import polars as pl
+
+    print(pl.from_arrow(expected))
+    print(received_pandas)
+    assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
+
+
+@pytest.mark.parametrize(
+    "initial_type, upgraded_type, result_type",
+    [
+        # Signed to signed
+        pytest.param(pa.int8(), pa.int64(), pa.int64(), id="int8_to_int64"),
+        pytest.param(pa.int64(), pa.int8(), pa.int64(), id="int64_to_int8"),
+        # Unsigned to unsigned
+        pytest.param(pa.uint8(), pa.uint32(), pa.uint32(), id="uint8_to_uint32"),
+        # Unsigned to signed
+        pytest.param(pa.uint8(), pa.int16(), pa.int16(), id="uint8_to_int16"),
+        # Int to float
+        pytest.param(pa.int16(), pa.float32(), pa.float32(), id="int16_to_float32"),
+        pytest.param(pa.int32(), pa.float64(), pa.float64(), id="int32_to_float64"),
+        # Float to float
+        pytest.param(pa.float32(), pa.float64(), pa.float64(), id="float32_to_float64"),
+    ],
+)
+def test_sparse_dynamic_schema_type_upgrade(version_store_factory, initial_type, upgraded_type, result_type):
+    lib = version_store_factory(dynamic_schema=True)
+    lib.set_output_format(OutputFormat.PYARROW)
+    lib._set_allow_arrow_input()
+    sym = "test_sparse_type_upgrade"
+
+    def make_array(values, nulls, typ):
+        cast = float if pa.types.is_floating(typ) else int
+        return pa.array([None if n else cast(v) for v, n in zip(values, nulls)], type=typ)
+
+    t1 = pa.table({"col": make_array([1, 2, 3, 4], [False, True, False, True], initial_type)})
+    t2 = pa.table({"col": make_array([10, 20, 30, 40], [True, False, True, False], upgraded_type)})
+
+    lib.write(sym, t1)
+    lib.append(sym, t2)
+
+    received = lib.read(sym).data
+    expected = pa.table(
+        {
+            "col": make_array(
+                [1, 2, 3, 4, 10, 20, 30, 40], [False, True, False, True, True, False, True, False], result_type
+            )
+        }
+    )
+    assert received.schema.field("col").type == result_type
+    assert expected.equals(received)
+    received_pandas = lib.read(sym, output_format="PANDAS").data
+    assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)

@@ -84,6 +84,25 @@ void expand_dense_buffer_using_bitmap(const BitMagic& bv, const uint8_t* dense_p
     }
 }
 
+/// The default null/missing value for a given type tag.
+/// Note: not valid for narrow string types (e.g. UTF_DYNAMIC32) — those are Arrow-only
+/// and handled by dedicated type handlers, never by generic sparse expansion.
+template<typename TagType>
+requires util::instantiation_of<TagType, TypeDescriptorTag>
+constexpr typename TagType::DataTypeTag::raw_type null_value() {
+    using RawType = typename TagType::DataTypeTag::raw_type;
+    constexpr auto data_type = TagType::DataTypeTag::data_type;
+    if constexpr (is_sequence_type(data_type) && !is_arrow_output_only_type(data_type)) {
+        return not_a_string();
+    } else if constexpr (is_floating_point_type(data_type)) {
+        return std::numeric_limits<RawType>::quiet_NaN();
+    } else if constexpr (is_time_type(data_type)) {
+        return NaT;
+    } else {
+        return RawType{0};
+    }
+}
+
 template<typename TagType>
 requires util::instantiation_of<TagType, TypeDescriptorTag>
 void default_initialize(uint8_t* data, const size_t bytes) {
@@ -91,14 +110,10 @@ void default_initialize(uint8_t* data, const size_t bytes) {
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto data_type = TagType::DataTypeTag::data_type;
     auto type_ptr ARCTICDB_UNUSED = reinterpret_cast<RawType*>(data);
-    if constexpr (is_sequence_type(data_type)) {
-        std::fill_n(type_ptr, num_rows, not_a_string());
-    } else if constexpr (is_floating_point_type(data_type)) {
-        std::fill_n(type_ptr, num_rows, std::numeric_limits<RawType>::quiet_NaN());
-    } else if constexpr (is_time_type(data_type)) {
-        std::fill_n(type_ptr, num_rows, NaT);
-    } else if constexpr (is_integer_type(data_type) || is_bool_type(data_type)) {
+    if constexpr (is_integer_type(data_type) || is_bool_type(data_type)) {
         std::memset(data, 0, bytes);
+    } else {
+        std::fill_n(type_ptr, num_rows, null_value<TagType>());
     }
 }
 
