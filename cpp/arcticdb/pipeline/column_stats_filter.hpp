@@ -36,7 +36,7 @@ struct ColumnStatsValues {
 };
 
 /**
- * Represents column statistics for a single row-slice, mapping column names to their statistics.
+ * Represents column statistics for a single row-slice.
  */
 struct ColumnStatsRow {
     timestamp start_index;
@@ -46,8 +46,7 @@ struct ColumnStatsRow {
 };
 
 /**
- * Parsed column statistics from a column stats segment, organized for efficient lookup
- * by start_index/end_index.
+ * Parsed column statistics from a column stats segment.
  */
 class ColumnStatsData {
   public:
