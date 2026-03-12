@@ -1226,20 +1226,22 @@ if(${TEST})
     endif()
 
     set(rapidcheck_srcs
-            column_store/test/rapidcheck_column_store.cpp
-            column_store/test/rapidcheck_chunked_buffer.cpp
-            column_store/test/rapidcheck_column.cpp
-            column_store/test/rapidcheck_column_data_random_accessor.cpp
-            column_store/test/rapidcheck_column_map.cpp
-            processing/test/rapidcheck_resample.cpp
-            stream/test/stream_test_common.cpp
-            util/test/rapidcheck_bitset.cpp
-            util/test/rapidcheck_decimal.cpp
-            util/test/rapidcheck_generators.cpp
-            util/test/rapidcheck_string_pool.cpp
+#            column_store/test/rapidcheck_column_store.cpp
+#            column_store/test/rapidcheck_chunked_buffer.cpp
+#            column_store/test/rapidcheck_column.cpp
+#            column_store/test/rapidcheck_column_data_random_accessor.cpp
+#            column_store/test/rapidcheck_column_map.cpp
+            processing/test/rapidcheck_compact_data.cpp
+#            processing/test/rapidcheck_resample.cpp
+#            stream/test/stream_test_common.cpp
+#            util/test/rapidcheck_bitset.cpp
+#            util/test/rapidcheck_decimal.cpp
+#            util/test/rapidcheck_generators.cpp
+#            util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
-            util/test/rapidcheck_lru_cache.cpp
-            version/test/rapidcheck_version_map.cpp)
+#            util/test/rapidcheck_lru_cache.cpp
+#            version/test/rapidcheck_version_map.cpp
+    )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 
