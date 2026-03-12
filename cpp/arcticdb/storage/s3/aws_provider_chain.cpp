@@ -128,7 +128,8 @@ void SafeSTSWebIdentityCredentialsProvider::RefreshIfExpired() {
     if (!m_stsClient) {
         m_stsConfig.scheme = Aws::Http::Scheme::HTTPS;
         m_stsConfig.region = m_region;
-        m_stsClient = Aws::MakeUnique<Aws::STS::STSClient>(SafeSTSWebIdentityTag, Aws::Auth::AWSCredentials(), m_stsConfig);
+        m_stsClient =
+                Aws::MakeUnique<Aws::STS::STSClient>(SafeSTSWebIdentityTag, Aws::Auth::AWSCredentials(), m_stsConfig);
     }
 
     auto outcome = m_stsClient->AssumeRoleWithWebIdentity(request);
