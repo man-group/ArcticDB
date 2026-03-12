@@ -157,6 +157,7 @@ std::optional<ColumnStatType> name_to_type(const std::string& name) {
 }
 
 ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats) {
+    version_ = {1, 0};
     for (const auto& [column, column_stat_names] : column_stats) {
         if (!column_stat_names.empty()) {
             column_stats_[column] = {};
@@ -174,6 +175,13 @@ ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_se
 ColumnStats::ColumnStats(const FieldCollection& column_stats_fields) {
     for (const auto& field : column_stats_fields) {
         if (field.name() != start_index_column_name && field.name() != end_index_column_name) {
+            if (!version_.has_value()) {
+                std::string_view name = field.name();
+                auto underscore_pos = name.find('_');
+                if (underscore_pos != std::string::npos) {
+                    parse_version(name.substr(0, underscore_pos));
+                }
+            }
             auto [column_name, index_type] = from_segment_column_name_to_external(field.name());
             if (auto it = column_stats_.find(column_name); it == column_stats_.end()) {
                 column_stats_[column_name] = {index_type};
