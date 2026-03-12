@@ -30,12 +30,12 @@ def test_compact_data_negative_rows_per_segment(lmdb_version_store_v1):
         lib.compact_data_experimental(sym, rows_per_segment=-1)
 
 
-def test_compact_data_noop(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    sym = "test_compact_data_noop"
-    df = pd.DataFrame({"col": np.arange(200_000)})
-    lib.write(sym, df)
-    lib.append(sym, df[:50_000])
+def test_compact_data_simple(version_store_factory):
+    lib = version_store_factory(column_group_size=2, segment_row_size=10)
+    sym = "test_compact_data_simple"
+    df = pd.DataFrame({"col": np.arange(4)})
+    lib.write(sym, df[:2])
+    lib.append(sym, df[2:])
     lib.compact_data_experimental(sym)
     assert_frame_equal(df, lib.read(sym).data)
     index = lib.read_index(sym)

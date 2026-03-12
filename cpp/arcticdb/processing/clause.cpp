@@ -2246,8 +2246,23 @@ std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(s
 }
 
 std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_ids) const {
-    // TODO: Implement properly
-    return entity_ids;
+    util::check(!entity_ids.empty(), "Unexpected empty entity_ids in CompactDataClause::process");
+    const auto proc =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager_, std::move(entity_ids)
+            );
+    // TODO: Also handle splitting (use SegmentinMemory::split as first pass, but this is also crazy inefficient)
+    // This will be horrendously inefficient if there are lots of small row-slices, and will also result in multi-block
+    // columns being committed to disk for the first time outside of tick-collectors, which will also impact read and
+    // processing performance, so needs refactoring to be more efficient
+    auto compacted_seg = proc.segments_->front();
+    for (auto seg = std::next(proc.segments_->cbegin()); seg != proc.segments_->cend(); ++seg) {
+        compacted_seg->append(**seg);
+    }
+    RowRange row_range{proc.row_ranges_->front()->first, proc.row_ranges_->back()->second};
+    ColRange col_range = *proc.col_ranges_->front();
+    ProcessingUnit res{std::move(*compacted_seg), std::move(row_range), std::move(col_range)};
+    return push_entities(*component_manager_, std::move(res));
 }
 
 const ClauseInfo& CompactDataClause::clause_info() const { return clause_info_; }
