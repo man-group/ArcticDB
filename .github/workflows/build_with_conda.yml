@@ -291,7 +291,7 @@ jobs:
           docker-images: false  # We're using docker images we don't want to clear
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-linux_64
           path: .
@@ -377,7 +377,7 @@ jobs:
           docker-images: false  # We're using docker images we don't want to clear
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-linux_aarch64
           path: .
@@ -456,7 +456,7 @@ jobs:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-osx_arm64
           path: .
@@ -547,7 +547,7 @@ jobs:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-linux_64
           path: .
@@ -686,7 +686,7 @@ jobs:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-osx_arm64
           path: .
@@ -821,7 +821,7 @@ jobs:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-linux_aarch64
           path: .
@@ -1023,7 +1023,7 @@ jobs:
         #   submodules: recursive
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-win_64
           path: .
@@ -1124,7 +1124,7 @@ jobs:
         #   submodules: recursive
 
       - name: Download build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: build-win_64
           path: .
