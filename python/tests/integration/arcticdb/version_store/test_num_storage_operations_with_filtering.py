@@ -104,7 +104,7 @@ def test_row_slicing_just_index(
     # RangeIndexes do not go through the normal read index path and incur an extra TABLE_DATA read.
     # I don't think that this is worth fixing.
     is_range_index = isinstance(index, pd.RangeIndex)
-    assert res["TABLE_DATA"]["count"] == 2 if is_range_index else 1
+    assert res["TABLE_DATA"]["count"] == (2 if is_range_index else 1)
 
 
 @pytest.mark.parametrize("cols_to_read", [["a"], ["b"]], ids=["a", "b"])
@@ -123,7 +123,7 @@ def test_row_and_column_slicing(
     res_df = lib.read("sym", row_range=(2, 3), columns=cols_to_read).data
     expected_df = df.iloc[2:3][cols_to_read]
 
-    if type(df.index) == pd.RangeIndex:
+    if isinstance(df.index, pd.RangeIndex):
         expected_df.index = pd.RangeIndex(0, 1)
     else:
         expected_df.index = index[2:3]
