@@ -6,9 +6,15 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+from operator import add
 import re
 import time
 from multiprocessing import Queue, Process
+
+from urllib.parse import urlparse
+
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from arcticdb import Arctic
 
 import pytest
 import pandas as pd
@@ -272,12 +278,11 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
     )
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
 
-    from urllib.parse import urlparse
-
-    if s3_endpoint and urlparse(s3_endpoint).hostname.endswith(".amazonaws.com"):
+    parsed_host = urlparse(s3_endpoint).hostname if s3_endpoint else None
+    if parsed_host and parsed_host.endswith(".amazonaws.com"):
         host = f"s3.{s3_region}.amazonaws.com"
     else:
-        host = urlparse(s3_endpoint).hostname if s3_endpoint else ""
+        host = parsed_host or ""
 
     uri = f"s3://{host}:{s3_bucket}?aws_auth=true&path_prefix=test_custom_chain_{lib_name}"
 
@@ -290,3 +295,41 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
         assert_frame_equal(result, df)
     finally:
         ac.delete_library(lib_name)
+
+
+def _delete_symbol_in_new_connection(args):
+     """Worker function that creates a fresh Arctic connection and deletes a symbol."""
+     uri, lib_name, symbol = args
+     ac = Arctic(uri)
+     lib = ac.get_library(lib_name)
+     lib.delete(symbol)
+
+@REAL_S3_TESTS_MARK
+def test_process_pool_executor_delete_fails(real_s3_storage, lib_name):
+    ac = Arctic(real_s3_storage.arctic_uri)
+    lib = ac.create_library(lib_name)
+    lib.write("test_sym", pd.DataFrame({"a": [1, 2, 3]}))
+
+    with ProcessPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(
+            _delete_symbol_in_new_connection,
+            (real_s3_storage.arctic_uri, lib_name, "test_sym"),
+        )
+        # Expect failure due to fork-unsafe AWS SDK
+        with pytest.raises(Exception):
+            future.result(timeout=30)
+
+@REAL_S3_TESTS_MARK
+def test_thread_pool_executor_delete_succeeds(real_s3_storage, lib_name):
+    ac = Arctic(real_s3_storage.arctic_uri)
+    lib = ac.create_library(lib_name)
+    lib.write("test_sym", pd.DataFrame({"a": [1, 2, 3]}))
+
+    def delete_from_lib(symbol):
+        lib.delete(symbol)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(delete_from_lib, "test_sym")
+        future.result(timeout=30)
+
+    assert "test_sym" not in lib.list_symbols()
