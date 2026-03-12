@@ -20,7 +20,9 @@ using namespace arcticdb;
 class CompactDataFixture : public ::testing::Test {
   protected:
     void SetUp() override {
-        const auto rows_per_segment = *rc::gen::inRange<uint64_t>(1, 1'000'000'000);
+        // There's nothing special about 1000 rows per segment, but using larger upper bounds leads to rapidcheck not
+        // selecting very interesting cases (i.e. ones where no compaction is required)
+        const auto rows_per_segment = *rc::gen::inRange<uint64_t>(1, 1000);
         auto row_range_boundaries =
                 *rc::gen::unique<std::vector<uint64_t>>(rc::gen::inRange<uint64_t>(1, rows_per_segment));
         row_range_boundaries.emplace_back(0);
