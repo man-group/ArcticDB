@@ -2145,7 +2145,8 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
     // - 2 row slices with < min_rows_per_segment_ cannot be combined into one row slice with > max_rows_per_segment_
     // - 1 row slice with > max_rows_per_segment_ when split in half will still have >= min_rows_per_segment_ in each
     //   resulting row slice
-    min_rows_per_segment_ = (2 * rows_per_segment_) / 3;
+    // If rows_per_segment_ == 1 min_rows_per_segment_ would be 0 without the std::max
+    min_rows_per_segment_ = std::max((2 * rows_per_segment_) / 3, uint64_t(1));
     max_rows_per_segment_ = 2 * min_rows_per_segment_;
 }
 

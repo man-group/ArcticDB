@@ -58,3 +58,11 @@ TEST(CompactDataStructureRowRanges, SmallUpdate) {
     auto res = clause.structure_row_ranges(row_ranges);
     ASSERT_EQ(res, expected);
 }
+
+TEST(CompactDataStructureRowRanges, UniformlyFragmented) {
+    CompactDataClause clause{10};
+    std::set<RowRange> row_ranges{{0, 5}, {5, 10}, {10, 15}, {15, 20}, {20, 25}};
+    std::set<RowRange> expected{{0, 10}, {10, 25}};
+    auto res = clause.structure_row_ranges(row_ranges);
+    ASSERT_EQ(res, expected);
+}
