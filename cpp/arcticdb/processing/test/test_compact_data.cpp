@@ -13,66 +13,43 @@
 
 using namespace arcticdb;
 
-// TODO: Parametrize all of these tests
-TEST(CompactDataStructureRowRanges, NoOp) {
+// First element is the input, second element is the expected output
+class CompactDataStructureRowRangesFixture
+    : public ::testing::TestWithParam<std::pair<std::set<RowRange>, std::set<RowRange>>> {};
+
+TEST_P(CompactDataStructureRowRangesFixture, All) {
+    const auto [row_ranges, expected_output] = GetParam();
     CompactDataClause clause{10};
-    // A single slice of any size is always just returned as is
-    auto row_ranges = std::set<RowRange>{{0, 4}};
     auto res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, row_ranges);
-    row_ranges = std::set<RowRange>{{0, 9}};
-    res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, row_ranges);
-    row_ranges = std::set<RowRange>{{0, 12}};
-    res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, row_ranges);
-    row_ranges = std::set<RowRange>{{0, 20}};
-    res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, row_ranges);
-    // Everything is already perfectly sliced
-    row_ranges = std::set<RowRange>{{0, 10}, {10, 20}, {20, 30}, {30, 36}};
-    res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, row_ranges);
-    // Everything is within the acceptable range, which is 6-12 rows inclusive with rows_per_segment_ == 10 and will not
-    // get better through re-slicing
-    row_ranges = std::set<RowRange>{{0, 9}, {9, 15}, {15, 23}, {23, 33}};
-    res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, row_ranges);
+    ASSERT_EQ(res, expected_output);
 }
 
-TEST(CompactDataStructureRowRanges, SmallAppend) {
-    CompactDataClause clause{10};
-    // Everything is already perfectly sliced except for small last row slice, which should be attached to the previous
-    // slice
-    std::set<RowRange> row_ranges{{0, 10}, {10, 20}, {20, 30}, {30, 35}};
-    std::set<RowRange> expected{{0, 10}, {10, 20}, {20, 35}};
-    auto res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, expected);
-}
+std::vector<std::pair<std::set<RowRange>, std::set<RowRange>>> parameters{
+        // No-ops (output same as input)
+        // A single slice of any size is always just returned as is, regardless of size
+        {{{0, 4}}, {{0, 4}}},
+        {{{0, 9}}, {{0, 9}}},
+        {{{0, 12}}, {{0, 12}}},
+        {{{0, 20}}, {{0, 20}}},
+        {{{0, 4}}, {{0, 4}}},
+        // Everything is already perfectly sliced
+        {{{0, 10}, {10, 20}, {20, 30}, {30, 36}}, {{0, 10}, {10, 20}, {20, 30}, {30, 36}}},
+        // Everything is within the acceptable range, which is 6-12 rows inclusive with rows_per_segment_ == 10 and will
+        // not get better through re-slicing
+        {{{0, 9}, {9, 15}, {15, 23}, {23, 33}}, {{0, 9}, {9, 15}, {15, 23}, {23, 33}}},
+        // Output differs to input
+        // Small append - everything is already perfectly sliced except for small last row slice, which should be
+        // attached to the previous slice
+        {{{0, 10}, {10, 20}, {20, 30}, {30, 35}}, {{0, 10}, {10, 20}, {20, 35}}},
+        // Small update - everything is already perfectly sliced except for a small row slice inserted into the middle
+        {{{0, 10}, {10, 11}, {11, 21}}, {{0, 10}, {10, 21}}},
+        // Uniformly fragmented
+        {{{0, 5}, {5, 10}, {10, 15}, {15, 20}, {20, 25}}, {{0, 10}, {10, 25}}},
+        // Edge case - first slice is too small so will be combined with next slice even though this is as big as we
+        // want them to get. Final slice is also too small so will be combined with the previous slice.
+        {{{0, 5}, {5, 17}, {17, 22}}, {{0, 22}}}
+};
 
-TEST(CompactDataStructureRowRanges, SmallUpdate) {
-    CompactDataClause clause{10};
-    // Everything is already perfectly sliced except for a small row slice inserted into the middle
-    std::set<RowRange> row_ranges{{0, 10}, {10, 11}, {11, 21}};
-    std::set<RowRange> expected{{0, 10}, {10, 21}};
-    auto res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, expected);
-}
-
-TEST(CompactDataStructureRowRanges, UniformlyFragmented) {
-    CompactDataClause clause{10};
-    std::set<RowRange> row_ranges{{0, 5}, {5, 10}, {10, 15}, {15, 20}, {20, 25}};
-    std::set<RowRange> expected{{0, 10}, {10, 25}};
-    auto res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, expected);
-}
-
-TEST(CompactDataStructureRowRanges, EdgeCase) {
-    CompactDataClause clause{30};
-    // First slice is too small so will be combined with next slice even though this is as big as we want them to get
-    // Final slice is also too small so will be combined with the previous slice
-    std::set<RowRange> row_ranges{{0, 19}, {19, 59}, {59, 78}};
-    std::set<RowRange> expected{{0, 78}};
-    auto res = clause.structure_row_ranges(row_ranges);
-    ASSERT_EQ(res, expected);
-}
+INSTANTIATE_TEST_SUITE_P(
+        CompactDataStructureRowRanges, CompactDataStructureRowRangesFixture, ::testing::ValuesIn(parameters)
+);
