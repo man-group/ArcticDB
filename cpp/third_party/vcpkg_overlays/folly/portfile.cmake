@@ -6,17 +6,14 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO facebook/folly
     REF "v${VERSION}"
-    SHA512 884bd663c50ee2965679808fa67926226d46105f0b7d90d5d76731abe2435b519d0efcd1054f3b59012588b99f94ae88bc2230b7cbeb71d8a0085525da2c0de9
+    SHA512 6d377c48cf1c0796da6fad34b930e9608f3cd765a675414eaad45ff46e9d0b9bb5f027b187ec135e88bb60a83cb91c07d266a6673621caf3f9961942b55276e2
     HEAD_REF main
     PATCHES
-        0001-fix-deps.patch
-        0002-disable-uninitialized-resize-on-new-stl.patch
-        0003-fix-unistd-include.patch
-        0004-fix-absolute-dir.patch
-        0005-Deactivate-libunwind-features.patch
-        0006-fix-Ignore-features-based-on-demangle.h.patch
-        0007-fix-windows-minmax.patch
-        0008-win-dont-propagate-cpp-version.patch
+        no_exception_tracer.patch
+        fix-deps.patch
+        disable-uninitialized-resize-on-new-stl.patch
+        fix-unistd-include.patch
+        fix-absolute-dir.patch
 )
 file(REMOVE "${SOURCE_PATH}/CMake/FindFastFloat.cmake")
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
@@ -48,6 +45,7 @@ vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        -DFOLLY_NO_EXCEPTION_TRACER=ON
         -DMSVC_USE_STATIC_RUNTIME=${MSVC_USE_STATIC_RUNTIME}
         -DCMAKE_INSTALL_DIR=share/folly
         -DCMAKE_POLICY_DEFAULT_CMP0167=NEW
