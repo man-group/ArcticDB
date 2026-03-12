@@ -259,6 +259,7 @@ class TestReadIndexRange:
             assert result.data.index.step == index.step
         else:
             assert result.data.index.equals(index[row_range[0] : row_range[1]])
+        assert result.data.empty != with_data
 
     @pytest.mark.parametrize(
         "non_datetime_index",
