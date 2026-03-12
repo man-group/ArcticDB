@@ -483,7 +483,7 @@ std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(
     ARCTICDB_DEBUG_THROW(5)
     // Experimentation shows flattening the entities into a single vector and a single call to
     // component_manager_->get is faster than not flattening and making multiple calls
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     auto [buckets] = component_manager_->get_entities<bucket_id>(entity_ids);
     for (auto [idx, entity_id] : folly::enumerate(entity_ids)) {
         res[buckets[idx]].emplace_back(entity_id);
@@ -925,7 +925,7 @@ template<ResampleBoundary closed_boundary>
 std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     if (entity_ids.empty()) {
         return {};
     }
@@ -1357,7 +1357,7 @@ std::vector<std::vector<EntityId>> MergeClause::structure_for_processing(
     // specify any particular input shape unless a clause is the
     // first one and can use structure_for_processing. Ideally
     // merging should be parallel like resampling
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, std::move(entity_ids)
     );
@@ -1513,7 +1513,7 @@ std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::v
 std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
     if (entity_ids.empty()) {
         return {};
     }
@@ -1745,7 +1745,7 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(
         }
     }
     component_manager_->replace_entities<std::shared_ptr<RowRange>>(
-            flatten_entities(std::move(entity_ids_vec)), new_row_ranges
+            flatten_vectors(std::move(entity_ids_vec)), new_row_ranges
     );
     auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
     return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);

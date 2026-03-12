@@ -844,7 +844,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
                             return folly::collect(work_futures).via(&async::io_executor());
                         });
     }
-    return std::move(entity_ids_vec_fut).thenValueInline(flatten_entities);
+    return std::move(entity_ids_vec_fut).thenValueInline(flatten_vectors<EntityId>);
 }
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
