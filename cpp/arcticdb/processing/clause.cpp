@@ -2203,7 +2203,6 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
                 } else {
                     return false;
                 }
-                //        return processing_row_ranges.contains(range_and_key.row_range());
             }
     );
     if (ranges_and_keys.empty()) {
