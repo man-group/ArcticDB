@@ -73,7 +73,7 @@ RC_GTEST_PROP(CompactData, StructureForProcessing, ()) {
         }
     }
     CompactDataClause clause{rows_per_segment};
-    const auto proc_unit_ids = clause.structure_for_processing(ranges_and_keys);
+    auto proc_unit_ids = clause.structure_for_processing(ranges_and_keys);
     // If there are fewer total rows than min_rows_per_segment_ then everything will be combined into one
     const auto min_rows_per_segment = std::min(clause.min_rows_per_segment_, row_range_boundaries.back());
     const auto max_rows_per_segment = clause.max_rows_per_segment_;
@@ -94,5 +94,10 @@ RC_GTEST_PROP(CompactData, StructureForProcessing, ()) {
             }
         }
     }
-    //    const auto flattened = flatten_entities(std::move(proc_unit_ids));
+    const auto flattened = flatten_vectors(std::move(proc_unit_ids));
+    if (!flattened.empty()) {
+        for (auto idx = flattened.cbegin(); idx != std::prev(flattened.cend()); ++idx) {
+            RC_ASSERT((*idx) + 1 == *std::next(idx));
+        }
+    }
 }
