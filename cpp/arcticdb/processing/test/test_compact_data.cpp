@@ -66,3 +66,13 @@ TEST(CompactDataStructureRowRanges, UniformlyFragmented) {
     auto res = clause.structure_row_ranges(row_ranges);
     ASSERT_EQ(res, expected);
 }
+
+TEST(CompactDataStructureRowRanges, EdgeCase) {
+    CompactDataClause clause{30};
+    // First slice is too small so will be combined with next slice even though this is as big as we want them to get
+    // Final slice is also too small so will be combined with the previous slice
+    std::set<RowRange> row_ranges{{0, 19}, {19, 59}, {59, 78}};
+    std::set<RowRange> expected{{0, 78}};
+    auto res = clause.structure_row_ranges(row_ranges);
+    ASSERT_EQ(res, expected);
+}
