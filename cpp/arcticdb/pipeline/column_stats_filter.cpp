@@ -253,7 +253,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 
         StatsRowVector stats_rows;
         stats_rows.reserve(isr.size());
-        size_t total_count = 0;
+        [[maybe_unused]] size_t total_count = 0;  // for debug logging only, unused in release build
         for (size_t row = 0; row < isr.size(); ++row) {
             if (input && !input->get_bit(row)) {
                 // Don't bother - we already know we don't need to look at the segment
@@ -280,7 +280,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         );
 
         // Convert to BitSet
-        size_t pruned_count = 0;
+        [[maybe_unused]] size_t pruned_count = 0;  // for debug logging only, unused in release build
         const auto& comparisons = std::get<std::vector<StatsComparison>>(result);
         util::check(comparisons.size() == isr.size(), "Expected comparisons.size() == isr.size()");
         for (size_t row = 0; row < isr.size(); ++row) {
