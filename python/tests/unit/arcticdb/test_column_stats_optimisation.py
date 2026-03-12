@@ -848,3 +848,46 @@ def test_column_stats_with_date_range(in_memory_version_store, clear_query_stats
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
 
     assert_frame_equal(result, df1)
+
+
+@pytest.mark.parametrize("negated", (True, False))
+def test_column_stats_bool_column_filters(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, negated
+):
+    lib = in_memory_version_store
+
+    df_0 = pd.DataFrame({"col_1": [True, True]}, index=pd.date_range("2000-01-01", periods=2))
+    df_1 = pd.DataFrame({"col_1": [False, True]}, index=pd.date_range("2000-01-03", periods=2))
+    df_2 = pd.DataFrame({"col_1": [True, False]}, index=pd.date_range("2000-01-05", periods=2))
+    df_3 = pd.DataFrame({"col_1": [False, False]}, index=pd.date_range("2000-01-07", periods=2))
+    df_4 = pd.DataFrame({"col_1": [False, False]}, index=pd.date_range("2000-01-09", periods=2))
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+    lib.append(sym, df_3)
+    lib.append(sym, df_4)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    if negated:
+        q = q[~q["col_1"]]
+    else:
+        q = q[q["col_1"]]
+    result = lib.read(sym, query_builder=q).data
+
+    table_data_reads = get_table_data_read_count()
+
+    expected = pd.concat([df_0, df_1, df_2, df_3, df_4])
+
+    if negated:
+        expected = expected[~expected["col_1"]]
+    else:
+        expected = expected[expected["col_1"]]
+    assert_frame_equal(result, expected)
+
+    # When negated=True, can prune off only the True, True block
+    # When negated=False, can prune off only the two False, False blocks
+    assert table_data_reads == 4 if negated else 3

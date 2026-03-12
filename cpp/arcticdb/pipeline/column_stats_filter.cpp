@@ -26,7 +26,8 @@ std::optional<Value> extract_value_from_column(
     return details::visit_type(data_type, [&it, col_idx](auto tag) -> std::optional<Value> {
         using type_info = ScalarTypeInfo<decltype(tag)>;
         // Only numeric types are supported at the moment.
-        if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type)) {
+        if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
+                      is_bool_type(type_info::data_type)) {
             auto opt_val = it->scalar_at<typename type_info::RawType>(col_idx);
             if (opt_val.has_value()) {
                 return Value{*opt_val, type_info::data_type};
@@ -127,36 +128,24 @@ StatsVariantData dispatch_binary_stats(
 }
 
 StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationType operation) {
-    if (!std::holds_alternative<std::vector<StatsComparison>>(left)) {
-        return left; // TODO aseaton not implemented
-    }
-    const auto& stats_comparisons = std::get<std::vector<StatsComparison>>(left);
     switch (operation) {
-    case OperationType::NOT: {
-        std::vector<StatsComparison> result;
-        result.reserve(stats_comparisons.size());
-        for (StatsComparison comparison : stats_comparisons) {
-            switch (comparison) {
-            case StatsComparison::UNKNOWN:
-                result.push_back(StatsComparison::UNKNOWN);
-                break;
-            case StatsComparison::ALL_MATCH:
-                result.push_back(StatsComparison::NONE_MATCH);
-                break;
-            case StatsComparison::NONE_MATCH:
-                result.push_back(StatsComparison::ALL_MATCH);
-                break;
-            default:
-                util::raise_rte("Unexpected StatsComparison", comparison);
-            }
-        }
-        util::check(result.size() == stats_comparisons.size(), "Expected result.size() == stats_comparison.size()");
-        return result;
-    }
+    case OperationType::NOT:
+    case OperationType::IDENTITY:
+        return column_stats_detail::visit_unary_boolean_stats(left, operation);
     default:
-        // Not implemented: ABS, ISNULL, NOTNULL, IDENTITY, NEG
         ARCTICDB_DEBUG(log::version(), "Unsupported unary operator for stats {}", operation);
-        return std::vector(stats_comparisons.size(), StatsComparison::UNKNOWN);
+        return util::variant_match(
+                left,
+                [](const std::vector<StatsComparison>& comparisons) -> StatsVariantData {
+                    return std::vector(comparisons.size(), StatsComparison::UNKNOWN);
+                },
+                [](const std::vector<ColumnStatsValues>& values) -> StatsVariantData {
+                    return std::vector(values.size(), StatsComparison::UNKNOWN);
+                },
+                [](const std::shared_ptr<Value>&) -> StatsVariantData {
+                    util::raise_rte("Do not expect a Value in dispatch_unary_stats!");
+                }
+        );
     }
 }
 

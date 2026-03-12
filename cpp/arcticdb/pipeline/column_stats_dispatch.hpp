@@ -10,7 +10,6 @@
 
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
@@ -46,29 +45,9 @@ StatsVariantData compute_stats(
 
 namespace column_stats_detail {
 
-inline size_t stats_variant_size(const StatsVariantData& v) {
-    return std::visit(
-            util::overload{
-                    [](const std::vector<StatsComparison>& vec) -> size_t { return vec.size(); },
-                    [](const std::shared_ptr<Value>&) -> size_t { return 0; },
-                    [](const std::vector<ColumnStatsValues>& vec) -> size_t { return vec.size(); }
-            },
-            v
-    );
-}
+size_t stats_variant_size(const StatsVariantData& v);
 
-inline bool value_is_nan(const Value& val) {
-    if (is_floating_point_type(val.data_type())) {
-        return details::visit_type(val.data_type(), [&val](auto tag) {
-            using RawType = decltype(tag)::raw_type;
-            if constexpr (std::is_floating_point_v<RawType>) {
-                return std::isnan(val.get<RawType>());
-            }
-            return false;
-        });
-    }
-    return false;
-}
+bool value_is_nan(const Value& val);
 
 template<typename Func>
 struct FlippedComparator;
@@ -173,42 +152,15 @@ std::vector<StatsComparison> visit_binary_comparator_stats(
 
 StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation);
 
-inline std::vector<StatsComparison> visit_binary_boolean_stats(
+std::vector<StatsComparison> visit_binary_boolean_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation
-) {
-    // TODO aseaton remaining cases
-    // StatsComparison & Value -> Only if Value is a bool
-    // StatsComparison & ColumnStatsValues -> Only if ColumnStatsValues are a bool
-    // Value & Value -> Only if Value is a bool
-    // ColumnStatsValues & ColumnStatsValues -> Only if a bool
-    // Value & ColumnStatsValues -> Only if a bool
-    return std::visit(
-            util::overload{
-                    [operation](const std::vector<StatsComparison>& l, const std::vector<StatsComparison>& r)
-                            -> std::vector<StatsComparison> {
-                        util::check(
-                                l.size() == r.size(),
-                                "Mismatched vector sizes in visit_binary_boolean_stats: {} vs {}",
-                                l.size(),
-                                r.size()
-                        );
-                        std::vector<StatsComparison> result;
-                        result.reserve(l.size());
-                        for (size_t i = 0; i < l.size(); ++i) {
-                            result.push_back(binary_boolean_stats(l.at(i), r.at(i), operation));
-                        }
-                        return result;
-                    },
-                    [&](const auto&, const auto&) -> std::vector<StatsComparison> {
-                        size_t sz = std::max(stats_variant_size(left), stats_variant_size(right));
-                        log::version().warn("Unsupported case in visit_binary_boolean_stats");
-                        return std::vector(sz, StatsComparison::UNKNOWN);
-                    }
-            },
-            left,
-            right
-    );
-}
+);
+
+StatsComparison unary_boolean_stats(const StatsComparison& stats_values, OperationType operation);
+
+StatsComparison unary_boolean_stats(const ColumnStatsValues& stats_values, OperationType operation);
+
+StatsVariantData visit_unary_boolean_stats(const StatsVariantData& left, OperationType operation);
 
 } // namespace column_stats_detail
 
