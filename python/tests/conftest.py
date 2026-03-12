@@ -1614,12 +1614,12 @@ def in_memory_library_tiny_segment_dynamic() -> Library:
 
 
 @pytest.fixture(params=["in_memory_library", "in_memory_library_dynamic"])
-def in_memory_library_static_dynamic(request) -> NativeVersionStore:
+def in_memory_library_static_dynamic(request) -> Library:
     return request.getfixturevalue(request.param)
 
 
 @pytest.fixture(params=["in_memory_library_tiny_segment", "in_memory_library_tiny_segment_dynamic"])
-def in_memory_library_tiny_segment_static_dynamic(request) -> NativeVersionStore:
+def in_memory_library_tiny_segment_static_dynamic(request) -> Library:
     return request.getfixturevalue(request.param)
 
 
@@ -1631,12 +1631,12 @@ def in_memory_library_tiny_segment_static_dynamic(request) -> NativeVersionStore
         "in_memory_library_dynamic",
     ]
 )
-def in_memory_library_static_dynamic_different_segments(request) -> NativeVersionStore:
+def in_memory_library_static_dynamic_different_segments(request) -> Library:
     return request.getfixturevalue(request.param)
 
 
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
-def lmdb_or_in_memory_version_store_tiny_segment(request) -> NativeVersionStore:
+def lmdb_or_in_memory_version_store_tiny_segment(request) -> Library:
     return request.getfixturevalue(request.param)
 
 
