@@ -2225,13 +2225,13 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
             if (row_range->contains(range_and_key.row_range().first)) {
                 current.emplace_back(idx);
             } else {
-                res.emplace_back(current);
-                current = std::vector<size_t>{1, idx};
+                res.emplace_back(std::move(current));
+                current = std::vector<size_t>{idx};
                 ++row_range;
             }
         } else {
             res.emplace_back(std::move(current));
-            current = std::vector<size_t>{1, idx};
+            current = std::vector<size_t>{idx};
             col_range = range_and_key.col_range();
             row_range = retained_processing_row_ranges.cbegin();
         }
