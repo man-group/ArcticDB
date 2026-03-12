@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+#
+# Sets up AWS infrastructure to test SafeSTSWebIdentityCredentialsProvider:
+#   - S3 bucket for OIDC discovery documents
+#   - S3 bucket for ArcticDB test data
+#   - IAM OIDC identity provider
+#   - IAM role that trusts the OIDC provider
+#
+# Usage: ./setup.sh [--region us-west-1]
+#
+# Prerequisites:
+#   - AWS CLI configured with admin-level credentials
+#   - pip install PyJWT cryptography
+#
+# Outputs a config file (test_config.env) sourced by other scripts.
+
+set -euo pipefail
+
+REGION="${1:-us-west-1}"
+TIMESTAMP=$(date +%s)
+OIDC_BUCKET="sts-oidc-test-${TIMESTAMP}"
+TEST_BUCKET="sts-arcticdb-test-${TIMESTAMP}"
+ROLE_NAME="sts-web-identity-test-role-${TIMESTAMP}"
+WORK_DIR="$(cd "$(dirname "$0")" && pwd)"
+KEYS_DIR="${WORK_DIR}/.keys"
+CONFIG_FILE="${WORK_DIR}/test_config.env"
+
+echo "==> Creating working directories"
+mkdir -p "${KEYS_DIR}"
+
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "    AWS Account: ${ACCOUNT_ID}"
+echo "    Region:      ${REGION}"
+
+# --- Step 1: Generate signing keys ---
+echo "==> Generating RSA signing key pair"
+openssl genrsa -out "${KEYS_DIR}/oidc-key.pem" 2048 2>/dev/null
+openssl rsa -in "${KEYS_DIR}/oidc-key.pem" -pubout -out "${KEYS_DIR}/oidc-pubkey.pem" 2>/dev/null
+
+# --- Step 2: Generate OIDC discovery documents ---
+echo "==> Generating OIDC discovery documents"
+python3 "${WORK_DIR}/generate_oidc_config.py" \
+    --pubkey "${KEYS_DIR}/oidc-pubkey.pem" \
+    --bucket "${OIDC_BUCKET}" \
+    --output-dir "${KEYS_DIR}"
+
+# --- Step 3: Create S3 buckets ---
+echo "==> Creating OIDC config bucket: ${OIDC_BUCKET}"
+aws s3 mb "s3://${OIDC_BUCKET}" --region "${REGION}"
+
+echo "==> Creating test data bucket: ${TEST_BUCKET}"
+aws s3 mb "s3://${TEST_BUCKET}" --region "${REGION}"
+
+# --- Step 4: Upload OIDC documents ---
+echo "==> Uploading OIDC discovery documents"
+aws s3 cp "${KEYS_DIR}/openid-configuration" \
+    "s3://${OIDC_BUCKET}/.well-known/openid-configuration" \
+    --content-type application/json
+
+aws s3 cp "${KEYS_DIR}/keys.json" \
+    "s3://${OIDC_BUCKET}/keys.json" \
+    --content-type application/json
+
+# --- Step 5: Make OIDC bucket publicly readable ---
+echo "==> Making OIDC bucket publicly readable"
+aws s3api put-public-access-block \
+    --bucket "${OIDC_BUCKET}" \
+    --public-access-block-configuration \
+    BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false
+
+aws s3api put-bucket-policy \
+    --bucket "${OIDC_BUCKET}" \
+    --policy "{
+        \"Version\": \"2012-10-17\",
+        \"Statement\": [{
+            \"Effect\": \"Allow\",
+            \"Principal\": \"*\",
+            \"Action\": \"s3:GetObject\",
+            \"Resource\": \"arn:aws:s3:::${OIDC_BUCKET}/*\"
+        }]
+    }"
+
+# --- Step 6: Register OIDC provider in IAM ---
+echo "==> Getting S3 TLS thumbprint"
+THUMBPRINT=$(openssl s_client \
+    -connect "${OIDC_BUCKET}.s3.amazonaws.com:443" \
+    -servername "${OIDC_BUCKET}.s3.amazonaws.com" \
+    </dev/null 2>/dev/null \
+    | openssl x509 -fingerprint -noout \
+    | sed 's/://g' \
+    | cut -d= -f2 \
+    | tr '[:upper:]' '[:lower:]')
+
+ISSUER_URL="https://${OIDC_BUCKET}.s3.amazonaws.com"
+
+echo "==> Creating IAM OIDC provider: ${ISSUER_URL}"
+OIDC_PROVIDER_ARN=$(aws iam create-open-id-connect-provider \
+    --url "${ISSUER_URL}" \
+    --thumbprint-list "${THUMBPRINT}" \
+    --client-id-list "sts.amazonaws.com" \
+    --query OpenIDConnectProviderArn --output text)
+
+# --- Step 7: Create IAM role ---
+echo "==> Creating IAM role: ${ROLE_NAME}"
+TRUST_POLICY=$(cat <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Principal": {
+            "Federated": "${OIDC_PROVIDER_ARN}"
+        },
+        "Action": "sts:AssumeRoleWithWebIdentity",
+        "Condition": {
+            "StringEquals": {
+                "${OIDC_BUCKET}.s3.amazonaws.com:aud": "sts.amazonaws.com"
+            }
+        }
+    }]
+}
+EOF
+)
+
+aws iam create-role \
+    --role-name "${ROLE_NAME}" \
+    --assume-role-policy-document "${TRUST_POLICY}" \
+    --query Role.Arn --output text > /dev/null
+
+ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
+
+# --- Step 8: Attach S3 policy to role ---
+echo "==> Attaching S3 access policy to role"
+aws iam put-role-policy \
+    --role-name "${ROLE_NAME}" \
+    --policy-name s3-test-access \
+    --policy-document "{
+        \"Version\": \"2012-10-17\",
+        \"Statement\": [{
+            \"Effect\": \"Allow\",
+            \"Action\": \"s3:*\",
+            \"Resource\": [
+                \"arn:aws:s3:::${TEST_BUCKET}\",
+                \"arn:aws:s3:::${TEST_BUCKET}/*\"
+            ]
+        }]
+    }"
+
+# --- Step 9: Generate initial JWT token ---
+echo "==> Generating JWT token"
+python3 "${WORK_DIR}/generate_token.py" \
+    --key "${KEYS_DIR}/oidc-key.pem" \
+    --bucket "${OIDC_BUCKET}" \
+    --output "${KEYS_DIR}/web-identity-token"
+
+# --- Step 10: Write config file ---
+cat > "${CONFIG_FILE}" <<EOF
+# Generated by setup.sh on $(date -Iseconds)
+# Source this file before running tests.
+ACCOUNT_ID=${ACCOUNT_ID}
+REGION=${REGION}
+OIDC_BUCKET=${OIDC_BUCKET}
+TEST_BUCKET=${TEST_BUCKET}
+ROLE_NAME=${ROLE_NAME}
+ROLE_ARN=${ROLE_ARN}
+OIDC_PROVIDER_ARN=${OIDC_PROVIDER_ARN}
+KEYS_DIR=${KEYS_DIR}
+TOKEN_FILE=${KEYS_DIR}/web-identity-token
+EOF
+
+echo ""
+echo "=== Setup complete ==="
+echo "Config written to: ${CONFIG_FILE}"
+echo ""
+echo "To run the test:"
+echo "  cd ${WORK_DIR}"
+echo "  ./run_test.sh"
+echo ""
+echo "To clean up when done:"
+echo "  ./cleanup.sh"

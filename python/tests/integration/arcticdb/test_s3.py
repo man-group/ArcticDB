@@ -273,9 +273,7 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
 
     # Write credentials to a temp file for the ProfileConfigFileAWSCredentialsProvider
     creds_file = tmp_path / "credentials"
-    creds_file.write_text(
-        f"[default]\n" f"aws_access_key_id = {s3_access_key}\n" f"aws_secret_access_key = {s3_secret_key}\n"
-    )
+    creds_file.write_text(f"[default]\naws_access_key_id = {s3_access_key}\naws_secret_access_key = {s3_secret_key}\n")
     monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
 
     parsed_host = urlparse(s3_endpoint).hostname if s3_endpoint else None
@@ -298,38 +296,51 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
 
 
 def _delete_symbol_in_new_connection(args):
-     """Worker function that creates a fresh Arctic connection and deletes a symbol."""
-     uri, lib_name, symbol = args
-     ac = Arctic(uri)
-     lib = ac.get_library(lib_name)
-     lib.delete(symbol)
+    """Worker function that creates a fresh Arctic connection and deletes a symbol."""
+    uri, lib_name, symbol = args
+    ac = Arctic(uri)
+    lib = ac.get_library(lib_name)
+    lib.delete(symbol)
+
 
 @REAL_S3_TESTS_MARK
-def test_process_pool_executor_delete_fails(real_s3_storage, lib_name):
-    ac = Arctic(real_s3_storage.arctic_uri)
+def test_process_pool_executor_delete_fails(real_s3_sts_storage, lib_name):
+    ac = Arctic(real_s3_sts_storage.arctic_uri)
     lib = ac.create_library(lib_name)
-    lib.write("test_sym", pd.DataFrame({"a": [1, 2, 3]}))
+    symbols = [f"test_sym_{i}" for i in range(4)]
+    for sym in symbols:
+        lib.write(sym, pd.DataFrame({"a": [1, 2, 3]}))
 
-    with ProcessPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            _delete_symbol_in_new_connection,
-            (real_s3_storage.arctic_uri, lib_name, "test_sym"),
-        )
+    with ProcessPoolExecutor(max_workers=len(symbols)) as executor:
+        futures = [
+            executor.submit(
+                _delete_symbol_in_new_connection,
+                (real_s3_sts_storage.arctic_uri, lib_name, sym),
+            )
+            for sym in symbols
+        ]
         # Expect failure due to fork-unsafe AWS SDK
-        with pytest.raises(Exception):
-            future.result(timeout=30)
+        for future in futures:
+            with pytest.raises(Exception):
+                future.result(timeout=30)
+
 
 @REAL_S3_TESTS_MARK
-def test_thread_pool_executor_delete_succeeds(real_s3_storage, lib_name):
-    ac = Arctic(real_s3_storage.arctic_uri)
+def test_thread_pool_executor_delete_succeeds(real_s3_sts_storage, lib_name):
+    ac = Arctic(real_s3_sts_storage.arctic_uri)
     lib = ac.create_library(lib_name)
-    lib.write("test_sym", pd.DataFrame({"a": [1, 2, 3]}))
+    symbols = [f"test_sym_{i}" for i in range(4)]
+    for sym in symbols:
+        lib.write(sym, pd.DataFrame({"a": [1, 2, 3]}))
 
     def delete_from_lib(symbol):
         lib.delete(symbol)
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(delete_from_lib, "test_sym")
-        future.result(timeout=30)
+    with ThreadPoolExecutor(max_workers=len(symbols)) as executor:
+        futures = [executor.submit(delete_from_lib, sym) for sym in symbols]
+        for future in futures:
+            future.result(timeout=30)
 
-    assert "test_sym" not in lib.list_symbols()
+    remaining = lib.list_symbols()
+    for sym in symbols:
+        assert sym not in remaining
