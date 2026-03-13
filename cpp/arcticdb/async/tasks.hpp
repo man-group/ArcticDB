@@ -366,11 +366,12 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
         interval timer;
         timer.start();
         std::unordered_set<std::string> failed_targets;
+        auto targets = target_stores_;
         if (check_key_exists_on_targets_) {
-            target_stores_.erase(
+            targets.erase(
                     std::remove_if(
-                            target_stores_.begin(),
-                            target_stores_.end(),
+                            targets.begin(),
+                            targets.end(),
                             [that = this, &failed_targets](const std::shared_ptr<Store>& target_store) {
                                 try {
                                     return target_store->key_exists_sync(that->key_to_read_);
@@ -387,10 +388,10 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
                                 }
                             }
                     ),
-                    target_stores_.end()
+                    targets.end()
             );
         }
-        if (!target_stores_.empty()) {
+        if (!targets.empty()) {
             storage::KeySegmentPair key_segment_pair;
             try {
                 key_segment_pair = source_store_->read_compressed_sync(key_to_read_);
@@ -403,7 +404,7 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
                 key_segment_pair.set_key(*key_to_write_);
             }
 
-            for (auto& target_store : target_stores_) {
+            for (auto& target_store : targets) {
                 try {
                     target_store->write_compressed_sync(key_segment_pair);
                 } catch (const storage::DuplicateKeyException& e) {
