@@ -384,6 +384,19 @@ def test_column_with_mixed_types():
         DataFrameNormalizer().normalize(df)
 
 
+def test_stringdtype_normalization():
+    """StringDtype columns (pandas 2.x) should be converted to object dtype during normalization."""
+    df = pd.DataFrame({"col": pd.array(["hello", "world"], dtype=pd.StringDtype())})
+    # Should not raise - the normalizer should handle StringDtype by converting to object
+    DataFrameNormalizer().normalize(df, dynamic_strings=True)
+
+
+def test_stringdtype_with_nan():
+    """StringDtype columns with NA values should normalize without error."""
+    df = pd.DataFrame({"col": pd.array(["hello", pd.NA, "world"], dtype=pd.StringDtype())})
+    DataFrameNormalizer().normalize(df, dynamic_strings=True)
+
+
 def test_timestamp_with_tz_pytz():
     dt = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     nytz = pytz.timezone("America/New_York")
@@ -553,6 +566,17 @@ def test_will_item_be_pickled(lmdb_version_store, sym):
 
     lmdb_version_store.write(sym, not_so_bad_df)
     assert_frame_equal(not_so_bad_df, lmdb_version_store.read(sym).data)
+
+
+def test_stringdtype_roundtrip(lmdb_version_store, sym):
+    """DataFrames with StringDtype columns should survive a write/read roundtrip."""
+    df = pd.DataFrame({"col": pd.array(["foo", "bar", "baz"], dtype=pd.StringDtype())})
+    lmdb_version_store.write(sym, df)
+    result = lmdb_version_store.read(sym).data
+    # The read-back will have object dtype, not StringDtype, since ArcticDB stores strings as object
+    expected = df.copy()
+    expected["col"] = expected["col"].astype(object)
+    assert_frame_equal(expected, result)
 
 
 @pytest.mark.parametrize(
