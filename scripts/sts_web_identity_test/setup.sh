@@ -6,7 +6,8 @@
 #   - IAM OIDC identity provider
 #   - IAM role that trusts the OIDC provider
 #
-# Usage: ./setup.sh [--region us-west-1]
+# Usage: ./setup.sh [<region>]
+# e.g.:  ./setup.sh us-west-1
 #
 # Prerequisites:
 #   - AWS CLI configured with admin-level credentials
