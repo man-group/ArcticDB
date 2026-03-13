@@ -16,7 +16,7 @@ from collections import namedtuple
 
 import pandas as pd
 import numpy as np
-import pytz
+from zoneinfo import ZoneInfo
 import re
 import itertools
 import attr
@@ -3626,8 +3626,8 @@ class NativeVersionStore:
                 # If tz is provided, it is stored in UTC - hence needs to be localized to UTC before converting to the
                 # given tz
                 return (
-                    _from_tz_timestamp(min_ts, "UTC").astimezone(pytz.timezone(tz)),
-                    _from_tz_timestamp(max_ts, "UTC").astimezone(pytz.timezone(tz)),
+                    _from_tz_timestamp(min_ts, "UTC").astimezone(ZoneInfo(tz)),
+                    _from_tz_timestamp(max_ts, "UTC").astimezone(ZoneInfo(tz)),
                 )
             else:
                 return _from_tz_timestamp(min_ts, None), _from_tz_timestamp(max_ts, None)
