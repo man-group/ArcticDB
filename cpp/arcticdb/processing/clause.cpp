@@ -2158,12 +2158,19 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
     // Greedy algorithm - keep adding row ranges until there are at least min_rows_per_segment_
     // If possible, keep adding more to get as close as possible to rows_per_segment_
     // If it is necessary to get above min_rows_per_segment_ in a slice, we may have to exceed max_rows_per_segment_
-    // In this case, process will split into 2 row slices
+    // In this case, CompactDataClause::process will split into 2 row slices
     std::set<RowRange> res;
     RowRange current = *row_ranges.cbegin();
     for (auto row_range = std::next(row_ranges.cbegin()); row_range != row_ranges.cend(); ++row_range) {
-        if (current.diff() < min_rows_per_segment_ || current.diff() + row_range->diff() <= rows_per_segment_ ||
-            (current.diff() + row_range->diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()) {
+        const bool current_below_min_rows_per_segment = current.diff() < min_rows_per_segment_;
+        const bool below_rows_per_segment_with_this_slice = current.diff() + row_range->diff() <= rows_per_segment_;
+        // This is equivalent to:
+        // (current.diff() + row_range->diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()
+        // but without any subtractions which can underflow with unsigned integers
+        const bool closer_to_rows_per_segment_with_this_slice_than_without =
+                (2 * current.diff()) + row_range->diff() < 2 * rows_per_segment_;
+        if (current_below_min_rows_per_segment || below_rows_per_segment_with_this_slice ||
+            closer_to_rows_per_segment_with_this_slice_than_without) {
             current.second = row_range->second;
         } else {
             res.emplace(current);
