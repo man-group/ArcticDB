@@ -10,7 +10,6 @@ from hypothesis import given, settings
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
 from arcticdb.options import ArrowOutputStringFormat
@@ -24,6 +23,8 @@ from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothes
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
+
+pa = pytest.importorskip("pyarrow")
 
 
 def test_record_batches_roundtrip():
@@ -868,20 +869,21 @@ def test_batch_append(lmdb_version_store_arrow):
 
 
 supported_types = [
-    pa.bool_(),
-    pa.uint8(),
-    pa.uint16(),
-    pa.uint32(),
-    pa.uint64(),
-    pa.int8(),
-    pa.int16(),
-    pa.int32(),
-    pa.int64(),
-    pa.float32(),
-    pa.float64(),
-    pa.string(),
-    pa.large_string(),
-    pa.timestamp("ns"),
+    # These are PyArrow dtypes; the specific objects are only created inside tests
+    "bool",
+    "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
+    "int8",
+    "int16",
+    "int32",
+    "int64",
+    "float32",
+    "float64",
+    "string",
+    "large_string",
+    "timestamp_ns",
 ]
 num_supported_types = len(supported_types)
 

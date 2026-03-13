@@ -3,7 +3,6 @@ import copy
 from arcticdb.options import OutputFormat
 import pandas as pd
 import numpy as np
-import pyarrow as pa
 import pytest
 
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
@@ -11,6 +10,7 @@ from arcticdb.exceptions import ArcticDbNotYetImplemented
 
 
 def generic_arrow_norm_test(lib, sym, pandas_object, expected_columns, expected_types=None):
+    pa = pytest.importorskip("pyarrow")
     lib.write(sym, pandas_object)
     table = lib.read(sym).data
     assert table.column_names == expected_columns

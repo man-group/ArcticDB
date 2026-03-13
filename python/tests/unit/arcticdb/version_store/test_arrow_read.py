@@ -11,8 +11,9 @@ from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.options import OutputFormat, ArrowOutputStringFormat
-import pyarrow as pa
-import pyarrow.compute as pc
+
+pa = pytest.importorskip("pyarrow")
+
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     ENDIANNESS,
@@ -1119,6 +1120,9 @@ def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_
 
 
 def test_project_dynamic_schema(lmdb_version_store_dynamic_schema_arrow):
+    pytest.importorskip("pyarrow")
+    import pyarrow.compute as pc
+
     lib = lmdb_version_store_dynamic_schema_arrow
     lib.set_output_format(OutputFormat.PYARROW)
     sym = "sym"
@@ -1161,6 +1165,9 @@ def test_project_dynamic_schema_complex(lmdb_version_store_dynamic_schema_arrow)
 
 
 def test_aggregation_empty_slices(lmdb_version_store_dynamic_schema_arrow):
+    pytest.importorskip("pyarrow")
+    import pyarrow.compute as pc
+
     lib = lmdb_version_store_dynamic_schema_arrow
     sym = "sym"
     df_1 = pd.DataFrame(
@@ -1204,6 +1211,9 @@ def test_aggregation_empty_slices(lmdb_version_store_dynamic_schema_arrow):
 
 
 def test_resample_empty_slices(lmdb_version_store_dynamic_schema_arrow):
+    pytest.importorskip("pyarrow")
+    import pyarrow.compute as pc
+
     lib = lmdb_version_store_dynamic_schema_arrow
     sym = "sym"
 
