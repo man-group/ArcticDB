@@ -417,6 +417,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/merge_options.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
@@ -574,6 +575,7 @@ set(arcticdb_srcs
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
+        version/merge_options.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
         version/version_core.cpp

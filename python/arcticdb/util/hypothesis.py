@@ -180,10 +180,26 @@ def date(draw, min_date, max_date, unit="ns"):
     return min_date + np.timedelta64(offset_from_start_in_ns, unit)
 
 
+class DataframeStrategyIndexType(Enum):
+    ROWRANGE = "ROWRANGE"
+    DATETIME = "DATETIME"
+
+
 @st.composite
-def dataframe(draw, column_names, column_dtypes, min_date, max_date, index_name="index"):
+def dataframe(
+    draw,
+    column_names,
+    column_dtypes,
+    min_date,
+    max_date,
+    index_name="index",
+    index_type=DataframeStrategyIndexType.DATETIME,
+):
     assert index_name not in column_names, f"Column name '{index_name}' conflicts with index name"
-    index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
+    if index_type == DataframeStrategyIndexType.DATETIME:
+        index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
+    else:
+        index = hs_pd.range_indexes(min_size=1)
     columns = []
     for name, dtype in zip(column_names, column_dtypes):
         if pd.api.types.is_integer_dtype(dtype):
