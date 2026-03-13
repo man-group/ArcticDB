@@ -27,6 +27,8 @@ static const char AWS_ECS_CONTAINER_AUTHORIZATION_TOKEN[] = "AWS_CONTAINER_AUTHO
 static const char AWS_EC2_METADATA_DISABLED[] = "AWS_EC2_METADATA_DISABLED";
 static const char AWS_WEB_IDENTITY_TOKEN_FILE[] = "AWS_WEB_IDENTITY_TOKEN_FILE";
 static const char AWS_ROLE_ARN[] = "AWS_ROLE_ARN";
+static const char AWS_ROLE_SESSION_NAME[] = "AWS_ROLE_SESSION_NAME";
+static const char AWS_DEFAULT_REGION[] = "AWS_DEFAULT_REGION";
 static const char DefaultCredentialsProviderChainTag[] = "DefaultAWSCredentialsProviderChain";
 
 // Custom credentials provider chain used for the DEFAULT_CREDENTIALS_PROVIDER_CHAIN auth method (_RBAC_ path).
@@ -41,22 +43,24 @@ static const char SafeSTSWebIdentityTag[] = "SafeSTSWebIdentityCredentialsProvid
 SafeSTSWebIdentityCredentialsProvider::SafeSTSWebIdentityCredentialsProvider() : m_initialized(false) {
     m_tokenFile = Aws::Environment::GetEnv(AWS_WEB_IDENTITY_TOKEN_FILE);
     m_roleArn = Aws::Environment::GetEnv(AWS_ROLE_ARN);
-    m_sessionName = Aws::Environment::GetEnv("AWS_ROLE_SESSION_NAME");
-    m_region = Aws::Environment::GetEnv("AWS_DEFAULT_REGION");
+    m_sessionName = Aws::Environment::GetEnv(AWS_ROLE_SESSION_NAME);
+    m_region = Aws::Environment::GetEnv(AWS_DEFAULT_REGION);
 
-    // Fall back to config profile if env vars are incomplete (matches legacy
-    // STSAssumeRoleWebIdentityCredentialsProvider)
-    if (m_roleArn.empty() || m_tokenFile.empty() || m_region.empty()) {
+    // Fall back to config profile for any missing values independently
+    // (matches SDK's GetLegacySettingFromEnvOrProfile behavior)
+    if (m_roleArn.empty() || m_tokenFile.empty() || m_sessionName.empty() || m_region.empty()) {
         auto profile = Aws::Config::GetCachedConfigProfile(Aws::Auth::GetConfigProfileName());
+        if (m_roleArn.empty()) {
+            m_roleArn = profile.GetRoleArn();
+        }
+        if (m_tokenFile.empty()) {
+            m_tokenFile = profile.GetValue("web_identity_token_file");
+        }
+        if (m_sessionName.empty()) {
+            m_sessionName = profile.GetValue("role_session_name");
+        }
         if (m_region.empty()) {
             m_region = profile.GetRegion();
-        }
-        if (m_roleArn.empty() || m_tokenFile.empty()) {
-            m_roleArn = profile.GetRoleArn();
-            m_tokenFile = profile.GetValue("web_identity_token_file");
-            if (m_sessionName.empty()) {
-                m_sessionName = profile.GetValue("role_session_name");
-            }
         }
     }
 
