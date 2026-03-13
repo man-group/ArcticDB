@@ -18,7 +18,7 @@ from arcticdb.util.test import assert_frame_equal
 def min_max_rows_per_segment(rows_per_segment):
     # Definitions taken from CompactDataClause constructor
     min_rows_per_segment = max((2 * rows_per_segment) // 3, 1)
-    max_rows_per_segment = 2 * min_rows_per_segment
+    max_rows_per_segment = max((4 * rows_per_segment) // 3, rows_per_segment + 1)
     return min_rows_per_segment, max_rows_per_segment
 
 
@@ -35,6 +35,22 @@ def test_compact_data_negative_rows_per_segment(lmdb_version_store_v1):
     sym = "test_compact_data_negative_rows_per_segment"
     with pytest.raises(ArcticNativeException):
         lib.compact_data_experimental(sym, rows_per_segment=-1)
+
+
+@pytest.mark.parametrize("lib_config_value", [1, 2, 3, 5, 7, 10])
+@pytest.mark.parametrize("method_arg", [1, 2, 3, 5, 7, 10])
+def test_compact_data_explicit_rows_per_segment(version_store_factory, lib_config_value, method_arg):
+    lib = version_store_factory(segment_row_size=lib_config_value)
+    sym = "test_compact_data_explicit_rows_per_segment"
+    df = pd.DataFrame({"col": np.arange(30)})
+    lib.write(sym, df)
+    lib.compact_data_experimental(sym, rows_per_segment=method_arg)
+    assert_frame_equal(df, lib.read(sym).data)
+    index = lib.read_index(sym)
+    row_counts = index["end_row"] - index["start_row"]
+    min_rows_per_segment, max_rows_per_segment = min_max_rows_per_segment(method_arg)
+    assert row_counts.min() >= min_rows_per_segment
+    assert row_counts.max() <= max_rows_per_segment
 
 
 @pytest.mark.parametrize("rows_per_segment", [1, 2, 3, 5, 7, 10])

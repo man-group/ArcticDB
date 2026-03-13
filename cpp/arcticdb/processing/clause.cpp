@@ -2158,7 +2158,7 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
     // Greedy algorithm - keep adding row ranges until there are at least min_rows_per_segment_
     // If possible, keep adding more to get as close as possible to rows_per_segment_
     // If it is necessary to get above min_rows_per_segment_ in a slice, we may have to exceed max_rows_per_segment_
-    // In this case, CompactDataClause::process will split into 2 row slices
+    // In this case, CompactDataClause::process will split into multiple row slices
     std::set<RowRange> res;
     RowRange current = *row_ranges.cbegin();
     for (auto row_range = std::next(row_ranges.cbegin()); row_range != row_ranges.cend(); ++row_range) {
@@ -2186,6 +2186,16 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
         res.erase(last_it);
         res.emplace(last_row_range);
     }
+    // It is possible that the last slice has fewer than min_rows_per_segment_, so combine with previous slice if this
+    // is the case
+    auto last_it = std::prev(res.end());
+    auto last_row_range = *last_it;
+    if (last_row_range.diff() < min_rows_per_segment_ && last_it != res.begin()) {
+        auto penultimate_it = std::prev(last_it);
+        last_row_range.first = penultimate_it->first;
+        res.erase(penultimate_it, res.end());
+        res.emplace(last_row_range);
+    }
     return res;
 }
 
@@ -2198,13 +2208,14 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
         row_ranges.insert(range_and_key.row_range());
     }
     auto processing_row_ranges = structure_row_ranges(row_ranges);
-    // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges, as this implies
-    // those row-slices do not need to change
+    // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges unless they are too
+    // big, as this implies those row-slices do not need to change
     auto retained_processing_row_ranges = processing_row_ranges;
     std::erase_if(
             ranges_and_keys,
-            [&processing_row_ranges, &retained_processing_row_ranges](const RangesAndKey& range_and_key) {
-                if (processing_row_ranges.contains(range_and_key.row_range())) {
+            [this, &processing_row_ranges, &retained_processing_row_ranges](const RangesAndKey& range_and_key) {
+                if (processing_row_ranges.contains(range_and_key.row_range()) &&
+                    range_and_key.row_range().diff() <= max_rows_per_segment_) {
                     retained_processing_row_ranges.erase(range_and_key.row_range());
                     return true;
                 } else {
@@ -2269,22 +2280,23 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     ColRange col_range = *proc.col_ranges_->front();
     // This is even more inefficient than the appends
     if (total_rows > max_rows_per_segment_) {
-        auto split_point = (total_rows / 2) + (total_rows % 2);
-        auto segments = compacted_seg->split(split_point, true);
+        auto num_segments = (total_rows / max_rows_per_segment_) + (total_rows % max_rows_per_segment_ == 0 ? 0 : 1);
+        auto rows_per_segment = (total_rows / num_segments) + (total_rows % num_segments == 0 ? 0 : 1);
+        auto segments = compacted_seg->split(rows_per_segment, true);
         std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs;
         for (auto& segment : segments) {
             segment_ptrs.emplace_back(std::make_shared<SegmentInMemory>(std::move(segment)));
         }
         std::vector<std::shared_ptr<RowRange>> row_ranges;
-        row_ranges.emplace_back(std::make_shared<RowRange>(
-                proc.row_ranges_->front()->first, proc.row_ranges_->front()->first + split_point
-        ));
-        row_ranges.emplace_back(std::make_shared<RowRange>(
-                proc.row_ranges_->front()->first + split_point, proc.row_ranges_->back()->second
-        ));
         std::vector<std::shared_ptr<ColRange>> col_ranges;
-        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
-        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        auto first_row = proc.row_ranges_->front()->first;
+        auto last_row = proc.row_ranges_->back()->second;
+        for (uint64_t idx = 0; idx < num_segments; ++idx) {
+            row_ranges.emplace_back(std::make_shared<RowRange>(
+                    first_row + (idx * rows_per_segment), std::min(last_row, first_row + ((idx + 1) * rows_per_segment))
+            ));
+            col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        }
         ProcessingUnit res;
         res.set_segments(std::move(segment_ptrs));
         res.set_row_ranges(std::move(row_ranges));
