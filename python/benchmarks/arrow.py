@@ -93,6 +93,79 @@ class ArrowNumeric:
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
 
+class ArrowSparseNumeric:
+    timeout = 600
+    connection_string = "lmdb://arrow_sparse_numeric"
+    lib_name_prewritten = "arrow_sparse_numeric_prewritten"
+    lib_name_fresh = "arrow_sparse_numeric_fresh"
+    num_cols = 9
+    params = ([1_000_000, 10_000_000], [0.1, 0.5, 0.9])
+    param_names = ["rows", "sparsity"]
+
+    def symbol_name(self, num_rows: int, sparsity: float):
+        return f"sparse_{num_rows}_{sparsity}"
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def _generate_table(self, num_rows, sparsity):
+        np.random.seed(42)
+        mask = np.random.random(num_rows) < sparsity
+        columns = {}
+        for i in range(self.num_cols):
+            vals = np.arange(i * num_rows, (i + 1) * num_rows, dtype=np.int64)
+            columns[f"col{i}"] = pa.array(np.where(mask, None, vals), pa.int64())
+        return pa.table(columns)
+
+    def setup_cache(self):
+        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        num_rows_list, sparsity_list = self.params
+        ac.delete_library(self.lib_name_prewritten)
+        lib = ac.create_library(self.lib_name_prewritten)
+        lib._nvs._set_allow_arrow_input()
+        for rows in num_rows_list:
+            for sparsity in sparsity_list:
+                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))
+
+    def teardown(self, rows, sparsity):
+        for lib in self.ac.list_libraries():
+            if "prewritten" in lib:
+                continue
+            self.ac.delete_library(lib)
+        del self.ac
+
+    def setup(self, rows, sparsity):
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        self.lib = self.ac.get_library(self.lib_name_prewritten)
+        self.lib._nvs._set_allow_arrow_input()
+        self.fresh_lib = self.get_fresh_lib()
+        self.fresh_lib._nvs._set_allow_arrow_input()
+        self.table = self._generate_table(rows, sparsity)
+        self.sym = self.symbol_name(rows, sparsity)
+
+    def get_fresh_lib(self):
+        self.ac.delete_library(self.lib_name_fresh)
+        return self.ac.create_library(self.lib_name_fresh)
+
+    def time_write(self, rows, sparsity):
+        self.fresh_lib.write(self.sym, self.table)
+
+    def peakmem_write(self, rows, sparsity):
+        self.fresh_lib.write(self.sym, self.table)
+
+    def time_read(self, rows, sparsity):
+        self.lib.read(self.sym)
+
+    def peakmem_read(self, rows, sparsity):
+        self.lib.read(self.sym)
+
+    def time_read_pandas(self, rows, sparsity):
+        self.lib.read(self.sym, output_format="PANDAS")
+
+    def peakmem_read_pandas(self, rows, sparsity):
+        self.lib.read(self.sym, output_format="PANDAS")
+
+
 class ArrowStrings:
     timeout = 600
     connection_string = "lmdb://arrow_strings"
