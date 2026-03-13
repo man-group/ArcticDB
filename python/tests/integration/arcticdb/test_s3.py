@@ -10,9 +10,15 @@ import re
 import time
 from multiprocessing import Queue, Process
 
+from urllib.parse import urlparse
+
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from arcticdb import Arctic
+
 import pytest
 import pandas as pd
 import sys
+import arcticdb as adb
 
 from arcticdb_ext.exceptions import StorageException
 
@@ -21,10 +27,12 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
-from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory, Key
 
 from arcticdb.util.test import config_context, config_context_string
-from tests.util.mark import SKIP_CONDA_MARK
+from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, S3Settings as NativeS3Settings
+from tests.util.mark import SKIP_CONDA_MARK, REAL_S3_TESTS_MARK
+from tests.util.storage_test import real_s3_credentials
 
 pytestmark = pytest.mark.skipif(
     sys.version_info.major == 3 and sys.version_info.minor == 6 and sys.platform == "linux",
@@ -212,3 +220,75 @@ def test_library_get_key_path(lib_name, s3_and_nfs_storage_bucket, test_prefix):
             assert path.startswith(test_prefix)
 
     assert keys_count > 0
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="monkeypatch.setenv does not propagate to C++ AWS SDK on Windows")
+def test_custom_credentials_provider_chain(lib_name, monkeypatch):
+    """Test that the _RBAC_ credentials path (DEFAULT_CREDENTIALS_PROVIDER_CHAIN) uses our
+    custom MyAWSCredentialsProviderChain which excludes the problematic CRT-based
+    STSAssumeRoleWebIdentityCredentialsProvider (see aws-sdk-cpp PR #3505, issues #3531, #3558).
+
+    This test verifies that:
+    1. S3Storage construction with _RBAC_ credentials doesn't hang or crash
+    2. Basic read/write operations work through the custom chain against moto
+    """
+    # Set AWS env vars so that the EnvironmentAWSCredentialsProvider (the first provider
+    # in our custom chain) picks up valid credentials for moto. This still exercises the
+    # _RBAC_ → MyAWSCredentialsProviderChain code path in C++.
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "awd")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "awd")
+
+    native_config = NativeVariantStorage(NativeS3Settings(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "", False))
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False,
+        ssl_test_support=False,
+        bucket_versioning=False,
+        native_config=native_config,
+    ) as factory:
+        with factory.create_fixture(key=Key(id="_RBAC_", secret="_RBAC_", user_name="rbac_test")) as bucket:
+            start = time.monotonic()
+            lib = bucket.create_version_store_factory(lib_name)()
+            df = pd.DataFrame({"a": [1, 2, 3]})
+            lib.write("test_symbol", df)
+            result = lib.read("test_symbol").data
+            elapsed = time.monotonic() - start
+            assert_frame_equal(result, df)
+            # The CRT-based STS provider hang takes 30+ seconds typically. Use a generous
+            # threshold to avoid flaky CI failures while still catching the hang.
+            assert elapsed < 60, f"Custom credentials provider chain took {elapsed:.1f}s (expected < 60s)"
+
+
+@REAL_S3_TESTS_MARK
+@pytest.mark.storage
+@pytest.mark.authentication
+def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypatch):
+    """Test the custom MyAWSCredentialsProviderChain against real S3.
+
+    Uses aws_auth=true in the URI which triggers the _RBAC_ → custom chain code path.
+    Credentials are supplied via AWS_SHARED_CREDENTIALS_FILE so that the
+    ProfileConfigFileAWSCredentialsProvider in our custom chain picks them up.
+    """
+    s3_endpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, _, _ = real_s3_credentials(shared_path=False)
+
+    # Write credentials to a temp file for the ProfileConfigFileAWSCredentialsProvider
+    creds_file = tmp_path / "credentials"
+    creds_file.write_text(f"[default]\naws_access_key_id = {s3_access_key}\naws_secret_access_key = {s3_secret_key}\n")
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(creds_file))
+
+    parsed_host = urlparse(s3_endpoint).hostname if s3_endpoint else None
+    if parsed_host and parsed_host.endswith(".amazonaws.com"):
+        host = f"s3.{s3_region}.amazonaws.com"
+    else:
+        host = parsed_host or ""
+
+    uri = f"s3://{host}:{s3_bucket}?aws_auth=true&path_prefix=test_custom_chain_{lib_name}"
+
+    ac = adb.Arctic(uri)
+    try:
+        lib = ac.create_library(lib_name)
+        df = pd.DataFrame({"a": [1, 2, 3]})
+        lib.write("test_symbol", df)
+        result = lib.read("test_symbol").data
+        assert_frame_equal(result, df)
+    finally:
+        ac.delete_library(lib_name)

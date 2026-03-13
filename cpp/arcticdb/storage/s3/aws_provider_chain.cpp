@@ -8,31 +8,169 @@
 
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/core/auth/STSCredentialsProvider.h>
 #include <aws/identity-management/auth/STSProfileCredentialsProvider.h>
 #include <aws/core/auth/SSOCredentialsProvider.h>
+#include <aws/core/config/ConfigAndCredentialsCacheManager.h>
 #include <aws/core/platform/Environment.h>
 #include <aws/core/utils/StringUtils.h>
+#include <aws/core/utils/UUID.h>
 #include <aws/core/utils/logging/LogMacros.h>
+#include <aws/sts/STSClient.h>
+#include <aws/sts/model/AssumeRoleWithWebIdentityRequest.h>
 #include <arcticdb/storage/s3/aws_provider_chain.hpp>
+
+#include <fstream>
 
 static const char AWS_ECS_CONTAINER_CREDENTIALS_RELATIVE_URI[] = "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI";
 static const char AWS_ECS_CONTAINER_CREDENTIALS_FULL_URI[] = "AWS_CONTAINER_CREDENTIALS_FULL_URI";
 static const char AWS_ECS_CONTAINER_AUTHORIZATION_TOKEN[] = "AWS_CONTAINER_AUTHORIZATION_TOKEN";
 static const char AWS_EC2_METADATA_DISABLED[] = "AWS_EC2_METADATA_DISABLED";
+static const char AWS_WEB_IDENTITY_TOKEN_FILE[] = "AWS_WEB_IDENTITY_TOKEN_FILE";
+static const char AWS_ROLE_ARN[] = "AWS_ROLE_ARN";
+static const char AWS_ROLE_SESSION_NAME[] = "AWS_ROLE_SESSION_NAME";
+static const char AWS_DEFAULT_REGION[] = "AWS_DEFAULT_REGION";
 static const char DefaultCredentialsProviderChainTag[] = "DefaultAWSCredentialsProviderChain";
 
-// Definition of own chain to work around https://github.com/aws/aws-sdk-cpp/issues/150
-// NOTE: These classes are not currently in use and may only be required if we need the STSProfileCred provider.
+// Custom credentials provider chain used for the DEFAULT_CREDENTIALS_PROVIDER_CHAIN auth method (_RBAC_ path).
+// This avoids regressions in the SDK's default chain (see aws-sdk-cpp PR #3505, issues #3531, #3558, #3562)
+// where the CRT-based STSAssumeRoleWebIdentityCredentialsProvider has caching and threading bugs.
 namespace arcticdb::storage::s3 {
 
 using namespace Aws::Auth;
+
+static const char SafeSTSWebIdentityTag[] = "SafeSTSWebIdentityCredentialsProvider";
+
+SafeSTSWebIdentityCredentialsProvider::SafeSTSWebIdentityCredentialsProvider() : m_initialized(false) {
+    m_tokenFile = Aws::Environment::GetEnv(AWS_WEB_IDENTITY_TOKEN_FILE);
+    m_roleArn = Aws::Environment::GetEnv(AWS_ROLE_ARN);
+    m_sessionName = Aws::Environment::GetEnv(AWS_ROLE_SESSION_NAME);
+    m_region = Aws::Environment::GetEnv(AWS_DEFAULT_REGION);
+
+    // Fall back to config profile for any missing values independently
+    // (matches SDK's GetLegacySettingFromEnvOrProfile behavior)
+    if (m_roleArn.empty() || m_tokenFile.empty() || m_sessionName.empty() || m_region.empty()) {
+        auto profile = Aws::Config::GetCachedConfigProfile(Aws::Auth::GetConfigProfileName());
+        if (m_roleArn.empty()) {
+            m_roleArn = profile.GetRoleArn();
+        }
+        if (m_tokenFile.empty()) {
+            m_tokenFile = profile.GetValue("web_identity_token_file");
+        }
+        if (m_sessionName.empty()) {
+            m_sessionName = profile.GetValue("role_session_name");
+        }
+        if (m_region.empty()) {
+            m_region = profile.GetRegion();
+        }
+    }
+
+    if (m_sessionName.empty()) {
+        m_sessionName = Aws::Utils::UUID::PseudoRandomUUID();
+    }
+
+    if (m_region.empty()) {
+        m_region = Aws::Region::US_EAST_1;
+    }
+
+    if (!m_tokenFile.empty() && !m_roleArn.empty()) {
+        m_initialized = true;
+        AWS_LOGSTREAM_INFO(
+                SafeSTSWebIdentityTag,
+                "Initialized with role ARN: " << m_roleArn << ", token file: " << m_tokenFile
+                                              << ", session: " << m_sessionName
+        );
+    } else {
+        AWS_LOGSTREAM_DEBUG(
+                SafeSTSWebIdentityTag,
+                "Not initialized: " << AWS_WEB_IDENTITY_TOKEN_FILE << " or " << AWS_ROLE_ARN << " not set."
+        );
+    }
+}
+
+Aws::Auth::AWSCredentials SafeSTSWebIdentityCredentialsProvider::GetAWSCredentials() {
+    if (!m_initialized) {
+        return {};
+    }
+    std::lock_guard<std::mutex> lock(m_credsMutex);
+    RefreshIfExpired();
+    return m_credentials;
+}
+
+static const int STS_CREDENTIAL_PROVIDER_EXPIRATION_GRACE_PERIOD = 5 * 1000;
+
+bool SafeSTSWebIdentityCredentialsProvider::ExpiresSoon() const {
+    return (m_credentials.GetExpiration() - Aws::Utils::DateTime::Now()).count() <
+           STS_CREDENTIAL_PROVIDER_EXPIRATION_GRACE_PERIOD;
+}
+
+void SafeSTSWebIdentityCredentialsProvider::RefreshIfExpired() {
+    if (!m_credentials.IsEmpty() && !ExpiresSoon()) {
+        return;
+    }
+
+    // Read the web identity token from file (re-read each time as IRSA rotates tokens).
+    std::ifstream tokenStream(m_tokenFile.c_str());
+    if (!tokenStream.is_open()) {
+        AWS_LOGSTREAM_ERROR(SafeSTSWebIdentityTag, "Can't open token file: " << m_tokenFile);
+        return; // Keep old cached credentials
+    }
+    Aws::String token((std::istreambuf_iterator<char>(tokenStream)), std::istreambuf_iterator<char>());
+    tokenStream.close();
+
+    if (token.empty()) {
+        AWS_LOGSTREAM_WARN(SafeSTSWebIdentityTag, "Web identity token file is empty: " << m_tokenFile);
+        return; // Keep old cached credentials
+    }
+
+    // Build the STS request.
+    Aws::STS::Model::AssumeRoleWithWebIdentityRequest request;
+    request.SetRoleArn(m_roleArn);
+    request.SetRoleSessionName(m_sessionName);
+    request.SetWebIdentityToken(token);
+
+    // Lazy-initialize the STS client (with its HTTP stack and thread pool) once.
+    if (!m_stsClient) {
+        m_stsConfig.scheme = Aws::Http::Scheme::HTTPS;
+        m_stsConfig.region = m_region;
+        m_stsClient =
+                Aws::MakeUnique<Aws::STS::STSClient>(SafeSTSWebIdentityTag, Aws::Auth::AWSCredentials(), m_stsConfig);
+    }
+
+    auto outcome = m_stsClient->AssumeRoleWithWebIdentity(request);
+    if (!outcome.IsSuccess()) {
+        AWS_LOGSTREAM_WARN(
+                SafeSTSWebIdentityTag,
+                "STS AssumeRoleWithWebIdentity failed: " << outcome.GetError().GetMessage()
+                                                         << " — returning empty credentials to allow chain fallthrough."
+        );
+        m_credentials = {};
+        return;
+    }
+
+    const auto& stsCreds = outcome.GetResult().GetCredentials();
+    m_credentials = Aws::Auth::AWSCredentials(
+            stsCreds.GetAccessKeyId(),
+            stsCreds.GetSecretAccessKey(),
+            stsCreds.GetSessionToken(),
+            stsCreds.GetExpiration()
+    );
+    AWS_LOGSTREAM_INFO(
+            SafeSTSWebIdentityTag,
+            "Successfully assumed role " << m_roleArn << ", credentials expire at "
+                                         << stsCreds.GetExpiration().ToGmtString(Aws::Utils::DateFormat::ISO_8601)
+    );
+}
 
 MyAWSCredentialsProviderChain::MyAWSCredentialsProviderChain() : Aws::Auth::AWSCredentialsProviderChain() {
     AddProvider(Aws::MakeShared<EnvironmentAWSCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<ProfileConfigFileAWSCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<ProcessCredentialsProvider>(DefaultCredentialsProviderChainTag));
-    AddProvider(Aws::MakeShared<STSAssumeRoleWebIdentityCredentialsProvider>(DefaultCredentialsProviderChainTag));
+
+    // Add the safe STS web identity provider (bypasses CRT-based implementation).
+    // The provider checks env vars internally and returns empty credentials if not configured,
+    // allowing the chain to continue to the next provider.
+    AddProvider(Aws::MakeShared<SafeSTSWebIdentityCredentialsProvider>(DefaultCredentialsProviderChainTag));
+
     AddProvider(Aws::MakeShared<SSOCredentialsProvider>(DefaultCredentialsProviderChainTag));
     AddProvider(Aws::MakeShared<STSProfileCredentialsProvider>(DefaultCredentialsProviderChainTag));
 

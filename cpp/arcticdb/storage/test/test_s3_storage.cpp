@@ -18,16 +18,18 @@
 #include <arcticdb/util/test/gtest_utils.hpp>
 
 #include <aws/core/Aws.h>
+#include <arcticdb/storage/s3/aws_provider_chain.hpp>
+#include <chrono>
 
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};
 
-    void setenv(const char* envname, const char* envval, bool) {
+    void setenv(const char* envname, const char* envval, bool override = false) {
         env_vars_to_unset.insert(envname);
 #if (WIN32)
         _putenv_s(envname, envval);
 #else
-        ::setenv(envname, envval, false);
+        ::setenv(envname, envval, override ? 1 : 0);
 #endif
     }
 
@@ -430,6 +432,30 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
     }
     ASSERT_EQ(list_in_store(store, KeyType::TABLE_DATA, prefix), symbols);
     ASSERT_TRUE(store.directory_bucket());
+}
+
+TEST_F(S3StorageFixture, test_safe_sts_web_identity_provider_returns_quickly) {
+    // Verify that our custom MyAWSCredentialsProviderChain with SafeSTSWebIdentityCredentialsProvider
+    // does not hang when IRSA env vars are set but the token file is missing.
+    // The CRT-based provider would hang for 10+ seconds; ours should return empty creds promptly.
+    arcticdb::storage::s3::S3ApiInstance::instance();
+
+    // Use a nonexistent token file so no real STS call is made - the provider
+    // should detect the missing file and return empty credentials immediately.
+    ::setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/tmp/nonexistent_token_file_for_test", 1);
+    ::setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/test-role", 1);
+
+    auto start = std::chrono::steady_clock::now();
+    arcticdb::storage::s3::MyAWSCredentialsProviderChain chain;
+    auto creds = chain.GetAWSCredentials();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    ::unsetenv("AWS_WEB_IDENTITY_TOKEN_FILE");
+    ::unsetenv("AWS_ROLE_ARN");
+
+    auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+    ASSERT_LT(elapsed_sec, 5) << "MyAWSCredentialsProviderChain took " << elapsed_sec
+                              << "s, suggesting it hit the problematic CRT-based STS path";
 }
 
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {

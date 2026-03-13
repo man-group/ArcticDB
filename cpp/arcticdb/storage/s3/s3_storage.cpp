@@ -21,6 +21,7 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
+#include <arcticdb/storage/s3/aws_provider_chain.hpp>
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 
@@ -205,8 +206,10 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
         );
     } else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN &&
                creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN) {
-        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms with custom credentials provider chain");
+        auto cred_provider = Aws::MakeShared<MyAWSCredentialsProviderChain>("DefaultAWSCredentialsProviderChain");
         s3_client_ = std::make_unique<S3ClientImpl>(
+                cred_provider,
                 get_s3_config_and_set_env_var(conf),
                 Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
                 conf.use_virtual_addressing()

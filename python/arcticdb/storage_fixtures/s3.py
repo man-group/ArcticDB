@@ -84,13 +84,16 @@ class S3Bucket(StorageFixture):
         factory: "BaseS3StorageFixtureFactory",
         bucket: str,
         native_config: Optional[NativeVariantStorage] = None,
+        key: Optional[Key] = None,
     ):
         super().__init__()
         self.factory = factory
         self.bucket = bucket
         self.native_config = native_config
 
-        if isinstance(factory, _PermissionCapableFactory) and factory.enforcing_permissions:
+        if key is not None:
+            self.key = key
+        elif isinstance(factory, _PermissionCapableFactory) and factory.enforcing_permissions:
             self.key = factory._create_user_get_key(bucket + "_user")
         else:
             self.key = factory.default_key
@@ -323,8 +326,8 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             verify=self.client_cert_file if self.client_cert_file else False,
         )
 
-    def create_fixture(self) -> S3Bucket:
-        return S3Bucket(self, self.default_bucket, self.native_config)
+    def create_fixture(self, key: Optional[Key] = None) -> S3Bucket:
+        return S3Bucket(self, self.default_bucket, self.native_config, key=key)
 
     def cleanup_bucket(self, b: S3Bucket):
         # When dealing with a potentially shared bucket, we only clear our the libs we know about:
@@ -970,13 +973,13 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         requests.post(self._iam_endpoint + "/moto-api/reset-auth", "0" if enforcing else "inf")
         self._enforcing_permissions = enforcing
 
-    def create_fixture(self) -> S3Bucket:
+    def create_fixture(self, key: Optional[Key] = None) -> S3Bucket:
         bucket = self.bucket_name("s3")
         create_bucket(self._s3_admin, bucket)
         if self.bucket_versioning:
             self._s3_admin.put_bucket_versioning(Bucket=bucket, VersioningConfiguration={"Status": "Enabled"})
 
-        out = S3Bucket(self, bucket, self.native_config)
+        out = S3Bucket(self, bucket, self.native_config, key=key)
         self._live_buckets.append(out)
         return out
 
