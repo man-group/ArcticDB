@@ -37,6 +37,19 @@ def test_compact_data_negative_rows_per_segment(lmdb_version_store_v1):
         lib.compact_data_experimental(sym, rows_per_segment=-1)
 
 
+def test_compact_data_maintain_metadata(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_compact_data_maintain_metadata"
+    df = pd.DataFrame({"col": np.arange(10)})
+    lib.write(sym, df)
+    metadata = {"hello": "world"}
+    lib.append(sym, df, metadata=metadata)
+    assert lib.read_metadata(sym).metadata == metadata
+    lib.compact_data_experimental(sym)
+    assert len(lib.read_index(sym)) == 1
+    assert lib.read_metadata(sym).metadata == metadata
+
+
 @pytest.mark.parametrize("lib_config_value", [1, 2, 3, 5, 7, 10])
 @pytest.mark.parametrize("method_arg", [1, 2, 3, 5, 7, 10])
 def test_compact_data_explicit_rows_per_segment(version_store_factory, lib_config_value, method_arg):
