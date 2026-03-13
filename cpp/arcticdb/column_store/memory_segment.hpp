@@ -88,15 +88,8 @@ class SegmentInMemory {
 
     void init_column_map() const;
 
-    template<class T, template<class> class Tensor>
-    requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, Tensor<T>& val) {
-        impl_->set_array(pos, val);
-    }
-
-    template<class T>
-    requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    template<util::arithmetic_tensor TensorType>
+    void set_array(position_t pos, TensorType& val) {
         impl_->set_array(pos, val);
     }
 

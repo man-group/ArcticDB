@@ -8,16 +8,14 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/entity/timeseries_descriptor.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <boost/iterator/iterator_facade.hpp>
-
-namespace py = pybind11;
 
 namespace arcticdb {
 
@@ -353,17 +351,8 @@ class SegmentInMemoryImpl {
         set_string(idx, val);
     }
 
-    template<class T, template<class> class Tensor>
-    requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, Tensor<T>& val) {
-        magic_.check();
-        ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
-        column_unchecked(pos).set_array(row_id_ + 1, val);
-    }
-
-    template<class T>
-    requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, py::array_t<T>& val) {
+    template<util::arithmetic_tensor TensorType>
+    void set_array(position_t pos, TensorType& val) {
         magic_.check();
         ARCTICDB_SAMPLE(MemorySegmentSetArray, 0)
         column_unchecked(pos).set_array(row_id_ + 1, val);

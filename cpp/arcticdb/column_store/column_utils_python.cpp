@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/column_utils.hpp>
+#include <arcticdb/column_store/column_utils_python.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/python/numpy_buffer_holder.hpp>
