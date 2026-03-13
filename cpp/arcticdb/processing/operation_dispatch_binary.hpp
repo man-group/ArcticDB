@@ -627,6 +627,8 @@ extern template VariantData visit_binary_operator<
         arcticdb::TimesOperator>(const VariantData&, const VariantData&, TimesOperator&&);
 extern template VariantData visit_binary_operator<
         arcticdb::DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
+extern template VariantData visit_binary_operator<
+        arcticdb::ModOperator>(const VariantData&, const VariantData&, ModOperator&&);
 
 // instantiated in operation_dispatch_binary_comparator.cpp to reduce compilation memory use
 extern template VariantData visit_binary_comparator<
