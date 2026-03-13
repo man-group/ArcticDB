@@ -82,3 +82,28 @@ def test_compact_data_append(version_store_factory, rows_per_segment, initial_ro
     min_rows_per_segment, max_rows_per_segment = min_max_rows_per_segment(rows_per_segment)
     assert row_counts.min() >= min_rows_per_segment
     assert row_counts.max() <= max_rows_per_segment
+
+
+@pytest.mark.parametrize("rows_per_segment", [1, 2, 3, 5, 7, 10])
+@pytest.mark.parametrize("initial_rows", [20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
+@pytest.mark.parametrize("update_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+def test_compact_data_update(version_store_factory, rows_per_segment, initial_rows, update_rows):
+    lib = version_store_factory(segment_row_size=rows_per_segment)
+    sym = "test_compact_data_update"
+    write_df = pd.DataFrame({"col": np.arange(initial_rows)}, index=pd.date_range("2026-01-01", periods=initial_rows))
+    lib.write(sym, write_df)
+    update_df = pd.DataFrame(
+        {"col": np.arange(initial_rows, initial_rows + update_rows)},
+        index=pd.date_range("2026-01-15", periods=update_rows),
+    )
+    lib.update(sym, update_df)
+    lib.compact_data_experimental(sym)
+    received_df = lib.read(sym).data
+    assert_frame_equal(write_df[:14], received_df[:14])
+    assert_frame_equal(update_df, received_df[14 : 14 + update_rows])
+    assert_frame_equal(write_df[14 + update_rows :], received_df[14 + update_rows :])
+    index = lib.read_index(sym)
+    row_counts = index["end_row"] - index["start_row"]
+    min_rows_per_segment, max_rows_per_segment = min_max_rows_per_segment(rows_per_segment)
+    assert row_counts.min() >= min_rows_per_segment
+    assert row_counts.max() <= max_rows_per_segment
