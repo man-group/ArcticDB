@@ -10,7 +10,6 @@ import copy
 import datetime
 import os
 
-import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
@@ -3052,8 +3051,9 @@ class Library:
         if IS_PANDAS_TWO:
             # Pandas 2.0.0 now uses `datetime.timezone.utc` instead of `pytz.UTC`.
             # See: https://github.com/pandas-dev/pandas/issues/34916
-            # We enforce the use of `pytz.UTC` for consistency.
-            last_update_time = last_update_time.replace(tzinfo=pytz.UTC)
+            # Normalize to stdlib datetime.timezone.utc so the tzinfo type is
+            # consistent regardless of pandas version.
+            last_update_time = last_update_time.replace(tzinfo=datetime.timezone.utc)
         columns = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["columns"], info["dtype"]))
         index = tuple(NameWithDType(n, t) for n, t in zip(info["col_names"]["index"], info["col_names"]["index_dtype"]))
         return SymbolDescription(
