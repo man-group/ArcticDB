@@ -2927,25 +2927,30 @@ folly::Future<VersionedItem> compact_data_impl(
     std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, version_info, *read_query, {});
     return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context), store, write_options, target_partial_index_key](
-                               std::vector<SliceAndKey>&& data_keys_and_slices
+                               std::vector<SliceAndKey>&& slices_and_keys
                        ) {
-                // TODO: Currently copy-pasted from merge update, needs custom implementation
-                ranges::sort(data_keys_and_slices);
-                std::vector<SliceAndKey> merged_ranges_and_keys;
-                auto new_slice = data_keys_and_slices.begin();
-                for (SliceAndKey& slice : pipeline_context->slice_and_keys_) {
-                    if (new_slice != data_keys_and_slices.end() && new_slice->slice_ == slice.slice_) {
-                        merged_ranges_and_keys.push_back(std::move(*new_slice));
-                        ++new_slice;
-                    } else {
-                        merged_ranges_and_keys.push_back(std::move(slice));
+                // TODO: There must be a more efficient way to do this
+                std::set<RowRange> new_row_ranges_set;
+                for (const auto& slice_and_key : slices_and_keys) {
+                    new_row_ranges_set.insert(slice_and_key.slice().row_range);
+                }
+                std::vector<RowRange> new_row_ranges(
+                        std::make_move_iterator(new_row_ranges_set.begin()),
+                        std::make_move_iterator(new_row_ranges_set.end())
+                );
+                for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
+                    if (ranges::none_of(new_row_ranges, [&slice_and_key](const RowRange& row_range) {
+                            return row_range.contains(slice_and_key.slice().row_range.first);
+                        })) {
+                        slices_and_keys.emplace_back(std::move(slice_and_key));
                     }
                 }
+                ranges::sort(slices_and_keys);
                 pipeline_context->slice_and_keys_.clear();
-                const size_t row_count = merged_ranges_and_keys.empty()
+                const size_t row_count = slices_and_keys.empty()
                                                  ? 0
-                                                 : merged_ranges_and_keys.back().slice().row_range.second -
-                                                           merged_ranges_and_keys.front().slice().row_range.first;
+                                                 : slices_and_keys.back().slice().row_range.second -
+                                                           slices_and_keys.front().slice().row_range.first;
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),
@@ -2959,7 +2964,7 @@ folly::Future<VersionedItem> compact_data_impl(
                 return index::write_index(
                         index_type_from_descriptor(pipeline_context->descriptor()),
                         tsd,
-                        std::move(merged_ranges_and_keys),
+                        std::move(slices_and_keys),
                         target_partial_index_key,
                         store
                 );
