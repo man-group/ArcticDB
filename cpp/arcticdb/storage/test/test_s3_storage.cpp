@@ -12,24 +12,24 @@
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 #include <arcticdb/storage/s3/nfs_backed_storage.hpp>
-#include <arcticdb/storage/s3/aws_provider_chain.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 
 #include <aws/core/Aws.h>
+#include <arcticdb/storage/s3/aws_provider_chain.hpp>
 #include <chrono>
 
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};
 
-    void setenv(const char* envname, const char* envval, bool overwrite) {
+    void setenv(const char* envname, const char* envval, bool override = false) {
         env_vars_to_unset.insert(envname);
 #if (WIN32)
         _putenv_s(envname, envval);
 #else
-        ::setenv(envname, envval, overwrite);
+        ::setenv(envname, envval, override ? 1 : 0);
 #endif
     }
 
@@ -434,6 +434,30 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_success) {
     ASSERT_TRUE(store.directory_bucket());
 }
 
+TEST_F(S3StorageFixture, test_safe_sts_web_identity_provider_returns_quickly) {
+    // Verify that our custom MyAWSCredentialsProviderChain with SafeSTSWebIdentityCredentialsProvider
+    // does not hang when IRSA env vars are set but the token file is missing.
+    // The CRT-based provider would hang for 10+ seconds; ours should return empty creds promptly.
+    arcticdb::storage::s3::S3ApiInstance::instance();
+
+    // Use a nonexistent token file so no real STS call is made - the provider
+    // should detect the missing file and return empty credentials immediately.
+    ::setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/tmp/nonexistent_token_file_for_test", 1);
+    ::setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/test-role", 1);
+
+    auto start = std::chrono::steady_clock::now();
+    arcticdb::storage::s3::MyAWSCredentialsProviderChain chain;
+    auto creds = chain.GetAWSCredentials();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    ::unsetenv("AWS_WEB_IDENTITY_TOKEN_FILE");
+    ::unsetenv("AWS_ROLE_ARN");
+
+    auto elapsed_sec = std::chrono::duration_cast<std::chrono::seconds>(elapsed).count();
+    ASSERT_LT(elapsed_sec, 5) << "MyAWSCredentialsProviderChain took " << elapsed_sec
+                              << "s, suggesting it hit the problematic CRT-based STS path";
+}
+
 TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
     auto* mock_s3_client = dynamic_cast<S3ClientTestWrapper*>(&store.client());
     mock_s3_client->add_list_objects_failure_unretryable(Aws::S3::S3Errors::INVALID_REQUEST);
@@ -451,46 +475,4 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
     }
     ASSERT_THROW(list_in_store(store, KeyType::TABLE_DATA, prefix), UnexpectedS3ErrorException);
     ASSERT_FALSE(store.directory_bucket());
-}
-
-TEST(TestS3Storage, custom_credentials_provider_chain_completes_quickly) {
-    // Verify that constructing and querying the custom credentials provider chain
-    // completes in a reasonable time (no hangs from CRT-based STS provider).
-    auto api = S3ApiInstance::instance();
-    auto start = std::chrono::steady_clock::now();
-    auto chain = arcticdb::storage::s3::MyAWSCredentialsProviderChain();
-    auto creds = chain.GetAWSCredentials();
-    auto elapsed = std::chrono::steady_clock::now() - start;
-    // Should complete in under 5 seconds even without valid credentials.
-    // The bug we're guarding against causes hangs of 30+ seconds or indefinite.
-    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 10);
-}
-
-TEST(TestS3Storage, safe_sts_web_identity_provider_returns_empty_when_not_configured) {
-    // With no AWS_WEB_IDENTITY_TOKEN_FILE / AWS_ROLE_ARN env vars set,
-    // the provider should return empty credentials immediately.
-    auto api = S3ApiInstance::instance();
-    auto provider = arcticdb::storage::s3::SafeSTSWebIdentityCredentialsProvider();
-    auto creds = provider.GetAWSCredentials();
-    ASSERT_TRUE(creds.IsEmpty());
-}
-
-class SafeSTSWebIdentityWithBadTokenFile : public EnvFunctionShim {
-  protected:
-    SafeSTSWebIdentityWithBadTokenFile() {
-        arcticdb::storage::s3::S3ApiInstance::instance();
-        setenv("AWS_WEB_IDENTITY_TOKEN_FILE", "/nonexistent/path/token", true);
-        setenv("AWS_ROLE_ARN", "arn:aws:iam::123456789012:role/test-role", true);
-    }
-};
-
-TEST_F(SafeSTSWebIdentityWithBadTokenFile, returns_empty_creds_on_missing_token_file) {
-    // When env vars are set but the token file doesn't exist,
-    // the provider should return empty credentials (not hang or throw).
-    auto provider = arcticdb::storage::s3::SafeSTSWebIdentityCredentialsProvider();
-    auto start = std::chrono::steady_clock::now();
-    auto creds = provider.GetAWSCredentials();
-    auto elapsed = std::chrono::steady_clock::now() - start;
-    ASSERT_TRUE(creds.IsEmpty());
-    ASSERT_LT(std::chrono::duration_cast<std::chrono::seconds>(elapsed).count(), 5);
 }

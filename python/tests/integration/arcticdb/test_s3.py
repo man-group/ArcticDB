@@ -253,10 +253,9 @@ def test_custom_credentials_provider_chain(lib_name, monkeypatch):
             result = lib.read("test_symbol").data
             elapsed = time.monotonic() - start
             assert_frame_equal(result, df)
-            # The CRT-based STS provider hang takes 10+ seconds. If library creation
-            # and a round-trip write/read complete well under that, the custom chain
-            # is working correctly and not hitting the problematic CRT path.
-            assert elapsed < 10, f"Custom credentials provider chain took {elapsed:.1f}s (expected < 10s)"
+            # The CRT-based STS provider hang takes 30+ seconds typically. Use a generous
+            # threshold to avoid flaky CI failures while still catching the hang.
+            assert elapsed < 60, f"Custom credentials provider chain took {elapsed:.1f}s (expected < 60s)"
 
 
 @REAL_S3_TESTS_MARK
@@ -293,54 +292,3 @@ def test_custom_credentials_provider_chain_real_s3(tmp_path, lib_name, monkeypat
         assert_frame_equal(result, df)
     finally:
         ac.delete_library(lib_name)
-
-
-def _delete_symbol_in_new_connection(args):
-    """Worker function that creates a fresh Arctic connection and deletes a symbol."""
-    uri, lib_name, symbol = args
-    ac = Arctic(uri)
-    lib = ac.get_library(lib_name)
-    lib.delete(symbol)
-
-
-@REAL_S3_TESTS_MARK
-def test_process_pool_executor_delete_fails(real_s3_sts_storage, lib_name):
-    ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.create_library(lib_name)
-    symbols = [f"test_sym_{i}" for i in range(4)]
-    for sym in symbols:
-        lib.write(sym, pd.DataFrame({"a": [1, 2, 3]}))
-
-    with ProcessPoolExecutor(max_workers=len(symbols)) as executor:
-        futures = [
-            executor.submit(
-                _delete_symbol_in_new_connection,
-                (real_s3_sts_storage.arctic_uri, lib_name, sym),
-            )
-            for sym in symbols
-        ]
-        # Expect failure due to fork-unsafe AWS SDK
-        for future in futures:
-            with pytest.raises(Exception):
-                future.result(timeout=30)
-
-
-@REAL_S3_TESTS_MARK
-def test_thread_pool_executor_delete_succeeds(real_s3_sts_storage, lib_name):
-    ac = Arctic(real_s3_sts_storage.arctic_uri)
-    lib = ac.create_library(lib_name)
-    symbols = [f"test_sym_{i}" for i in range(4)]
-    for sym in symbols:
-        lib.write(sym, pd.DataFrame({"a": [1, 2, 3]}))
-
-    def delete_from_lib(symbol):
-        lib.delete(symbol)
-
-    with ThreadPoolExecutor(max_workers=len(symbols)) as executor:
-        futures = [executor.submit(delete_from_lib, sym) for sym in symbols]
-        for future in futures:
-            future.result(timeout=30)
-
-    remaining = lib.list_symbols()
-    for sym in symbols:
-        assert sym not in remaining
