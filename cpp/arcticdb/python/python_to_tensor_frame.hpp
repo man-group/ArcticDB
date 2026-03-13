@@ -20,7 +20,9 @@ namespace py = pybind11;
 using namespace arcticdb::entity;
 
 // py::tuple for Pandas data, record batches for Arrow data
-using InputItem = std::variant<py::tuple, std::vector<RecordBatchData>>;
+// Use shared_ptr for RecordBatchData since it has a deleted copy constructor
+// and pybind11 requires copyable types in std::variant
+using InputItem = std::variant<py::tuple, std::vector<std::shared_ptr<RecordBatchData>>>;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     char* buffer_;

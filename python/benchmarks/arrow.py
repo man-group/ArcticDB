@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import gc
 import random
 import time
 import numpy as np
@@ -18,6 +19,21 @@ from arcticdb.util.test import random_strings_of_length
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
 from benchmarks.common import generate_pseudo_random_dataframe
+
+
+def _get_anon_rss_kb():
+    """Get anonymous RSS in kB from /proc/self/status (Linux only).
+
+    RssAnon excludes file-backed pages (e.g. LMDB mmap), isolating heap/stack memory.
+    """
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("RssAnon:"):
+                    return int(line.split()[1])
+    except FileNotFoundError:
+        pass
+    return 0
 
 
 class ArrowNumeric:
@@ -193,3 +209,64 @@ class ArrowStrings:
             date_range=self.date_range,
             arrow_string_format_default=arrow_string_format,
         )
+
+
+class ArrowMemoryStability:
+    """Detect memory leaks in the Arrow read/write path.
+
+    Writes and reads the same ~1MB PyArrow table 500 times with prune_previous_versions=True,
+    and tracks anonymous RSS growth (excludes LMDB file-backed mmap pages).
+    A healthy implementation should show near-zero growth.
+    """
+
+    timeout = 600
+    connection_string = "lmdb://arrow_memory_stability"
+    lib_name = "arrow_memory_stability"
+    sym = "mem_test"
+    num_iterations = 500
+    warmup_iterations = 10
+    # ~1MB: 10 int64 columns × 13,000 rows = 10 × 13000 × 8 bytes ≈ 1.04MB
+    num_rows = 13_000
+    num_cols = 10
+
+    def setup(self):
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        self.ac.delete_library(self.lib_name)
+        self.ac.create_library(self.lib_name)
+        self.lib = self.ac.get_library(self.lib_name)
+        self.lib._nvs._set_allow_arrow_input()
+        self.table = pa.table(
+            {
+                f"col{i}": np.arange(i * self.num_rows, (i + 1) * self.num_rows, dtype=np.int64)
+                for i in range(self.num_cols)
+            },
+        )
+
+    def teardown(self):
+        self.ac.delete_library(self.lib_name)
+        del self.ac
+
+    def track_rss_growth_write_read(self):
+        """Anonymous RSS growth (kB) after 500 write+read cycles with prune_previous_versions=True.
+
+        Near zero for a healthy implementation. Large positive values indicate a memory leak
+        (e.g. Arrow C Data Interface release callbacks not being called).
+        """
+        # Warmup: let internal caches, pools, and allocators stabilize
+        for _ in range(self.warmup_iterations):
+            self.lib.write(self.sym, self.table, prune_previous_versions=True)
+            self.lib.read(self.sym)
+
+        gc.collect()
+        rss_before = _get_anon_rss_kb()
+
+        for _ in range(self.num_iterations):
+            self.lib.write(self.sym, self.table, prune_previous_versions=True)
+            self.lib.read(self.sym)
+
+        gc.collect()
+        rss_after = _get_anon_rss_kb()
+
+        return rss_after - rss_before
+
+    track_rss_growth_write_read.unit = "kB"
