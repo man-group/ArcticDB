@@ -6,25 +6,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
-## Claude-Maintained Documentation
+## Documentation
+
+### User-Facing Documentation (`docs/mkdocs/docs/`)
+
+**New features must include documentation:**
+
+- **Tutorials** (`tutorials/`): Step-by-step guides for features (e.g., `sql_queries.md`)
+- **API Reference** (`api/`): Auto-generated from docstrings via mkdocstrings
+- **Technical docs** (`technical/`): Architecture and implementation details
+
+When adding a new feature:
+
+1. **Add/update docstrings** in the Python code (NumPy format)
+2. **Create a tutorial** if the feature has multiple use cases or nuances
+3. **Update `mkdocs.yml`** nav section to include new pages
+4. **Build docs locally** to verify: `cd docs/mkdocs && mkdocs serve`
+
+Documentation checklist:
+- [ ] Public API has complete docstrings (Parameters, Returns, Raises, Examples)
+- [ ] Complex features have a tutorial with code examples
+- [ ] Edge cases and limitations are documented
+- [ ] When to use feature A vs feature B is explained (if applicable)
+
+### Claude-Maintained Technical Docs (`docs/claude/`)
 
 Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
-
-### When to Read/Update Documentation
 
 - **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
 - **Update** the doc only when making changes to that area
 - Do NOT proactively read or update docs for unrelated areas
 
-### Documentation Style
-
-Keep documentation **high-level and terse**:
-- Reference `file_path:ClassName:method_name` instead of copying code
-- Use tables and bullet points over code blocks
-- Keep conceptual diagrams; remove implementation details
-- Avoid duplicating what's already in source code
-
-### Documentation Index
+Keep documentation **high-level and terse**: reference `file_path:ClassName:method_name` instead of copying code; use tables and bullet points over code blocks; avoid duplicating what's already in source code.
 
 | Area | Document |
 |------|----------|
@@ -43,11 +56,8 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 ### Building the Python Wheel
 
 ```bash
-# Build with a specific CMake preset (limit parallelism to avoid overloading the system)
-CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 ```
-
-Note: Limit `CMAKE_BUILD_PARALLEL_LEVEL` to min(16, nproc) to avoid memory pressure during compilation.
 
 ### Building on Man Linux VMs
 
@@ -68,15 +78,20 @@ source /turbo/<username>/pyenvs/arcticdb-dev/bin/activate
 # Initialize git submodules (required for vcpkg)
 git submodule update --init --recursive
 
-# Build with linux-debug preset (limit parallelism, use protobuf 4)
-ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+# Build with linux-debug preset (use protobuf 4 on Man VMs)
+ARCTICDB_PROTOC_VERS=4 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+```
+
+To install packages which aren't available internally, use the following custom index:
+```bash
+pip install -i https://repo.prod.m/artifactory/api/pypi/external-pypi/simple/ hypothesis==6.72.4
 ```
 
 ### Building a Wheel
 
 ```bash
 # Build wheel (use ARCTICDB_PROTOC_VERS=4 to skip protobuf 5 on Man VMs)
-ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip wheel . --no-deps -w dist/
+ARCTICDB_PROTOC_VERS=4 ARCTIC_CMAKE_PRESET=linux-debug pip wheel . --no-deps -w dist/
 ```
 
 The wheel will be created in `dist/arcticdb-<version>-cp311-cp311-linux_x86_64.whl`.
@@ -146,40 +161,52 @@ cpp/out/<preset>-build/arcticdb/test_unit_arcticdb --gtest_filter="TestSuite.Tes
 ## Running Python Tests
 
 ```bash
-# Run all tests
-python -m pytest python/tests
+# Run all tests (use -n for parallel execution via pytest-xdist)
+python -m pytest -n 8 python/tests
 
 # Run a single test file
 python -m pytest python/tests/unit/arcticdb/test_arctic.py
 
 # Run a specific test
 python -m pytest python/tests/unit/arcticdb/test_arctic.py::test_function_name
+
+# Run tests in a subdirectory in parallel
+python -m pytest -n 8 python/tests/unit/arcticdb/version_store/
 ```
 
 ## Benchmarking
 
+**IMPORTANT: Always use a release build for benchmarking.** Debug builds have 10-30x overhead from disabled optimizations, assertions, and unoptimized template instantiation (e.g. sparrow/Arrow type system). Use `ARCTIC_CMAKE_PRESET=linux-release` for both C++ and Python benchmarks.
+
 ### C++ Benchmarks (Google Benchmark)
 
 ```bash
-cmake -DTEST=ON --preset <preset> cpp
-cmake --build cpp/out/<preset>-build --target benchmarks
+cmake -DTEST=ON --preset linux-release cpp
+cmake --build cpp/out/linux-release-build --target benchmarks
 
 # Run specific benchmarks
-cpp/out/<preset>-build/arcticdb/benchmarks --benchmark_filter=<regex>
+cpp/out/linux-release-build/arcticdb/benchmarks --benchmark_filter=<regex> --benchmark_time_unit=ms
 ```
 
 Benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`.
 
 ### Python Benchmarks (ASV)
 
-ASV benchmarks live in `python/benchmarks/`. Requires `asv` and `virtualenv` installed.
-
+ASV benchmarks live in `python/benchmarks/`. Install a release build first:
 ```bash
-cd python
-python -m asv run -v --show-stderr HEAD^!              # Benchmark current commit
-python -m asv run -v --show-stderr --bench <regex>     # Run subset matching regex
-python -m asv run --python=$(which python) -v          # Use current env (faster)
+ARCTICDB_PROTOC_VERS=4 ARCTIC_CMAKE_PRESET=linux-release pip install -ve .
 ```
+
+Run from the **repo root** (not `python/`), using `--python=$(which python)` to use the active virtualenv without rebuilding:
+```bash
+asv run --python=$(which python) -v --show-stderr --bench BasicFunctions
+```
+
+Do **not** combine `--python=$(which python)` with a commit range (`HEAD^!`) — they are mutually exclusive.
+
+**Available suites**: `BasicFunctions`, `Arrow`, `QueryBuilder`, `Resample`, `ModificationFunctions`, `ListSymbols`, `ListVersions`, `Snapshots`, `VersionChain`, `RecursiveNormalizer`, `FinalizeStagedData`.
+
+By default only LMDB storage is tested. Set `ARCTICDB_STORAGE_AWS_S3=1` to include S3; `ARCTICDB_SLOW_TESTS=1` for slow benchmarks.
 
 See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
 
@@ -189,6 +216,33 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ## Key Development Guidelines
 
+### Test-Driven Development
+
+**Every code change must be accompanied by a failing test that the change fixes.** This ensures:
+- The bug or missing feature is properly understood before fixing
+- The fix actually addresses the issue
+- Regressions are caught if the code is modified later
+
+When fixing a bug or adding a feature:
+1. Write a test that demonstrates the bug or missing functionality
+2. Verify the test fails
+3. Implement the fix
+4. Verify the test passes
+
+### Git Workflow
+
+**Always confirm with the developer before committing and pushing changes upstream.** Do not assume that passing tests means the changes are ready for review. The developer may want to:
+- Review the implementation approach
+- Make additional changes or refinements
+- Squash or reorganize commits
+- Add to the commit message or PR description
+
+Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
+
+### Branch Work Logs
+
+When working on a feature branch, maintain a work log in `docs/claude/plans/<branch-name>/branch-work-log.md`. Update it at the end of each task with a few bullet points summarizing what was done. This provides continuity across sessions and helps with PR descriptions.
+
 ### Backwards Compatibility
 
 - Data written by newer clients should be readable by older clients - document breaking changes clearly
@@ -196,12 +250,14 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ### Code Style
 
-Code style is enforced by `./build_tooling/format.py`. **Always run the formatter after making code changes:**
+Code style is enforced by `./build_tooling/format.py`. **Always run the formatter after making code changes, but only on files changed on the branch:**
 
 ```bash
-# Format all code
-python ./build_tooling/format.py --in-place --type all
+# Format only files changed on the branch
+git diff --name-only origin/master..HEAD -- '*.py' | xargs -r -n1 python ./build_tooling/format.py --in-place --type python --file
+git diff --name-only origin/master..HEAD -- '*.cpp' '*.hpp' | xargs -r -n1 python ./build_tooling/format.py --in-place --type cpp --file
 ```
+
 
 ### Git Commits
 
