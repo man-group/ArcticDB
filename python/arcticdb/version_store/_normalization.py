@@ -219,6 +219,12 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             "GitHub issue and participate to its discussions: https://github.com/man-group/ArcticDB/issues/881"
         )
 
+    # pandas 2.x can infer string columns as StringDtype instead of object. StringDtype is a pandas
+    # extension type, not a numpy dtype, so np.issubdtype() will throw if we don't handle it first.
+    # Convert to object dtype so the rest of the normalization path treats it as a regular string column.
+    if isinstance(arr.dtype, pd.StringDtype):
+        arr = np.array(arr, dtype=object)
+
     if isinstance(arr.dtype, pd.core.dtypes.dtypes.CategoricalDtype):
         if is_integer_dtype(arr.categories.dtype):
             norm_meta.common.int_categories[arr_name].category.extend(arr.categories)
