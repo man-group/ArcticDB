@@ -33,9 +33,10 @@ def test_compact_data_negative_rows_per_segment(lmdb_version_store_v1):
 def test_compact_data_simple(version_store_factory):
     lib = version_store_factory(column_group_size=2, segment_row_size=10)
     sym = "test_compact_data_simple"
-    df = pd.DataFrame({"col": np.arange(4)})
-    lib.write(sym, df[:2])
-    lib.append(sym, df[2:])
+    df = pd.DataFrame({"col": np.arange(20)})
+    lib.write(sym, df[:5])
+    lib.append(sym, df[5:15])
+    lib.append(sym, df[15:])
     lib.compact_data_experimental(sym)
     assert_frame_equal(df, lib.read(sym).data)
     index = lib.read_index(sym)

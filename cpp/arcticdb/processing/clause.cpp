@@ -2251,7 +2251,6 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
                     *component_manager_, std::move(entity_ids)
             );
-    // TODO: Also handle splitting (use SegmentinMemory::split as first pass, but this is also crazy inefficient)
     // This will be horrendously inefficient if there are lots of small row-slices, and will also result in multi-block
     // columns being committed to disk for the first time outside of tick-collectors, which will also impact read and
     // processing performance, so needs refactoring to be more efficient
@@ -2259,10 +2258,36 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     for (auto seg = std::next(proc.segments_->cbegin()); seg != proc.segments_->cend(); ++seg) {
         compacted_seg->append(**seg);
     }
-    RowRange row_range{proc.row_ranges_->front()->first, proc.row_ranges_->back()->second};
+    auto total_rows = proc.row_ranges_->back()->second - proc.row_ranges_->front()->first;
     ColRange col_range = *proc.col_ranges_->front();
-    ProcessingUnit res{std::move(*compacted_seg), std::move(row_range), std::move(col_range)};
-    return push_entities(*component_manager_, std::move(res));
+    // This is even more inefficient than the appends
+    if (total_rows > max_rows_per_segment_) {
+        auto split_point = (total_rows / 2) + (total_rows % 2);
+        auto segments = compacted_seg->split(split_point, true);
+        std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs;
+        for (auto& segment : segments) {
+            segment_ptrs.emplace_back(std::make_shared<SegmentInMemory>(std::move(segment)));
+        }
+        std::vector<std::shared_ptr<RowRange>> row_ranges;
+        row_ranges.emplace_back(std::make_shared<RowRange>(
+                proc.row_ranges_->front()->first, proc.row_ranges_->front()->first + split_point
+        ));
+        row_ranges.emplace_back(std::make_shared<RowRange>(
+                proc.row_ranges_->front()->first + split_point, proc.row_ranges_->back()->second
+        ));
+        std::vector<std::shared_ptr<ColRange>> col_ranges;
+        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        ProcessingUnit res;
+        res.set_segments(std::move(segment_ptrs));
+        res.set_row_ranges(std::move(row_ranges));
+        res.set_col_ranges(std::move(col_ranges));
+        return push_entities(*component_manager_, std::move(res));
+    } else {
+        RowRange row_range{proc.row_ranges_->front()->first, proc.row_ranges_->back()->second};
+        ProcessingUnit res{std::move(*compacted_seg), std::move(row_range), std::move(col_range)};
+        return push_entities(*component_manager_, std::move(res));
+    }
 }
 
 const ClauseInfo& CompactDataClause::clause_info() const { return clause_info_; }
