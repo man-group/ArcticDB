@@ -43,12 +43,10 @@ from arcticdb_ext.version_store import (
 
 import pandas as pd
 import numpy as np
-import logging
+from arcticdb.log import version as log
 from arcticdb.version_store._normalization import normalize_metadata
 from arcticdb.version_store.admin_tools import AdminTools
 import arcticdb_ext as _ae
-
-logger = logging.getLogger(__name__)
 
 
 AsOf = Union[int, str, datetime.datetime, _PreloadedIndexQuery]
@@ -1127,6 +1125,15 @@ class Library:
                     f"write_pickle instead. type(data)=[{type(data)}]"
                 )
 
+        log.debug(
+            "write: symbol={}, data_type={}, metadata={}, prune_previous_versions={}, staged={}, validate_index={}",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            prune_previous_versions,
+            staged,
+            validate_index,
+        )
         return self._nvs.write(
             symbol=symbol,
             data=data,
@@ -1201,6 +1208,14 @@ class Library:
         --------
         write: For more detailed documentation.
         """
+        log.debug(
+            "write_pickle: symbol={}, data_type={}, metadata={}, prune_previous_versions={}, staged={}, pickled=True",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            prune_previous_versions,
+            staged,
+        )
         return self._nvs.write(
             symbol=symbol,
             data=data,
@@ -1295,6 +1310,12 @@ class Library:
         >>> items[0].symbol, items[1].symbol
         ('symbol_1', 'symbol_2')
         """
+        log.debug(
+            "write_batch: num_payloads={}, prune_previous_versions={}, validate_index={}",
+            len(payloads),
+            prune_previous_versions,
+            validate_index,
+        )
         self._raise_if_duplicate_symbols_in_batch(payloads)
         self._raise_if_unsupported_type_in_write_batch(payloads)
 
@@ -1343,6 +1364,11 @@ class Library:
         write: For more detailed documentation.
         write_pickle: For information on the implications of providing data that needs to be pickled.
         """
+        log.debug(
+            "write_pickle_batch: num_payloads={}, prune_previous_versions={}",
+            len(payloads),
+            prune_previous_versions,
+        )
         self._raise_if_duplicate_symbols_in_batch(payloads)
 
         return self._nvs._batch_write_internal(
@@ -1445,6 +1471,14 @@ class Library:
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
 
+        log.debug(
+            "append: symbol={}, data_type={}, metadata={}, prune_previous_versions={}, validate_index={}",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            prune_previous_versions,
+            validate_index,
+        )
         return self._nvs.append(
             symbol=symbol,
             dataframe=data,
@@ -1490,6 +1524,12 @@ class Library:
         ArcticUnsupportedDataTypeException
             If data that is not of NormalizableType appears in any of the payloads.
         """
+        log.debug(
+            "append_batch: num_payloads={}, prune_previous_versions={}, validate_index={}",
+            len(append_payloads),
+            prune_previous_versions,
+            validate_index,
+        )
 
         self._raise_if_duplicate_symbols_in_batch(append_payloads)
         self._raise_if_unsupported_type_in_write_batch(append_payloads)
@@ -1618,6 +1658,15 @@ class Library:
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
 
+        log.debug(
+            "update: symbol={}, data_type={}, metadata={}, upsert={}, date_range={}, prune_previous_versions={}",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            upsert,
+            date_range,
+            prune_previous_versions,
+        )
         return self._nvs.update(
             symbol=symbol,
             data=data,
@@ -2116,6 +2165,16 @@ class Library:
         ----
         column: [[5,6,7]]
         """
+        log.debug(
+            "read: symbol={}, as_of={}, date_range={}, row_range={}, columns={}, query_builder={}, lazy={}",
+            symbol,
+            as_of,
+            date_range,
+            row_range,
+            columns,
+            query_builder is not None,
+            lazy,
+        )
         if lazy:
             return LazyDataFrame(
                 self,
@@ -2233,6 +2292,12 @@ class Library:
         --------
         read
         """
+        log.debug(
+            "read_batch: num_symbols={}, query_builder={}, lazy={}",
+            len(symbols),
+            query_builder is not None,
+            lazy,
+        )
         symbol_strings = []
         as_ofs = []
         date_ranges = []
@@ -2422,6 +2487,11 @@ class Library:
             2025-01-01 00:00:00       1
             2025-01-02 00:00:00       2
         """
+        log.debug(
+            "read_batch_and_join: num_symbols={}, query_builder={}",
+            len(symbols),
+            query_builder is not None,
+        )
         symbol_strings = []
         as_ofs = []
         date_ranges = []
@@ -2677,6 +2747,7 @@ class Library:
         versions
             Version or versions of symbol to delete. If ``None`` then all versions will be deleted.
         """
+        log.debug("delete: symbol={}, versions={}", symbol, versions)
         if versions is None:
             self._nvs.delete(symbol)
             return
@@ -2703,6 +2774,7 @@ class Library:
             List of DataError objects, one for each symbol that was not deleted due to an error.
             If the symbol was already deleted, there will be no error, just a warning.
         """
+        log.debug("delete_batch: num_requests={}", len(delete_requests))
         symbols = []
         versions = []
 
@@ -2953,6 +3025,14 @@ class Library:
             If lazy is False, VersionedItem object that contains a .data and .metadata element.
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
+        log.debug(
+            "head: symbol={}, n={}, as_of={}, columns={}, lazy={}",
+            symbol,
+            n,
+            as_of,
+            columns,
+            lazy,
+        )
         if lazy:
             q = QueryBuilder().head(n)
             return LazyDataFrame(
@@ -3019,6 +3099,14 @@ class Library:
             If lazy is False, VersionedItem object that contains a .data and .metadata element.
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
+        log.debug(
+            "tail: symbol={}, n={}, as_of={}, columns={}, lazy={}",
+            symbol,
+            n,
+            as_of,
+            columns,
+            lazy,
+        )
         if lazy:
             q = QueryBuilder().tail(n)
             return LazyDataFrame(
