@@ -1127,6 +1127,15 @@ class Library:
                     f"write_pickle instead. type(data)=[{type(data)}]"
                 )
 
+        logger.debug(
+            "write: symbol=%r, data_type=%s, metadata=%s, prune_previous_versions=%s, staged=%s, validate_index=%s",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            prune_previous_versions,
+            staged,
+            validate_index,
+        )
         return self._nvs.write(
             symbol=symbol,
             data=data,
@@ -1201,6 +1210,14 @@ class Library:
         --------
         write: For more detailed documentation.
         """
+        logger.debug(
+            "write_pickle: symbol=%r, data_type=%s, metadata=%s, prune_previous_versions=%s, staged=%s, pickled=True",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            prune_previous_versions,
+            staged,
+        )
         return self._nvs.write(
             symbol=symbol,
             data=data,
@@ -1445,6 +1462,14 @@ class Library:
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
 
+        logger.debug(
+            "append: symbol=%r, data_type=%s, metadata=%s, prune_previous_versions=%s, validate_index=%s",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            prune_previous_versions,
+            validate_index,
+        )
         return self._nvs.append(
             symbol=symbol,
             dataframe=data,
@@ -1618,6 +1643,15 @@ class Library:
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
 
+        logger.debug(
+            "update: symbol=%r, data_type=%s, metadata=%s, upsert=%s, date_range=%r, prune_previous_versions=%s",
+            symbol,
+            type(data).__name__,
+            metadata is not None,
+            upsert,
+            date_range,
+            prune_previous_versions,
+        )
         return self._nvs.update(
             symbol=symbol,
             data=data,
@@ -2116,6 +2150,16 @@ class Library:
         ----
         column: [[5,6,7]]
         """
+        logger.debug(
+            "read: symbol=%r, as_of=%r, date_range=%r, row_range=%r, columns=%r, query_builder=%s, lazy=%s",
+            symbol,
+            as_of,
+            date_range,
+            row_range,
+            columns,
+            query_builder is not None,
+            lazy,
+        )
         if lazy:
             return LazyDataFrame(
                 self,
@@ -2953,6 +2997,14 @@ class Library:
             If lazy is False, VersionedItem object that contains a .data and .metadata element.
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
+        logger.debug(
+            "head: symbol=%r, n=%d, as_of=%r, columns=%r, lazy=%s",
+            symbol,
+            n,
+            as_of,
+            columns,
+            lazy,
+        )
         if lazy:
             q = QueryBuilder().head(n)
             return LazyDataFrame(
@@ -3019,6 +3071,14 @@ class Library:
             If lazy is False, VersionedItem object that contains a .data and .metadata element.
             If lazy is True, a LazyDataFrame object on which further querying can be performed prior to collect.
         """
+        logger.debug(
+            "tail: symbol=%r, n=%d, as_of=%r, columns=%r, lazy=%s",
+            symbol,
+            n,
+            as_of,
+            columns,
+            lazy,
+        )
         if lazy:
             q = QueryBuilder().tail(n)
             return LazyDataFrame(
