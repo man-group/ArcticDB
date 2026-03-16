@@ -115,27 +115,34 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
 
 template<typename Func>
 VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
-    if (is_empty_type(col.column_->type().data_type()) || is_integer_type(col.column_->type().data_type())) {
-        if constexpr (std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>) {
-            return is_empty_type(col.column_->type().data_type()) ? VariantData(FullResult{})
-                                                                  : VariantData(EmptyResult{});
-        } else if constexpr (std::is_same_v<std::remove_reference_t<Func>, NotNullOperator>) {
-            return is_empty_type(col.column_->type().data_type()) ? VariantData(EmptyResult{})
-                                                                  : VariantData(FullResult{});
+    constexpr auto should_keep_null_values = std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>;
+
+    if (is_empty_type(col.column_->type().data_type())) {
+        if constexpr (should_keep_null_values) {
+            return FullResult{};
         } else {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected operator passed to unary_comparator");
+            return EmptyResult{};
+        }
+    }
+
+    if (!col.column_->is_sparse() &&
+        (is_integer_type(col.column_->type().data_type()) || is_bool_type(col.column_->type().data_type()))) {
+        // For dense integer/bool columns all values are not null
+        if constexpr (should_keep_null_values) {
+            return EmptyResult{};
+        } else {
+            return FullResult{};
         }
     }
 
     util::BitSet output_bitset;
-    constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>;
-    details::visit_type(col.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&, should_keep_null_values](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         // Non-explicit lambda capture due to a bug in LLVM: https://github.com/llvm/llvm-project/issues/34798
         arcticdb::transform<typename type_info::TDT>(
                 *(col.column_),
                 output_bitset,
-                sparse_missing_value_output,
+                should_keep_null_values,
                 [&](auto input_value) -> bool {
                     if constexpr (is_floating_point_type(type_info::data_type)) {
                         return func.apply(input_value);
@@ -144,17 +151,9 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
                     } else if constexpr (is_time_type(type_info::data_type)) {
                         return func.template apply<TimeTypeTag>(input_value);
                     } else {
-                        // This line should not be reached with if the column is of int type because we have an early
-                        // exit above
-                        // https://github.com/man-group/ArcticDB/blob/bc554c9d42c7714bab645a167c4df843bc2672c6/cpp/arcticdb/processing/operation_dispatch_unary.hpp#L117
-                        // both null and not null are allowed with integers and return respectively EmptyResult and
-                        // FullResult. We must keep the exception though as otherwise not all control paths of this
-                        // function will return a value and this won't compile.
-                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                "Cannot perform null check: {} ({})",
-                                unary_operation_to_string(func, col.column_name_),
-                                get_user_friendly_type_string(col.column_->type())
-                        );
+                        // For sparse integer/bool columns, physically stored values are never null.
+                        // Thus for each physically stored value we use `!should_keep_null_values`.
+                        return !should_keep_null_values;
                     }
                 }
         );
