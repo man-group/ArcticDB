@@ -797,7 +797,8 @@ def enrich_bom(
         "components": components,
     }
 
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    os.makedirs(output_dir, exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(enriched_bom, f, indent=2)
     print(f"  Enriched BOM written to: {output_path}")
