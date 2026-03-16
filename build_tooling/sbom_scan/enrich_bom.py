@@ -757,7 +757,7 @@ def enrich_bom(
         submodule_added += 1
     print(f"  Git submodule components added: {submodule_added}")
     # Remove duplicate arcticdb entries — it's the scanned product (listed in metadata),
-    # not a dependency. cdxgen sometimes adds it as a component with a fake version.
+    components = [c for c in components if c.get("name", "").lower() != product_name]
     product_name = "arcticdb"
     components = [
         c for c in components
