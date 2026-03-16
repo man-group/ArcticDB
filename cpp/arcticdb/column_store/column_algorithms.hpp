@@ -64,18 +64,22 @@ static void for_each_enumerated_flattened(
     // instead of `it++`.
     if (input_column.is_sparse()) {
         auto begin = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         if (start_idx.has_value()) {
-            // We need to advance the iterator to the first physical position where `begin->idx() >= *start_idx`
-            while (begin->idx() < static_cast<ssize_t>(*start_idx)) {
+            // We need to advance the iterator to the first physical position where `begin->idx() >= *start_idx`.
+            // Guard against `begin == end` to avoid advancing past the last set bit: BitMagic's get_next() returns 0
+            // (not a sentinel) when exhausted, which would cause idx_ to wrap and the loop to never terminate.
+            while (begin != end && begin->idx() < static_cast<ssize_t>(*start_idx)) {
                 ++begin;
             }
         }
-        auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
         if (end_idx.has_value()) {
-            end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
-            while (end->idx() < static_cast<ssize_t>(*end_idx)) {
-                ++end;
+            auto truncated_end = begin;
+            // Same guard: stop at natural cend if end_idx exceeds all set bit positions.
+            while (truncated_end != end && truncated_end->idx() < static_cast<ssize_t>(*end_idx)) {
+                ++truncated_end;
             }
+            end = truncated_end;
         }
         for_each_flattened(begin, end, std::forward<functor>(f));
     } else {
@@ -85,8 +89,8 @@ static void for_each_enumerated_flattened(
         }
         auto end = input_data.cend<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
         if (end_idx.has_value()) {
-            end = input_data.cbegin<input_tdt, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
-            std::advance(end, *end_idx);
+            end = begin;
+            std::advance(end, *end_idx - start_idx.value_or(0));
         }
         for_each_flattened(begin, end, std::forward<functor>(f));
     }
