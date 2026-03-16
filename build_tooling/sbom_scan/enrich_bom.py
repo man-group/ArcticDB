@@ -344,7 +344,13 @@ def parse_requirements_frozen(reqs_path: str, pip_licenses: list | None = None) 
 
             if is_editable:
                 comp["properties"].append({"name": "pip:editable", "value": "true"})
+    from collections import deque
+    resolved: dict[str, str] = {}
+    queue: deque[str] = deque(direct)
+    visited: set[str] = set()
 
+    while queue:
+        pkg = queue.popleft()
             lic = license_map.get(name.lower())
             if not lic:
                 lic = KNOWN_LICENSES_FALLBACK.get(name.lower())
