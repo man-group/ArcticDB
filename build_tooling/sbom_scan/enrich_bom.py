@@ -763,7 +763,10 @@ def enrich_bom(
         c for c in components
         if c.get("name", "").lower() != product_name
         or any(p.get("value") == "pip" and not any(
-            q.get("value") == "true" for q in c.get("properties", []) if q.get("name") == "pip:editable"
+            runtime_normalised = {_normalise(k) for k in runtime_filter}
+        for comp in pip_comps:
+            if runtime_filter is not None:
+                if _normalise(comp["name"]) not in runtime_normalised:
         ) for p in c.get("properties", []))
     ]
     # Simpler: just remove all "arcticdb" entries from components entirely;
