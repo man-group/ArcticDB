@@ -43,9 +43,7 @@ withproxy ./build_tooling/sbom_scan/generate_sbom.sh \
 --output-dir DIR         Report output dir (default: ~/arcticdb-sbom-reports)
 --tools-dir DIR          Tool download dir (default: ~/sbom-tools)
 --tools-venv DIR         Python venv for scanning tools (default: ~/sbom-tools-env)
---python-version VER     Python type for cdxgen (default: auto, e.g. python312)
 --arcticdb-version VER   Version string (default: from pyproject.toml)
---skip-cdxgen            Use existing bom-python.json / bom-cpp.json
 --skip-grype             Skip vulnerability scan
 --skip-pip-licenses      Skip pip-licenses extraction
 --skip-build-check       Skip check for vcpkg_installed/ dir
