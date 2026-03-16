@@ -1,6 +1,6 @@
 # ArcticDB SBOM Tools
 
-Generates a Software Bill of Materials (SBOM), license report, and vulnerability scan for ArcticDB.
+Generates a Software Bill of Materials (SBOM), license report, and vulnerability scan for ArcticDB (linux only)
 
 ## Files
 
