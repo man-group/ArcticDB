@@ -373,7 +373,8 @@ def get_submodule_versions(arcticdb_root: str) -> dict:
                 # Extract clean version: "v3.13.2" -> "3.13.2", "LMDB_0.9.22" -> "0.9.22"
                 version = re.sub(r"^[vV]", "", describe.split("-")[0])
                 version = re.sub(r"^LMDB_", "", version)
-                submodules[name] = {"hash": commit_hash, "path": path, "describe": describe, "version": version}
+                requires = [re.split(r"[\[;]", r.strip())[0].strip()
+                            for r in req_str.split(",") if r.strip()]
     except Exception as e:
         print(f"  Warning: could not read git submodule status: {e}", file=sys.stderr)
     return submodules
