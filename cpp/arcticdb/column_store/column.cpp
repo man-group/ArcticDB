@@ -1033,6 +1033,6 @@ const util::BitMagic& Column::sparse_map() const {
 
 std::optional<util::BitMagic>& Column::opt_sparse_map() { return sparse_map_; }
 
-std::optional<util::BitMagic> Column::opt_sparse_map() const { return sparse_map_; }
+const std::optional<util::BitMagic>& Column::opt_sparse_map() const { return sparse_map_; }
 
 } // namespace arcticdb

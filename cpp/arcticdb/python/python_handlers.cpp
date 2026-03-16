@@ -115,6 +115,9 @@ void PythonBoolHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
@@ -172,14 +175,9 @@ void PythonStringHandler::handle_type(
     const auto& ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
-    auto decoded_data = [&m, &ndarray, bytes, &dest_column]() {
-        if (ndarray.sparse_map_bytes() > 0) {
-            return Column(
-                    m.source_type_desc_,
-                    bytes / get_type_size(m.source_type_desc_.data_type()),
-                    AllocationType::DYNAMIC,
-                    Sparsity::PERMITTED
-            );
+    auto decoded_data = [&m, bytes, &dest_column]() {
+        if (auto dense_size = bytes / get_type_size(m.source_type_desc_.data_type()); dense_size < m.num_rows_) {
+            return Column(m.source_type_desc_, dense_size, AllocationType::DYNAMIC, Sparsity::PERMITTED);
         } else {
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
             column.buffer().add_external_block(
@@ -192,6 +190,9 @@ void PythonStringHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     if (is_dynamic_string_type(m.dest_type_desc_.data_type())) {
         convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
@@ -203,16 +204,9 @@ void PythonStringHandler::
                 const {
     auto dest_data = dest_column.bytes_at(mapping.offset_bytes_, mapping.num_rows_ * sizeof(PyObject*));
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);
-    DynamicStringReducer string_reducer{shared_data, cast_handler_data(handler_data), ptr_dest, mapping.num_rows_};
-    string_reducer.reduce(
-            source_column,
-            mapping.source_type_desc_,
-            mapping.dest_type_desc_,
-            mapping.num_rows_,
-            *string_pool,
-            source_column.opt_sparse_map()
+    write_python_dynamic_strings_to_dest(
+            ptr_dest, source_column, mapping, *string_pool, shared_data, cast_handler_data(handler_data)
     );
-    string_reducer.finalize();
 }
 
 int PythonStringHandler::type_size() const { return sizeof(PyObject*); }
@@ -245,6 +239,9 @@ void PythonArrayHandler::handle_type(
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
     Column column{m.source_type_desc_, Sparsity::PERMITTED};
     data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), encoding_version);
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    column.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(column, dest_column, m, shared_data, any, string_pool, read_options);
 }

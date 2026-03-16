@@ -594,7 +594,7 @@ def test_append_docs_example(lmdb_version_store):
 
     q = QueryBuilder()
     q = q[(q["COL_30"] > 30) & (q["COL_31"] < 50)]
-    print(lib.read("test_frame", date_range=_range, colymns=_cols, query_builder=q).data)
+    print(lib.read("test_frame", date_range=_range, columns=_cols, query_builder=q).data)
 
     # Update example
     random_data = np.random.randint(0, 50, size=(25, 50))

@@ -131,5 +131,5 @@
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
-  "builtin-baseline": "ef7dbf94b9198bc58f45951adcf1f041fcbc5ea0"
+  "builtin-baseline": "ac56141cba73a968d4a615aec7f48c966b73b6d0"
 }
