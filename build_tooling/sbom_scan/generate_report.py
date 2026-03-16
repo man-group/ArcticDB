@@ -494,7 +494,12 @@ def generate_html_report(bom: dict, grype_data: dict | None, pip_licenses: list 
   <table>
     <thead><tr><th>Package</th><th>Version</th><th>License</th><th>Source</th></tr></thead>
     <tbody>{cpp_lic_html}</tbody>
-  </table>
+function showTab(id, btn) {{
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if (btn) btn.classList.add('active');
+}}
 </div>
 
 <div id="copyleft" class="tab-content">
