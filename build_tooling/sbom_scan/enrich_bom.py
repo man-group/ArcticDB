@@ -5,8 +5,6 @@ ArcticDB BOM Enrichment Script
 Builds a clean, authoritative CycloneDX BOM from:
   1. Python components from pip freeze output (requirements-frozen.txt) — exact installed versions
      Licensed data merged from pip-licenses JSON if provided.
-     cdxgen Python BOM is NOT used — it reads version ranges from pyproject.toml and produces
-     dozens of duplicate entries per package (e.g. numpy 1.18, 1.20, 1.22, 1.24, 2.0, latest).
   2. C++ components from vcpkg installed packages — versions from vcpkg.spdx.json, NOT ports tree.
      The vcpkg ports tree contains the latest port HEAD version, not the pinned/override version.
      Example: openssl ports/ HEAD = 3.6.1, but installed (and shipped) = 3.3.0 (pinned override).
