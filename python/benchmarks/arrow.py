@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 
 from arcticdb import Arctic, OutputFormat, ArrowOutputStringFormat
+from arcticdb.options import LibraryOptions
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
@@ -98,34 +99,43 @@ class ArrowSparseNumeric:
     connection_string = "lmdb://arrow_sparse_numeric"
     lib_name_prewritten = "arrow_sparse_numeric_prewritten"
     lib_name_fresh = "arrow_sparse_numeric_fresh"
+    type_promotion_suffix = "_with_type_promotion"
     num_cols = 9
     params = ([1_000_000, 10_000_000], [0.1, 0.5, 0.9])
     param_names = ["rows", "sparsity"]
 
-    def symbol_name(self, num_rows: int, sparsity: float):
-        return f"sparse_{num_rows}_{sparsity}"
+    def symbol_name(self, num_rows: int, sparsity: float, suffix=""):
+        return f"sparse_{num_rows}_{sparsity}{suffix}"
 
     def __init__(self):
         self.logger = get_logger()
 
-    def _generate_table(self, num_rows, sparsity):
+    def _generate_table(self, num_rows, sparsity, pa_type=pa.int64()):
         np.random.seed(42)
         mask = np.random.random(num_rows) < sparsity
         columns = {}
         for i in range(self.num_cols):
             vals = np.arange(i * num_rows, (i + 1) * num_rows, dtype=np.int64)
-            columns[f"col{i}"] = pa.array(np.where(mask, None, vals), pa.int64())
+            columns[f"col{i}"] = pa.array(np.where(mask, None, vals), pa_type)
         return pa.table(columns)
 
     def setup_cache(self):
         ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         num_rows_list, sparsity_list = self.params
         ac.delete_library(self.lib_name_prewritten)
-        lib = ac.create_library(self.lib_name_prewritten)
+        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))
         lib._nvs._set_allow_arrow_input()
         for rows in num_rows_list:
             for sparsity in sparsity_list:
                 lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))
+                lib.write(
+                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),
+                    self._generate_table(rows // 2, sparsity, pa.int32()),
+                )
+                lib.append(
+                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),
+                    self._generate_table(rows // 2, sparsity, pa.int64()),
+                )
 
     def teardown(self, rows, sparsity):
         for lib in self.ac.list_libraries():
@@ -142,6 +152,7 @@ class ArrowSparseNumeric:
         self.fresh_lib._nvs._set_allow_arrow_input()
         self.table = self._generate_table(rows, sparsity)
         self.sym = self.symbol_name(rows, sparsity)
+        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
@@ -164,6 +175,12 @@ class ArrowSparseNumeric:
 
     def peakmem_read_pandas(self, rows, sparsity):
         self.lib.read(self.sym, output_format="PANDAS")
+
+    def time_read_with_type_promotion(self, rows, sparsity):
+        self.lib.read(self.sym_with_type_promotion)
+
+    def peakmem_read_with_type_promotion(self, rows, sparsity):
+        self.lib.read(self.sym_with_type_promotion)
 
 
 class ArrowStrings:
