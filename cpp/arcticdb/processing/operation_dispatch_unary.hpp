@@ -114,10 +114,9 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
 }
 
 template<typename Func>
-requires std::is_same_v<std::remove_cvref_t<Func>, IsNullOperator> ||
-         std::is_same_v<std::remove_cvref_t<Func>, NotNullOperator>
+requires util::any_of<std::remove_cvref_t<Func>, IsNullOperator, NotNullOperator>
 VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
-    constexpr static auto is_null_operator = std::is_same<std::remove_cvref_t<Func>, IsNullOperator>{};
+    constexpr static bool is_null_operator = std::same_as<std::remove_cvref_t<Func>, IsNullOperator>;
 
     if (is_empty_type(col.column_->type().data_type())) {
         if constexpr (is_null_operator) {
