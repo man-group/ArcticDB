@@ -114,11 +114,13 @@ VariantData visit_unary_operator(const VariantData& left, Func&& func) {
 }
 
 template<typename Func>
+requires std::is_same_v<std::remove_cvref_t<Func>, IsNullOperator> ||
+         std::is_same_v<std::remove_cvref_t<Func>, NotNullOperator>
 VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
-    constexpr auto should_keep_null_values = std::is_same_v<std::remove_reference_t<Func>, IsNullOperator>;
+    constexpr static auto is_null_operator = std::is_same<std::remove_cvref_t<Func>, IsNullOperator>{};
 
     if (is_empty_type(col.column_->type().data_type())) {
-        if constexpr (should_keep_null_values) {
+        if constexpr (is_null_operator) {
             return FullResult{};
         } else {
             return EmptyResult{};
@@ -128,7 +130,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
     if (!col.column_->is_sparse() &&
         (is_integer_type(col.column_->type().data_type()) || is_bool_type(col.column_->type().data_type()))) {
         // For dense integer/bool columns all values are not null
-        if constexpr (should_keep_null_values) {
+        if constexpr (is_null_operator) {
             return EmptyResult{};
         } else {
             return FullResult{};
@@ -136,13 +138,13 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
     }
 
     util::BitSet output_bitset;
-    details::visit_type(col.column_->type().data_type(), [&, should_keep_null_values](auto col_tag) {
+    details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         // Non-explicit lambda capture due to a bug in LLVM: https://github.com/llvm/llvm-project/issues/34798
         arcticdb::transform<typename type_info::TDT>(
                 *(col.column_),
                 output_bitset,
-                should_keep_null_values,
+                is_null_operator,
                 [&](auto input_value) -> bool {
                     if constexpr (is_floating_point_type(type_info::data_type)) {
                         return func.apply(input_value);
@@ -153,7 +155,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
                     } else {
                         // For sparse integer/bool columns, physically stored values are never null.
                         // Thus for each physically stored value we use `!should_keep_null_values`.
-                        return !should_keep_null_values;
+                        return !is_null_operator;
                     }
                 }
         );
