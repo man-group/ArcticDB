@@ -102,7 +102,10 @@ def test_row_slicing_just_index(
 
     assert res["TABLE_INDEX"]["count"] == 1
     # RangeIndexes do not go through the normal read index path and incur an extra TABLE_DATA read.
-    # I don't think that this is worth fixing.
+    # This is due to the "count() > 0" check at the start of `build_col_read_query_filters`, which RangeIndex-s
+    # (which are not physically stored) fail. We read every block within the row range for RangeIndex-s at the
+    # moment.
+    # Monday: 11524336137
     is_range_index = isinstance(index, pd.RangeIndex)
     assert res["TABLE_DATA"]["count"] == (2 if is_range_index else 1)
 
