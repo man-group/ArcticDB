@@ -203,6 +203,16 @@ class ChunkedBufferImpl {
         return blocks_[pos];
     }
 
+    BlockType* block_at_offset(size_t offset) {
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE,
+                "block_at_offset is only valid for detachable buffers"
+        );
+        auto it = std::lower_bound(block_offsets_.begin(), block_offsets_.end(), offset);
+        util::check(it != block_offsets_.end() && *it == offset, "No block found at offset {}", offset);
+        return blocks_[std::distance(block_offsets_.begin(), it)];
+    }
+
     // If the extra space required does not fit in the current last block, and is <=DefaultBlockSize, then if aligned is
     // set to true, the current last block will be padded with zeros, and a new default sized block added. This allows
     // the buffer to stay regular sized for as long as possible, which greatly improves random access performance, and
@@ -638,18 +648,27 @@ class ChunkedBufferImpl {
   private:
     BlockType* copy_subset_to_block(BlockType* source, size_t pos, size_t size) {
         auto result = [&]() {
-            switch (source->get_type()) {
-            case MemBlockType::DYNAMIC:
-                return create_regular_block(size, source->offset() + pos);
-            case MemBlockType::EXTERNAL_WITH_EXTRA_BYTES:
+            if (allocation_type_ == entity::AllocationType::DETACHABLE) {
                 return create_detachable_block(size, source->offset() + pos);
-            case MemBlockType::EXTERNAL_PACKED:
-                util::raise_rte("Copying subsets of packed buffers is not supported");
-            default:
-                util::raise_rte("Unknown memory block type: {}", source->get_type());
+            } else {
+                return create_regular_block(size, source->offset() + pos);
             }
         }();
-        result->copy_from(source->ptr(pos), result->physical_bytes(), 0);
+        switch (source->get_type()) {
+        case MemBlockType::DYNAMIC:
+        case MemBlockType::EXTERNAL_WITH_EXTRA_BYTES:
+            result->copy_from(source->ptr(pos), result->physical_bytes(), 0);
+            break;
+        case MemBlockType::EXTERNAL_PACKED: {
+            auto* packed_src = static_cast<ExternalPackedMemBlock*>(source);
+            // Copying packed bits is less efficient than a memcpy.
+            // We don't use memcpy because it would result in a dest block with shift != 0
+            // Sparrow does not currently expose a convinient API to set a non-zero offset for bool columns.
+            // TODO: Use memcpy once sparrow exposes `slice_inplace` API.
+            copy_packed_bits(packed_src->data(), packed_src->shift() + pos, size, result->data());
+            break;
+        }
+        }
         return result;
     }
 

@@ -67,4 +67,18 @@ bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos) {
     return (packed_bits[byte_idx] >> bit_idx) & 1;
 }
 
+void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value) {
+    auto dv = std::div(bit_pos, 8);
+    size_t byte_idx = dv.quot;
+    size_t bit_idx = dv.rem;
+    packed_bits[byte_idx] &= ~(1 << bit_idx);                        // Unset bit
+    packed_bits[byte_idx] |= static_cast<uint8_t>(value) << bit_idx; // Set bit
+}
+
+void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest) {
+    for (size_t i = 0; i < num_bits; ++i) {
+        set_bit_at(dest, i, get_bit_at(src, src_bit_offset + i));
+    }
+}
+
 } // namespace arcticdb

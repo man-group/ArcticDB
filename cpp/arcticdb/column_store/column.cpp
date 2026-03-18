@@ -312,6 +312,12 @@ void Column::advance_data(std::size_t size) { data_.advance(position_t(size)); }
 
 void Column::advance_shapes(std::size_t size) { shapes_.advance(position_t(size)); }
 
+void Column::allocate_and_advance_by(std::size_t bytes) {
+    util::check(bytes != 0, "allocate_and_advance_by data called with zero size");
+    data_.ensure_bytes(bytes);
+    advance_data(bytes);
+}
+
 [[nodiscard]] ChunkedBuffer& Column::buffer() { return data_.buffer(); }
 
 uint8_t* Column::bytes_at(size_t bytes, size_t required) {

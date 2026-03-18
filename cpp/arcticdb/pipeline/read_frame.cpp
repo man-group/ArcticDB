@@ -130,8 +130,7 @@ SegmentInMemory allocate_chunked_frame(
                 // number of memory blocks not equal number of segments because follow-up methods like
                 // `copy_frame_data_to_buffer` rely on offsets rather than block indices.
                 const auto bytes = block_row_count * data_size;
-                column->allocate_data(bytes);
-                column->advance_data(bytes);
+                column->allocate_and_advance_by(bytes);
             }
         }
     }
@@ -334,7 +333,6 @@ void decode_or_expand(
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
     if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
         handler->handle_type(
                 data,
@@ -349,6 +347,7 @@ void decode_or_expand(
         );
     } else {
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
+        auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
         const auto dest_bytes = mapping.dest_bytes_;
         std::optional<util::BitMagic> bv;
         util::check(encoded_field_info.has_ndarray(), "Unsupported encoding for field {}", encoded_field_info);

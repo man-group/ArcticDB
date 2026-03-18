@@ -153,6 +153,8 @@ const uint8_t* ExternalPackedMemBlock::ptr(size_t pos) const {
     util::raise_rte("Accessing position {} for a packed mem block is not supported", pos);
 }
 
+uint8_t* ExternalPackedMemBlock::end() const { return const_cast<uint8_t*>(data()) + physical_bytes(); }
+
 size_t ExternalPackedMemBlock::shift() const { return shift_; }
 
 } // namespace arcticdb

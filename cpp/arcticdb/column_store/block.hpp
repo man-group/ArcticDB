@@ -50,7 +50,7 @@ class IMemBlock {
     // virtual to allow ExternalPackedBuffer to override to throw
     [[nodiscard]] virtual const uint8_t* ptr(size_t pos) const;
     [[nodiscard]] virtual uint8_t* ptr(size_t pos);
-    [[nodiscard]] uint8_t* end() const;
+    [[nodiscard]] virtual uint8_t* end() const;
 };
 
 // DynamicMemBlock stores inline memory of a certain capacity. It allows resizing within the predefined capacity.
@@ -139,6 +139,7 @@ class ExternalPackedMemBlock : public ExternalMemBlock {
     [[nodiscard]] size_t logical_size() const final;
     [[nodiscard]] const uint8_t* ptr(size_t pos) const final;
     [[nodiscard]] uint8_t* ptr(size_t pos) final;
+    [[nodiscard]] uint8_t* end() const final;
     [[nodiscard]] size_t shift() const;
 
   private:

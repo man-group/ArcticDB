@@ -454,4 +454,70 @@ void ArrowStringHandler::default_initialize(
     }
 }
 
+void ArrowBoolHandler::handle_type(
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
+    util::check(field.has_ndarray(), "Bool handler expected array");
+    const auto& ndarray = field.ndarray();
+    const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+
+    Column decoded_data{
+            m.source_type_desc_,
+            bytes / get_type_size(m.source_type_desc_.data_type()),
+            AllocationType::DYNAMIC,
+            Sparsity::PERMITTED
+    };
+
+    data += decode_field(
+            m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
+    );
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
+
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
+}
+
+void ArrowBoolHandler::
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>&, const ReadOptions&)
+                const {
+    using BoolTypeTag = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
+    auto* packed_dest = dest_column.buffer().block_at_offset(m.offset_bytes_)->data();
+    const auto positions = get_positions_after_truncation(m);
+
+    // TODO: This is probably terribly inefficient for dense data
+    for_each_enumerated_flattened<BoolTypeTag>(
+            source_column,
+            [&] ARCTICDB_LAMBDA_INLINE(const auto& en) { set_bit_at(packed_dest, en.idx(), en.value()); },
+            positions.first_idx_after_truncation,
+            positions.end_idx_after_truncation
+    );
+
+    const bool is_sparse = source_column.opt_sparse_map().has_value();
+    if (is_sparse) {
+        const auto& sparse_map = *source_column.opt_sparse_map();
+        // Copy the sparse map, because handle_truncation modifies the bitset inplace
+        auto validity_bitset = sparse_map;
+        handle_truncation(validity_bitset, m.truncate_);
+
+        if (validity_bitset.count() != validity_bitset.size()) {
+            create_dense_bitmap(
+                    positions.extra_buffer_position, validity_bitset, dest_column, AllocationType::DETACHABLE
+            );
+        }
+    }
+
+    handle_truncation(dest_column, m.truncate_);
+}
+
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowBoolHandler::
+        output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
+    return {input_type, detachable_block_config::Packed{}};
+}
+
+void ArrowBoolHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+    // No-op: the the validity bitmap is populated upstream.
+    // The packed data buffer does not need initialization since missing values are masked by the bitmap.
+}
+
 } // namespace arcticdb

@@ -499,6 +499,8 @@ class Column {
 
     void advance_shapes(std::size_t size);
 
+    void allocate_and_advance_by(std::size_t bytes);
+
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
         auto physical_row = get_physical_row(row);

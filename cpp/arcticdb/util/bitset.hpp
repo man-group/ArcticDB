@@ -41,6 +41,10 @@ void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t o
 
 bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos);
 
+void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value);
+
+void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest);
+
 template<typename functor>
 requires std::is_invocable_r_v<void, functor, size_t>
 void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to, functor&& f) {
