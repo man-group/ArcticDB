@@ -40,6 +40,15 @@ jobs:
           ec2-instance-type: ${{ inputs.instance-type }}
           subnet-id: ${{ inputs.subnet-id }}
           security-group-id: ${{ inputs.security-group-id }}
+          aws-resource-tags: >
+            [
+              {"Key": "Name", "Value": "arcticdb-ci-runner"},
+              {"Key": "Source", "Value": "github-actions"},
+              {"Key": "Repository", "Value": "${{ github.repository }}"},
+              {"Key": "Branch", "Value": "${{ github.head_ref || github.ref_name }}"},
+              {"Key": "Workflow", "Value": "${{ github.workflow }}"},
+              {"Key": "RunId", "Value": "${{ github.run_id }}"}
+            ]
 
   stop-runner:
     name: Stop self-hosted EC2 runner
