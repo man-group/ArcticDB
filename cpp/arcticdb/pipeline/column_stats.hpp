@@ -22,6 +22,11 @@ static constexpr size_t end_index_column_offset = static_cast<size_t>(index::Fie
 
 enum class ColumnStatElement { MIN, MAX };
 
+std::string to_segment_column_name(
+        const std::string& column, ColumnStatElement column_stat_element,
+        std::optional<std::pair<uint64_t, uint64_t>> version = std::nullopt // default only in header
+);
+
 /**
  * Parse a column stats segment column name and extract the stat type (MIN or MAX) and original column name.
  * Expected format: "vX.Y_MIN(column)" or "vX.Y_MAX(column)"

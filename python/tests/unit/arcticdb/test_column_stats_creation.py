@@ -13,6 +13,9 @@ import pytest
 from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException, InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import NoSuchVersionException
+from arcticdb.util.test import assert_frame_equal, config_context_multi
+from arcticdb.version_store.processing import QueryBuilder
+import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
 
@@ -673,3 +676,184 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
     ]:
         test()
         clear()
+
+
+def _get_key_read_count(key_type_name):
+    """Get the number of reads for a given key type from query stats."""
+    stats = qs.get_query_stats()
+    return (
+        (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get(key_type_name, {}).get("count", 0)
+    )
+
+
+def test_inline_column_stats_no_column_stats_key(in_memory_version_store_tiny_segment, clear_query_stats):
+    """Inline stats should not create a separate COLUMN_STATS key."""
+    lib = in_memory_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    sym = "test_inline_column_stats_no_column_stats_key"
+
+    df = pd.DataFrame(
+        {"col_1": [1, 2, 3, 4], "col_2": [10, 20, 30, 40]},
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    with config_context_multi(
+        {
+            "Statistics.GenerateOnWrite": 1,
+            "ColumnStats.EmbedInIndex": 1,
+        }
+    ):
+        lib.write(sym, df)
+
+    assert lib_tool.count_keys(KeyType.COLUMN_STATS) == 0
+
+    # Also verify that reading does not attempt to fetch a COLUMN_STATS key
+    with config_context_multi(
+        {
+            "ColumnStats.EmbedInIndex": 1,
+            "ColumnStats.UseForQueries": 1,
+        }
+    ):
+        qs.enable()
+        q = QueryBuilder()
+        q = q[q["col_1"] > 2]
+        qs.reset_stats()
+        lib.read(sym, query_builder=q)
+        assert _get_key_read_count("COLUMN_STATS") == 0
+
+
+def test_inline_column_stats_index_structure(in_memory_version_store_tiny_segment):
+    """The TABLE_INDEX segment should contain v1.0_MIN/MAX columns for each numeric column."""
+    lib = in_memory_version_store_tiny_segment
+    sym = "test_inline_column_stats_index_structure"
+
+    df = pd.DataFrame(
+        {"col_1": [1, 2, 3, 4], "col_2": [10.0, 20.0, 30.0, 40.0]},
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    with config_context_multi(
+        {
+            "Statistics.GenerateOnWrite": 1,
+            "ColumnStats.EmbedInIndex": 1,
+        }
+    ):
+        lib.write(sym, df)
+
+    index_df = lib.read_index(sym)
+
+    # The index should contain the standard columns plus inline stat columns
+    assert "v1.0_MIN(col_1)" in index_df.columns
+    assert "v1.0_MAX(col_1)" in index_df.columns
+    assert "v1.0_MIN(col_2)" in index_df.columns
+    assert "v1.0_MAX(col_2)" in index_df.columns
+
+    # segment_row_size=2 with 4 rows produces 2 segments
+    assert len(index_df) == 2
+
+    # Verify the actual min/max values match the data
+    # Segment 0: rows [1, 2], Segment 1: rows [3, 4]
+    assert index_df["v1.0_MIN(col_1)"].iloc[0] == 1
+    assert index_df["v1.0_MAX(col_1)"].iloc[0] == 2
+    assert index_df["v1.0_MIN(col_1)"].iloc[1] == 3
+    assert index_df["v1.0_MAX(col_1)"].iloc[1] == 4
+
+    assert index_df["v1.0_MIN(col_2)"].iloc[0] == 10.0
+    assert index_df["v1.0_MAX(col_2)"].iloc[0] == 20.0
+    assert index_df["v1.0_MIN(col_2)"].iloc[1] == 30.0
+    assert index_df["v1.0_MAX(col_2)"].iloc[1] == 40.0
+
+
+def test_inline_column_stats_pruning(in_memory_version_store_tiny_segment, clear_query_stats):
+    """Verify that inline column stats actually prune segments during read."""
+    lib = in_memory_version_store_tiny_segment
+    sym = "test_inline_column_stats_pruning"
+
+    # segment_row_size=2: seg0=[1,2], seg1=[3,4]
+    df = pd.DataFrame(
+        {"col_1": [1, 2, 3, 4]},
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    with config_context_multi(
+        {
+            "Statistics.GenerateOnWrite": 1,
+            "ColumnStats.EmbedInIndex": 1,
+            "ColumnStats.UseForQueries": 1,
+        }
+    ):
+        lib.write(sym, df)
+
+        # col_1 > 2: seg0 max=2 <= 2, should be pruned. Only seg1 read.
+        qs.enable()
+        q = QueryBuilder()
+        q = q[q["col_1"] > 2]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = _get_key_read_count("TABLE_DATA")
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (seg0 pruned), got {table_data_reads}"
+        expected = df[df["col_1"] > 2]
+        assert_frame_equal(expected, result)
+
+        # col_1 < 2: seg1 min=3 >= 2, should be pruned. Only seg0 read.
+        q = QueryBuilder()
+        q = q[q["col_1"] < 2]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = _get_key_read_count("TABLE_DATA")
+        assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (seg1 pruned), got {table_data_reads}"
+        expected = df[df["col_1"] < 2]
+        assert_frame_equal(expected, result)
+
+        # col_1 > 4: both segments pruned (max of seg0=2 and seg1=4, both <= 4)
+        q = QueryBuilder()
+        q = q[q["col_1"] > 4]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = _get_key_read_count("TABLE_DATA")
+        assert table_data_reads == 0, f"Expected 0 TABLE_DATA reads (both pruned), got {table_data_reads}"
+        assert len(result) == 0
+
+        # col_1 >= 1: no pruning possible, both segments read
+        q = QueryBuilder()
+        q = q[q["col_1"] >= 1]
+        qs.reset_stats()
+        result = lib.read(sym, query_builder=q).data
+        table_data_reads = _get_key_read_count("TABLE_DATA")
+        assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads (no pruning), got {table_data_reads}"
+        assert_frame_equal(df, result)
+
+
+def test_inline_column_stats_compat_read_without_flag(in_memory_version_store_tiny_segment):
+    """Data written with inline stats should be readable without the EmbedInIndex flag set.
+
+    This simulates an older client that does not know about inline stats: the extra columns
+    in the index segment should be silently ignored, and the data should be read correctly.
+    """
+    lib = in_memory_version_store_tiny_segment
+    sym = "test_inline_column_stats_compat_read"
+
+    df = pd.DataFrame(
+        {"col_1": [1, 2, 3, 4], "col_2": [10, 20, 30, 40]},
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    # Write with inline stats enabled
+    with config_context_multi(
+        {
+            "Statistics.GenerateOnWrite": 1,
+            "ColumnStats.EmbedInIndex": 1,
+        }
+    ):
+        lib.write(sym, df)
+
+    # Read without EmbedInIndex or UseForQueries (simulating old client)
+    result = lib.read(sym).data
+    assert_frame_equal(df, result)
+
+    # Also verify that filtered reads still produce correct results without the flag
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    expected = df[df["col_1"] > 2]
+    assert_frame_equal(expected, result)

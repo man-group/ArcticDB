@@ -50,6 +50,37 @@ folly::Future<entity::AtomKey> write_index(
 }
 
 folly::Future<entity::AtomKey> write_index(
+        const std::shared_ptr<InputFrame>& frame, std::vector<SliceAndKey>&& slice_and_keys,
+        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
+        std::optional<SegmentInMemory> inline_stats
+) {
+    if (!inline_stats.has_value()) {
+        return write_index(frame, std::move(slice_and_keys), partial_key, sink);
+    }
+
+    auto offset = frame->offset;
+    auto index = stream::index_type_from_descriptor(frame->desc());
+    auto timeseries_desc = index_descriptor_from_frame(frame, offset);
+
+    return util::variant_match(index, [&](auto idx) {
+        using IndexType = decltype(idx);
+        IndexWriter<IndexType> writer(sink, partial_key, timeseries_desc);
+        for (const auto& slice_and_key : slice_and_keys) {
+            writer.add(slice_and_key.key(), slice_and_key.slice_);
+        }
+
+        // Add inline stats columns to the index segment
+        auto& writer_seg = writer.segment();
+        auto& stats_seg = *inline_stats;
+        for (size_t i = 0; i < stats_seg.num_columns(); ++i) {
+            writer_seg.add_column(stats_seg.field(i), stats_seg.column_ptr(i));
+        }
+
+        return writer.commit();
+    });
+}
+
+folly::Future<entity::AtomKey> write_index(
         const std::shared_ptr<InputFrame>& frame, std::vector<folly::Future<SliceAndKey>>&& slice_and_keys,
         const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
 ) {

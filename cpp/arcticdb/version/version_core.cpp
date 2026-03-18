@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/column_stats_filter.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/name_validation.hpp>
@@ -2640,10 +2641,88 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
+static bool looks_like_column_stats_name(std::string_view name) {
+    // Column stats columns are named "vX.Y_..." (e.g. "v1.0_MIN(col)")
+    return name.size() > 2 && name[0] == 'v' && name.find('.') != std::string_view::npos;
+}
+
+static std::optional<SegmentInMemory> extract_inline_column_stats(SegmentInMemory& index_segment) {
+    // Scan the index segment's fields for column stats columns (v1.0_MIN(...) / v1.0_MAX(...))
+    // The standard index fields (start_index, end_index, version_id, etc.) are skipped.
+    std::vector<size_t> stats_col_indices;
+    for (size_t i = 0; i < index_segment.descriptor().field_count(); ++i) {
+        auto field_name = index_segment.field(i).name();
+        if (!looks_like_column_stats_name(field_name)) {
+            continue;
+        }
+        try {
+            from_segment_column_name_to_internal(field_name);
+            stats_col_indices.push_back(i);
+        } catch (...) {
+            // Looked like it could be a stats column but failed to parse
+        }
+    }
+
+    if (stats_col_indices.empty())
+        return std::nullopt;
+
+    // Also locate start_index and end_index columns
+    std::optional<size_t> start_idx_col, end_idx_col;
+    for (size_t i = 0; i < index_segment.descriptor().field_count(); ++i) {
+        auto field_name = index_segment.field(i).name();
+        if (field_name == start_index_column_name) {
+            start_idx_col = i;
+        } else if (field_name == end_index_column_name) {
+            end_idx_col = i;
+        }
+    }
+
+    SegmentInMemory stats_seg;
+    stats_seg.init_column_map();
+    stats_seg.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
+
+    if (start_idx_col.has_value()) {
+        stats_seg.add_column(index_segment.field(*start_idx_col), index_segment.column_ptr(*start_idx_col));
+    }
+    if (end_idx_col.has_value()) {
+        stats_seg.add_column(index_segment.field(*end_idx_col), index_segment.column_ptr(*end_idx_col));
+    }
+    for (auto col_idx : stats_col_indices) {
+        stats_seg.add_column(index_segment.field(col_idx), index_segment.column_ptr(col_idx));
+    }
+
+    // The row count must be set explicitly because add_column with shared column pointers
+    // does not update the segment's row_id_.
+    stats_seg.set_row_id(static_cast<ssize_t>(index_segment.row_count()) - 1);
+
+    return stats_seg;
+}
+
 static folly::Future<IndexInformation> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 ) {
     auto index_future = store->read(versioned_item.key_);
+
+    bool embed_in_index = ConfigsMap::instance()->get_int("ColumnStats.EmbedInIndex", 0) == 1;
+    if (embed_in_index && should_try_column_stats_read(read_query)) {
+        return std::move(index_future)
+                .via(&async::io_executor())
+                .thenValue([vi = versioned_item](auto&& key_seg) -> IndexInformation {
+                    try {
+                        auto inline_stats = extract_inline_column_stats(key_seg.second);
+                        return {std::move(key_seg), std::move(inline_stats)};
+                    } catch (const std::exception& ex) {
+                        ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", vi.key_, ex.what());
+                        throw storage::NoDataFoundException(fmt::format(
+                                "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                                vi.version(),
+                                vi.symbol(),
+                                vi.key_,
+                                ex.what()
+                        ));
+                    }
+                });
+    }
 
     using OptionalKeySeg = std::optional<SegmentInMemory>;
     const bool need_column_stats = should_try_column_stats_read(read_query);

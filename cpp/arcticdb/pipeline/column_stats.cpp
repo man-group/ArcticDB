@@ -81,7 +81,7 @@ std::string to_segment_column_name_v1(
 
 std::string to_segment_column_name(
         const std::string& column, ColumnStatElement column_stat_element,
-        std::optional<std::pair<uint64_t, uint64_t>> version = std::nullopt
+        std::optional<std::pair<uint64_t, uint64_t>> version
 ) {
     if (!version.has_value()) {
         // Use latest version

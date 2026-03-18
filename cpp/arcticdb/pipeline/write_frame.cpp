@@ -16,6 +16,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/format_date.hpp>
@@ -444,7 +445,8 @@ int64_t write_window_size() {
 folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& key, const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
+        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
+        const std::shared_ptr<StatsAccumulator>& stats_accumulator
 ) {
     ARCTICDB_SAMPLE(WriteSlices, 0)
 
@@ -453,7 +455,7 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
     int64_t write_window = write_window_size();
     auto window = folly::window(
             std::move(slice_and_rowcount),
-            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats, stats_accumulator](auto&& slice) {
                 return async::submit_cpu_task(WriteToSegmentTask(
                                                       frame,
                                                       slice.first,
@@ -463,7 +465,20 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
                                                       frame->index,
                                                       sparsify_floats
                                               ))
-                        .then([sink, de_dup_map](auto&& ks) {
+                        .then([sink, de_dup_map, stats_accumulator](auto&& ks) {
+                            if (stats_accumulator) {
+                                auto& [partial_key, segment, slice] = ks.value();
+                                SliceColumnStats slice_stats{slice, {}};
+                                for (size_t i = 0; i < segment.num_columns(); ++i) {
+                                    auto& col = segment.column(i);
+                                    if (col.has_statistics()) {
+                                        slice_stats.column_stats.emplace_back(
+                                                std::string{segment.field(i).name()}, col.get_statistics()
+                                        );
+                                    }
+                                }
+                                stats_accumulator->wlock()->push_back(std::move(slice_stats));
+                            }
                             return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
                         });
             },
@@ -475,7 +490,7 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing, IndexPartialKey&& key,
         const std::shared_ptr<stream::StreamSink>& sink, const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats
+        bool sparsify_floats, const std::shared_ptr<StatsAccumulator>& stats_accumulator
 ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(*frame, slicing);
@@ -484,7 +499,16 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
+    return write_slices(
+                   frame,
+                   std::move(slices),
+                   slicing,
+                   std::move(tsv),
+                   sink,
+                   de_dup_map,
+                   sparsify_floats,
+                   stats_accumulator
+    )
             .via(&async::cpu_executor())
             .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
                 return rollback_slices_on_quota_exceeded(std::move(ks), sink);
@@ -492,17 +516,126 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
             .via(&async::io_executor());
 }
 
+std::optional<SegmentInMemory> build_inline_stats_segment(
+        const StatsAccumulator& accumulator, const InputFrame& frame
+) {
+    auto all_stats = accumulator.rlock()->size() == 0 ? std::vector<SliceColumnStats>{} : *accumulator.rlock();
+
+    if (all_stats.empty())
+        return std::nullopt;
+
+    // Sort slices by row range to match the order they'll appear in the index
+    std::sort(all_stats.begin(), all_stats.end(), [](const SliceColumnStats& a, const SliceColumnStats& b) {
+        return a.slice.row_range.first < b.slice.row_range.first;
+    });
+
+    // Collect the union of all stat column names across all slices, preserving order of first appearance
+    std::vector<std::string> stat_column_names;
+    ankerl::unordered_dense::set<std::string> seen_names;
+    for (const auto& slice_stats : all_stats) {
+        for (const auto& [col_name, stats] : slice_stats.column_stats) {
+            auto min_name = to_segment_column_name(col_name, ColumnStatElement::MIN);
+            auto max_name = to_segment_column_name(col_name, ColumnStatElement::MAX);
+            if (seen_names.insert(min_name).second) {
+                stat_column_names.push_back(min_name);
+            }
+            if (seen_names.insert(max_name).second) {
+                stat_column_names.push_back(max_name);
+            }
+        }
+    }
+
+    if (stat_column_names.empty())
+        return std::nullopt;
+
+    // Build a mapping from original column name to its DataType from the frame descriptor
+    ankerl::unordered_dense::map<std::string, DataType> column_data_types;
+    for (const auto& field : frame.desc().fields()) {
+        column_data_types[std::string{field.name()}] = field.type().data_type();
+    }
+
+    // Create the segment with ROWCOUNT index
+    SegmentInMemory seg;
+    seg.init_column_map();
+    seg.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
+
+    // Add stat columns
+    for (const auto& stat_col_name : stat_column_names) {
+        auto [orig_col_name, stat_element] = from_segment_column_name_to_internal(stat_col_name);
+        auto it = column_data_types.find(orig_col_name);
+        if (it == column_data_types.end())
+            continue;
+        auto data_type = it->second;
+        seg.add_column(FieldRef{make_scalar_type(data_type), stat_col_name}, 0, AllocationType::DYNAMIC);
+    }
+
+    // Populate rows
+    for (const auto& slice_stats : all_stats) {
+        // Build a map from original column name to its stats for this slice
+        ankerl::unordered_dense::map<std::string, FieldStatsImpl> col_to_stats;
+        for (const auto& [col_name, stats] : slice_stats.column_stats) {
+            col_to_stats[col_name] = stats;
+        }
+
+        for (size_t col_idx = 0; col_idx < seg.num_columns(); ++col_idx) {
+            auto& col = seg.column(col_idx);
+            auto col_name = std::string{seg.field(col_idx).name()};
+            auto [orig_col_name, stat_element] = from_segment_column_name_to_internal(col_name);
+            auto stats_it = col_to_stats.find(orig_col_name);
+            if (stats_it == col_to_stats.end()) {
+                // No stats for this column in this slice — leave as default/NaN
+                col.default_initialize_rows(0, 1, false);
+                continue;
+            }
+
+            auto& stats = stats_it->second;
+            auto data_type = seg.field(col_idx).type().data_type();
+            details::visit_type(data_type, [&](auto tag) {
+                using RawType = typename ScalarTypeInfo<decltype(tag)>::RawType;
+                if constexpr (is_numeric_type(ScalarTypeInfo<decltype(tag)>::data_type)) {
+                    if (stat_element == ColumnStatElement::MIN && stats.has_min()) {
+                        col.push_back<RawType>(stats.get_min<RawType>());
+                    } else if (stat_element == ColumnStatElement::MAX && stats.has_max()) {
+                        col.push_back<RawType>(stats.get_max<RawType>());
+                    } else {
+                        col.default_initialize_rows(col.row_count(), col.row_count() + 1, false);
+                    }
+                } else {
+                    col.default_initialize_rows(col.row_count(), col.row_count() + 1, false);
+                }
+            });
+        }
+    }
+
+    return seg;
+}
+
 folly::Future<entity::AtomKey> write_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
         const std::shared_ptr<Store>& store, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
 ) {
     ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
-    auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
+    std::shared_ptr<StatsAccumulator> stats_accumulator;
+    bool embed_stats = ConfigsMap::instance()->get_int("Statistics.GenerateOnWrite", 0) == 1 &&
+                       ConfigsMap::instance()->get_int("ColumnStats.EmbedInIndex", 0) == 1;
+    if (embed_stats) {
+        stats_accumulator = std::make_shared<StatsAccumulator>();
+    }
+
+    auto fut_slice_keys = slice_and_write(
+            frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats, stats_accumulator
+    );
     // Write the keys of the slices into an index segment
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return std::move(fut_slice_keys)
-            .thenValue([frame = frame, key = std::move(key), &store](auto&& slice_keys) mutable {
-                return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
+            .thenValue([frame = frame, key = std::move(key), &store, stats_accumulator](auto&& slice_keys) mutable {
+                std::optional<SegmentInMemory> inline_stats;
+                if (stats_accumulator) {
+                    inline_stats = build_inline_stats_segment(*stats_accumulator, *frame);
+                }
+                return index::write_index(
+                        frame, std::forward<decltype(slice_keys)>(slice_keys), key, store, std::move(inline_stats)
+                );
             });
 }
 

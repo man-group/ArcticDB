@@ -108,6 +108,12 @@ folly::Future<entity::AtomKey> write_index(
         const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
 );
 
+folly::Future<entity::AtomKey> write_index(
+        const std::shared_ptr<InputFrame>& frame, std::vector<SliceAndKey>&& slice_and_keys,
+        const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
+        std::optional<SegmentInMemory> inline_stats
+);
+
 inline folly::Future<VersionedItem> index_and_version(
         const stream::Index& index, const std::shared_ptr<stream::StreamSink>& store, TimeseriesDescriptor time_series,
         std::vector<SliceAndKey> slice_and_keys, const StreamId& stream_id, VersionId version_id

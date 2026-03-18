@@ -17,6 +17,7 @@ from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_M
 from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CompatLibrary
+from arcticdb_ext import set_config_int, unset_config_int
 
 if ARCTICDB_USING_CONDA:
     pytest.skip("These tests rely on pip based environments", allow_module_level=True)
@@ -621,3 +622,24 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
                 "assert actual_col_names == ['col_one', 'col_two'], f'Actual col names were {actual_col_names}'",
             ]
         )
+
+
+def test_compat_read_inline_column_stats_index(old_venv_and_arctic_uri, lib_name):
+    """Old clients should read data correctly when TABLE_INDEX contains inline column stats columns."""
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+
+    df = pd.DataFrame({"col_1": [1, 2, 3, 4], "col_2": [10.0, 20.0, 30.0, 40.0]}, index=np.arange(4))
+
+    with CompatLibrary(old_venv, arctic_uri, lib_name, create_with_current_version=True) as compat:
+        # Write with current version using inline column stats (wider TABLE_INDEX segment)
+        with compat.current_version() as curr:
+            set_config_int("Statistics.GenerateOnWrite", 1)
+            set_config_int("ColumnStats.EmbedInIndex", 1)
+            try:
+                curr.lib.write("sym", df)
+            finally:
+                unset_config_int("Statistics.GenerateOnWrite")
+                unset_config_int("ColumnStats.EmbedInIndex")
+
+        # Old client should read the data correctly, ignoring the extra stats columns in TABLE_INDEX
+        compat.old_lib.assert_read("sym", df)

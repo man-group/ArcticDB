@@ -119,6 +119,8 @@ class IndexWriter {
         current_row_ = slice.row_range.first;
     }
 
+    SegmentInMemory& segment() { return agg_.segment(); }
+
     folly::Future<arcticdb::entity::AtomKey> commit() {
         util::check_arg(!sync_, "commit() called on a IndexWriter that was not created with sync = false");
         agg_.finalize();

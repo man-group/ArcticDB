@@ -18,10 +18,18 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
+#include <arcticdb/column_store/statistics.hpp>
+#include <folly/Synchronized.h>
 
 namespace arcticdb::pipelines {
 
 using namespace arcticdb::stream;
+
+struct SliceColumnStats {
+    FrameSlice slice;
+    std::vector<std::pair<std::string, FieldStatsImpl>> column_stats;
+};
+using StatsAccumulator = folly::Synchronized<std::vector<SliceColumnStats>>;
 
 struct WriteToSegmentTask : public async::BaseTask {
   public:
@@ -51,7 +59,8 @@ struct WriteToSegmentTask : public async::BaseTask {
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing, IndexPartialKey&& partial_key,
         const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(), bool allow_sparse = false
+        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(), bool allow_sparse = false,
+        const std::shared_ptr<StatsAccumulator>& stats_accumulator = nullptr
 );
 
 int64_t write_window_size();
@@ -59,7 +68,8 @@ int64_t write_window_size();
 folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
+        const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
+        const std::shared_ptr<StatsAccumulator>& stats_accumulator = nullptr
 );
 
 folly::Future<entity::AtomKey> write_frame(

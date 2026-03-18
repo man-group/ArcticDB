@@ -1641,6 +1641,15 @@ def lmdb_or_in_memory_version_store_tiny_segment(request) -> Library:
     return request.getfixturevalue(request.param)
 
 
+# conftest.py
+import pytest
+from pathlib import Path
+
+
+def pytest_configure(config):
+    config.option.basetemp = Path.home() / "pytest-tmp"
+
+
 @pytest.fixture(
     scope="session",
     params=[

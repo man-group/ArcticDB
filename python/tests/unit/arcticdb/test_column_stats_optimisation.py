@@ -8,6 +8,7 @@ import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
 from arcticdb.util.test import config_context, config_context_multi
+from arcticdb_ext.storage import KeyType
 
 
 def get_table_data_read_count():
@@ -43,6 +44,14 @@ def test_column_stats_query_optimisation(
     lib.append(sym, df1)
 
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    # By default, column stats are stored in a separate COLUMN_STATS key, not embedded in TABLE_INDEX
+    lib_tool = lib.library_tool()
+    assert lib_tool.count_keys(KeyType.COLUMN_STATS) > 0, "Expected a COLUMN_STATS key to be created"
+    index_df = lib.read_index(sym)
+    assert not any(
+        c.startswith("v1.0_") for c in index_df.columns
+    ), f"TABLE_INDEX should not contain inline stats columns, got: {[c for c in index_df.columns if c.startswith('v1.0_')]}"
 
     qs.enable()
     q = QueryBuilder()
