@@ -13,7 +13,6 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb.util.test import config_context
 from arcticdb.version_store.processing import QueryBuilder
 
-
 # "warn" = env var set to "1" (explicit opt-in to warning)
 # "warn_default" = env var not set (default is now "1", so warns)
 # "error" = env var set to "0" (opt-in to error)
