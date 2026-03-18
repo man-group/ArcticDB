@@ -323,12 +323,12 @@ SegmentInMemoryImpl::SegmentInMemoryImpl() :
 
 SegmentInMemoryImpl::SegmentInMemoryImpl(
         const StreamDescriptor& desc, size_t expected_column_size, AllocationType allocation_type,
-        Sparsity allow_sparse, const ExtraBytesPerColumn& extra_bytes_per_column
+        Sparsity allow_sparse, const BlockConfigPerColumn& block_config_per_column
 ) :
     descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{desc.id(), desc.index()})),
     string_pool_(std::make_shared<StringPool>()),
     allow_sparse_(allow_sparse) {
-    on_descriptor_change(desc, expected_column_size, allocation_type, allow_sparse, extra_bytes_per_column);
+    on_descriptor_change(desc, expected_column_size, allocation_type, allow_sparse, block_config_per_column);
 }
 
 SegmentInMemoryImpl::~SegmentInMemoryImpl() { ARCTICDB_TRACE(log::version(), "Destroying segment in memory"); }
@@ -392,17 +392,18 @@ void SegmentInMemoryImpl::generate_column_map() const {
 
 void SegmentInMemoryImpl::create_columns(
         size_t old_size, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-        const ExtraBytesPerColumn& extra_bytes_per_column
+        const BlockConfigPerColumn& block_config_per_column
 ) {
     columns_.reserve(descriptor_->field_count());
     util::check(
-            !extra_bytes_per_column.has_value() || extra_bytes_per_column.value().size() == descriptor_->field_count(),
-            "Size mismatch for extra_bytes_per_column"
+            !block_config_per_column.has_value() ||
+                    block_config_per_column.value().size() == descriptor_->field_count(),
+            "Size mismatch for block_config_per_column"
     );
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
-        size_t extra_bytes_per_block = 0;
-        if (extra_bytes_per_column.has_value()) {
-            extra_bytes_per_block = extra_bytes_per_column.value()[i];
+        DetachableBlockConfig block_config = detachable_block_config::Regular{0};
+        if (block_config_per_column.has_value()) {
+            block_config = block_config_per_column.value()[i];
         }
         auto type = descriptor_->fields(i).type();
         util::check(
@@ -417,11 +418,7 @@ void SegmentInMemoryImpl::create_columns(
             ));
         } else {
             columns_.emplace_back(std::make_shared<Column>(
-                    descriptor_->fields(i).type(),
-                    expected_column_size,
-                    allocation_type,
-                    allow_sparse,
-                    extra_bytes_per_block
+                    descriptor_->fields(i).type(), expected_column_size, allocation_type, allow_sparse, block_config
             ));
         }
     }
@@ -455,7 +452,7 @@ bool SegmentInMemoryImpl::is_index_sorted() const {
  */
 size_t SegmentInMemoryImpl::on_descriptor_change(
         const StreamDescriptor& descriptor, size_t expected_column_size, AllocationType allocation_type,
-        Sparsity allow_sparse, const ExtraBytesPerColumn& extra_bytes_per_column
+        Sparsity allow_sparse, const BlockConfigPerColumn& block_config_per_column
 ) {
     ARCTICDB_TRACE(
             log::storage(),
@@ -466,7 +463,7 @@ size_t SegmentInMemoryImpl::on_descriptor_change(
 
     std::size_t old_size = descriptor_->fields().size();
     *descriptor_ = descriptor;
-    create_columns(old_size, expected_column_size, allocation_type, allow_sparse, extra_bytes_per_column);
+    create_columns(old_size, expected_column_size, allocation_type, allow_sparse, block_config_per_column);
     ARCTICDB_TRACE(log::storage(), "Descriptor change: descriptor is now {}", *descriptor_);
     return old_size;
 }

@@ -15,18 +15,18 @@ SegmentInMemory::SegmentInMemory() : impl_(std::make_shared<SegmentInMemoryImpl>
 
 SegmentInMemory::SegmentInMemory(
         const StreamDescriptor& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-        const ExtraBytesPerColumn& extra_bytes_per_column
+        const BlockConfigPerColumn& block_config_per_column
 ) :
     impl_(std::make_shared<SegmentInMemoryImpl>(
-            tsd, expected_column_size, allocation_type, allow_sparse, extra_bytes_per_column
+            tsd, expected_column_size, allocation_type, allow_sparse, block_config_per_column
     )) {}
 
 SegmentInMemory::SegmentInMemory(
         StreamDescriptor&& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-        const ExtraBytesPerColumn& extra_bytes_per_column
+        const BlockConfigPerColumn& block_config_per_column
 ) :
     impl_(std::make_shared<SegmentInMemoryImpl>(
-            std::move(tsd), expected_column_size, allocation_type, allow_sparse, extra_bytes_per_column
+            std::move(tsd), expected_column_size, allocation_type, allow_sparse, block_config_per_column
     )) {}
 
 void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept { std::swap(left.impl_, right.impl_); }

@@ -420,17 +420,17 @@ void ArrowStringHandler::convert_type(
     }
 }
 
-std::pair<TypeDescriptor, size_t> ArrowStringHandler::output_type_and_extra_bytes(
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type_and_block_config(
         const TypeDescriptor&, std::string_view column_name, const ReadOptions& read_options
 ) const {
     auto string_format = output_string_format(column_name, read_options);
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), 0};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), {}};
     case ArrowOutputStringFormat::LARGE_STRING:
-        return {make_scalar_type(DataType::UTF_DYNAMIC64), sizeof(int64_t)};
+        return {make_scalar_type(DataType::UTF_DYNAMIC64), detachable_block_config::Regular{sizeof(int64_t)}};
     case ArrowOutputStringFormat::SMALL_STRING:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), sizeof(int32_t)};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{sizeof(int32_t)}};
     default:
         util::raise_rte("Unknown arrow string output format {}", static_cast<int32_t>(string_format));
     }

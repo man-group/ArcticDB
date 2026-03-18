@@ -269,13 +269,13 @@ class SegmentInMemoryImpl {
     using iterator = SegmentRowIterator<Row>;
     using const_iterator = SegmentRowIterator<const Row>;
 
-    using ExtraBytesPerColumn = std::optional<std::vector<size_t>>;
+    using BlockConfigPerColumn = std::optional<std::vector<DetachableBlockConfig>>;
 
     SegmentInMemoryImpl();
 
     SegmentInMemoryImpl(
             const StreamDescriptor& desc, size_t expected_column_size, AllocationType allocation_type,
-            Sparsity allow_sparse, const ExtraBytesPerColumn& extra_bytes_per_column
+            Sparsity allow_sparse, const BlockConfigPerColumn& block_config_per_column
     );
 
     ~SegmentInMemoryImpl();
@@ -294,12 +294,12 @@ class SegmentInMemoryImpl {
 
     void create_columns(
             size_t old_size, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
+            const BlockConfigPerColumn& block_config_per_column = std::nullopt
     );
 
     size_t on_descriptor_change(
             const StreamDescriptor& descriptor, size_t expected_column_size, AllocationType allocation_type,
-            Sparsity allow_sparse, const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
+            Sparsity allow_sparse, const BlockConfigPerColumn& block_config_per_column = std::nullopt
     );
 
     std::optional<std::size_t> column_index(std::string_view name) const;

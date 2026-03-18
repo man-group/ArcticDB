@@ -13,6 +13,7 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/util/bitset.hpp>
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
 
@@ -83,21 +84,27 @@ class ChunkedBufferImpl {
 
     ChunkedBufferImpl() = default;
 
-    explicit ChunkedBufferImpl(entity::AllocationType allocation_type, size_t extra_bytes_per_block = 0) :
+    explicit ChunkedBufferImpl(
+            entity::AllocationType allocation_type, entity::DetachableBlockConfig block_config = {}
+    ) :
         allocation_type_(allocation_type),
-        extra_bytes_per_block_(extra_bytes_per_block) {
+        block_config_(block_config) {
         util::check(
-                allocation_type_ == entity::AllocationType::DETACHABLE || extra_bytes_per_block_ == 0,
-                "Only detachable allocation type can be used with extra bytes"
+                allocation_type_ == entity::AllocationType::DETACHABLE ||
+                        block_config_ == entity::DetachableBlockConfig{entity::detachable_block_config::Regular{0}},
+                "Only detachable allocation type can be used with non-default block config"
         );
     }
 
-    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type, size_t extra_bytes_per_block = 0) :
+    ChunkedBufferImpl(
+            size_t size, entity::AllocationType allocation_type, entity::DetachableBlockConfig block_config = {}
+    ) :
         allocation_type_(allocation_type),
-        extra_bytes_per_block_(extra_bytes_per_block) {
+        block_config_(block_config) {
         util::check(
-                allocation_type_ == entity::AllocationType::DETACHABLE || extra_bytes_per_block_ == 0,
-                "Only detachable allocation type can be used with extra bytes"
+                allocation_type_ == entity::AllocationType::DETACHABLE ||
+                        block_config_ == entity::DetachableBlockConfig{entity::detachable_block_config::Regular{0}},
+                "Only detachable allocation type can be used with non-default block config"
         );
         if (allocation_type == entity::AllocationType::DETACHABLE) {
             add_detachable_block(size, 0UL);
@@ -127,7 +134,7 @@ class ChunkedBufferImpl {
         ChunkedBufferImpl output;
         output.bytes_ = bytes_;
         output.regular_sized_until_ = regular_sized_until_;
-        output.extra_bytes_per_block_ = extra_bytes_per_block_;
+        output.block_config_ = block_config_;
 
         for (auto block : blocks_) {
             util::check(
@@ -184,7 +191,7 @@ class ChunkedBufferImpl {
         swap(left.blocks_, right.blocks_);
         swap(left.block_offsets_, right.block_offsets_);
         swap(left.allocation_type_, right.allocation_type_);
-        swap(left.extra_bytes_per_block_, right.extra_bytes_per_block_);
+        swap(left.block_config_, right.block_config_);
     }
 
     [[nodiscard]] const auto& blocks() const { return blocks_; }
@@ -515,8 +522,15 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] entity::AllocationType allocation_type() const { return allocation_type_; }
 
-    [[nodiscard]] size_t extra_bytes_per_block() const { return extra_bytes_per_block_; }
-    [[nodiscard]] bool has_extra_bytes_per_block() const { return extra_bytes_per_block_ > 0; }
+    [[nodiscard]] size_t extra_bytes_per_block() const {
+        if (auto* regular = std::get_if<entity::detachable_block_config::Regular>(&block_config_))
+            return regular->extra_bytes;
+        return 0;
+    }
+    [[nodiscard]] bool has_extra_bytes_per_block() const { return extra_bytes_per_block() > 0; }
+    [[nodiscard]] bool is_packed() const {
+        return std::holds_alternative<entity::detachable_block_config::Packed>(block_config_);
+    }
 
     void clear() {
         bytes_ = 0;
@@ -653,14 +667,22 @@ class ChunkedBufferImpl {
     BlockType* create_detachable_block(size_t capacity, size_t offset) const {
         util::check(
                 allocation_type_ == entity::AllocationType::DETACHABLE,
-                "Can create regular blocks only for dynamic allocation type"
+                "Can create detachable blocks only for detachable allocation type"
         );
-        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalMemBlock));
-        // When producing a string column for arrow with variable length format we need an extra value for the final
-        // offset. Thus, we add the extra bytes when allocating new detachable blocks.
-        auto* data = allocate_detachable_memory(capacity + extra_bytes_per_block_);
-        new (ptr) ExternalMemBlock(data, capacity, offset, ts, true, extra_bytes_per_block_);
-        return reinterpret_cast<ExternalMemBlock*>(ptr);
+        if (auto* regular = std::get_if<entity::detachable_block_config::Regular>(&block_config_)) {
+            auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalMemBlock));
+            // When producing a string column for arrow with variable length format we need an extra value for the
+            // final offset. Thus, we add the extra bytes when allocating new detachable blocks.
+            auto* data = allocate_detachable_memory(capacity + regular->extra_bytes);
+            new (ptr) ExternalMemBlock(data, capacity, offset, ts, true, regular->extra_bytes);
+            return reinterpret_cast<ExternalMemBlock*>(ptr);
+        } else {
+            auto packed_bytes = bitset_packed_size_bytes(capacity);
+            auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalPackedMemBlock));
+            auto* data = allocate_detachable_memory(packed_bytes);
+            new (ptr) ExternalPackedMemBlock(data, capacity, 0, offset, ts, true);
+            return reinterpret_cast<ExternalPackedMemBlock*>(ptr);
+        }
     }
 
     void free_block(BlockType* block) const {
@@ -722,7 +744,7 @@ class ChunkedBufferImpl {
     std::vector<size_t> block_offsets_;
 #endif
     entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
-    size_t extra_bytes_per_block_ = 0;
+    entity::DetachableBlockConfig block_config_;
 };
 
 constexpr size_t PageSize = 4096;

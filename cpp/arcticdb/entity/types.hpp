@@ -106,6 +106,17 @@ enum class ValueType : uint8_t {
 
 enum class AllocationType : uint8_t { DYNAMIC = 0, PRESIZED = 1, DETACHABLE = 2 };
 
+namespace detachable_block_config {
+struct Regular {
+    size_t extra_bytes = 0;
+    bool operator==(const Regular&) const = default;
+};
+struct Packed {
+    bool operator==(const Packed&) const = default;
+};
+} // namespace detachable_block_config
+using DetachableBlockConfig = std::variant<detachable_block_config::Regular, detachable_block_config::Packed>;
+
 enum class Sparsity : uint8_t { NOT_PERMITTED = 0, PERMITTED = 1 };
 
 // Sequence types are composed of more than one element

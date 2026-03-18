@@ -25,7 +25,7 @@ struct ArrowStringHandler {
             const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+    [[nodiscard]] std::pair<entity::TypeDescriptor, entity::DetachableBlockConfig> output_type_and_block_config(
             const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
     ) const;
 
