@@ -666,7 +666,7 @@ class NativeVersionStore:
             # Log formatting gets confused by curly braces in input string, hence the conversion to a list
             msg = (
                 f"{method} received unrecognized keyword argument(s) {invalid_args}. "
-                f"Supported keyword arguments are {sorted(list(valid_kwargs))}."
+                f"Supported keyword arguments are {sorted(list(valid_kwargs))}. "
                 f"This warning will be changed to an error in a future version of ArcticDB. "
                 f"If you want to opt out of the validation error, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
             )
