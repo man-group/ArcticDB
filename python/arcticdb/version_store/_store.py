@@ -91,7 +91,6 @@ from arcticdb.version_store._normalization import (
     normalize_dt_range_to_ts,
     _denormalize_columns_names,
 )
-from python.arcticdb.util.utils import strtobool
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 from arcticdb.util._versions import PANDAS_VERSION
@@ -99,6 +98,7 @@ from packaging.version import Version
 import arcticdb_ext as ae
 
 from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
+from arcticdb.util.utils import strtobool
 
 IS_WINDOWS = sys.platform == "win32"
 
