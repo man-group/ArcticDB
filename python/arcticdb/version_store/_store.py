@@ -664,17 +664,20 @@ class NativeVersionStore:
                 invalid_args.append(arg)
         if invalid_args:
             # Log formatting gets confused by curly braces in input string, hence the conversion to a list
-            msg = (
+            base_msg = (
                 f"{method} received unrecognized keyword argument(s) {invalid_args}. "
                 f"Supported keyword arguments are {sorted(list(valid_kwargs))}. "
-                f"This warning will be changed to an exception in a future version of ArcticDB. "
-                f"If you want to preview the future behavior, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to 0. "
-                f"If you want to opt out of the validation exception, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
+                f"If you want to explicitly opt out of the validation exception, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
             )
             if strtobool(os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", "1")):
+                msg = (
+                    base_msg
+                    + "This warning will be changed to an exception in a future version of ArcticDB. "
+                    + "If you want to preview the future behavior, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to 0. "
+                )
                 log.warning(msg)
             else:
-                raise ArcticNativeException(msg)
+                raise ArcticNativeException(base_msg)
 
     def stage(
         self,
