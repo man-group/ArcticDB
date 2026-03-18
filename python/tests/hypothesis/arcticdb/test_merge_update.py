@@ -7,11 +7,14 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     DataframeStrategyIndexType,
 )
+from arcticdb.exceptions import UserInputException
 from arcticdb.version_store._store import MergeStrategy
 from hypothesis import strategies as st, given, settings, HealthCheck
 from typing import List, Tuple, Optional
 
 from arcticdb.util.test import assert_frame_equal, merge
+
+pytestmark = pytest.mark.merge_update
 
 DTYPES = ["uint32", "int64", "float", "object", "datetime64[ns]", "bool"]
 COL_NAMES = [f"{dtype}_col" for dtype in DTYPES]
@@ -115,7 +118,14 @@ def test_timeseries_merge_update(lmdb_version_store_v1, merge_args):
     for df in target_list:
         lib.append(symbol, df)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
-    lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+    try:
+        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+    except UserInputException as e:
+        if "Multiple source rows match the same target row" not in str(e):
+            raise
+        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+            merge(pd.concat(target_list), source, strategy=strategy, on=on)
+        return
     result = lib.read(symbol).data
     expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)
@@ -132,7 +142,14 @@ def test_rowrange_merge_update(lmdb_version_store_v1, merge_args):
     lib.version_store.force_delete_symbol(symbol)
     lib.write(symbol, target[0])
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
-    lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+    try:
+        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+    except UserInputException as e:
+        if "Multiple source rows match the same target row" not in str(e):
+            raise
+        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+            merge(target[0], source, strategy=strategy, on=on)
+        return
     result = lib.read(symbol).data
     expected = merge(target[0], source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)

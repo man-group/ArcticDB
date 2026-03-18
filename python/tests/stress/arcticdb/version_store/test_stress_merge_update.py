@@ -12,6 +12,8 @@ from typing import List, Optional
 import arcticdb.toolbox.query_stats as qs
 import math
 
+pytestmark = pytest.mark.merge_update
+
 
 def make_matching_source(
     target_df: pd.DataFrame,
@@ -39,7 +41,9 @@ def make_matching_source(
                 # Flip all bits of the underlying uint32 representation to guarantee different float32 values. XOR with
                 # 0xFFFFFFFF guarantees source[i] != target[i] for every row because no IEEE 754 float equals its
                 # bitwise complement (NaN -> non-NaN, non-NaN may -> NaN, etc.).
-                target_vals = target_vals.copy()
+                # This is guaranteed to work only if the dates in the index are unique. Otherwise, there's still a
+                # chance (even though small) to get a match.
+                target_vals = target_vals.copy(deep=True)
                 for col in on:
                     raw = target_vals[col].values.view(np.uint32)
                     target_vals[col] = (raw ^ np.uint32(0xFFFFFFFF)).view(np.float32)
@@ -56,7 +60,7 @@ def make_matching_source(
 
 # Merge update stress tests use a lot of memory and can OOM if run in parallel. Add a xdist_group to ensure the tests
 # are not running in parallel with each other.
-# @pytest.mark.xdist_group(name="stress_merge_update")
+@pytest.mark.xdist_group(name="stress_merge_update")
 class TestStressTimeseriesMergeUpdate:
 
     @classmethod
@@ -121,7 +125,7 @@ class TestStressTimeseriesMergeUpdate:
         assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == expected_table_data_read_count
         written_table_data_keys = 0
         if "TABLE_DATA" in stats["storage_operations"]["S3_PutObject"]:
-            written_table_data_keys = stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"]
+            written_table_data_keys = stats["storage_operations"]["S3_PutObject"]["TABLE_DATA"]["count"]
         assert written_table_data_keys == expected_table_data_write_count
         assert stats["storage_operations"]["S3_GetObject"]["TABLE_INDEX"]["count"] == 1
         assert stats["storage_operations"]["S3_PutObject"]["TABLE_INDEX"]["count"] == 1

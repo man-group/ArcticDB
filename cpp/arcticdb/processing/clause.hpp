@@ -857,7 +857,7 @@ struct MergeUpdateClause {
     /// passed it via the API. In future query optimization can reoder it. Does not contain duplicates.
     std::vector<std::string> on_;
     /// Used to check if a column is in on_ without performing a linear search.
-    ankerl::unordered_dense::set<std::string_view> on_set_;
+    ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_set_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
@@ -908,19 +908,12 @@ struct MergeUpdateClause {
 
     std::vector<std::vector<size_t>> filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            const std::span<const NativeTensor> source_tensors, const ProcessingUnit& proc,
+            const std::span<const NativeTensor> source_tensors, ProcessingUnit& proc,
             std::optional<std::vector<std::vector<size_t>>>&& index_match
     ) const;
 
     std::vector<std::vector<size_t>> initialize_rows_to_update_for_rowrange_indexed_data(
-            const ProcessingUnit& proc, const StreamDescriptor& source_descriptor,
-            const StreamDescriptor& target_descriptor
-    ) const;
-
-    std::vector<std::vector<size_t>> filter_on_additional_columns_match(
-            const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            const std::span<const NativeTensor> source_tensors, const ProcessingUnit& proc,
-            std::vector<std::vector<size_t>>&& index_match
+            ProcessingUnit& proc, const StreamDescriptor& source_descriptor
     ) const;
 
     bool is_update_only() const;

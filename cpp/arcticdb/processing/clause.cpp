@@ -71,27 +71,26 @@ position_t write_py_string_to_pool_or_throw(
         PyObject* const py_string_object, const size_t row_in_segment, const RowRange& row_range,
         std::optional<ScopedGILLock>& gil_lock, StringPool& new_string_pool, const std::string_view column_name
 ) {
-    std::variant<position_t, convert::StringEncodingError> string_pool_entry =
-            add_py_string_to_pool<TDT::data_type()>(py_string_object, gil_lock, new_string_pool);
-    if (auto* err = std::get_if<convert::StringEncodingError>(&string_pool_entry); err) {
-        err->row_index_in_slice_ = row_in_segment;
-        err->raise(column_name, row_range.first);
-    }
-
-    return std::get<position_t>(string_pool_entry);
+    return util::variant_match(
+            add_py_string_to_pool<TDT::data_type()>(py_string_object, gil_lock, new_string_pool),
+            [](position_t offset) { return offset; },
+            [&](convert::StringEncodingError&& err) -> position_t {
+                err.row_index_in_slice_ = row_in_segment;
+                err.raise(column_name, row_range.first);
+            }
+    );
 }
 
-/// @param rows_to_repool If not nullptr will update only the rows whose bit is set to 1
 template<typename TDT>
 requires util::instantiation_of<TDT, TypeDescriptorTag>
 void rebuild_sequence_column_in_new_pool(
         Column& target_column, const StringPool& old_string_pool, StringPool& new_string_pool,
-        const util::BitSet* rows_to_repool = nullptr
+        const util::BitSet* rows_to_add_in_new_pool = nullptr
 ) {
-    if (rows_to_repool) {
+    if (rows_to_add_in_new_pool) {
         ColumnData target_column_data = target_column.data();
         auto accessor = random_accessor<TDT>(&target_column_data);
-        for (auto row = rows_to_repool->first(); row != rows_to_repool->end(); ++row) {
+        for (auto row = rows_to_add_in_new_pool->first(); row != rows_to_add_in_new_pool->end(); ++row) {
             if (is_a_string(accessor[*row])) {
                 const std::string_view string_value = old_string_pool.get_const_view(accessor[*row]);
                 const OffsetString& new_offset = new_string_pool.get(string_value);
@@ -175,47 +174,6 @@ bool merge_update_string_column_timeseries(
     return is_column_changed;
 }
 
-size_t find_column_for_match(std::string_view column_name, const StreamDescriptor& descriptor) {
-    static const boost::regex pattern(R"(__col_(.+)__(\d+))");
-    const std::optional<std::string_view> index_name =
-            descriptor.index().field_count() ? std::optional(descriptor.field(0).name()) : std::nullopt;
-    // If the DatetimeIndex is the same as the column name we allow one repetition so that if there's a column named
-    // "index" and the DatetimeIndex is not named, it'll work. This'll also work if the index has the same name as the
-    // column.
-    bool can_name_be_repeated = index_name ? column_name == *index_name : false;
-    std::optional<size_t> repeated_column_index;
-    for (size_t i = descriptor.index().field_count(); i < descriptor.field_count(); ++i) {
-        const std::string_view field_name = descriptor.field(i).name();
-        if (field_name == column_name) {
-            return i;
-        } else {
-            boost::cmatch match;
-            if (boost::regex_match(field_name.data(), field_name.data() + field_name.size(), match, pattern)) {
-                const std::string_view matched_name(match[1].first, match[1].length());
-                if (matched_name == column_name) {
-                    if (can_name_be_repeated) {
-                        can_name_be_repeated = false;
-                        repeated_column_index = i;
-                    } else {
-                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                "Column name \"{}\" is repeated multiple times in the dataframe. This makes its use in "
-                                "matching for merge ambiguous for the stream descriptor: {}",
-                                column_name,
-                                descriptor
-                        );
-                    }
-                }
-            }
-        }
-    }
-    if (repeated_column_index) {
-        return *repeated_column_index;
-    }
-    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            "Trying to match on column \"{}\" that does not exist in descriptor {}", column_name, descriptor
-    );
-}
-
 /// When merge update is performed on a string column the string pool is rebuild from scratch, thus we must iterate over
 /// all rows in the column. When the column is *not* part of a timeseries the rows in rows_to_update are in random
 /// order. To avoid having quadratic complexity (i.e. O(n * k) where n are the rows in the target and k are all matches
@@ -235,7 +193,7 @@ bool merge_update_string_column_rowrange(
                 "Fixed string sequences are not supported for merge update"
         );
     } else if constexpr (is_dynamic_string_type(TDT::data_type())) {
-        util::BitSet rows_to_repool(target_column.row_count());
+        util::BitSet target_rows_not_matched_by_source(target_column.row_count());
         // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
         // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
         // If such a string is encountered in a column, then the GIL will be held until that whole column has
@@ -250,11 +208,13 @@ bool merge_update_string_column_rowrange(
                         py_string_object, target_row, row_range, gil_lock, new_string_pool, target_field.name()
                 );
                 is_column_changed = true;
-                rows_to_repool.set(target_row);
+                target_rows_not_matched_by_source.set(target_row);
             }
         }
-        rows_to_repool.flip();
-        rebuild_sequence_column_in_new_pool<TDT>(target_column, target_string_pool, new_string_pool, &rows_to_repool);
+        target_rows_not_matched_by_source.flip();
+        rebuild_sequence_column_in_new_pool<TDT>(
+                target_column, target_string_pool, new_string_pool, &target_rows_not_matched_by_source
+        );
     }
     return is_column_changed;
 }
@@ -263,7 +223,7 @@ struct MergeUpdateStringColumnFlags {
     /// The column is part of a timeseries dataframe
     bool is_timeseries = false;
     /// Only move the data to a new string pool.
-    bool repool = false;
+    bool data_not_changed = false;
 };
 
 template<typename TDT>
@@ -274,7 +234,7 @@ bool merge_update_string_column(
         const StringPool& target_string_pool, const std::span<PyObject* const> source_column_view,
         StringPool& new_string_pool
 ) {
-    if (flags.repool) {
+    if (flags.data_not_changed) {
         rebuild_sequence_column_in_new_pool<TDT>(target_column, target_string_pool, new_string_pool);
         return false;
     } else {
@@ -339,15 +299,16 @@ std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
         } else if (is_source_null && is_target_null) {
             return true;
         } else {
-            std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error =
-                    create_py_object_wrapper_or_error<TargetTDT::data_type()>(source_value, scoped_gil_lock);
-            if (const auto* err = std::get_if<convert::StringEncodingError>(&wrapper_or_error); err) {
-                return std::get<convert::StringEncodingError>(std::move(wrapper_or_error));
-            } else {
-                const auto& wrapper = std::get<convert::PyStringWrapper>(wrapper_or_error);
-                return target_string_pool.get_const_view(target_value) ==
-                       std::string_view(wrapper.buffer_, wrapper.length_);
-            }
+            return util::variant_match(
+                    create_py_object_wrapper_or_error<TargetTDT::data_type()>(source_value, scoped_gil_lock),
+                    [](convert::StringEncodingError&& err) -> std::variant<bool, convert::StringEncodingError> {
+                        return err;
+                    },
+                    [&](convert::PyStringWrapper&& wrapper) -> std::variant<bool, convert::StringEncodingError> {
+                        return target_string_pool.get_const_view(target_value) ==
+                               std::string_view(wrapper.buffer_, wrapper.length_);
+                    }
+            );
         }
     } else if constexpr (is_floating_point_type(SourceTDT::data_type())) {
         constexpr static NaNAwareFloatComparator comparator;
@@ -357,45 +318,9 @@ std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
     }
 }
 
-struct MergeTargetColumnInfo {
-    SegmentInMemory& segment_;
-    const size_t column_position_in_slice_;
-    const size_t source_field_position_;
-    const size_t target_field_position_;
-    Column& target_column() const { return segment_.column(column_position_in_slice_); }
-};
-
-MergeTargetColumnInfo get_merge_fields_and_column(
-        const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-        const std::string_view column_name, const ProcessingUnit& proc, const bool dynamic_schema
-) {
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            !dynamic_schema, "Dynamic schema is not implemented for merge updates yet"
-    );
-    const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
-    const std::span<const std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
-    const size_t source_field_position = find_column_for_match(column_name, source_descriptor);
-    const size_t target_field_position = [&] {
-        if (dynamic_schema) {
-            return source_field_position;
-        }
-        return find_column_for_match(column_name, target_descriptor);
-    }();
-    const auto target_column_slice = std::ranges::find_if(col_ranges, [&](const std::shared_ptr<ColRange>& col_range) {
-        return col_range->contains(target_field_position);
-    });
-    const size_t position_in_slice =
-            target_field_position - (*target_column_slice)->first + target_descriptor.index().field_count();
-    SegmentInMemory& target_segment = *target_segments[target_column_slice - col_ranges.begin()];
-    return {.segment_ = target_segment,
-            .column_position_in_slice_ = position_in_slice,
-            .source_field_position_ = source_field_position,
-            .target_field_position_ = target_field_position};
-}
-
 template<typename TDT>
 requires util::instantiation_of<TDT, TypeDescriptorTag>
-auto map_column_values_to_rows(const Column& column, const StringPool* string_pool) {
+auto map_column_values_to_rows(const ColumnWithStrings& column) {
     constexpr static bool is_target_sequence_type = is_sequence_type(TDT::data_type());
     constexpr static bool is_target_floating_point_type = is_floating_point_type(TDT::data_type());
     using TargetRawType = typename TDT::DataTypeTag::raw_type;
@@ -407,15 +332,10 @@ auto map_column_values_to_rows(const Column& column, const StringPool* string_po
     using Comparator =
             std::conditional_t<is_target_floating_point_type, NaNAwareFloatComparator, std::equal_to<TargetValueType>>;
     ankerl::unordered_dense::map<TargetValueType, std::vector<size_t>, Hasher, Comparator> target_values;
-    arcticdb::for_each_enumerated<TDT>(column, [&](auto row) {
+    arcticdb::for_each_enumerated<TDT>(*column.column_, [&](auto row) {
         if constexpr (is_target_sequence_type) {
             if (is_a_string(row.value())) {
-                ARCTICDB_DEBUG_CHECK(
-                        ErrorCode::E_ASSERTION_FAILURE,
-                        string_pool != nullptr,
-                        "String pool must be provided for string columns"
-                );
-                target_values[string_pool->get_const_view(row.value())].push_back(row.idx());
+                target_values[column.string_at_offset(row.value())].push_back(row.idx());
             } else {
                 target_values[std::nullopt].push_back(row.idx());
             }
@@ -2129,14 +2049,10 @@ MergeUpdateClause::MergeUpdateClause(
         std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source
 ) :
 
+    on_(std::move(on)),
     strategy_(strategy),
     source_(std::move(source)) {
-    for (std::string& column : on) {
-        if (!on_set_.contains(column)) {
-            on_.push_back(std::move(column));
-            on_set_.insert(on_.back());
-        }
-    }
+    std::erase_if(on_, [&](const std::string& column) { return !on_set_.insert(column).second; });
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             strategy_.not_matched_by_target == MergeAction::DO_NOTHING, "Merge cannot perform insertion at the moment"
     );
@@ -2257,7 +2173,7 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
 }
 
 std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_for_rowrange_indexed_data(
-        const ProcessingUnit& proc, const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor
+        ProcessingUnit& proc, const StreamDescriptor& source_descriptor
 ) const {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !on_.empty(),
@@ -2269,26 +2185,28 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
     // If such a string is encountered in a column, then the GIL will be held until that whole column has
     // been processed, on the assumption that if a column has one such string it will probably have many.
     std::optional<ScopedGILLock> scoped_gil_lock;
-    const std::string_view col_name = on_.front();
-    const MergeTargetColumnInfo target_info =
-            get_merge_fields_and_column(source_descriptor, target_descriptor, col_name, proc, false);
+    const std::string_view column_name = on_.front();
     std::vector<std::vector<size_t>> result;
     result.resize(source_->num_rows);
-    const Field& source_field = source_descriptor.field(target_info.source_field_position_);
+    const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            source_field_position,
+            "Column '{}' specified in the 'on' parameter is not present in the source DataFrame",
+            column_name
+    );
+    const Field& source_field = source_descriptor.field(*source_field_position);
     details::visit_type(source_field.type().data_type(), [&](auto source_field_dt) {
         using SourceTDT = ScalarTagType<std::decay_t<decltype(source_field_dt)>>;
         using SourceRawType = typename SourceTDT::DataTypeTag::raw_type;
-        const Field& target_field = target_descriptor.field(target_info.target_field_position_);
-        details::visit_type(target_field.type().data_type(), [&](auto target_field_dt) {
+        const ColumnWithStrings target_column = std::get<ColumnWithStrings>(proc.get(ColumnName{column_name}));
+        details::visit_type(target_column.column_->type().data_type(), [&](auto target_field_dt) {
             using TargetTDT = ScalarTagType<decltype(target_field_dt)>;
             if constexpr (std::is_same_v<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>) {
                 using SourceType =
                         std::conditional_t<is_sequence_type(SourceTDT::data_type()), PyObject* const, SourceRawType>;
-                auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(
-                        target_info.target_column(), &(target_info.segment_.string_pool())
-                );
+                auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(target_column);
                 const size_t column_position_in_source_tensors =
-                        target_info.source_field_position_ - source_descriptor.index().field_count();
+                        *source_field_position - source_descriptor.index().field_count();
                 std::span source_data(
                         static_cast<const SourceType*>(source_->field_tensors()[column_position_in_source_tensors].data(
                         )),
@@ -2300,19 +2218,19 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                         if (is_py_none(source_value) || is_py_nan(source_value)) {
                             result[source_row_idx] = target_values_to_rows[std::nullopt];
                         } else {
-                            std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error =
+                            util::variant_match(
                                     create_py_object_wrapper_or_error<SourceTDT::data_type()>(
                                             source_value, scoped_gil_lock
-                                    );
-                            if (auto* err = std::get_if<convert::StringEncodingError>(&wrapper_or_error); err) {
-                                err->row_index_in_slice_ = source_row_idx;
-                                err->raise(col_name, 0);
-                            } else {
-                                const auto& wrapper = std::get<convert::PyStringWrapper>(wrapper_or_error);
-                                result[source_row_idx] = target_values_to_rows[std::optional{
-                                        std::string_view(wrapper.buffer_, wrapper.length_)
-                                }];
-                            }
+                                    ),
+                                    [&](convert::StringEncodingError&& err) {
+                                        err.row_index_in_slice_ = source_row_idx;
+                                        err.raise(column_name, 0);
+                                    },
+                                    [&](convert::PyStringWrapper&& wrapper) {
+                                        std::string_view wrapper_view{wrapper.buffer_, wrapper.length_};
+                                        result[source_row_idx] = target_values_to_rows[std::optional{wrapper_view}];
+                                    }
+                            );
                         }
                     } else {
                         result[source_row_idx] = target_values_to_rows[source_value];
@@ -2356,8 +2274,24 @@ bool MergeUpdateClause::update_and_insert(
     const auto [source_row_start, source_row_end] = get_source_start_end(proc);
     bool row_slice_changed = false;
     const bool is_timeseries = source_->desc().index().type() == IndexDescriptor::Type::TIMESTAMP;
-    // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
-    // updated
+    util::BitSet matched_target_rows(row_ranges.front()->diff());
+    // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
+    // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday: 10655963947
+    for (size_t source_row_idx = 0; source_row_idx < rows_to_update.size(); ++source_row_idx) {
+        for (const size_t target_row : rows_to_update[source_row_idx]) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    !matched_target_rows[target_row],
+                    "Multiple source rows match the same target row. This is not allowed as it's not clear which "
+                    "source row should be used for the update. Target row is {}, the second source row to match it is "
+                    "{}",
+                    target_row,
+                    source_row_idx + source_row_start
+            );
+            matched_target_rows[target_row] = true;
+        }
+    }
+    // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row
+    // being updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
         StringPool new_string_pool;
         bool segment_contains_string_column = false;
@@ -2408,7 +2342,7 @@ bool MergeUpdateClause::update_and_insert(
                     segment_contains_string_column = true;
                     const MergeUpdateStringColumnFlags column_update_flags{
                             .is_timeseries = is_timeseries,
-                            .repool = on_set_.contains(target_field.name()) && strategy_.update_only()
+                            .data_not_changed = on_set_.contains(target_field.name()) && strategy_.update_only()
                     };
                     row_slice_changed |= merge_update_string_column<ScalarType>(
                             target_column,
@@ -2421,7 +2355,7 @@ bool MergeUpdateClause::update_and_insert(
                             new_string_pool
                     );
                 } else {
-                    if (on_set_.contains(target_field.name()) && strategy_.update_only()) {
+                    if (is_update_only() && on_set_.contains(target_field.name())) {
                         return;
                     }
                     ColumnData target_column_data = target_column.data();
@@ -2464,8 +2398,11 @@ bool MergeUpdateClause::update_and_insert(
 /// if a source index value exists in the target index. At the end some vectors in the output can be empty which
 /// means that that particular row in source did not match anything in the target. It is allowed for one row in
 /// target to be matched by multiple rows in source only if MergeUpdateClause::on_ is not empty. If
-/// MergeUpdateClause::on_ is not empty there will be further filtering which might remove some matches. Otherwise,
-/// one row will be updated multiple times which is not allowed.
+/// MergeUpdateClause::on_ is not empty, there will be further filtering that might remove some matches. Otherwise,
+/// one row will be updated multiple times, which is not allowed.
+///
+/// Complexity: $$O(m * log_2(n) + n)$$ where: m is the count of source rows in the bounds of the segment, n is the
+/// number of target rows in the segment.
 std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
         const Column& target_index, const std::span<const timestamp> source_index, const ProcessingUnit& proc
 ) const {
@@ -2486,6 +2423,9 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
     const size_t source_rows_in_row_slice = source_row_end - source_row;
     std::vector<std::vector<size_t>> matched_rows(source_rows_in_row_slice);
     size_t target_row = 0;
+    // This loop can be inverted so that if source_row_end - source_row_start is > len(target) the complexity becomes
+    // O(n * log_2(m)) where: m is the count of source rows in the bounds of the segment, n is the number of target rows
+    // in the segment.
     while (target_row < last_target_row_to_consider && source_row < source_row_end) {
         const timestamp source_ts = source_index[source_row];
         // TODO: Profile performance and try different optimizations. See Monday 10655963947
@@ -2511,9 +2451,12 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
     return matched_rows;
 }
 
+/// Complexity: $$O(c * n * m)$$ m is the count of source rows in the bounds of the segment, n is the  number of target
+/// rows in the segment. c is the number of columns in MergeUpdateClause::on_. It can be reached if the data in source
+/// and target is the same up to the very last column in MergeUpdateClause::on_.
 std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns_match(
         const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-        const std::span<const NativeTensor> source_tensors, const ProcessingUnit& proc,
+        const std::span<const NativeTensor> source_tensors, ProcessingUnit& proc,
         std::optional<std::vector<std::vector<size_t>>>&& index_match
 ) const {
     ranges::subrange on = on_;
@@ -2535,7 +2478,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                 source_index_type,
                 target_index_type
         );
-        matched_rows = initialize_rows_to_update_for_rowrange_indexed_data(proc, source_descriptor, target_descriptor);
+        matched_rows = initialize_rows_to_update_for_rowrange_indexed_data(proc, source_descriptor);
         on = on.next();
     }
     if (on.empty()) {
@@ -2548,9 +2491,18 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
     // been processed, on the assumption that if a column has one such string it will probably have many.
     std::optional<ScopedGILLock> scoped_gil_lock;
     for (std::string_view column_name : on) {
-        MergeTargetColumnInfo target_info =
-                get_merge_fields_and_column(source_descriptor, target_descriptor, column_name, proc, false);
-        const Field& source_field = source_descriptor.field(target_info.source_field_position_);
+        const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                source_field_position,
+                "Column '{}' specified in the 'on' parameter is not present in the source DataFrame",
+                column_name
+        );
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                target_descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
+                        target_descriptor.field(0).name() != column_name,
+                "Column '{}' specified in the 'on' parameter cannot have the same name as the timestamp index column"
+        );
+        const Field& source_field = source_descriptor.field(*source_field_position);
         details::visit_type(source_field.type().data_type(), [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
             using SourceTDT = ScalarTagType<SourceDataTypeTag>;
             using SourceType = std::conditional_t<
@@ -2558,51 +2510,53 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                     PyObject* const*,
                     const typename SourceDataTypeTag::raw_type*>;
             const size_t column_position_in_source_tensors =
-                    target_info.source_field_position_ - source_descriptor.index().field_count();
+                    *source_field_position - source_descriptor.index().field_count();
             std::span source_data(
                     static_cast<SourceType>(source_tensors[column_position_in_source_tensors].data()) +
                             source_row_start,
                     source_row_end - source_row_start
             );
-            ColumnData target_data = target_info.target_column().data();
-            const Field& target_field = target_descriptor.field(target_info.target_field_position_);
-            details::visit_type(target_field.type().data_type(), [&]<typename TargetDataTypeTag>(TargetDataTypeTag) {
-                using TargetTDT = ScalarTagType<TargetDataTypeTag>;
-                using TargetRawType = TargetDataTypeTag::raw_type;
-                // TODO: Relax for dynamic schema
-                if constexpr (std::same_as<std::decay_t<SourceDataTypeTag>, std::decay_t<TargetDataTypeTag>>) {
-                    auto target_accessor = random_accessor<TargetTDT>(&target_data);
-                    for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
-                        std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row_idx) {
-                            const TargetRawType target_value = target_accessor.at(target_row_idx);
-                            const auto& source_value = source_data[source_row_idx];
-                            auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
-                                    source_value,
-                                    target_value,
-                                    target_info.segment_.const_string_pool(),
-                                    scoped_gil_lock
-                            );
-                            if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {
-                                if (auto* err = std::get_if<convert::StringEncodingError>(&are_values_equal); err) {
-                                    err->row_index_in_slice_ = source_row_idx;
-                                    err->raise(column_name, source_row_start);
-                                } else {
-                                    return !std::get<bool>(are_values_equal);
-                                }
-                            } else {
-                                return !std::get<bool>(are_values_equal);
+            const ColumnWithStrings target_column = std::get<ColumnWithStrings>(proc.get(ColumnName{column_name}));
+            ColumnData target_data = target_column.column_->data();
+            details::visit_type(
+                    target_column.column_->type().data_type(),
+                    [&]<typename TargetDataTypeTag>(TargetDataTypeTag) {
+                        using TargetTDT = ScalarTagType<TargetDataTypeTag>;
+                        using TargetRawType = TargetDataTypeTag::raw_type;
+                        // TODO: Relax for dynamic schema
+                        if constexpr (std::same_as<std::decay_t<SourceDataTypeTag>, std::decay_t<TargetDataTypeTag>>) {
+                            auto target_accessor = random_accessor<TargetTDT>(&target_data);
+                            for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
+                                std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row_idx) {
+                                    const TargetRawType target_value = target_accessor.at(target_row_idx);
+                                    const auto& source_value = source_data[source_row_idx];
+                                    auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
+                                            source_value, target_value, *target_column.string_pool_, scoped_gil_lock
+                                    );
+                                    if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {
+                                        return util::variant_match(
+                                                are_values_equal,
+                                                [](const bool equal) { return !equal; },
+                                                [&](convert::StringEncodingError& err) -> bool {
+                                                    err.row_index_in_slice_ = source_row_idx;
+                                                    err.raise(column_name, source_row_start);
+                                                }
+                                        );
+                                    } else {
+                                        return !std::get<bool>(are_values_equal);
+                                    }
+                                });
                             }
-                        });
+                        } else {
+                            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                                    "Target column \"{}\" has unexpected type {}. Source type: {}",
+                                    column_name,
+                                    TargetDataTypeTag::data_type,
+                                    SourceDataTypeTag::data_type
+                            );
+                        }
                     }
-                } else {
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                            "Target column \"{}\" has unexpected type {}. Source type: {}",
-                            column_name,
-                            TargetDataTypeTag::data_type,
-                            SourceDataTypeTag::data_type
-                    );
-                }
-            });
+            );
         });
     }
     return matched_rows;

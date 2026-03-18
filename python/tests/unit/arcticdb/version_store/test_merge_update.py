@@ -19,6 +19,8 @@ from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
 
+pytestmark = pytest.mark.merge_update
+
 
 def mock_find_keys_for_symbol(key_types):
     keys = {kt: [f"{kt}_{i}" for i in range(key_types[kt])] for kt in key_types}
@@ -744,7 +746,11 @@ class TestMergeTimeseriesUpdate:
         if index_name is not None:
             target.index.name = index_name
             source.index.name = index_name
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=[repeated_column])
+        lib.write("sym", target)
+        with pytest.raises(UserInputException) as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=[repeated_column])
+            assert f"{index_name}" in str(exc_info.value)
+            assert "index column" in str(exc_info.value)
 
     def test_on_list_contains_the_same_column_twice(self, lmdb_library):
         lib = lmdb_library
@@ -757,6 +763,48 @@ class TestMergeTimeseriesUpdate:
             index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
         )
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "a"])
+
+    def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        source = pd.DataFrame(
+            {"a": [10, 20], "b": [10.0, 20.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            lib.merge_experimental("sym", source, strategy=self.strategy)
+
+    def test_throws_when_multiple_source_rows_match_same_target_row_with_on(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        source = pd.DataFrame(
+            {"a": [2, 2], "b": [10.0, 20.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+    def test_throws_when_multiple_source_rows_match_same_target_row_via_nan(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        source = pd.DataFrame(
+            {"a": np.array([None, np.nan], dtype=object), "b": [10.0, 20.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
 
 
 class TestMergeTimeseriesInsert:
@@ -1534,22 +1582,45 @@ class TestMergeRowrangeUpdate:
         source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
 
-    def test_multiple_on_columns(self, lmdb_library):
+    @pytest.mark.parametrize(
+        "target,source",
+        [
+            (
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 3, 4],
+                        "b": ["x", "y", "z", "w"],
+                        "c": [10.0, 20.0, 30.0, 40.0],
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 99, 4],
+                        "b": ["x", "wrong", "z", "w"],
+                        "c": [99.0, 99.0, 99.0, 99.0],
+                    }
+                ),
+            ),
+            (
+                pd.DataFrame(
+                    {
+                        "a": [1, 1, 2, 2],
+                        "b": ["x", "y", "x", "y"],
+                        "c": [10.0, 20.0, 30.0, 40.0],
+                    }
+                ),
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 1, 2],
+                        "b": ["x", "x", "y", "y"],
+                        "c": [99.0, 99.0, 99.0, 99.0],
+                    }
+                ),
+            ),
+        ],
+    )
+    def test_multiple_on_columns(self, lmdb_library, target, source):
         lib = lmdb_library
-        target = pd.DataFrame(
-            {
-                "a": [1, 2, 3, 4],
-                "b": ["x", "y", "z", "w"],
-                "c": [10.0, 20.0, 30.0, 40.0],
-            }
-        )
-        source = pd.DataFrame(
-            {
-                "a": [1, 2, 99, 4],
-                "b": ["x", "wrong", "z", "w"],
-                "c": [99.0, 99.0, 99.0, 99.0],
-            }
-        )
         # Must match on both "a" and "b": rows 0 and 3 match, rows 1 and 2 do not
         generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
 
@@ -1669,3 +1740,19 @@ class TestMergeRowrangeUpdate:
             }
         )
         generic_merge_test(lib, "sym", target, source, self.strategy, on=on)
+
+    def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [2, 2], "b": [10.0, 20.0]})
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+    def test_throws_when_multiple_source_rows_match_same_target_row_via_nan(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [None, "x", "y"], "b": [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": np.array([np.nan, None], dtype=object), "b": [10.0, 20.0]})
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
