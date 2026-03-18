@@ -335,3 +335,20 @@ message SymbolListDescriptor
 {
     bool enabled = 1;
 }
+
+enum ColumnStatsType {
+    COLUMN_STATS_MIN = 0;
+    COLUMN_STATS_MAX = 1;
+}
+
+message StatColMapping {
+    uint32 stats_seg_offset = 1;
+    uint32 data_col_offset = 2;
+    ColumnStatsType type = 3;
+}
+
+message ColumnStatsHeader {
+    uint32 major_version = 1;
+    uint32 minor_version = 2;
+    repeated StatColMapping stats = 3;
+}
