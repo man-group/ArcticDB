@@ -667,8 +667,9 @@ class NativeVersionStore:
             msg = (
                 f"{method} received unrecognized keyword argument(s) {invalid_args}. "
                 f"Supported keyword arguments are {sorted(list(valid_kwargs))}. "
-                f"This warning will be changed to an error in a future version of ArcticDB. "
-                f"If you want to opt out of the validation error, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
+                f"This warning will be changed to an exception in a future version of ArcticDB. "
+                f"If you want to preview the future behavior, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to 0. "
+                f"If you want to opt out of the validation exception, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
             )
             if strtobool(os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", "1")):
                 log.warning(msg)
