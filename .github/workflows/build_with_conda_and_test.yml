@@ -191,7 +191,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
-  # ==================== JOB 3: PYTHON TESTS ====================
+    # ==================== JOB 3: PYTHON TESTS ====================
   python_tests:
     name: Python Tests (${{inputs.platform}}) - ${{matrix.type}}
     needs: [compile]
@@ -208,6 +208,7 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
       SCCACHE_GHA_ENABLED: "true"
+      IS_WINDOWS: ${{contains(inputs.platform, 'win')}}
     defaults:
       run:
         shell: bash -l {0}
@@ -250,7 +251,7 @@ jobs:
           post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts (Windows)
-        if: contains(inputs.platform, 'win')
+        if: env.IS_WINDOWS == 'true'
         shell: cmd /C call {0}
         run: |
           set ARCTIC_CMAKE_PRESET=
@@ -266,7 +267,7 @@ jobs:
           ARCTICDB_USING_CONDA: 1
 
       - name: Install ArcticDB from artifacts (Unix)
-        if: ${{!contains(inputs.platform, 'win')}}
+        if: env.IS_WINDOWS != 'true'
         run: |
           if [ -d "cpp/out/${{inputs.preset}}-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
             echo "Build artifacts found, skipping CMake build"
@@ -294,8 +295,8 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install Azurite
-        if: ${{!contains(inputs.platform, 'win')}}
+      - name: Install Azurite (Unix)
+        if: env.IS_WINDOWS != 'true'
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
@@ -303,7 +304,7 @@ jobs:
           command: npm install -g azurite
 
       - name: Install Azurite (Windows)
-        if: contains(inputs.platform, 'win')
+        if: env.IS_WINDOWS == 'true'
         shell: bash -elo pipefail {0}
         run: |
           npm install -g azurite
@@ -317,9 +318,14 @@ jobs:
           export PATH="$npm_bin_dir:$PATH"
           which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
 
-      - name: Check no arcticdb file depend on tests package
+      - name: Check no arcticdb file depend on tests package (Unix)
+        if: env.IS_WINDOWS != 'true'
         run: build_tooling/checks.sh
-        shell: ${{contains(inputs.platform, 'win') && 'bash -elo pipefail {0}' || 'bash -l {0}'}}
+
+      - name: Check no arcticdb file depend on tests package (Windows)
+        if: env.IS_WINDOWS == 'true'
+        shell: bash -elo pipefail {0}
+        run: build_tooling/checks.sh
 
       - name: Set persistent storage variables
         if: inputs.persistent_storage != 'no'
@@ -341,11 +347,17 @@ jobs:
         if: inputs.debug_enabled
         uses: mxschmitt/action-tmate@v3
 
-      - name: Install pytest-repeat
+      - name: Install pytest-repeat (Unix)
+        if: env.IS_WINDOWS != 'true'
         run: python -m pip --retries 3 --timeout 180 install pytest-repeat
-        shell: ${{contains(inputs.platform, 'win') && 'bash -elo pipefail {0}' || 'bash -l {0}'}}
 
-      - name: Test with pytest
+      - name: Install pytest-repeat (Windows)
+        if: env.IS_WINDOWS == 'true'
+        shell: bash -elo pipefail {0}
+        run: python -m pip --retries 3 --timeout 180 install pytest-repeat
+
+      - name: Test with pytest (Unix)
+        if: env.IS_WINDOWS != 'true'
         run: |
           openssl version -d || true
           ulimit -a || true
@@ -360,10 +372,8 @@ jobs:
           else
             cd python
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
-              ${{inputs.skip_lmdb_tests && '-m "not lmdb"' || ''}} \
               tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
           fi
-        shell: ${{contains(inputs.platform, 'win') && 'bash -elo pipefail {0}' || 'bash -l {0}'}}
         env:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{inputs.run_commandline}}
@@ -371,4 +381,28 @@ jobs:
           HYPOTHESIS_PROFILE: ${{inputs.hypothesis_profile}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
           STORAGE_TYPE: ${{inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage}}
+          NODE_OPTIONS: --openssl-legacy-provider
+
+      - name: Test with pytest (Windows)
+        if: env.IS_WINDOWS == 'true'
+        shell: bash -elo pipefail {0}
+        run: |
+          echo "Run commandline: $COMMANDLINE"
+          eval "$COMMANDLINE"
+          export ARCTICDB_RAND_SEED=$RANDOM
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS"
+            echo "Run custom pytest command: $command"
+            eval "$command"
+          else
+            cd python
+            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
+              -m "not lmdb" \
+              tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
+          fi
+        env:
+          ARCTICDB_USING_CONDA: 1
+          COMMANDLINE: ${{inputs.run_commandline}}
+          ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
           NODE_OPTIONS: --openssl-legacy-provider
