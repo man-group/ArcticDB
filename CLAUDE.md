@@ -90,7 +90,7 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make configure` / `configure-debug` | CMake configure only | |
 | `make test-cpp` / `test-cpp-debug` | Build and run C++ unit tests | `FILTER=` for gtest_filter |
 | `make symlink` / `symlink-debug` | Symlink built extension into `python/` | |
-| `make test-py` | Run Python tests | `TYPE=unit\|integration\|...`, `ARGS=` |
+| `make test-py` | Run Python tests | `TYPE=unit\|integration\|...`, `FILE=` path to file/test, `ARGS=` |
 | `make wheel` | Build a pip wheel into `dist/` | |
 | `make bench-cpp` | Build and run C++ benchmarks | `FILTER=` |
 | `make install-editable` | Install arcticdb in editable mode (no C++ rebuild) | |

@@ -122,10 +122,13 @@ symlink-debug: ## Symlink debug arcticdb_ext into python/
 
 # ── test-py ──────────────────────────────────────────────────────────────────
 # TYPE selects the test subdirectory (unit, integration, hypothesis, stress).
+# FILE overrides TYPE to run a specific file or test (strips leading python/ if present).
 # ARGS passes extra arguments to pytest.
 TYPE ?= unit
-test-py: ## Run Python tests (TYPE=unit|integration|..., ARGS= extra pytest args)
-	cd python && python -m pytest tests/$(TYPE) $(ARGS)
+FILE ?=
+_TEST_TARGET = $(if $(FILE),$(patsubst python/%,%,$(FILE)),tests/$(TYPE))
+test-py: ## Run Python tests (TYPE=unit|integration|..., FILE= path, ARGS= extra pytest args)
+	cd python && python -m pytest $(_TEST_TARGET) $(ARGS)
 
 # ── wheel ────────────────────────────────────────────────────────────────────
 wheel: ## Build a pip wheel
