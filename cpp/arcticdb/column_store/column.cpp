@@ -401,7 +401,7 @@ void Column::unsparsify(size_t num_rows) {
         const auto dest_bytes = num_rows * sizeof(RawType);
         auto dest = ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
-        util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
+        util::expand_dense_buffer_and_promote_type<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
         std::swap(dest, data_.buffer());
     });
     sparse_map_ = std::nullopt;
@@ -1033,6 +1033,6 @@ const util::BitMagic& Column::sparse_map() const {
 
 std::optional<util::BitMagic>& Column::opt_sparse_map() { return sparse_map_; }
 
-std::optional<util::BitMagic> Column::opt_sparse_map() const { return sparse_map_; }
+const std::optional<util::BitMagic>& Column::opt_sparse_map() const { return sparse_map_; }
 
 } // namespace arcticdb

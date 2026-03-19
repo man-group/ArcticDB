@@ -117,7 +117,7 @@ std::vector<VariantKey> MockLmdbClient::list(
     std::vector<VariantKey> found_keys;
 
     for (const auto& [key, segment] : lmdb_contents_) {
-        if (key.db_name_ == db_name && util::string_starts_with(prefix, key.path_)) {
+        if (key.db_name_ == db_name && key.path_.starts_with(prefix)) {
             raise_if_has_failure_trigger(key, StorageOperation::LIST);
 
             auto k = variant_key_from_bytes(

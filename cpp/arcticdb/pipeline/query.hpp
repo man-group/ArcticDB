@@ -259,7 +259,7 @@ void build_col_read_query_filters(
 ) {
     if (pipeline_context->only_index_columns_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
         auto query = [pipeline = std::move(pipeline_context
-                      )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
+                      )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
             auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
             auto start_row = isr.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
             auto start_row_end = isr.column(index::Fields::start_row).end<stream::SliceTypeDescriptorTag>();
@@ -273,6 +273,9 @@ void build_col_read_query_filters(
                 }
                 ++index_segment_row;
                 ++start_row;
+            }
+            if (input) {
+                res->combine_operation_and(*input, bm::bvector<>::opt_none);
             }
             return res;
         };

@@ -159,6 +159,7 @@ class ColumnDataRandomAccessorDense {
 };
 
 template<typename TDT>
+requires(util::instantiation_of<TDT, TypeDescriptorTag> && (TDT::dimension() == Dimension::Dim0))
 ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent) {
     bool sparse = parent->bit_vector() != nullptr;
     if (parent->buffer().num_blocks() == 1) {

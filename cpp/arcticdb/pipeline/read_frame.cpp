@@ -281,6 +281,51 @@ void decode_index_field(
     }
 }
 
+bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
+
+// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type).
+// We have decoded the column of source type directly onto the output buffer above.
+// We therefore need to iterate backwards through the source values, static casting them to the destination
+// type to avoid overwriting values we haven't cast yet.
+template<typename SourceType, typename DestinationType>
+requires(sizeof(SourceType) <= sizeof(DestinationType))
+void promote_integral_type(const ColumnMapping& m, Column& column) {
+    const auto src_data_type_size = data_type_size(m.source_type_desc_);
+    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
+
+    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_, src_data_type_size * m.num_rows_));
+    auto dest_ptr =
+            reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_, dest_data_type_size * m.num_rows_));
+
+    for (auto i = static_cast<ssize_t>(m.num_rows_) - 1; i >= 0; --i) {
+        dest_ptr[i] = static_cast<DestinationType>(src_ptr[i]);
+    }
+}
+
+void handle_type_promotion(const ColumnMapping& m, Column& column) {
+    if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
+        m.dest_type_desc_.visit_tag([&column, &m](auto dest_desc_tag) {
+            using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+            m.source_type_desc_.visit_tag([&column, &m](auto src_desc_tag) {
+                using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+                constexpr auto is_arithmetic =
+                        std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>;
+                constexpr auto is_size_non_decreasing = sizeof(SourceType) <= sizeof(DestinationType);
+                if constexpr (is_arithmetic && is_size_non_decreasing) {
+                    promote_integral_type<SourceType, DestinationType>(m, column);
+                } else {
+                    util::raise_rte(
+                            "Can't promote type {} to type {} in field {}",
+                            m.source_type_desc_,
+                            m.dest_type_desc_,
+                            m.frame_field_descriptor_.name()
+                    );
+                }
+            });
+        });
+    }
+}
+
 void decode_or_expand(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
@@ -305,26 +350,49 @@ void decode_or_expand(
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
         const auto dest_bytes = mapping.dest_bytes_;
         std::optional<util::BitMagic> bv;
-        if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
-            const auto& ndarray = encoded_field_info.ndarray();
-            const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+        util::check(encoded_field_info.has_ndarray(), "Unsupported encoding for field {}", encoded_field_info);
+        const auto uncompressed_bytes = encoding_sizes::data_uncompressed_size(encoded_field_info.ndarray());
+        const auto dense_num_rows = uncompressed_bytes / source_type_desc.get_type_bytes();
+        // In some cases (stage and finalize) no sparse map is encoded if all dense values are at the beginning,
+        // hence `ndarray().sparse_map_bytes() > 0` is not enough. We check whether the uncompressed size matches
+        // the expected number of rows.
+        const bool is_sparse = dense_num_rows < mapping.num_rows_;
+        const bool is_arrow = read_options.output_format() == OutputFormat::ARROW;
 
-            ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
-            SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, &read_options](auto tdt) {
-                using TagType = decltype(tdt);
-                using RawType = typename TagType::DataTypeTag::raw_type;
-                if (read_options.output_format() != OutputFormat::ARROW) {
-                    // Arrow doesn't care what values are at indices where the validity bitmap is zero
-                    util::default_initialize<TagType>(dest, dest_bytes);
+        if (is_sparse) {
+            // We explicitly allocate an intermediate dense_buffer to decode the dense data into.
+            // We then expand it into the dest column, casting to dest type in the same pass.
+            // Avoiding the extra allocation would require expanding in dest in-place via reverse iteration
+            // of the BitMagic vector. However, reverse iteration was benchmarked to be ~5x slower than the
+            // fast forward enumerator, which outweighs any savings from skipping the allocation.
+            ChunkedBuffer dense_buffer = ChunkedBuffer::presized(uncompressed_bytes);
+            SliceDataSink dense_sink{dense_buffer.data(), uncompressed_bytes};
+            data += decode_field(source_type_desc, encoded_field_info, data, dense_sink, bv, encoding_version);
+
+            if (!bv.has_value()) {
+                bv = util::BitMagic();
+                if (dense_num_rows > 0) {
+                    bv->set_range(0, dense_num_rows - 1, true);
                 }
-                util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
+            }
+
+            dest_type_desc.visit_tag([&](auto dest_tdt) {
+                using DestType = typename decltype(dest_tdt)::DataTypeTag::raw_type;
+                if (!is_arrow) {
+                    // Arrow doesn't care about values at positions marked missing by the validity bitmap.
+                    util::default_initialize<decltype(dest_tdt)>(dest, dest_bytes);
+                }
+                source_type_desc.visit_tag([&](auto src_tdt) {
+                    using SrcType = typename decltype(src_tdt)::DataTypeTag::raw_type;
+                    util::expand_dense_buffer_and_promote_type<SrcType, DestType>(
+                            bv.value(), dense_buffer.data(), dest
+                    );
+                });
             });
 
-            // For arrow we must apply the truncation to the bitmap and set it as an extra buffer.
-            if (read_options.output_format() == OutputFormat::ARROW) {
-                bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
+            // For Arrow output, apply truncation to the bitmap and set it as an extra buffer.
+            if (is_arrow) {
+                bv->resize(mapping.num_rows_);
                 handle_truncation(*bv, mapping.truncate_);
                 if (bv->count() != bv->size()) {
                     auto first_offset_after_truncation = mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0
@@ -334,15 +402,8 @@ void decode_or_expand(
             }
         } else {
             SliceDataSink sink(dest, dest_bytes);
-            const auto& ndarray = encoded_field_info.ndarray();
-            if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
-                ARCTICDB_TRACE(log::version(), "Default initializing as only have {} bytes of {}", bytes, dest_bytes);
-                source_type_desc.visit_tag([dest, bytes, dest_bytes](auto tdt) {
-                    using TagType = decltype(tdt);
-                    util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
-                });
-            }
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
+            handle_type_promotion(mapping, dest_column);
         }
         handle_truncation(dest_column, mapping.truncate_);
     }
@@ -673,49 +734,6 @@ void check_mapping_type_compatibility(const ColumnMapping& m) {
     );
 }
 
-// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
-// We have decoded the column of source type directly onto the output buffer above
-// We therefore need to iterate backwards through the source values, static casting them to the destination
-// type to avoid overriding values we haven't cast yet.
-template<typename SourceType, typename DestinationType>
-void promote_integral_type(const ColumnMapping& m, Column& column) {
-    const auto src_data_type_size = data_type_size(m.source_type_desc_);
-    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
-
-    const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
-    const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
-
-    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_ + src_ptr_offset, 0UL)
-    ); // No bytes required as we are at the end
-    auto dest_ptr = reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_ + dest_ptr_offset, 0UL));
-    for (auto i = 0u; i < m.num_rows_; ++i) {
-        *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
-    }
-}
-
-bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
-
-void handle_type_promotion(const ColumnMapping& m, const DecodePathData& shared_data, Column& column) {
-    if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
-        m.dest_type_desc_.visit_tag([&column, &m, shared_data](auto dest_desc_tag) {
-            using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            m.source_type_desc_.visit_tag([&column, &m](auto src_desc_tag) {
-                using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    promote_integral_type<SourceType, DestinationType>(m, column);
-                } else {
-                    util::raise_rte(
-                            "Can't promote type {} to type {} in field {}",
-                            m.source_type_desc_,
-                            m.dest_type_desc_,
-                            m.frame_field_descriptor_.name()
-                    );
-                }
-            });
-        });
-    }
-}
-
 void decode_into_frame_dynamic(
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
@@ -788,8 +806,6 @@ void decode_into_frame_dynamic(
                     context.string_pool_ptr(),
                     read_options
             );
-
-            handle_type_promotion(mapping, shared_data, column);
             ARCTICDB_TRACE(
                     log::codec(),
                     "Decoded or expanded dynamic column {} to position {}",

@@ -1577,8 +1577,66 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory) -> NativeVersi
     return in_memory_store_factory(column_group_size=2, segment_row_size=2)
 
 
+@pytest.fixture
+def in_memory_version_store_tiny_segment_dynamic(in_memory_store_factory) -> NativeVersionStore:
+    return in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+
+
+@pytest.fixture
+def in_memory_library() -> Library:
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst")
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_dynamic() -> Library:
+    library_options = LibraryOptions(dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_tiny_segment() -> Library:
+    library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_tiny_segment_dynamic() -> Library:
+    library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2, dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture(params=["in_memory_library", "in_memory_library_dynamic"])
+def in_memory_library_static_dynamic(request) -> Library:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(params=["in_memory_library_tiny_segment", "in_memory_library_tiny_segment_dynamic"])
+def in_memory_library_tiny_segment_static_dynamic(request) -> Library:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "in_memory_library_tiny_segment",
+        "in_memory_library_tiny_segment_dynamic",
+        "in_memory_library",
+        "in_memory_library_dynamic",
+    ]
+)
+def in_memory_library_static_dynamic_different_segments(request) -> Library:
+    return request.getfixturevalue(request.param)
+
+
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
-def lmdb_or_in_memory_version_store_tiny_segment(request) -> NativeVersionStore:
+def lmdb_or_in_memory_version_store_tiny_segment(request) -> Library:
     return request.getfixturevalue(request.param)
 
 

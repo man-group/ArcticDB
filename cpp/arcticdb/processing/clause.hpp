@@ -22,6 +22,7 @@
 #include <folly/Poly.h>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/util/string_utils.hpp>
 #include <vector>
 #include <string>
 #include <variant>
@@ -809,14 +810,12 @@ struct ConcatClause {
 struct WriteClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
-    WriteOptions write_options_;
     IndexPartialKey index_partial_key_;
     std::shared_ptr<DeDupMap> dedup_map_;
     std::shared_ptr<Store> store_;
 
     WriteClause(
-            const WriteOptions& write_options, const IndexPartialKey& index_partial_key,
-            std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+            const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 
@@ -852,7 +851,7 @@ struct WriteClause {
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
-    std::vector<std::string> on_;
+    ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
@@ -901,6 +900,14 @@ struct MergeUpdateClause {
             const Column& target_index, const std::span<const timestamp> source_index,
             const TimestampRange& target_atom_key_range
     ) const;
+
+    std::vector<std::vector<size_t>> filter_on_additional_columns_match(
+            const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
+            const std::span<const NativeTensor> source_tensors, const ProcessingUnit& proc,
+            std::vector<std::vector<size_t>>&& index_match
+    ) const;
+
+    bool is_update_only() const;
 
     /// For each timestamp range stores the first and last row in the source that overlaps with the row range. The
     /// interval is closed in the start and open in the end: [start, end)
