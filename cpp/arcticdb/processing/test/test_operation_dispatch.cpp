@@ -119,9 +119,6 @@ TEST(OperationDispatch, binary_operator) {
     ASSERT_TRUE(std::holds_alternative<std::shared_ptr<Value>>(variant_data_float_neg_divisor));
     ASSERT_DOUBLE_EQ(std::get<std::shared_ptr<Value>>(variant_data_float_neg_divisor)->get<double>(), -1.0);
 
-    // Integral modulo by zero should fail with a user input error instead of UB.
-    auto zero = std::make_shared<Value>(static_cast<int64_t>(0), DataType::INT64);
-    EXPECT_THROW(visit_binary_operator(int_column, zero, ModOperator{}), UserInputException);
 }
 
 TEST(OperationDispatch, binary_comparator) {

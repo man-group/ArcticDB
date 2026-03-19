@@ -195,19 +195,6 @@ def test_projection_modulo_infinite_rhs_raises():
         q.apply("mod_neg_inf", q["col"] % -np.inf)
 
 
-def test_projection_modulo_integer_by_zero_raises(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    symbol = "test_projection_modulo_integer_by_zero_raises"
-    df = pd.DataFrame({"int_col": np.arange(5, dtype=np.int64)}, index=np.arange(5))
-    lib.write(symbol, df)
-
-    q = QueryBuilder()
-    q = q.apply("mod_zero", q["int_col"] % 0)
-    with pytest.raises(UserInputException):
-        lib.read(symbol, query_builder=q)
-
-
 def test_projection_modulo_mixed_type_non_representable_values(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)

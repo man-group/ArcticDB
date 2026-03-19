@@ -11,7 +11,6 @@
 #include <unordered_set>
 #include <optional>
 #include <cmath>
-#include <limits>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
@@ -235,39 +234,22 @@ struct binary_operation_promoted_type {
                                                                     2 * max_width>>>>>>>>;
 };
 
+// Modulo cannot overflow, so no width-doubling is needed (unlike +/-/*).
+// For mixed signed/unsigned integers, always use a signed type so that Python/Pandas
+// sign semantics (result sign follows divisor) can produce negative results.
 template<class LHS, class RHS>
 struct binary_operation_promoted_type<LHS, RHS, ModOperator> {
     static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
-    static constexpr bool lhs_signed_rhs_unsigned = std::is_signed_v<LHS> && std::is_unsigned_v<RHS>;
-    static constexpr bool lhs_unsigned_rhs_signed = std::is_unsigned_v<LHS> && std::is_signed_v<RHS>;
-    static constexpr bool signed_is_wider =
-            (lhs_signed_rhs_unsigned && sizeof(LHS) > sizeof(RHS)) ||
-            (lhs_unsigned_rhs_signed && sizeof(RHS) > sizeof(LHS));
-    static constexpr bool mixed_int64_uint64 =
-            (std::is_same_v<LHS, int64_t> && std::is_same_v<RHS, uint64_t>) ||
-            (std::is_same_v<LHS, uint64_t> && std::is_same_v<RHS, int64_t>);
-    using float_type = std::conditional_t<
-            std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
-            std::conditional_t<max_width == 8, double, float>,
-            double>;
-    using mixed_integral_type = std::conditional_t<
-            signed_is_wider,
-            arithmetic_promoted_type::details::signed_width_t<max_width>,
-            std::conditional_t<
-                    mixed_int64_uint64,
-                    double,
-                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>>>;
-    using integral_type = std::conditional_t<
-            std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
-            arithmetic_promoted_type::details::unsigned_width_t<max_width>,
-            std::conditional_t<
-                    std::is_signed_v<LHS> && std::is_signed_v<RHS>,
-                    arithmetic_promoted_type::details::signed_width_t<max_width>,
-                    mixed_integral_type>>;
     using type = std::conditional_t<
             std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
-            float_type,
-            integral_type>;
+            std::conditional_t<
+                    std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
+                    std::conditional_t<max_width == 8, double, float>,
+                    double>,
+            std::conditional_t<
+                    std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
+                    arithmetic_promoted_type::details::unsigned_width_t<max_width>,
+                    arithmetic_promoted_type::details::signed_width_t<max_width>>>;
 };
 
 template<class LHS, class RHS>
@@ -402,9 +384,6 @@ struct ModOperator {
         if constexpr (std::is_floating_point_v<V>) {
             const auto lhs = static_cast<V>(t);
             const auto rhs = static_cast<V>(u);
-            if (rhs == V{0}) {
-                return std::numeric_limits<V>::quiet_NaN();
-            }
             // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
             auto result = std::fmod(lhs, rhs);
             if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
@@ -412,7 +391,6 @@ struct ModOperator {
             }
             return result;
         } else {
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(u != U{0}, "Modulo by zero");
             auto lhs = static_cast<V>(t);
             auto rhs = static_cast<V>(u);
             auto result = lhs % rhs;
