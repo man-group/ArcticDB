@@ -234,11 +234,12 @@ def resolve_runtime_deps(setup_cfg_path: str, python_exe: str = sys.executable) 
     print(f"  Direct runtime deps from setup.cfg ({len(direct)}): {', '.join(direct)}")
 
     resolved: dict[str, str] = {}   # canonical_name -> version
-    queue: list[str] = list(direct)
+    from collections import deque
+    queue: deque[str] = deque(direct)
     visited: set[str] = set()
 
     while queue:
-        pkg = queue.pop(0)
+        pkg = queue.popleft()
         key = re.sub(r"[-_.]", "_", pkg.lower())
         if key in visited:
             continue
@@ -262,7 +263,9 @@ def resolve_runtime_deps(setup_cfg_path: str, python_exe: str = sys.executable) 
             elif line.startswith("Requires:"):
                 req_str = line.split(":", 1)[1].strip()
                 if req_str:
-                    requires = [r.strip() for r in req_str.split(",") if r.strip()]
+                    # Strip extras ([security]) and markers (; python_version ...) from each entry
+                    requires = [re.split(r"[\[;]", r.strip())[0].strip()
+                                for r in req_str.split(",") if r.strip()]
 
         if version:
             resolved[pkg] = version
@@ -344,13 +347,7 @@ def parse_requirements_frozen(reqs_path: str, pip_licenses: list | None = None) 
 
             if is_editable:
                 comp["properties"].append({"name": "pip:editable", "value": "true"})
-    from collections import deque
-    resolved: dict[str, str] = {}
-    queue: deque[str] = deque(direct)
-    visited: set[str] = set()
 
-    while queue:
-        pkg = queue.popleft()
             lic = license_map.get(name.lower())
             if not lic:
                 lic = KNOWN_LICENSES_FALLBACK.get(name.lower())
@@ -377,10 +374,11 @@ def get_submodule_versions(arcticdb_root: str) -> dict:
                 commit_hash, path, describe = m.group(1), m.group(2), m.group(3)
                 name = os.path.basename(path)
                 # Extract clean version: "v3.13.2" -> "3.13.2", "LMDB_0.9.22" -> "0.9.22"
-                version = re.sub(r"^[vV]", "", describe.split("-")[0])
+                # describe can be "v3.13.2", "v3.13.2-15-gabcdef", "LMDB_0.9.22", etc.
+                # Strip the trailing "-N-g<hash>" commits-ahead suffix before extracting version.
+                tag_part = re.sub(r"-\d+-g[0-9a-f]+$", "", describe)
+                version = re.sub(r"^[vV]", "", tag_part)
                 version = re.sub(r"^LMDB_", "", version)
-                requires = [re.split(r"[\[;]", r.strip())[0].strip()
-                            for r in req_str.split(",") if r.strip()]
     except Exception as e:
         print(f"  Warning: could not read git submodule status: {e}", file=sys.stderr)
     return submodules
@@ -599,6 +597,68 @@ def build_submodule_components(submodule_versions: dict) -> list:
     return components
 
 
+def parse_version_constraints(setup_cfg_path: str) -> dict[str, str]:
+    """Parse install_requires from setup.cfg → {name_lower: constraint_str}.
+
+    e.g. 'protobuf >=3.5.0.post1, < 7' → {'protobuf': '>=3.5.0.post1, <7'}
+    """
+    import configparser
+    cfg = configparser.ConfigParser()
+    cfg.read(setup_cfg_path)
+    raw = cfg.get("options", "install_requires", fallback="")
+    constraints: dict[str, str] = {}
+    for line in raw.splitlines():
+        line = line.split("#")[0].strip()   # strip inline comments
+        if not line:
+            continue
+        name = re.split(r"[>=<!,\s\[]", line)[0].strip()
+        constraint = line[len(name):].strip()
+        if name:
+            constraints[name.lower()] = constraint
+    return constraints
+
+
+def generate_range_boundaries(name: str, constraint: str, installed_version: str) -> list[tuple[str, str]]:
+    """Generate range-boundary BOM versions for packages supporting multiple major versions.
+
+    Returns list of (version_str, label) for majors that are supported but not installed.
+    Only produces entries when there is an explicit >= lower bound.
+
+    Example: protobuf '>=3.5.0.post1, <7', installed='4.26.1'
+      → [('3.5.0', 'range-boundary (v3.x supported)'),
+         ('5.0.0', 'range-boundary (v5.x supported)'),
+         ('6.0.0', 'range-boundary (v6.x supported)')]
+    """
+    # Parse lower bound (required — no lower bound → nothing to check)
+    lower_m = re.search(r">=?\s*((\d+)\.[\d.a-zA-Z]+)", constraint.split(",")[0])
+    if not lower_m:
+        return []
+    lower_major = int(lower_m.group(2))
+    lower_version = re.sub(r"\.post\d+$", "", lower_m.group(1))  # strip .post suffix
+
+    # Parse upper bound (e.g. '<7' → max supported major is 6)
+    upper_m = re.search(r"<\s*(\d+)", constraint)
+    upper_major = int(upper_m.group(1)) - 1 if upper_m else None
+
+    try:
+        installed_major = int(installed_version.split(".")[0])
+    except (ValueError, AttributeError, IndexError):
+        return []
+
+    max_major = upper_major if upper_major is not None else installed_major
+
+    if max_major < lower_major or max_major == lower_major == installed_major:
+        return []
+
+    boundaries = []
+    for major in range(lower_major, max_major + 1):
+        if major == installed_major:
+            continue  # already in BOM as the primary installed entry
+        version = lower_version if major == lower_major else f"{major}.0.0"
+        boundaries.append((version, f"range-boundary (v{major}.x supported)"))
+    return boundaries
+
+
 def enrich_bom(
     python_bom_path: str,
     cpp_bom_path: str | None,
@@ -640,7 +700,9 @@ def enrich_bom(
     # setup.cfg install_requires is the source of truth for what arcticdb ships.
     # We resolve the full transitive closure so only runtime packages appear in
     # the BOM — dev/test packages (pytest, coverage, boto3, etc.) are excluded.
+    # Also parse version constraints for range-boundary analysis.
     runtime_filter: dict[str, str] | None = None
+    version_constraints: dict[str, str] = {}
     if setup_cfg_path and os.path.exists(setup_cfg_path):
         py_exe = product_python or sys.executable
         print(f"  Resolving runtime deps from: {setup_cfg_path}")
@@ -648,6 +710,7 @@ def enrich_bom(
         if not runtime_filter:
             print("  Warning: runtime dep resolution returned nothing — including all pip packages", file=sys.stderr)
             runtime_filter = None
+        version_constraints = parse_version_constraints(setup_cfg_path)
     else:
         print("  No --setup-cfg provided — including all pip freeze packages")
 
@@ -663,21 +726,59 @@ def enrich_bom(
     if requirements_frozen_path and os.path.exists(requirements_frozen_path):
         print(f"  Python packages from pip freeze: {requirements_frozen_path}")
         pip_comps = parse_requirements_frozen(requirements_frozen_path, pip_licenses_data)
+        runtime_normalised = {_normalise(k) for k in runtime_filter} if runtime_filter is not None else None
         skipped = []
+        range_boundary_count = 0
         for comp in pip_comps:
-            if runtime_filter is not None:
-                if _normalise(comp["name"]) not in {_normalise(k) for k in runtime_filter}:
+            if runtime_normalised is not None:
+                if _normalise(comp["name"]) not in runtime_normalised:
                     skipped.append(comp["name"])
                     continue
+
+            constraint = version_constraints.get(comp["name"].lower(), "")
+            if constraint:
+                comp.setdefault("properties", []).append(
+                    {"name": "python:version-constraint", "value": constraint}
+                )
+            comp.setdefault("properties", []).append(
+                {"name": "python:version-role", "value": "installed"}
+            )
+
             key = (comp["name"].lower(), comp["version"])
             if key in seen:
                 continue
             seen.add(key)
             components.append(comp)
             python_count += 1
+
+            # Add range-boundary entries so grype scans supported-but-not-installed versions
+            if constraint:
+                for bver, blabel in generate_range_boundaries(comp["name"], constraint, comp["version"]):
+                    bkey = (comp["name"].lower(), bver)
+                    if bkey in seen:
+                        continue
+                    seen.add(bkey)
+                    bpurl = f"pkg:pypi/{comp['name'].lower()}@{bver}"
+                    components.append({
+                        "type": "library",
+                        "name": comp["name"],
+                        "version": bver,
+                        "purl": bpurl,
+                        "bom-ref": bpurl,
+                        "properties": [
+                            {"name": "cdx:build:source", "value": "pip"},
+                            {"name": "python:version-constraint", "value": constraint},
+                            {"name": "python:version-role", "value": "range-boundary"},
+                            {"name": "python:version-role-label", "value": blabel},
+                        ],
+                    })
+                    range_boundary_count += 1
+
         if skipped:
             print(f"  Excluded {len(skipped)} non-runtime pip packages (dev/test deps)")
         print(f"  Python components (from pip freeze, runtime only): {python_count}")
+        if range_boundary_count:
+            print(f"  Range-boundary components added for CVE coverage: {range_boundary_count}")
     else:
         # Fallback: use cdxgen Python BOM but only take versioned, non-duplicate entries
         print(f"  Loading Python BOM (cdxgen fallback): {python_bom_path}")
@@ -761,24 +862,26 @@ def enrich_bom(
         components.append(comp)
         submodule_added += 1
     print(f"  Git submodule components added: {submodule_added}")
-    # Remove duplicate arcticdb entries — it's the scanned product (listed in metadata),
-    components = [c for c in components if c.get("name", "").lower() != product_name]
     product_name = "arcticdb"
-    components = [
-        c for c in components
-        if c.get("name", "").lower() != product_name
-        or any(p.get("value") == "pip" and not any(
-            runtime_normalised = {_normalise(k) for k in runtime_filter}
-        for comp in pip_comps:
-            if runtime_filter is not None:
-                if _normalise(comp["name"]) not in runtime_normalised:
-        ) for p in c.get("properties", []))
-    ]
-    # Simpler: just remove all "arcticdb" entries from components entirely;
-    # it belongs in metadata.component only.
     components = [c for c in components if c.get("name", "").lower() != product_name]
     print(f"  TOTAL components in enriched BOM: {len(components)}")
     print(f"  (arcticdb removed from components — it is the BOM subject in metadata)")
+
+    # ----- Validate: no component may have an unknown version -----
+    # An unknown version means grype cannot match CVEs for that component.
+    unknown_versions = [
+        (c["name"], c.get("version", "missing"))
+        for c in components
+        if c.get("version", "unknown") in ("unknown", "", None)
+    ]
+    if unknown_versions:
+        print(f"\n  ERROR: {len(unknown_versions)} components have unknown versions:", file=sys.stderr)
+        for _name, _ver in unknown_versions:
+            print(f"    {_name}: {_ver!r}", file=sys.stderr)
+        raise SystemExit(
+            "Aborting: components with unknown versions would produce an inaccurate security report.\n"
+            "Fix by updating KNOWN_LICENSES_FALLBACK in enrich_bom.py or correcting the input data."
+        )
 
     # ----- Assemble final BOM -----
     enriched_bom = {

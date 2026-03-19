@@ -1,6 +1,6 @@
 # ArcticDB SBOM Tools
 
-Generates a Software Bill of Materials (SBOM), license report, and vulnerability scan for ArcticDB (linux only)
+Generates a Software Bill of Materials (SBOM), license report, and vulnerability scan for ArcticDB (Linux only).
 
 ## Files
 
@@ -12,18 +12,16 @@ Generates a Software Bill of Materials (SBOM), license report, and vulnerability
 
 ## Quick Start
 
-```bash
-cd ~/ArcticDB
+Run from the ArcticDB repo root:
 
+```bash
 # Full run (all phases)
 ./build_tooling/sbom_scan/generate_sbom.sh \
-  --arcticdb-root ~/ArcticDB \
   --build-preset linux-release \
   --output-dir ~/arcticdb-sbom-reports
 
 # If behind a corporate proxy, prepend your proxy wrapper:
-withproxy ./build_tooling/sbom_scan/generate_sbom.sh \
-  --arcticdb-root ~/ArcticDB \
+./build_tooling/sbom_scan/generate_sbom.sh \
   --build-preset linux-release \
   --output-dir ~/arcticdb-sbom-reports
 ```
@@ -32,8 +30,7 @@ withproxy ./build_tooling/sbom_scan/generate_sbom.sh \
 
 - Python 3.10+ with pip
 - ArcticDB built so `vcpkg_installed/` exists
-- Internet access to download cdxgen and grype (or set `TOOLS_DIR` to a pre-populated dir)
-- Optional: Java 21+ for cdxgen atom slicing (improves analysis depth; non-fatal if absent)
+- Internet access to download grype (or set `TOOLS_DIR` to a pre-populated dir)
 
 ## Options
 
@@ -53,30 +50,26 @@ withproxy ./build_tooling/sbom_scan/generate_sbom.sh \
 
 | Phase | What it does |
 |-------|-------------|
-| 0 | Validate environment, resolve versions |
-| 1 | Download cdxgen + grype if needed; create tools venv |
-| 2 | Generate Python BOM with cdxgen |
-| 3 | Generate initial C++ BOM with cdxgen (raw, versionless junk expected) |
-| 4 | Enrich BOM: replace vcpkg versions from vcpkg_installed/, add CPEs, add git submodule deps |
+| 0 | Validate environment, resolve version, check git tag and vcpkg consistency |
+| 1 | Download grype if needed; create pip-licenses tools venv |
+| 2 | Freeze product Python packages; extract licenses with pip-licenses |
+| 3 | Create empty C++ BOM placeholder |
+| 4 | Enrich BOM: read vcpkg_installed/ for C++ versions, add CPEs, add git submodule deps |
 | 5 | Vulnerability scan with grype |
-| 6 | License extraction with pip-licenses (in isolated tools venv) |
-| 7 | Generate HTML + Markdown report |
+| 6 | Generate HTML + Markdown report |
 
 ## Output Files
 
 ```
 ~/arcticdb-sbom-reports/
-  bom-python.json          # Raw Python BOM from cdxgen
-  bom-cpp.json             # Raw C++ BOM from cdxgen (has versionless junk)
   bom-enriched.json        # Clean, authoritative BOM (use this for audits)
+  requirements-frozen.txt  # pip freeze snapshot of the product environment
   grype-vulns.json         # Vulnerability scan results (JSON)
   grype-vulns.txt          # Vulnerability scan results (table)
   pip-licenses.json        # Python package licenses (from pip-licenses)
   pip-licenses.txt         # Python package licenses (human-readable)
   arcticdb-sbom-report.html  # Combined HTML report (tabbed)
   arcticdb-sbom-report.md   # Markdown summary
-  cdxgen-python.log        # cdxgen Python scan log
-  cdxgen-cpp.log           # cdxgen C++ scan log
   grype.log                # grype scan log
 ```
 
@@ -86,3 +79,15 @@ CPEs (Common Platform Enumeration) are added for ~50 C++ libraries to enable
 grype to match them against the NVD vulnerability database. Without CPEs,
 `pkg:generic/openssl@3.3.0` would not be recognized by grype; with CPE
 `cpe:2.3:a:openssl:openssl:3.3.0:*:*:*:*:*:*:*` it is matched correctly.
+
+## Version Accuracy
+
+C++ package versions come from `vcpkg_installed/x64-linux/share/*/vcpkg.spdx.json`
+(the actually-installed packages), not from the vcpkg ports tree (which contains
+the latest port HEAD versions). For example, openssl may be pinned to 3.3.0 via
+a vcpkg.json override while the ports tree HEAD is 3.6.1 — the SBOM correctly
+reports 3.3.0.
+
+The script checks that the vcpkg submodule commit matches the `builtin-baseline`
+in `cpp/vcpkg.json`. A mismatch means the installed packages may not correspond
+to the declared baseline, and a rebuild is recommended before running the scan.

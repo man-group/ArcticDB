@@ -4,7 +4,7 @@
 # =============================================================================
 # Generates a complete Software Bill of Materials (SBOM) for ArcticDB,
 # covering Python deps, C++ deps (vcpkg), git submodules, vulnerability scan,
-# license report, and a combined HTML + Markdown report.
+# license report, and a Markdown report.
 #
 # TOOL ISOLATION GUARANTEE:
 #   Scanning tools (grype, pip-licenses) are NEVER installed in the product
@@ -140,14 +140,35 @@ else
     success "Product Python environment is clean (no scanning tools detected)"
 fi
 
-# Resolve ArcticDB version
+# Resolve ArcticDB version (setup.cfg is authoritative; pyproject.toml is a fallback)
 if [[ -z "$ARCTICDB_VERSION" ]]; then
-    ARCTICDB_VERSION=$(grep -m1 '^version' "${ARCTICDB_ROOT}/pyproject.toml" 2>/dev/null \
-        | sed 's/version\s*=\s*"\(.*\)"/\1/' | tr -d '[:space:]') \
-        || ARCTICDB_VERSION=$("${PRODUCT_PYTHON}" -c "import arcticdb; print(arcticdb.__version__)" 2>/dev/null) \
-        || ARCTICDB_VERSION="unknown"
+    _VER=$(grep -m1 '^version' "${ARCTICDB_ROOT}/setup.cfg" 2>/dev/null \
+        | sed 's/version\s*=\s*//' | tr -d '[:space:]' || true)
+    if [[ -z "$_VER" ]]; then
+        _VER=$(grep -m1 '^version' "${ARCTICDB_ROOT}/pyproject.toml" 2>/dev/null \
+            | sed 's/version\s*=\s*"\(.*\)"/\1/' | tr -d '[:space:]' || true)
+    fi
+    if [[ -z "$_VER" ]]; then
+        _VER=$("${PRODUCT_PYTHON}" -c "import arcticdb; print(arcticdb.__version__)" 2>/dev/null || true)
+    fi
+    ARCTICDB_VERSION="${_VER:-unknown}"
 fi
 info "ArcticDB version: ${ARCTICDB_VERSION}"
+
+# Verify version against git tag
+GIT_TAG=$(git -C "${ARCTICDB_ROOT}" describe --exact-match --tags HEAD 2>/dev/null || echo "")
+if [[ -n "${GIT_TAG}" ]]; then
+    GIT_TAG_VER="${GIT_TAG#v}"
+    if [[ "${GIT_TAG_VER}" == "${ARCTICDB_VERSION}" ]]; then
+        success "Git tag matches version: ${GIT_TAG}"
+    else
+        warn "Git tag (${GIT_TAG}) does not match resolved version (${ARCTICDB_VERSION})"
+        warn "The SBOM may not correspond to the correct release. Pass --arcticdb-version to override."
+    fi
+else
+    warn "No exact git tag on HEAD — SBOM version (${ARCTICDB_VERSION}) cannot be verified against a release tag."
+    warn "For a release SBOM, run on a tagged commit (e.g. git checkout v${ARCTICDB_VERSION})."
+fi
 
 # Check vcpkg_installed
 if [[ $SKIP_BUILD_CHECK -eq 0 ]]; then
@@ -158,6 +179,26 @@ if [[ $SKIP_BUILD_CHECK -eq 0 ]]; then
     else
         PKG_COUNT=$(ls -1 "${VCPKG_SHARE_DIR}" 2>/dev/null | wc -l)
         success "vcpkg_installed: ${PKG_COUNT} packages at ${VCPKG_SHARE_DIR}"
+
+        # Check vcpkg submodule matches builtin-baseline (catches stale builds)
+        VCPKG_SUB_HASH=$(git -C "${ARCTICDB_ROOT}/cpp/vcpkg" rev-parse HEAD 2>/dev/null || echo "")
+        VCPKG_BASELINE=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('${ARCTICDB_ROOT}/cpp/vcpkg.json'))
+    print(d.get('builtin-baseline',''))
+except Exception as e:
+    sys.stderr.write(str(e)+'\n')
+" 2>/dev/null || echo "")
+        if [[ -n "${VCPKG_SUB_HASH}" && -n "${VCPKG_BASELINE}" ]]; then
+            if [[ "${VCPKG_BASELINE}" == "${VCPKG_SUB_HASH}"* || "${VCPKG_SUB_HASH}" == "${VCPKG_BASELINE}"* ]]; then
+                success "vcpkg submodule matches builtin-baseline: ${VCPKG_BASELINE:0:8}"
+            else
+                warn "vcpkg submodule (${VCPKG_SUB_HASH:0:8}) does not match builtin-baseline (${VCPKG_BASELINE:0:8})"
+                warn "vcpkg_installed/ may reflect a different vcpkg commit than vcpkg.json declares."
+                warn "Rebuild: CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=${BUILD_PRESET} pip install -ve ."
+            fi
+        fi
 
         # Show a few key versions to confirm accuracy
         for PKG in openssl zstd protobuf; do
@@ -223,7 +264,7 @@ else
         warn "  Via install script: curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b ${TOOLS_DIR}"
         warn "  Via Go: go install github.com/anchore/grype@latest"
         warn "  Prebuilt: copy grype binary to ${GRYPE} and chmod +x it"
-        warn "  If behind a proxy: run the script with your proxy wrapper, e.g. withproxy ./generate_sbom.sh ..."
+        warn "  If behind a proxy: run the script with your proxy wrapper"
         warn "Vulnerability scan will be skipped for this run."
         rm -rf "${GRYPE_TMP}"
         SKIP_GRYPE=1
@@ -454,9 +495,7 @@ printf "    %-25s %s\n" "Enriched BOM:"    "${BOM_ENRICHED}"
 [[ -f "${GRYPE_JSON}" ]]         && printf "    %-25s %s\n" "Vulns (JSON):"  "${GRYPE_JSON}"
 [[ -f "${GRYPE_TXT}" ]]          && printf "    %-25s %s\n" "Vulns (table):" "${GRYPE_TXT}"
 [[ -f "${PIP_LICENSES_JSON}" ]]  && printf "    %-25s %s\n" "Pip licenses:"  "${PIP_LICENSES_JSON}"
-HTML="${OUTPUT_DIR}/arcticdb-sbom-report.html"
 MD="${OUTPUT_DIR}/arcticdb-sbom-report.md"
-[[ -f "${HTML}" ]]               && printf "    %-25s %s\n" "HTML report:"   "${HTML}"
 [[ -f "${MD}" ]]                 && printf "    %-25s %s\n" "MD report:"     "${MD}"
 echo ""
 
@@ -481,5 +520,5 @@ PYEOF
 fi
 
 echo ""
-[[ -f "${HTML}" ]] && success "Open report: xdg-open ${HTML}"
+[[ -f "${MD}" ]] && success "Report: ${MD}"
 echo ""

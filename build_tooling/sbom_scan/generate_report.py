@@ -2,26 +2,49 @@
 """
 ArcticDB SBOM Report Generator
 ================================
-Generates a combined HTML + Markdown report from:
-  - Enriched CycloneDX BOM (arcticdb-bom-enriched.json)
+Generates a Markdown report from:
+  - Enriched CycloneDX BOM (bom-enriched.json)
   - grype vulnerability scan results (grype-vulns.json)
   - pip-licenses output (pip-licenses.json)  [optional]
 
-The HTML report has tabs for:
-  1. Summary (component counts, severity counts)
-  2. Vulnerabilities (table with severity badges)
-  3. Python Licenses
-  4. C++ Licenses (vcpkg + submodules)
-  5. Copyleft Flags (GPL/LGPL/AGPL components needing legal review)
+Sections: Summary, Vulnerabilities, Copyleft Flags, Python Deps,
+          C++ Deps, BSL-1.1 Compatibility, Version Range Coverage.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import argparse
 from datetime import datetime
+
+
+
+def generate_range_boundaries(name: str, constraint: str, installed_version: str) -> list[tuple[str, str]]:
+    """Mirror of enrich_bom.generate_range_boundaries — kept in sync manually."""
+    lower_m = re.search(r">=?\s*((\d+)\.[\d.a-zA-Z]+)", constraint.split(",")[0])
+    if not lower_m:
+        return []
+    lower_major = int(lower_m.group(2))
+    lower_version = re.sub(r"\.post\d+$", "", lower_m.group(1))
+    upper_m = re.search(r"<\s*(\d+)", constraint)
+    upper_major = int(upper_m.group(1)) - 1 if upper_m else None
+    try:
+        installed_major = int(installed_version.split(".")[0])
+    except (ValueError, AttributeError, IndexError):
+        return []
+    max_major = upper_major if upper_major is not None else installed_major
+    if max_major < lower_major or max_major == lower_major == installed_major:
+        return []
+    boundaries = []
+    for major in range(lower_major, max_major + 1):
+        if major == installed_major:
+            continue
+        version = lower_version if major == lower_major else f"{major}.0.0"
+        boundaries.append((version, f"range-boundary (v{major}.x supported)"))
+    return boundaries
 
 
 SEVERITY_COLORS = {
@@ -156,13 +179,18 @@ def get_version_source(comp: dict) -> str:
 
 
 def categorize_components(bom: dict) -> dict:
-    """Split components by source type."""
+    """Split components by source type. Range-boundary entries are excluded from
+    the main lists (they are not installed components) and collected separately."""
     python_comps = []
     vcpkg_comps = []
     submodule_comps = []
     other_comps = []
+    range_boundary_comps = []
 
     for comp in bom.get("components", []):
+        if get_prop(comp, "python:version-role") == "range-boundary":
+            range_boundary_comps.append(comp)
+            continue
         source = get_component_source(comp)
         if source == "pip":
             python_comps.append(comp)
@@ -178,6 +206,7 @@ def categorize_components(bom: dict) -> dict:
         "vcpkg": vcpkg_comps,
         "submodule": submodule_comps,
         "other": other_comps,
+        "range_boundary": range_boundary_comps,
     }
 
 
@@ -194,15 +223,38 @@ def get_license_str(comp: dict) -> str:
     return ", ".join(parts) if parts else "Unknown"
 
 
+def get_prop(comp: dict, key: str) -> str:
+    """Return a named BOM property value, or empty string if absent."""
+    for p in comp.get("properties", []):
+        if p.get("name") == key:
+            return p.get("value", "")
+    return ""
+
+
 def build_source_lookup(bom: dict) -> dict[str, dict]:
-    """Build a package-name → {source, version_source} map from the enriched BOM."""
+    """Build lookup maps from the enriched BOM.
+
+    Returns two keys per component:
+      - by purl  (exact match used by grype artifacts)
+      - by name  (fallback; installed version takes priority over range-boundary)
+    """
     lookup: dict[str, dict] = {}
     for comp in bom.get("components", []):
         name = comp.get("name", "").lower()
-        lookup[name] = {
+        purl = comp.get("purl", "")
+        version_role = get_prop(comp, "python:version-role") or "installed"
+        entry = {
             "source": get_component_source(comp),
             "version_source": get_version_source(comp),
+            "version_role": version_role,
+            "version_constraint": get_prop(comp, "python:version-constraint"),
+            "version_role_label": get_prop(comp, "python:version-role-label"),
         }
+        if purl:
+            lookup[purl] = entry
+        # Name-level fallback: prefer installed over range-boundary
+        if version_role == "installed" or name not in lookup:
+            lookup[name] = entry
     return lookup
 
 
@@ -211,15 +263,18 @@ def parse_grype_results(grype_data: dict | None, source_lookup: dict | None = No
     if not grype_data:
         return []
     vulns = []
+    sl = source_lookup or {}
     for match in grype_data.get("matches", []):
         vuln = match.get("vulnerability", {})
         artifact = match.get("artifact", {})
         severity = vuln.get("severity", "unknown").lower()
         pkg_name = artifact.get("name", "")
-        # Resolve source + version_source from BOM lookup; fall back to grype artifact type
-        bom_entry = (source_lookup or {}).get(pkg_name.lower(), {})
+        artifact_purl = artifact.get("purl", "")
+        bom_entry = sl.get(artifact_purl) or sl.get(pkg_name.lower(), {})
         source = bom_entry.get("source", "")
         version_source = bom_entry.get("version_source", "")
+        version_role = bom_entry.get("version_role", "installed")
+        version_role_label = bom_entry.get("version_role_label", "")
         if not source:
             grype_type = artifact.get("type", "")
             source = "pip" if grype_type == "python" else ("vcpkg" if grype_type else "unknown")
@@ -233,10 +288,12 @@ def parse_grype_results(grype_data: dict | None, source_lookup: dict | None = No
             "urls": vuln.get("urls", [])[:2],
             "source": source,
             "version_source": version_source,
+            "version_role": version_role,
+            "version_role_label": version_role_label,
         })
-    # Sort by severity
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "negligible": 4, "unknown": 5}
-    vulns.sort(key=lambda v: order.get(v["severity"], 5))
+    vulns.sort(key=lambda v: (0 if v["version_role"] == "installed" else 1,
+                              order.get(v["severity"], 5)))
     return vulns
 
 
@@ -246,302 +303,6 @@ def count_severities(vulns: list) -> dict:
         sev = v["severity"].lower()
         counts[sev] = counts.get(sev, 0) + 1
     return counts
-
-
-def generate_html_report(bom: dict, grype_data: dict | None, pip_licenses: list | None, output_path: str):
-    """Generate the combined HTML report."""
-    categories = categorize_components(bom)
-    vulns = parse_grype_results(grype_data, build_source_lookup(bom))
-    sev_counts = count_severities(vulns)
-
-    arcticdb_meta = bom.get("metadata", {}).get("component", {})
-    arcticdb_version = arcticdb_meta.get("version", "unknown")
-    scan_date = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
-    total_components = len(bom.get("components", []))
-
-    # Find copyleft components
-    copyleft_comps = []
-    for comp in bom.get("components", []):
-        lic_str = get_license_str(comp)
-        for spdx in COPYLEFT_SPDX:
-            if spdx.lower() in lic_str.lower():
-                copyleft_comps.append((comp, lic_str))
-                break
-
-    # BSL compatibility analysis — classify all components
-    bsl_all_rows = []
-    bsl_counts: dict[str, int] = {"permissive": 0, "weak_copyleft": 0, "strong_copyleft": 0, "unknown": 0}
-    for comp in sorted(bom.get("components", []), key=lambda c: c.get("name", "").lower()):
-        lic_str = get_license_str(comp)
-        compat = classify_bsl_compat(lic_str)
-        bsl_counts[compat] = bsl_counts.get(compat, 0) + 1
-        bsl_all_rows.append({
-            "name": comp.get("name", ""),
-            "version": comp.get("version", ""),
-            "license": lic_str,
-            "source": get_component_source(comp),
-            "compat": compat,
-        })
-
-    # Build pip license table data (from pip-licenses JSON or BOM)
-    pip_lic_rows = []
-    if pip_licenses:
-        for pkg in pip_licenses:
-            pip_lic_rows.append({
-                "name": pkg.get("Name", pkg.get("name", "")),
-                "version": pkg.get("Version", pkg.get("version", "")),
-                "license": pkg.get("License", pkg.get("license", "Unknown")),
-            })
-    else:
-        for comp in categories["python"]:
-            pip_lic_rows.append({
-                "name": comp.get("name", ""),
-                "version": comp.get("version", ""),
-                "license": get_license_str(comp),
-            })
-    pip_lic_rows.sort(key=lambda x: x["name"].lower())
-
-    # Build C++ license table data
-    cpp_lic_rows = []
-    for comp in sorted(categories["vcpkg"] + categories["submodule"] + categories["other"],
-                       key=lambda c: c.get("name", "").lower()):
-        source = get_component_source(comp)
-        cpp_lic_rows.append({
-            "name": comp.get("name", ""),
-            "version": comp.get("version", ""),
-            "license": get_license_str(comp),
-            "source": source,
-            "version_source": get_version_source(comp),
-            "cpe": comp.get("cpe", ""),
-        })
-
-    def sev_badge(sev: str) -> str:
-        color = SEVERITY_COLORS.get(sev.lower(), "#9e9e9e")
-        return f'<span style="background:{color};color:white;padding:2px 8px;border-radius:3px;font-size:0.85em;font-weight:bold">{sev.upper()}</span>'
-
-    def summary_card(label: str, value: str | int, color: str = "#1565c0") -> str:
-        return f"""
-        <div style="background:white;border-left:4px solid {color};padding:16px 20px;border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,0.1);min-width:150px">
-            <div style="font-size:2em;font-weight:bold;color:{color}">{value}</div>
-            <div style="color:#555;font-size:0.9em">{label}</div>
-        </div>"""
-
-    # Vulnerability rows
-    SOURCE_BADGE_COLORS = {"pip": ("#1b5e20", "#e8f5e9"), "vcpkg": ("#4a148c", "#f3e5f5"),
-                           "git-submodule": ("#e65100", "#fff3e0")}
-    def source_badge(src: str) -> str:
-        fg, bg = SOURCE_BADGE_COLORS.get(src, ("#555", "#f5f5f5"))
-        return f'<span style="background:{bg};color:{fg};padding:1px 7px;border-radius:3px;font-size:0.8em;font-weight:600">{src}</span>'
-
-    vuln_rows_html = ""
-    if vulns:
-        for v in vulns:
-            url_links = " ".join(f'<a href="{u}" target="_blank" style="color:#1565c0">[link]</a>' for u in v["urls"])
-            vs = v["version_source"]
-            if vs == "vcpkg:override":
-                vs_hint = '<br><span style="font-size:0.75em;color:#1b5e20">● pinned override</span>'
-            elif vs.startswith("vcpkg:baseline"):
-                commit = vs.split("(")[1].rstrip(")") if "(" in vs else ""
-                vs_hint = f'<br><span style="font-size:0.75em;color:#5d4037" title="cpp/vcpkg.json builtin-baseline">● baseline {commit}</span>'
-            else:
-                vs_hint = ""
-            vuln_rows_html += f"""
-            <tr>
-                <td><code>{v['id']}</code> {url_links}</td>
-                <td>{sev_badge(v['severity'])}</td>
-                <td><strong>{v['package']}</strong> {v['version']}{vs_hint}</td>
-                <td>{source_badge(v['source'])}</td>
-                <td><code>{v['fix_versions']}</code></td>
-                <td style="font-size:0.85em;color:#555">{v['description']}</td>
-            </tr>"""
-    else:
-        vuln_rows_html = '<tr><td colspan="6" style="text-align:center;color:green;padding:20px">✓ No vulnerabilities found</td></tr>'
-
-    # pip license rows
-    pip_lic_html = ""
-    for row in pip_lic_rows:
-        lic = row["license"]
-        flag = " ⚠️" if any(c.lower() in lic.lower() for c in ["gpl", "lgpl", "agpl"]) else ""
-        pip_lic_html += f"<tr><td>{row['name']}</td><td>{row['version']}</td><td>{lic}{flag}</td></tr>"
-
-    # C++ license rows
-    cpp_lic_html = ""
-    for row in cpp_lic_rows:
-        lic = row["license"]
-        flag = " ⚠️" if any(c.lower() in lic.lower() for c in ["gpl", "lgpl", "agpl"]) else ""
-        source_badge = f'<span style="background:#e3f2fd;color:#1565c0;padding:1px 6px;border-radius:3px;font-size:0.8em">{row["source"]}</span>'
-        cpe_hint = f'<br><code style="font-size:0.75em;color:#888">{row["cpe"]}</code>' if row["cpe"] else ""
-        vs = row["version_source"]
-        if vs == "vcpkg:override":
-            vs_hint = '<br><span style="font-size:0.75em;color:#1b5e20">● pinned override</span>'
-        elif vs.startswith("vcpkg:baseline"):
-            commit = vs.split("(")[1].rstrip(")") if "(" in vs else ""
-            vs_hint = f'<br><span style="font-size:0.75em;color:#5d4037" title="cpp/vcpkg.json builtin-baseline">● baseline {commit}</span>'
-        else:
-            vs_hint = ""
-        cpp_lic_html += f"<tr><td>{row['name']}{cpe_hint}</td><td>{row['version']}{vs_hint}</td><td>{lic}{flag}</td><td>{source_badge}</td></tr>"
-
-    # Copyleft rows
-    copyleft_html = ""
-    if copyleft_comps:
-        for comp, lic in copyleft_comps:
-            source = get_component_source(comp)
-            copyleft_html += f"""
-            <tr style="background:#fff3e0">
-                <td><strong>{comp.get('name', '')}</strong></td>
-                <td>{comp.get('version', '')}</td>
-                <td style="color:#e65100"><strong>{lic}</strong></td>
-                <td>{source}</td>
-                <td>⚠️ Legal review required</td>
-            </tr>"""
-    else:
-        copyleft_html = '<tr><td colspan="5" style="text-align:center;color:green;padding:20px">✓ No copyleft licenses detected</td></tr>'
-
-    # BSL compatibility rows
-    bsl_rows_html = ""
-    for row in bsl_all_rows:
-        compat = row["compat"]
-        color = BSL_COMPAT_COLOR.get(compat, "#757575")
-        label = BSL_COMPAT_LABEL.get(compat, "? Unknown")
-        compat_badge = f'<span style="color:{color};font-weight:bold">{label}</span>'
-        row_bg = ""
-        if compat == "strong_copyleft":
-            row_bg = ' style="background:#ffebee"'
-        elif compat == "weak_copyleft":
-            row_bg = ' style="background:#fff8e1"'
-        elif compat == "unknown":
-            row_bg = ' style="background:#f5f5f5"'
-        bsl_rows_html += f'<tr{row_bg}><td>{row["name"]}</td><td>{row["version"]}</td><td>{row["license"]}</td><td>{compat_badge}</td><td>{row["source"]}</td></tr>'
-
-    html = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ArcticDB SBOM Report v{arcticdb_version}</title>
-<style>
-  body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin:0; padding:0; background:#f5f5f5; color:#333 }}
-  .header {{ background:linear-gradient(135deg,#1a237e,#283593); color:white; padding:24px 32px }}
-  .header h1 {{ margin:0 0 4px; font-size:1.8em }}
-  .header p {{ margin:0; opacity:0.8; font-size:0.9em }}
-  .summary-cards {{ display:flex; gap:16px; flex-wrap:wrap; padding:24px 32px; background:white; border-bottom:1px solid #e0e0e0 }}
-  .tabs {{ display:flex; background:white; border-bottom:2px solid #e0e0e0; padding:0 32px }}
-  .tab-btn {{ padding:12px 20px; cursor:pointer; border:none; background:none; font-size:0.95em; color:#555; border-bottom:3px solid transparent; margin-bottom:-2px; font-family:inherit }}
-  .tab-btn.active {{ color:#1a237e; border-bottom-color:#1a237e; font-weight:600 }}
-  .tab-btn:hover:not(.active) {{ color:#333; background:#f5f5f5 }}
-  .tab-content {{ display:none; padding:24px 32px }}
-  .tab-content.active {{ display:block }}
-  table {{ width:100%; border-collapse:collapse; background:white; border-radius:4px; box-shadow:0 1px 3px rgba(0,0,0,0.1) }}
-  th {{ background:#283593; color:white; padding:10px 14px; text-align:left; font-weight:600; font-size:0.9em }}
-  td {{ padding:8px 14px; border-bottom:1px solid #e0e0e0; font-size:0.9em; vertical-align:top }}
-  tr:last-child td {{ border-bottom:none }}
-  tr:hover td {{ background:#fafafa }}
-  .section-title {{ font-size:1.1em; font-weight:600; color:#283593; margin:0 0 12px }}
-  code {{ background:#f5f5f5; padding:1px 4px; border-radius:3px; font-size:0.9em }}
-</style>
-</head>
-<body>
-
-<div class="header">
-  <h1>ArcticDB SBOM Report</h1>
-  <p>Version: <strong>{arcticdb_version}</strong> &nbsp;|&nbsp; Generated: {scan_date}</p>
-</div>
-
-<div class="summary-cards">
-  {summary_card("Total Components", total_components)}
-  {summary_card("Python (pip)", len(categories['python']), "#1b5e20")}
-  {summary_card("C++ (vcpkg)", len(categories['vcpkg']), "#4a148c")}
-  {summary_card("Submodules", len(categories['submodule']), "#e65100")}
-  {summary_card("Vulnerabilities", len(vulns), "#b71c1c")}
-  {summary_card("Critical", sev_counts['critical'], SEVERITY_COLORS['critical'])}
-  {summary_card("High", sev_counts['high'], SEVERITY_COLORS['high'])}
-  {summary_card("Medium", sev_counts['medium'], SEVERITY_COLORS['medium'])}
-  {summary_card("Copyleft", len(copyleft_comps), "#e65100")}
-  {summary_card("BSL: Permissive", bsl_counts['permissive'], "#2e7d32")}
-  {summary_card("BSL: Weak Copyleft", bsl_counts['weak_copyleft'], "#e65100")}
-  {summary_card("BSL: Strong Copyleft", bsl_counts['strong_copyleft'], "#b71c1c")}
-  {summary_card("BSL: Unknown", bsl_counts['unknown'], "#757575")}
-</div>
-
-<div class="tabs">
-  <button class="tab-btn active" onclick="showTab('vulns')">Vulnerabilities ({len(vulns)})</button>
-  <button class="tab-btn" onclick="showTab('pylic')">Python Licenses ({len(pip_lic_rows)})</button>
-  <button class="tab-btn" onclick="showTab('cpplic')">C++ Licenses ({len(cpp_lic_rows)})</button>
-  <button class="tab-btn" onclick="showTab('copyleft')">Copyleft ({len(copyleft_comps)})</button>
-  <button class="tab-btn" onclick="showTab('bslcompat')">BSL-1.1 Compatibility</button>
-</div>
-
-<div id="vulns" class="tab-content active">
-  <div class="section-title">Vulnerability Findings</div>
-  <table>
-    <thead><tr>
-      <th>CVE / ID</th><th>Severity</th><th>Package</th><th>Source</th><th>Fix Available</th><th>Description</th>
-    </tr></thead>
-    <tbody>{vuln_rows_html}</tbody>
-  </table>
-</div>
-
-<div id="pylic" class="tab-content">
-  <div class="section-title">Python Package Licenses</div>
-  <table>
-    <thead><tr><th>Package</th><th>Version</th><th>License</th></tr></thead>
-    <tbody>{pip_lic_html}</tbody>
-  </table>
-</div>
-
-<div id="cpplic" class="tab-content">
-  <div class="section-title">C++ Library Licenses (vcpkg + submodules)</div>
-  <table>
-    <thead><tr><th>Package</th><th>Version</th><th>License</th><th>Source</th></tr></thead>
-    <tbody>{cpp_lic_html}</tbody>
-function showTab(id, btn) {{
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  if (btn) btn.classList.add('active');
-}}
-</div>
-
-<div id="copyleft" class="tab-content">
-  <div class="section-title">Copyleft / Restrictive Licenses — Legal Review Required</div>
-  <table>
-    <thead><tr><th>Package</th><th>Version</th><th>License</th><th>Source</th><th>Action</th></tr></thead>
-    <tbody>{copyleft_html}</tbody>
-  </table>
-</div>
-
-<div id="bslcompat" class="tab-content">
-  <div class="section-title">BSL-1.1 License Compatibility Analysis</div>
-  <p style="margin:0 0 16px;color:#555;font-size:0.9em">
-    ArcticDB is distributed under the <strong>Business Source License 1.1 (BSL-1.1)</strong>
-    (Licensor: Man Group Operations Limited). This table classifies each dependency license
-    for BSL-1.1 distribution compatibility.
-    <br><br>
-    <strong style="color:#2e7d32">✓ Permissive</strong> — Attribution required; no copyleft concerns (MIT, BSD, Apache-2.0, BSL-1.0, etc.).
-    <strong style="color:#e65100">⚠ Weak Copyleft</strong> — Legal review required; LGPL requires ability to relink, MPL is file-level copyleft.
-    <strong style="color:#b71c1c">✗ Strong Copyleft</strong> — Incompatible with BSL-1.1 distribution (GPL, AGPL).
-    <strong style="color:#757575">? Unknown</strong> — License not identified; manual review needed.
-  </p>
-  <table>
-    <thead><tr><th>Package</th><th>Version</th><th>License</th><th>BSL-1.1 Compat</th><th>Source</th></tr></thead>
-    <tbody>{bsl_rows_html}</tbody>
-  </table>
-</div>
-
-<script>
-function showTab(id) {{
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  event.target.classList.add('active');
-}}
-</script>
-</body>
-</html>"""
-
-    with open(output_path, "w") as f:
-        f.write(html)
-    print(f"  HTML report written to: {output_path}")
 
 
 def generate_markdown_report(bom: dict, grype_data: dict | None, pip_licenses: list | None, output_path: str):
@@ -562,10 +323,20 @@ def generate_markdown_report(bom: dict, grype_data: dict | None, pip_licenses: l
                 copyleft_comps.append((comp, lic_str))
                 break
 
-    # BSL compat counts for summary
+    installed_vulns = [v for v in vulns if v["version_role"] == "installed"]
+    boundary_vulns  = [v for v in vulns if v["version_role"] == "range-boundary"]
+    installed_ids = {(v["id"], v["package"]) for v in installed_vulns}
+    boundary_only_vulns = [v for v in boundary_vulns
+                           if (v["id"], v["package"]) not in installed_ids]
+
+    total_components = (len(categories["python"]) + len(categories["vcpkg"]) +
+                        len(categories["submodule"]) + len(categories["other"]))
+
     bsl_counts: dict[str, int] = {"permissive": 0, "weak_copyleft": 0, "strong_copyleft": 0, "unknown": 0}
+    installed_comps = (categories["python"] + categories["vcpkg"] +
+                       categories["submodule"] + categories["other"])
     bsl_rows = []
-    for comp in sorted(bom.get("components", []), key=lambda c: c.get("name", "").lower()):
+    for comp in sorted(installed_comps, key=lambda c: c.get("name", "").lower()):
         lic_str = get_license_str(comp)
         compat = classify_bsl_compat(lic_str)
         bsl_counts[compat] = bsl_counts.get(compat, 0) + 1
@@ -587,11 +358,12 @@ def generate_markdown_report(bom: dict, grype_data: dict | None, pip_licenses: l
         f"",
         f"| Category | Count |",
         f"|----------|-------|",
-        f"| Total components | {len(bom.get('components', []))} |",
+        f"| Total components (installed) | {total_components} |",
         f"| Python (pip) | {len(categories['python'])} |",
         f"| C++ (vcpkg) | {len(categories['vcpkg'])} |",
         f"| Git submodules | {len(categories['submodule'])} |",
-        f"| Total vulnerabilities | {len(vulns)} |",
+        f"| Vulnerabilities (installed version) | {len(installed_vulns)} |",
+        f"| Vulnerabilities (supported range only) | {len(boundary_only_vulns)} |",
         f"| Critical | {sev_counts['critical']} |",
         f"| High | {sev_counts['high']} |",
         f"| Medium | {sev_counts['medium']} |",
@@ -604,13 +376,13 @@ def generate_markdown_report(bom: dict, grype_data: dict | None, pip_licenses: l
         f"",
     ]
 
-    # Vulnerabilities — full list, no cap
     lines += ["## Vulnerabilities", ""]
     if vulns:
-        lines += ["| CVE | Severity | Package | Version | Source | Version Source | Fix Available |",
-                  "|-----|----------|---------|---------|--------|----------------|---------------|"]
+        lines += ["| CVE | Severity | Package | Version | Scope | Source | Version Source | Fix Available |",
+                  "|-----|----------|---------|---------|-------|--------|----------------|---------------|"]
         for v in vulns:
-            lines.append(f"| {v['id']} | **{v['severity'].upper()}** | {v['package']} | {v['version']} | {v['source']} | {v['version_source'] or '-'} | {v['fix_versions']} |")
+            scope = "range boundary" if v["version_role"] == "range-boundary" else "installed"
+            lines.append(f"| {v['id']} | **{v['severity'].upper()}** | {v['package']} | {v['version']} | {scope} | {v['source']} | {v['version_source'] or '-'} | {v['fix_versions']} |")
     else:
         lines.append("✓ No vulnerabilities found")
     lines.append("")
@@ -626,21 +398,31 @@ def generate_markdown_report(bom: dict, grype_data: dict | None, pip_licenses: l
         lines.append("✓ No copyleft licenses detected")
     lines.append("")
 
-    # Python dependencies — full list
+    constraint_lookup: dict[str, str] = {
+        comp.get("name", "").lower(): get_prop(comp, "python:version-constraint")
+        for comp in categories["python"]
+        if get_prop(comp, "python:version-constraint")
+    }
+
     pip_lic_rows = []
     if pip_licenses:
         pip_lic_rows = [{"name": p.get("Name", p.get("name", "")),
                          "version": p.get("Version", p.get("version", "")),
-                         "license": p.get("License", "Unknown")} for p in pip_licenses]
+                         "license": p.get("License", "Unknown"),
+                         "constraint": constraint_lookup.get(
+                             p.get("Name", p.get("name", "")).lower(), "")} for p in pip_licenses]
     else:
         pip_lic_rows = [{"name": c.get("name", ""), "version": c.get("version", ""),
-                         "license": get_license_str(c)} for c in categories["python"]]
+                         "license": get_license_str(c),
+                         "constraint": get_prop(c, "python:version-constraint")}
+                        for c in categories["python"]]
     pip_lic_rows.sort(key=lambda x: x["name"].lower())
 
     lines += [f"## Python Dependencies ({len(pip_lic_rows)} packages)", ""]
-    lines += ["| Package | Version | License |", "|---------|---------|---------|"]
+    lines += ["| Package | Version | Constraint | License |",
+              "|---------|---------|------------|---------|"]
     for row in pip_lic_rows:
-        lines.append(f"| {row['name']} | {row['version']} | {row['license']} |")
+        lines.append(f"| {row['name']} | {row['version']} | {row['constraint'] or '—'} | {row['license']} |")
     lines.append("")
 
     # C++ dependencies — full list
@@ -689,6 +471,35 @@ def generate_markdown_report(bom: dict, grype_data: dict | None, pip_licenses: l
             lines.append(f"| {row['name']} | {row['version']} | {row['license']} | {row['source']} |")
         lines.append("")
 
+    # Version Range Coverage
+    if constraint_lookup:
+        lines += [
+            "## Version Range Coverage",
+            "",
+            "ArcticDB supports a range of versions for some Python dependencies. "
+            "The table shows which boundary versions were included in the grype scan "
+            "and whether any CVEs were found at those versions.",
+            "",
+            "| Package | Installed | Supported Range | Boundary Versions Scanned | CVEs (boundaries only) |",
+            "|---------|-----------|-----------------|---------------------------|------------------------|",
+        ]
+        for comp in sorted(categories["python"], key=lambda c: c.get("name", "").lower()):
+            constraint = get_prop(comp, "python:version-constraint")
+            if not constraint:
+                continue
+            name = comp.get("name", "")
+            installed_ver = comp.get("version", "")
+            boundaries = generate_range_boundaries(name, constraint, installed_ver)
+            boundary_versions = ", ".join(ver for ver, _ in boundaries) or "—"
+            pkg_boundary_only = [
+                f"{v['id']} @ {v['version']}"
+                for v in boundary_only_vulns
+                if v["package"].lower() == name.lower()
+            ]
+            cve_cell = "; ".join(pkg_boundary_only) if pkg_boundary_only else "✓ None"
+            lines.append(f"| {name} | {installed_ver} | `{constraint}` | {boundary_versions} | {cve_cell} |")
+        lines.append("")
+
     with open(output_path, "w") as f:
         f.write("\n".join(lines))
     print(f"  Markdown report written to: {output_path}")
@@ -723,14 +534,11 @@ def main():
     elif isinstance(pip_licenses_raw, dict):
         pip_licenses = pip_licenses_raw.get("licenses", [])
 
-    html_out = os.path.join(args.output_dir, "arcticdb-sbom-report.html")
     md_out = os.path.join(args.output_dir, "arcticdb-sbom-report.md")
 
-    generate_html_report(bom, grype_data, pip_licenses, html_out)
     generate_markdown_report(bom, grype_data, pip_licenses, md_out)
 
     print(f"\n[Report Generation] Done!")
-    print(f"  HTML: {html_out}")
     print(f"  Markdown: {md_out}")
 
 
