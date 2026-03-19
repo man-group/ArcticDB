@@ -106,7 +106,16 @@ jobs:
           )
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-${{inputs.platform}}
+          retention-days: 7
+          path: |
+            cpp/out/${{inputs.preset}}-build/
+            python/arcticdb_ext*
+            python/**/*.so
+            python/**/*.pyd
 
   # ==================== JOB 2: C++ TESTS ====================
   cpp_tests:
