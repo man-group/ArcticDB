@@ -1,11 +1,10 @@
 name: Conda Build and Test
-
 on:
   workflow_call:
     inputs:
       # Platform parameters
       runner:                    {required: true,  type: string,  description: GitHub runner to execute on}
-      platform:                  {required: true,  type: string,  description: Platform identifier e.g. linux_64, osx_arm64, win_64}
+      platform:                  {required: true,  type: string,  description: Platform identifier e.g. linux_64 or win_64}
       preset:                    {required: true,  type: string,  description: CMake preset name e.g. linux-conda-release}
       cache_key:                 {required: true,  type: string,  description: Unique conda environment cache key per platform}
 
@@ -15,14 +14,14 @@ on:
       run_cpp_tests:             {required: false, type: boolean, default: true,  description: Whether to run C++ tests}
       cpp_tests_enabled:         {required: false, type: boolean, default: true,  description: Whether C++ tests are supported on this platform}
       skip_lmdb_tests:           {required: false, type: boolean, default: false, description: Skip LMDB tests. Windows only}
-      hypothesis_profile:        {required: false, type: string,  default: '',    description: Hypothesis profile e.g. ci_linux, ci_macos}
+      hypothesis_profile:        {required: false, type: string,  default: '',    description: Hypothesis profile e.g. ci_linux or ci_macos}
 
       # Passthrough from user inputs
-      persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type e.g. AWS_S3, GCPXML, AZURE}
+      persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type e.g. AWS_S3 or AZURE}
       debug_enabled:             {required: false, type: boolean, default: false, description: Enable tmate debug session}
       run_enable_logging:        {required: false, type: boolean, default: false, description: Enable ArcticDB debug logging}
       run_commandline:           {required: false, type: string,  default: '',    description: Custom commandline to run before tests}
-      run_custom_pytest_command:  {required: false, type: string,  default: '',    description: Custom pytest command or additional arguments}
+      run_custom_pytest_command: {required: false, type: string,  default: '',    description: Custom pytest command or additional arguments}
 
 jobs:
   # ==================== JOB 1: COMPILE ====================
@@ -37,6 +36,7 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
       SCCACHE_GHA_ENABLED: "true"
+      IS_WINDOWS: ${{contains(inputs.platform, 'win')}}
     defaults:
       run:
         shell: bash -l {0}
@@ -65,27 +65,38 @@ jobs:
           post-cleanup: 'none'
 
       - name: Clear CMAKE_GENERATOR variables (Windows)
-        if: contains(inputs.platform, 'win')
+        if: env.IS_WINDOWS == 'true'
         shell: cmd /C call {0}
         run: |
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
 
-      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+      - name: Build ArcticDB with conda (Windows)
+        if: env.IS_WINDOWS == 'true'
+        shell: cmd /C call {0}
         run: |
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
-        shell: ${{contains(inputs.platform, 'win') && 'cmd /C call {0}' || 'bash -l {0}'}}
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: ${{contains(inputs.platform, 'win') && inputs.preset || ''}}
+          ARCTIC_CMAKE_PRESET: ${{inputs.preset}}
 
-      - name: Show sccache stats
-        if: ${{!contains(inputs.platform, 'win')}}
+      - name: Build ArcticDB with conda (Unix)
+        if: env.IS_WINDOWS != 'true'
+        run: |
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+
+      - name: Show sccache stats (Unix)
+        if: env.IS_WINDOWS != 'true'
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
 
       - name: Show sccache stats (Windows)
-        if: contains(inputs.platform, 'win')
+        if: env.IS_WINDOWS == 'true'
         shell: cmd /C call {0}
         run: |
           if defined SCCACHE_PATH (
@@ -95,16 +106,7 @@ jobs:
           )
 
       - name: Archive build artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-${{inputs.platform}}
-          retention-days: 7
-          path: |
-            cpp/out/${{inputs.preset}}-build/
-            python/arcticdb_ext*
-            python/**/*.so
-            python/**/*.pyd
+        uses: actions/upload-artifact
 
   # ==================== JOB 2: C++ TESTS ====================
   cpp_tests:
