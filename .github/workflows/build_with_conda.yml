@@ -256,257 +256,63 @@ jobs:
             python/**/*.so
             python/**/*.pyd
 
+  # CPP_Conda_Tests
   cpp_tests_linux_64:
-    name: C++ Tests (linux_64)
     if: |
       always() &&
       !cancelled() &&
       (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
     needs: [compile_linux_64]
-    runs-on: ubuntu-22.04
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
-      SCCACHE_GHA_ENABLED: "true"
-    defaults:
-      run:
-        shell: bash -l {0}
-    steps:
-      - uses: actions/checkout@v6.0.1
-        # Do not use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.12.0
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
-
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
-          large-packages: false # Time-consuming but doesn't save that much space (4GB)
-          docker-images: false  # We're using docker images we don't want to clear
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: build-linux_64
-          path: .
-
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v2.0.0
-        id: cpu-cores
-
-      - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
-        with:
-          environment-file: environment-dev.yml
-          environment-name: arcticdb
-          init-shell: >-
-            bash
-          cache-environment: true
-          cache-environment-key: conda-env-linux_64
-          post-cleanup: 'none'
-
-      - name: Configure C++ Tests (linux_64)
-        run: |
-          cd cpp
-          # Only reconfigure if TEST is not already ON in the CMake cache
-          # This avoids unnecessary reconfiguration when the compile job already built with TEST=ON
-          if [ -f out/linux-conda-release-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/linux-conda-release-build/CMakeCache.txt; then
-            echo "CMake cache already has TEST=ON, skipping reconfiguration"
-          else
-            cmake --preset linux-conda-release -DTEST=ON
-          fi
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Build C++ Tests (linux_64)
-        run: |
-          cd cpp
-          cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
-          cmake --build --preset linux-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Show sccache stats after C++ tests build (linux_64)
-        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
-
-      - name: Run C++ Tests (linux_64)
-        run: |
-          cd cpp/out/linux-conda-release-build/
-          ctest --output-on-failure
-        env:
-          ARCTICDB_USING_CONDA: 1
-
+    uses: ./.github/workflows/build_with_conda_cpp_tests.yml
+    with:
+      runner: ubuntu-22.04
+      platform: linux_64
+      preset: linux-conda-release
+      cache_key: conda-env-linux_64
+      free_disk_space: true
+  
   cpp_tests_linux_aarch64:
-    name: C++ Tests (linux_aarch64)
     if: |
       always() &&
       !cancelled() &&
       (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
     needs: [compile_linux_aarch64]
-    runs-on: ubuntu-22.04-arm
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
-      SCCACHE_GHA_ENABLED: "true"
-    defaults:
-      run:
-        shell: bash -l {0}
-    steps:
-      - uses: actions/checkout@v6.0.1
-        # Do not use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.12.0
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
-
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
-          large-packages: false # Time-consuming but doesn't save that much space (4GB)
-          docker-images: false  # We're using docker images we don't want to clear
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: build-linux_aarch64
-          path: .
-
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v2.0.0
-        id: cpu-cores
-
-      - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
-        with:
-          environment-file: environment-dev.yml
-          environment-name: arcticdb
-          init-shell: >-
-            bash
-          cache-environment: true
-          cache-environment-key: conda-env-linux_aarch64
-          post-cleanup: 'none'
-
-      - name: Configure C++ Tests (linux_aarch64)
-        run: |
-          cd cpp
-          # Only reconfigure if TEST is not already ON in the CMake cache
-          # This avoids unnecessary reconfiguration when the compile job already built with TEST=ON
-          if [ -f out/linux-conda-release-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/linux-conda-release-build/CMakeCache.txt; then
-            echo "CMake cache already has TEST=ON, skipping reconfiguration"
-          else
-            cmake --preset linux-conda-release -DTEST=ON
-          fi
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Build C++ Tests (linux_aarch64)
-        run: |
-          cd cpp
-          cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
-          cmake --build --preset linux-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Show sccache stats after C++ tests build (linux_aarch64)
-        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
-
-      - name: Run C++ Tests (linux_aarch64)
-        run: |
-          cd cpp/out/linux-conda-release-build/
-          ctest --output-on-failure
-        env:
-          ARCTICDB_USING_CONDA: 1
+    uses: ./.github/workflows/build_with_conda_cpp_tests.yml
+    with:
+      runner: ubuntu-22.04-arm
+      platform: linux_aarch64
+      preset: linux-conda-release
+      cache_key: conda-env-linux_aarch64
+      free_disk_space: true
 
   cpp_tests_osx_arm64:
-    name: C++ Tests (osx_arm64)
     if: |
       always() &&
       !cancelled() &&
       (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
     needs: [compile_osx_arm64]
-    runs-on: macos-14
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
-      SCCACHE_GHA_ENABLED: "true"
-    defaults:
-      run:
-        shell: bash -l {0}
-    steps:
-      - uses: actions/checkout@v6.0.1
-        # Do not use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
+    uses: ./.github/workflows/build_with_conda_cpp_tests.yml
+    with:
+      runner: macos-14
+      platform: osx_arm64
+      preset: macos-conda-release
+      cache_key: conda-env-osx_arm64
 
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.12.0
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
+  cpp_tests_win_64:
+    if: |
+      always() &&
+      !cancelled() &&
+      (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
+    needs: [compile_win_64]
+    uses: ./.github/workflows/build_with_conda_cpp_tests.yml
+    with:
+      runner: windows-latest
+      platform: win_64
+      preset: windows-cl-conda-release
+      cache_key: conda-env-win_64
+      enabled: false
 
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: build-osx_arm64
-          path: .
-
-      - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v2.0.0
-        id: cpu-cores
-
-      - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
-        with:
-          environment-file: environment-dev.yml
-          environment-name: arcticdb
-          init-shell: >-
-            bash
-          cache-environment: true
-          cache-environment-key: conda-env-osx_arm64
-          post-cleanup: 'none'
-
-      - name: Configure C++ Tests (osx_arm64)
-        run: |
-          cd cpp
-          # Only reconfigure if TEST is not already ON in the CMake cache
-          # This avoids unnecessary reconfiguration when the compile job already built with TEST=ON
-          if [ -f out/macos-conda-release-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/macos-conda-release-build/CMakeCache.txt; then
-            echo "CMake cache already has TEST=ON, skipping reconfiguration"
-          else
-            cmake --preset macos-conda-release -DTEST=ON
-          fi
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Build C++ Tests (osx_arm64)
-        run: |
-          cd cpp
-          cmake --build --preset macos-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
-          cmake --build --preset macos-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Show sccache stats after C++ tests build (osx_arm64)
-        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
-
-      - name: Run C++ Tests (osx_arm64)
-        run: |
-          cd cpp/out/macos-conda-release-build/
-          ctest --output-on-failure
-        env:
-          ARCTICDB_USING_CONDA: 1
-
+  # PYTHON_Conda_Tests ( TO DO !!! )
   python_tests_linux_64:
     name: Python Tests (linux_64) - ${{matrix.type}}
     if: |
@@ -1004,104 +810,7 @@ jobs:
             python/**/*.so
             python/**/*.pyd
 
-  cpp_tests_win_64:
-    name: C++ Tests (win_64)
-    if: |
-      always() &&
-      !cancelled() &&
-      (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
-    needs: [compile_win_64]
-    runs-on: windows-latest
-    env:
-      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
-      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
-      SCCACHE_GHA_ENABLED: "true"
-    steps:
-      - uses: actions/checkout@v6.0.1
-        # DONT use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v8
-        with:
-          name: build-win_64
-          path: .
-
-      - name: Configure sccache
-        uses: mozilla-actions/sccache-action@v0.0.9
-        with:
-          version: v0.12.0
-          disable_annotations: 'true'  # supress noisy report that pollutes the summary page
-
-      - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
-        with:
-          environment-file: environment-dev.yml
-          init-shell: bash cmd.exe
-          cache-environment: true
-          cache-environment-key: conda-env-win_64
-          post-cleanup: 'none'
-
-      - name: Configure C++ Tests (win_64)
-        shell: cmd /C call {0}
-        # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
-        if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        run: |
-          REM Some `CMAKE_*` variables (in particular CMAKE_GENERATOR_{PLATFORM,TOOLSET}) are set by mamba / micromamba / conda
-          REM when the environment is activated.
-          REM See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
-          REM The values which are chosen prevent Ninja to be used as a generator with MSVC.
-          REM We override those values so that we can.
-          set CMAKE_GENERATOR_PLATFORM=
-          set CMAKE_GENERATOR_TOOLSET=
-          cd cpp
-          cmake --preset windows-cl-conda-release -DTEST=ON
-        env:
-          ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
-
-      - name: Build C++ Tests (win_64)
-        shell: cmd /C call {0}
-        # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
-        if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        run: |
-          REM Some `CMAKE_*` variables (in particular CMAKE_GENERATOR_{PLATFORM,TOOLSET}) are set by mamba / micromamba / conda
-          REM when the environment is activated.
-          REM See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
-          REM The values which are chosen prevent Ninja to be used as a generator with MSVC.
-          REM We override those values so that we can.
-          set CMAKE_GENERATOR_PLATFORM=
-          set CMAKE_GENERATOR_TOOLSET=
-          cd cpp
-          cmake --build --preset windows-cl-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
-          cmake --build --preset windows-cl-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Show sccache stats after C++ tests build (win_64)
-        shell: cmd /C call {0}
-        run: |
-          if defined SCCACHE_PATH (
-            %SCCACHE_PATH% --show-stats
-          ) else (
-            sccache --show-stats
-          )
-
-      - name: Run C++ Tests (win_64)
-        shell: cmd /C call {0}
-        # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
-        if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        run: |
-          cd cpp/out/windows-cl-conda-release-build/
-          ctest --output-on-failure
-        env:
-          CTEST_OUTPUT_ON_FAILURE: 1
-          ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
-
+  
   python_tests_win_64:
     name: Python Tests (win_64) - ${{matrix.type}}
     if: |

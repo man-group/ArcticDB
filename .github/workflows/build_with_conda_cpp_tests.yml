@@ -1,0 +1,105 @@
+name: Conda C++ Tests
+on:
+  workflow_call:
+    inputs:
+      runner:
+        required: true
+        type: string
+      platform:
+        required: true
+        type: string
+      preset:
+        required: true
+        type: string
+      cache_key:
+        required: true
+        type: string
+      enabled:
+        required: false
+        type: boolean
+        default: true
+      free_disk_space:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  cpp_tests:
+    name: C++ Tests (${{inputs.platform}})
+    if: |
+      always() &&
+      !cancelled() &&
+      inputs.enabled
+    runs-on: ${{inputs.runner}}
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+      SCCACHE_GHA_ENABLED: "true"
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: v0.12.0
+          disable_annotations: 'true'
+
+      - name: Free Disk Space
+        if: inputs.free_disk_space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+          docker-images: false
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: build-${{inputs.platform}}
+          path: .
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: bash
+          cache-environment: true
+          cache-environment-key: ${{inputs.cache_key}}
+          post-cleanup: 'none'
+
+      - name: Configure C++ Tests
+        run: |
+          cd cpp
+          if [ -f out/${{inputs.preset}}-build/CMakeCache.txt ] && grep -q "TEST:BOOL=ON" out/${{inputs.preset}}-build/CMakeCache.txt; then
+            echo "CMake cache already has TEST=ON, skipping reconfiguration"
+          else
+            cmake --preset ${{inputs.preset}} -DTEST=ON
+          fi
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Build C++ Tests
+        run: |
+          cd cpp
+          cmake --build --preset ${{inputs.preset}} --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
+          cmake --build --preset ${{inputs.preset}} --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+      - name: Show sccache stats
+        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
+
+      - name: Run C++ Tests
+        run: |
+          cd cpp/out/${{inputs.preset}}-build/
+          ctest --output-on-failure
+        env:
+          ARCTICDB_USING_CONDA: 1
