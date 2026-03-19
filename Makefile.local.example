@@ -1,0 +1,14 @@
+# Makefile.local — User-specific overrides (gitignored)
+#
+# Copy this file to Makefile.local and edit as needed.
+# All variables here override the defaults in Makefile.
+
+RELEASE_PRESET   = linux-release-py310
+DEBUG_PRESET     = linux-debug-py310
+
+# ── Man group configuration ──────────────────────────────────────────────────
+# Prefix pip/cmake-configure commands to go through the corporate proxy
+PROXY_CMD        = withproxy
+# /tmp is noexec
+TMPDIR_OVERRIDE  = $(HOME)/.tmp
+PROTOC_VERS      = 456
