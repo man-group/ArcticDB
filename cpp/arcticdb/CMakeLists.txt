@@ -1070,6 +1070,7 @@ if(${TEST})
             util/test/gtest_main.cpp
             util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
+            util/test/test_bitset.cpp
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp

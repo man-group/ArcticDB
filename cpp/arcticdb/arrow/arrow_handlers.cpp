@@ -481,20 +481,18 @@ void ArrowBoolHandler::handle_type(
 void ArrowBoolHandler::
         convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>&, const ReadOptions&)
                 const {
-    using BoolTypeTag = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
     auto* packed_dest = dest_column.buffer().block_at_offset(m.offset_bytes_)->data();
     const auto positions = get_positions_after_truncation(m);
 
-    // TODO: This is probably terribly inefficient for dense data
-    for_each_enumerated_flattened<BoolTypeTag>(
-            source_column,
-            [&] ARCTICDB_LAMBDA_INLINE(const auto& en) { set_bit_at(packed_dest, en.idx(), en.value()); },
-            positions.first_idx_after_truncation,
-            positions.end_idx_after_truncation
-    );
-
     const bool is_sparse = source_column.opt_sparse_map().has_value();
     if (is_sparse) {
+        using BoolTypeTag = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
+        for_each_enumerated_flattened<BoolTypeTag>(
+                source_column,
+                [&] ARCTICDB_LAMBDA_INLINE(const auto& en) { set_bit_at(packed_dest, en.idx(), en.value()); },
+                positions.first_idx_after_truncation,
+                positions.end_idx_after_truncation
+        );
         const auto& sparse_map = *source_column.opt_sparse_map();
         // Copy the sparse map, because handle_truncation modifies the bitset inplace
         auto validity_bitset = sparse_map;
@@ -505,6 +503,10 @@ void ArrowBoolHandler::
                     positions.extra_buffer_position, validity_bitset, dest_column, AllocationType::DETACHABLE
             );
         }
+    } else {
+        bools_to_packed_bits(
+                reinterpret_cast<const bool*>(source_column.data().buffer().data()), m.num_rows_, packed_dest
+        );
     }
 
     handle_truncation(dest_column, m.truncate_);

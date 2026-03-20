@@ -39,6 +39,8 @@ void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
 
 void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr);
 
+void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest);
+
 bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos);
 
 void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value);
