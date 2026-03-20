@@ -250,6 +250,124 @@ def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format, column_
         generic_filter_test(lib, symbol, q, expected)
 
 
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("flipped", (True, False))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_datetime_col_against_numeric_value(
+    dtype, flipped, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    value = dtype(pd.Timestamp(1).value)
+    q = QueryBuilder()
+    if flipped:
+        q = q[getattr(value, function)(q["a"])]
+    else:
+        q = q[getattr(q["a"], function)(value)]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("flipped", (True, False))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_numeric_col_against_datetime_value(
+    dtype, flipped, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    value = pd.Timestamp(1)
+    q = QueryBuilder()
+    if flipped:
+        q = q[getattr(value, function)(q["a"])]
+    else:
+        q = q[getattr(q["a"], function)(value)]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_datetime_against_numeric_isin(
+    function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)([dtype(pd.Timestamp(1).value)])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_numeric_against_datetime_isin(
+    function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)([pd.Timestamp(1)])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_datetime_col_against_numeric_col(
+    dtype, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)], "b": np.array([0, 1], dtype=dtype)})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)(q["b"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_numeric_col_against_datetime_col(
+    dtype, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": np.array([0, 1], dtype=dtype), "b": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)(q["b"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
 def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -507,6 +625,30 @@ def test_filter_numeric_isnotin_hashing_overflow(
     result = lib.read("test_filter_numeric_isnotin_hashing_overflow", query_builder=q).data
 
     assert_frame_equal(df, result)
+
+
+def test_filter_isin_with_nan_in_set(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """Our isin handling doesn't match Pandas, which returns NaN rows from isin([np.nan])."""
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_with_nan_in_set"
+    df = pd.DataFrame({"a": [1.0, np.nan, 3.0]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["a"].isin([np.nan, 3.0])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [3.0]})
+    assert_frame_equal(expected, result)
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin([np.nan, 3.0])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [1.0, np.nan]})
+    assert_frame_equal(expected, result)
 
 
 _uint64_max = np.iinfo(np.uint64).max

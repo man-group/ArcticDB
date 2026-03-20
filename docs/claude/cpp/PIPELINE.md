@@ -143,9 +143,11 @@ Key types:
 | `ColumnStatsValues` | `column_stats_filter.hpp` | Min/max `Value` pair for one column in one row-slice |
 | `ColumnStatElement` | `column_stats.hpp` | `MIN` or `MAX` — the individual stat within a `MINMAX` stat type |
 
+`StatsVariantData` is a `std::variant` over `std::vector<StatsComparison>`, `std::shared_ptr<Value>`, `std::vector<ColumnStatsValues>`, and `std::shared_ptr<ValueSet>`. The `ValueSet` alternative is used by `isin`/`isnotin` expressions.
+
 ### Evaluation
 
-The filter expression AST is walked by `compute_stats()` / `evaluate_ast_node_against_stats()` in `column_stats_filter.cpp`. Leaf `ColumnName` nodes produce `ColumnStatsValues` vectors; leaf `ValueName` nodes produce `Value` pointers. Binary comparison operators (in `column_stats_dispatch.hpp`) apply three-valued logic (`StatsComparison`: `ALL_MATCH`, `NONE_MATCH`, `UNKNOWN`) using `ValueRange<T>` overloads on the existing comparison operator structs. Boolean operators (`AND`, `OR`, `XOR`, `NOT`) compose these results.
+The filter expression AST is walked by `compute_stats()` / `evaluate_ast_node_against_stats()` in `column_stats_filter.cpp`. Leaf `ColumnName` nodes produce `ColumnStatsValues` vectors; leaf `ValueName` nodes produce `Value` pointers; leaf `ValueSetName` nodes produce `ValueSet` pointers. Binary comparison operators (in `column_stats_dispatch.hpp`) apply three-valued logic (`StatsComparison`: `ALL_MATCH`, `NONE_MATCH`, `UNKNOWN`) using `ValueRange<T>` overloads on the existing comparison operator structs. Boolean operators (`AND`, `OR`, `XOR`, `NOT`) compose these results. Membership operators (`ISIN`, `ISNOTIN`) are handled by `visit_binary_membership_stats()`, which delegates to `stats_membership_comparator()` for each row-slice.
 
 If all filter clauses AND together to `NONE_MATCH` for a row-slice, that slice is excluded from the read via `create_column_stats_filter()`, which returns a `FilterQuery` lambda passed to `filter_index()`.
 

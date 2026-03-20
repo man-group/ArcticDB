@@ -116,6 +116,12 @@ The comparison operator structs (`LessThanOperator`, `GreaterThanOperator`, `Equ
 
 `ValueRange<T>` holds `min` and `max` fields. The `FlippedComparator` trait (in `column_stats_dispatch.hpp`) handles reversed operand order (e.g. `5 < col` becomes `col > 5`).
 
+#### Membership Operators (isin / isnotin)
+
+`stats_membership_comparator()` in `column_stats_dispatch.cpp` evaluates a segment's min/max stats against a `ValueSet`. It uses the `ValueSet`'s cached `min_value()` / `max_value()` (computed lazily via `std::call_once`, filtering out NaN values) for a fast range disjointness check. If the ranges overlap and the result is ambiguous, it falls back to iterating individual set elements against the segment's `ValueRange`. The `isnotin` result is the logical inverse of `isin`. `visit_binary_membership_stats()` applies this per row-slice across the stats vector.
+
+`Value::is_nan()` supports the NaN handling: segments where both min and max are NaN are treated as all-NaN and produce `NONE_MATCH` for `isin`.
+
 See [PIPELINE.md - Column Stats Filtering](PIPELINE.md#column-stats-filtering) for the full read-path integration.
 
 ### Type Dispatch
