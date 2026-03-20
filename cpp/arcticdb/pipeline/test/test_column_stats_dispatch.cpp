@@ -1462,3 +1462,191 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(OperationType::NE, StatsComparison::ALL_MATCH)
         )
 );
+
+// Parameters: (min, max, query_value, op, expected)
+class BoolValueRangeComparisonTest
+    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, OperationType, StatsComparison>> {};
+
+TEST_P(BoolValueRangeComparisonTest, AllCases) {
+    auto [min, max, value, op, expected] = GetParam();
+    std::vector<ColumnStatsValues> stats{{construct_value(min), construct_value(max)}};
+    auto query = std::make_shared<Value>(construct_value(value));
+    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result.at(0), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        LessThan, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] < false -> NONE_MATCH (min=false >= false)
+                std::make_tuple(false, false, false, OperationType::LT, StatsComparison::NONE_MATCH),
+                // [false, false] < true -> ALL_MATCH (max=false < true)
+                std::make_tuple(false, false, true, OperationType::LT, StatsComparison::ALL_MATCH),
+                // [false, true] < false -> NONE_MATCH (min=false >= false)
+                std::make_tuple(false, true, false, OperationType::LT, StatsComparison::NONE_MATCH),
+                // [false, true] < true -> UNKNOWN (min=false < true but max=true >= true)
+                std::make_tuple(false, true, true, OperationType::LT, StatsComparison::UNKNOWN),
+                // [true, true] < false -> NONE_MATCH (min=true >= false)
+                std::make_tuple(true, true, false, OperationType::LT, StatsComparison::NONE_MATCH),
+                // [true, true] < true -> NONE_MATCH (min=true >= true)
+                std::make_tuple(true, true, true, OperationType::LT, StatsComparison::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        LessThanEquals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] <= false -> ALL_MATCH
+                std::make_tuple(false, false, false, OperationType::LE, StatsComparison::ALL_MATCH),
+                // [false, false] <= true -> ALL_MATCH
+                std::make_tuple(false, false, true, OperationType::LE, StatsComparison::ALL_MATCH),
+                // [false, true] <= false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::LE, StatsComparison::UNKNOWN),
+                // [false, true] <= true -> ALL_MATCH
+                std::make_tuple(false, true, true, OperationType::LE, StatsComparison::ALL_MATCH),
+                // [true, true] <= false -> NONE_MATCH
+                std::make_tuple(true, true, false, OperationType::LE, StatsComparison::NONE_MATCH),
+                // [true, true] <= true -> ALL_MATCH
+                std::make_tuple(true, true, true, OperationType::LE, StatsComparison::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        GreaterThan, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] > false -> NONE_MATCH
+                std::make_tuple(false, false, false, OperationType::GT, StatsComparison::NONE_MATCH),
+                // [false, false] > true -> NONE_MATCH
+                std::make_tuple(false, false, true, OperationType::GT, StatsComparison::NONE_MATCH),
+                // [false, true] > false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::GT, StatsComparison::UNKNOWN),
+                // [false, true] > true -> NONE_MATCH
+                std::make_tuple(false, true, true, OperationType::GT, StatsComparison::NONE_MATCH),
+                // [true, true] > false -> ALL_MATCH
+                std::make_tuple(true, true, false, OperationType::GT, StatsComparison::ALL_MATCH),
+                // [true, true] > true -> NONE_MATCH
+                std::make_tuple(true, true, true, OperationType::GT, StatsComparison::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        GreaterThanEquals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] >= false -> ALL_MATCH
+                std::make_tuple(false, false, false, OperationType::GE, StatsComparison::ALL_MATCH),
+                // [false, false] >= true -> NONE_MATCH
+                std::make_tuple(false, false, true, OperationType::GE, StatsComparison::NONE_MATCH),
+                // [false, true] >= false -> ALL_MATCH
+                std::make_tuple(false, true, false, OperationType::GE, StatsComparison::ALL_MATCH),
+                // [false, true] >= true -> UNKNOWN
+                std::make_tuple(false, true, true, OperationType::GE, StatsComparison::UNKNOWN),
+                // [true, true] >= false -> ALL_MATCH
+                std::make_tuple(true, true, false, OperationType::GE, StatsComparison::ALL_MATCH),
+                // [true, true] >= true -> ALL_MATCH
+                std::make_tuple(true, true, true, OperationType::GE, StatsComparison::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        Equals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] == false -> ALL_MATCH
+                std::make_tuple(false, false, false, OperationType::EQ, StatsComparison::ALL_MATCH),
+                // [false, false] == true -> NONE_MATCH
+                std::make_tuple(false, false, true, OperationType::EQ, StatsComparison::NONE_MATCH),
+                // [false, true] == false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::EQ, StatsComparison::UNKNOWN),
+                // [false, true] == true -> UNKNOWN
+                std::make_tuple(false, true, true, OperationType::EQ, StatsComparison::UNKNOWN),
+                // [true, true] == false -> NONE_MATCH
+                std::make_tuple(true, true, false, OperationType::EQ, StatsComparison::NONE_MATCH),
+                // [true, true] == true -> ALL_MATCH
+                std::make_tuple(true, true, true, OperationType::EQ, StatsComparison::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        NotEquals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] != false -> NONE_MATCH
+                std::make_tuple(false, false, false, OperationType::NE, StatsComparison::NONE_MATCH),
+                // [false, false] != true -> ALL_MATCH
+                std::make_tuple(false, false, true, OperationType::NE, StatsComparison::ALL_MATCH),
+                // [false, true] != false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::NE, StatsComparison::UNKNOWN),
+                // [false, true] != true -> UNKNOWN
+                std::make_tuple(false, true, true, OperationType::NE, StatsComparison::UNKNOWN),
+                // [true, true] != false -> ALL_MATCH
+                std::make_tuple(true, true, false, OperationType::NE, StatsComparison::ALL_MATCH),
+                // [true, true] != true -> NONE_MATCH
+                std::make_tuple(true, true, true, OperationType::NE, StatsComparison::NONE_MATCH)
+        )
+);
+
+// Parameters: (min_opt, max_opt, query_val, op, expected)
+class BoolStatsComparatorTest
+    : public ::testing::TestWithParam<
+              std::tuple<std::optional<bool>, std::optional<bool>, bool, OperationType, StatsComparison>> {};
+
+TEST_P(BoolStatsComparatorTest, AllCases) {
+    auto [min_opt, max_opt, query_val, op, expected] = GetParam();
+    std::optional<Value> min_val = min_opt.has_value() ? std::optional{construct_value(*min_opt)} : std::nullopt;
+    std::optional<Value> max_val = max_opt.has_value() ? std::optional{construct_value(*max_opt)} : std::nullopt;
+    std::vector<ColumnStatsValues> stats{{min_val, max_val}};
+    auto query = std::make_shared<Value>(construct_value(query_val));
+    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result.at(0), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        MissingStats, BoolStatsComparatorTest,
+        ::testing::Values(
+                // Both missing -> UNKNOWN
+                std::make_tuple(
+                        std::optional<bool>{}, std::optional<bool>{}, true, OperationType::EQ, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        std::optional<bool>{}, std::optional<bool>{}, false, OperationType::GT, StatsComparison::UNKNOWN
+                )
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoolVsBool, BoolStatsComparatorTest,
+        ::testing::Values(
+                // [false, false] == false -> ALL_MATCH
+                std::make_tuple(
+                        std::optional{false}, std::optional{false}, false, OperationType::EQ, StatsComparison::ALL_MATCH
+                ),
+                // [false, false] == true -> NONE_MATCH
+                std::make_tuple(
+                        std::optional{false}, std::optional{false}, true, OperationType::EQ, StatsComparison::NONE_MATCH
+                ),
+                // [true, true] == true -> ALL_MATCH
+                std::make_tuple(
+                        std::optional{true}, std::optional{true}, true, OperationType::EQ, StatsComparison::ALL_MATCH
+                ),
+                // [true, true] > false -> ALL_MATCH
+                std::make_tuple(
+                        std::optional{true}, std::optional{true}, false, OperationType::GT, StatsComparison::ALL_MATCH
+                ),
+                // [false, true] < true -> UNKNOWN
+                std::make_tuple(
+                        std::optional{false}, std::optional{true}, true, OperationType::LT, StatsComparison::UNKNOWN
+                ),
+                // [false, false] != true -> ALL_MATCH
+                std::make_tuple(
+                        std::optional{false}, std::optional{false}, true, OperationType::NE, StatsComparison::ALL_MATCH
+                ),
+                // [false, true] >= true -> UNKNOWN
+                std::make_tuple(
+                        std::optional{false}, std::optional{true}, true, OperationType::GE, StatsComparison::UNKNOWN
+                ),
+                // [false, false] < true -> ALL_MATCH
+                std::make_tuple(
+                        std::optional{false}, std::optional{false}, true, OperationType::LT, StatsComparison::ALL_MATCH
+                )
+        )
+);

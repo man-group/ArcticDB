@@ -378,6 +378,8 @@ struct LessThanOperator {
     bool operator()(T t, U u) const {
         return t < u;
     }
+    // MSVC warns about using < on bool (C4804). Cast to int to suppress.
+    bool operator()(bool t, bool u) const { return static_cast<int>(t) < static_cast<int>(u); }
     template<typename T>
     bool operator()(std::optional<T>, T) const {
         util::raise_rte("Less than operator not supported with strings");
@@ -404,6 +406,7 @@ struct LessThanEqualsOperator {
     bool operator()(T t, U u) const {
         return t <= u;
     }
+    bool operator()(bool t, bool u) const { return static_cast<int>(t) <= static_cast<int>(u); }
     template<typename T>
     bool operator()(std::optional<T>, T) const {
         util::raise_rte("Less than equals operator not supported with strings");
@@ -430,6 +433,7 @@ struct GreaterThanOperator {
     bool operator()(T t, U u) const {
         return t > u;
     }
+    bool operator()(bool t, bool u) const { return static_cast<int>(t) > static_cast<int>(u); }
     template<typename T>
     bool operator()(std::optional<T>, T) const {
         util::raise_rte("Greater than operator not supported with strings");
@@ -456,6 +460,7 @@ struct GreaterThanEqualsOperator {
     bool operator()(T t, U u) const {
         return t >= u;
     }
+    bool operator()(bool t, bool u) const { return static_cast<int>(t) >= static_cast<int>(u); }
     template<typename T>
     bool operator()(std::optional<T>, T) const {
         util::raise_rte("Greater than equals operator not supported with strings");
@@ -482,6 +487,7 @@ struct EqualsOperator {
     bool operator()(T t, U u) const {
         return t == u;
     }
+    bool operator()(bool t, bool u) const { return static_cast<int>(t) == static_cast<int>(u); }
     template<typename T>
     bool operator()(T t, std::optional<T> u) const {
         if (u.has_value())
@@ -536,6 +542,7 @@ struct NotEqualsOperator {
     bool operator()(T t, U u) const {
         return t != u;
     }
+    bool operator()(bool t, bool u) const { return static_cast<int>(t) != static_cast<int>(u); }
     template<typename T>
     bool operator()(T t, std::optional<T> u) const {
         if (u.has_value())
