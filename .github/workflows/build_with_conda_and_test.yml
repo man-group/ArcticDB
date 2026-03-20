@@ -67,13 +67,6 @@ jobs:
           cache-environment-key: ${{inputs.cache_key}}
           post-cleanup: 'none'
 
-      - name: Clear CMAKE_GENERATOR variables (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: cmd /C call {0}
-        run: |
-          set CMAKE_GENERATOR_PLATFORM=
-          set CMAKE_GENERATOR_TOOLSET=
-
       - name: Build ArcticDB with conda (Windows)
         if: env.IS_WINDOWS == 'true'
         shell: cmd /C call {0}
