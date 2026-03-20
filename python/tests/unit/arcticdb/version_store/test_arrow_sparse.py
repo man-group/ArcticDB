@@ -226,9 +226,6 @@ class TestSparseArrowQueryBuilder:
         )
         lib.write(self.sym, self.table, index_column="ts")
 
-    @pytest.mark.xfail(
-        reason="isnull() does not detect nulls in non-float Arrow-written sparse columns (monday: 11433347675)"
-    )
     def test_filter_isnull(self, lmdb_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"].isnull()]
@@ -241,9 +238,6 @@ class TestSparseArrowQueryBuilder:
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    @pytest.mark.xfail(
-        reason="notnull() does not detect nulls in non-float Arrow-written sparse columns (monday: 11433347675)"
-    )
     def test_filter_notnull(self, lmdb_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"].notnull()]
@@ -306,9 +300,6 @@ class TestSparseArrowQueryBuilder:
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    @pytest.mark.xfail(
-        reason="notnull() does not detect nulls in non-float Arrow-written sparse columns (monday: 11433347675)"
-    )
     def test_filter_combined_columns(self, lmdb_version_store_arrow):
         q = QueryBuilder()
         q = q[(q["int_col"].notnull()) & (q["float_col"].notnull())]
@@ -347,9 +338,6 @@ class TestSparseArrowQueryBuilder:
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    @pytest.mark.xfail(
-        reason="notnull() does not detect nulls in non-float Arrow-written sparse columns (monday: 11433347675)"
-    )
     def test_date_range_with_filter(self, lmdb_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"].notnull()]
