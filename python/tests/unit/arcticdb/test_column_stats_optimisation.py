@@ -8,6 +8,7 @@ import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
 from arcticdb.util.test import config_context, config_context_multi
+from arcticdb_ext.exceptions import UserInputException
 
 
 def get_table_data_read_count():
@@ -1225,3 +1226,163 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
     q = q[q["col"] > 0]
     result = lib.read(sym, query_builder=q).data
     assert len(result) == 0
+
+
+@pytest.mark.parametrize(
+    "query_expr,expected_reads",
+    [
+        pytest.param(lambda q: q["bool_col"] == True, 2, id="eq_true"),  # noqa: E712
+        pytest.param(lambda q: q["bool_col"] == False, 2, id="eq_false"),  # noqa: E712
+        pytest.param(lambda q: q["bool_col"] != True, 2, id="ne_true"),  # noqa: E712
+        pytest.param(lambda q: q["bool_col"] != False, 2, id="ne_false"),  # noqa: E712
+        pytest.param(lambda q: True == q["bool_col"], 2, id="true_eq"),  # noqa: E712
+        pytest.param(lambda q: False == q["bool_col"], 2, id="false_eq"),  # noqa: E712
+    ],
+)
+def test_column_stats_bool_comparison_operators(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"bool_col": [True, True]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"bool_col": [False, True]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"bool_col": [False, False]}, index=pd.date_range("2000-01-05", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"bool_col": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1, df2])
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA reads, got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr,expected_reads",
+    [
+        pytest.param(lambda q: (q["int_col"] > 4) & q["bool_col"], 1, id="comparison_and_bool_col"),
+        pytest.param(lambda q: q["bool_col"] & (q["int_col"] > 4), 1, id="bool_col_and_comparison"),
+        pytest.param(lambda q: (q["int_col"] > 4) | q["bool_col"], 1, id="comparison_or_bool_col"),
+    ],
+)
+def test_column_stats_bool_col_combined_with_comparison(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"int_col": [1, 2], "bool_col": [False, False]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"int_col": [5, 6], "bool_col": [True, True]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"int_col": {"MINMAX"}, "bool_col": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA reads, got {table_data_reads}"
+
+
+def test_column_stats_bool_col_and_bool_value(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """Test expressions like `q["b"] & True`"""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"b": [False, False]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"b": [True, True]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats(sym, {"b": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[q["b"] & True]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+    assert_frame_equal(result, df1)
+    assert table_data_reads == 1, f"Expected 1 read, got {table_data_reads}"
+
+    q = QueryBuilder()
+    q = q[q["b"] | False]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+    assert_frame_equal(result, df1)
+    assert table_data_reads == 1, f"Expected 1 read, got {table_data_reads}"
+
+
+def test_column_stats_two_bool_cols(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    """Test binary boolean operation between two bool columns"""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"b1": [True, True], "b2": [False, False]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"b1": [True, True], "b2": [True, True]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats(sym, {"b1": {"MINMAX"}, "b2": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[q["b1"] & q["b2"]]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+    assert_frame_equal(result, df1)
+    assert table_data_reads == 1, f"Expected 1 read, got {table_data_reads}"
+
+
+def test_column_stats_bool_vs_int_cross_type(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+):
+    """Cross-type bool-vs-int comparisons (e.g. bool_col > 0) are rejected by the
+    processing layer. When column stats prune all segments the error is bypassed and
+    an empty result is silently returned, which is acceptable since it is correct."""
+    lib = in_memory_version_store
+
+    # seg0: all-true, seg1: all-false
+    df0 = pd.DataFrame({"bool_col": [True, True]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"bool_col": [False, False]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.create_column_stats(sym, {"bool_col": {"MINMAX"}})
+
+    # When a surviving segment is processed, the cross-type comparison is rejected
+    q = QueryBuilder()
+    q = q[q["bool_col"] > 0]
+    with pytest.raises(UserInputException):
+        lib.read(sym, query_builder=q)
+
+    # When column stats prune ALL segments, schema validation still rejects it
+    df_only_false = pd.DataFrame({"bool_col": [False, False]}, index=pd.date_range("2000-01-01", periods=2))
+    lib.write(sym, df_only_false)
+    lib.create_column_stats(sym, {"bool_col": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["bool_col"] > 0]
+    with pytest.raises(UserInputException):
+        lib.read(sym, query_builder=q)

@@ -630,3 +630,347 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::NE, SC::ALL_MATCH)
         )
 );
+
+// ============================================================================
+// Bool ValueRange comparison tests
+// ============================================================================
+// Parameters: (min, max, query_value, op, expected)
+class BoolValueRangeComparisonTest : public ::testing::TestWithParam<std::tuple<bool, bool, bool, OperationType, SC>> {
+};
+
+TEST_P(BoolValueRangeComparisonTest, AllCases) {
+    auto [min, max, value, op, expected] = GetParam();
+    ASSERT_EQ(value_range_comparison(ValueRange<bool>{min, max}, value, op), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        LessThan, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] < false -> NONE_MATCH (min=false >= false)
+                std::make_tuple(false, false, false, OperationType::LT, SC::NONE_MATCH),
+                // [false, false] < true -> ALL_MATCH (max=false < true)
+                std::make_tuple(false, false, true, OperationType::LT, SC::ALL_MATCH),
+                // [false, true] < false -> NONE_MATCH (min=false >= false)
+                std::make_tuple(false, true, false, OperationType::LT, SC::NONE_MATCH),
+                // [false, true] < true -> UNKNOWN (min=false < true but max=true >= true)
+                std::make_tuple(false, true, true, OperationType::LT, SC::UNKNOWN),
+                // [true, true] < false -> NONE_MATCH (min=true >= false)
+                std::make_tuple(true, true, false, OperationType::LT, SC::NONE_MATCH),
+                // [true, true] < true -> NONE_MATCH (min=true >= true)
+                std::make_tuple(true, true, true, OperationType::LT, SC::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        LessThanEquals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] <= false -> ALL_MATCH
+                std::make_tuple(false, false, false, OperationType::LE, SC::ALL_MATCH),
+                // [false, false] <= true -> ALL_MATCH
+                std::make_tuple(false, false, true, OperationType::LE, SC::ALL_MATCH),
+                // [false, true] <= false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::LE, SC::UNKNOWN),
+                // [false, true] <= true -> ALL_MATCH
+                std::make_tuple(false, true, true, OperationType::LE, SC::ALL_MATCH),
+                // [true, true] <= false -> NONE_MATCH
+                std::make_tuple(true, true, false, OperationType::LE, SC::NONE_MATCH),
+                // [true, true] <= true -> ALL_MATCH
+                std::make_tuple(true, true, true, OperationType::LE, SC::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        GreaterThan, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] > false -> NONE_MATCH
+                std::make_tuple(false, false, false, OperationType::GT, SC::NONE_MATCH),
+                // [false, false] > true -> NONE_MATCH
+                std::make_tuple(false, false, true, OperationType::GT, SC::NONE_MATCH),
+                // [false, true] > false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::GT, SC::UNKNOWN),
+                // [false, true] > true -> NONE_MATCH
+                std::make_tuple(false, true, true, OperationType::GT, SC::NONE_MATCH),
+                // [true, true] > false -> ALL_MATCH
+                std::make_tuple(true, true, false, OperationType::GT, SC::ALL_MATCH),
+                // [true, true] > true -> NONE_MATCH
+                std::make_tuple(true, true, true, OperationType::GT, SC::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        GreaterThanEquals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] >= false -> ALL_MATCH
+                std::make_tuple(false, false, false, OperationType::GE, SC::ALL_MATCH),
+                // [false, false] >= true -> NONE_MATCH
+                std::make_tuple(false, false, true, OperationType::GE, SC::NONE_MATCH),
+                // [false, true] >= false -> ALL_MATCH
+                std::make_tuple(false, true, false, OperationType::GE, SC::ALL_MATCH),
+                // [false, true] >= true -> UNKNOWN
+                std::make_tuple(false, true, true, OperationType::GE, SC::UNKNOWN),
+                // [true, true] >= false -> ALL_MATCH
+                std::make_tuple(true, true, false, OperationType::GE, SC::ALL_MATCH),
+                // [true, true] >= true -> ALL_MATCH
+                std::make_tuple(true, true, true, OperationType::GE, SC::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        Equals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] == false -> ALL_MATCH
+                std::make_tuple(false, false, false, OperationType::EQ, SC::ALL_MATCH),
+                // [false, false] == true -> NONE_MATCH
+                std::make_tuple(false, false, true, OperationType::EQ, SC::NONE_MATCH),
+                // [false, true] == false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::EQ, SC::UNKNOWN),
+                // [false, true] == true -> UNKNOWN
+                std::make_tuple(false, true, true, OperationType::EQ, SC::UNKNOWN),
+                // [true, true] == false -> NONE_MATCH
+                std::make_tuple(true, true, false, OperationType::EQ, SC::NONE_MATCH),
+                // [true, true] == true -> ALL_MATCH
+                std::make_tuple(true, true, true, OperationType::EQ, SC::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        NotEquals, BoolValueRangeComparisonTest,
+        ::testing::Values(
+                // [false, false] != false -> NONE_MATCH
+                std::make_tuple(false, false, false, OperationType::NE, SC::NONE_MATCH),
+                // [false, false] != true -> ALL_MATCH
+                std::make_tuple(false, false, true, OperationType::NE, SC::ALL_MATCH),
+                // [false, true] != false -> UNKNOWN
+                std::make_tuple(false, true, false, OperationType::NE, SC::UNKNOWN),
+                // [false, true] != true -> UNKNOWN
+                std::make_tuple(false, true, true, OperationType::NE, SC::UNKNOWN),
+                // [true, true] != false -> ALL_MATCH
+                std::make_tuple(true, true, false, OperationType::NE, SC::ALL_MATCH),
+                // [true, true] != true -> NONE_MATCH
+                std::make_tuple(true, true, true, OperationType::NE, SC::NONE_MATCH)
+        )
+);
+
+// ============================================================================
+// Bool stats_comparator tests
+// ============================================================================
+// Parameters: (min_opt, max_opt, query_val, op, expected)
+class BoolStatsComparatorTest
+    : public ::testing::TestWithParam<std::tuple<std::optional<bool>, std::optional<bool>, bool, OperationType, SC>> {};
+
+TEST_P(BoolStatsComparatorTest, AllCases) {
+    auto [min_opt, max_opt, query_val, op, expected] = GetParam();
+    ColumnStatsValues csv{
+            min_opt.has_value() ? std::optional<Value>{construct_value(*min_opt)} : std::nullopt,
+            max_opt.has_value() ? std::optional<Value>{construct_value(*max_opt)} : std::nullopt
+    };
+    Value query = construct_value(query_val);
+    SC result;
+    switch (op) {
+    case OperationType::EQ:
+        result = stats_comparator(csv, query, EqualsOperator{});
+        break;
+    case OperationType::NE:
+        result = stats_comparator(csv, query, NotEqualsOperator{});
+        break;
+    case OperationType::LT:
+        result = stats_comparator(csv, query, LessThanOperator{});
+        break;
+    case OperationType::LE:
+        result = stats_comparator(csv, query, LessThanEqualsOperator{});
+        break;
+    case OperationType::GT:
+        result = stats_comparator(csv, query, GreaterThanOperator{});
+        break;
+    case OperationType::GE:
+        result = stats_comparator(csv, query, GreaterThanEqualsOperator{});
+        break;
+    default:
+        FAIL() << "Unexpected op";
+    }
+    ASSERT_EQ(result, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        MissingStats, BoolStatsComparatorTest,
+        ::testing::Values(
+                std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, true, OperationType::EQ, SC::UNKNOWN),
+                std::make_tuple(std::optional{false}, std::optional<bool>{}, true, OperationType::EQ, SC::UNKNOWN),
+                std::make_tuple(std::optional<bool>{}, std::optional{true}, false, OperationType::EQ, SC::UNKNOWN),
+                std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, false, OperationType::GT, SC::UNKNOWN),
+                std::make_tuple(std::optional{true}, std::optional<bool>{}, true, OperationType::LT, SC::UNKNOWN),
+                std::make_tuple(std::optional<bool>{}, std::optional{false}, false, OperationType::NE, SC::UNKNOWN)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoolVsBool, BoolStatsComparatorTest,
+        ::testing::Values(
+                // [false, false] == false -> ALL_MATCH
+                std::make_tuple(std::optional{false}, std::optional{false}, false, OperationType::EQ, SC::ALL_MATCH),
+                // [false, false] == true -> NONE_MATCH
+                std::make_tuple(std::optional{false}, std::optional{false}, true, OperationType::EQ, SC::NONE_MATCH),
+                // [true, true] == true -> ALL_MATCH
+                std::make_tuple(std::optional{true}, std::optional{true}, true, OperationType::EQ, SC::ALL_MATCH),
+                // [true, true] > false -> ALL_MATCH
+                std::make_tuple(std::optional{true}, std::optional{true}, false, OperationType::GT, SC::ALL_MATCH),
+                // [false, true] < true -> UNKNOWN
+                std::make_tuple(std::optional{false}, std::optional{true}, true, OperationType::LT, SC::UNKNOWN),
+                // [false, false] != true -> ALL_MATCH
+                std::make_tuple(std::optional{false}, std::optional{false}, true, OperationType::NE, SC::ALL_MATCH),
+                // [false, true] >= true -> UNKNOWN
+                std::make_tuple(std::optional{false}, std::optional{true}, true, OperationType::GE, SC::UNKNOWN),
+                // [false, false] < true -> ALL_MATCH
+                std::make_tuple(std::optional{false}, std::optional{false}, true, OperationType::LT, SC::ALL_MATCH)
+        )
+);
+
+// ============================================================================
+// to_stats_comparison_for_boolean tests
+// ============================================================================
+TEST(ToStatsComparisonForBoolean, FromColumnStatsValues) {
+    // Delegates to unary_boolean_stats with IDENTITY
+    ColumnStatsValues all_true{
+            std::optional<Value>{construct_value(true)}, std::optional<Value>{construct_value(true)}
+    };
+    ASSERT_EQ(to_stats_comparison_for_boolean(all_true), SC::ALL_MATCH);
+
+    ColumnStatsValues all_false{
+            std::optional<Value>{construct_value(false)}, std::optional<Value>{construct_value(false)}
+    };
+    ASSERT_EQ(to_stats_comparison_for_boolean(all_false), SC::NONE_MATCH);
+
+    ColumnStatsValues mixed{std::optional<Value>{construct_value(false)}, std::optional<Value>{construct_value(true)}};
+    ASSERT_EQ(to_stats_comparison_for_boolean(mixed), SC::UNKNOWN);
+
+    ColumnStatsValues missing{std::nullopt, std::nullopt};
+    ASSERT_EQ(to_stats_comparison_for_boolean(missing), SC::UNKNOWN);
+}
+
+TEST(ToStatsComparisonForBoolean, FromValue) {
+    Value val_true = construct_value(true);
+    ASSERT_EQ(to_stats_comparison_for_boolean(val_true), SC::ALL_MATCH);
+
+    Value val_false = construct_value(false);
+    ASSERT_EQ(to_stats_comparison_for_boolean(val_false), SC::NONE_MATCH);
+}
+
+TEST(ToStatsComparisonForBoolean, NonBoolValueRaises) {
+    Value val_int = construct_value(int64_t{42});
+    ASSERT_THROW(to_stats_comparison_for_boolean(val_int), std::runtime_error);
+
+    Value val_double = construct_value(3.14);
+    ASSERT_THROW(to_stats_comparison_for_boolean(val_double), std::runtime_error);
+}
+
+// ============================================================================
+// visit_binary_boolean_stats new cases
+// ============================================================================
+namespace {
+
+ColumnStatsValues make_bool_csv(bool min, bool max) {
+    return ColumnStatsValues{std::optional<Value>{construct_value(min)}, std::optional<Value>{construct_value(max)}};
+}
+
+std::shared_ptr<Value> make_bool_value(bool v) { return std::make_shared<Value>(construct_value(v)); }
+
+std::shared_ptr<Value> make_int_value(int64_t v) { return std::make_shared<Value>(construct_value(v)); }
+
+} // namespace
+
+TEST(VisitBinaryBooleanStatsNewCases, StatsComparisonXColumnStatsValues) {
+    // StatsComparison AND ColumnStatsValues(all true) => depends on left
+    std::vector<StatsComparison> left{SC::ALL_MATCH, SC::NONE_MATCH, SC::UNKNOWN};
+    std::vector<ColumnStatsValues> right{
+            make_bool_csv(true, true), make_bool_csv(true, true), make_bool_csv(true, true)
+    };
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::AND);
+    ASSERT_EQ(result, (std::vector{SC::ALL_MATCH, SC::NONE_MATCH, SC::UNKNOWN}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, ColumnStatsValuesXStatsComparison) {
+    std::vector<ColumnStatsValues> left{make_bool_csv(false, false), make_bool_csv(true, true)};
+    std::vector<StatsComparison> right{SC::ALL_MATCH, SC::ALL_MATCH};
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    // NONE_MATCH AND ALL_MATCH = NONE_MATCH, ALL_MATCH AND ALL_MATCH = ALL_MATCH
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::AND);
+    ASSERT_EQ(result, (std::vector{SC::NONE_MATCH, SC::ALL_MATCH}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, ColumnStatsValuesXColumnStatsValues) {
+    std::vector<ColumnStatsValues> left{make_bool_csv(true, true), make_bool_csv(false, false)};
+    std::vector<ColumnStatsValues> right{make_bool_csv(false, false), make_bool_csv(false, false)};
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    // ALL_MATCH OR NONE_MATCH = ALL_MATCH, NONE_MATCH OR NONE_MATCH = NONE_MATCH
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::OR);
+    ASSERT_EQ(result, (std::vector{SC::ALL_MATCH, SC::NONE_MATCH}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, StatsComparisonXBoolValue) {
+    std::vector<StatsComparison> left{SC::ALL_MATCH, SC::NONE_MATCH};
+    auto right = make_bool_value(true);
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    // ALL_MATCH AND ALL_MATCH = ALL_MATCH, NONE_MATCH AND ALL_MATCH = NONE_MATCH
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::AND);
+    ASSERT_EQ(result, (std::vector{SC::ALL_MATCH, SC::NONE_MATCH}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, BoolValueXStatsComparison) {
+    auto left = make_bool_value(false);
+    std::vector<StatsComparison> right{SC::ALL_MATCH, SC::NONE_MATCH};
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    // NONE_MATCH OR ALL_MATCH = ALL_MATCH, NONE_MATCH OR NONE_MATCH = NONE_MATCH
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::OR);
+    ASSERT_EQ(result, (std::vector{SC::ALL_MATCH, SC::NONE_MATCH}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, ColumnStatsValuesXBoolValue) {
+    std::vector<ColumnStatsValues> left{make_bool_csv(true, true), make_bool_csv(false, true)};
+    auto right = make_bool_value(true);
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    // ALL_MATCH AND ALL_MATCH = ALL_MATCH, UNKNOWN AND ALL_MATCH = UNKNOWN
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::AND);
+    ASSERT_EQ(result, (std::vector{SC::ALL_MATCH, SC::UNKNOWN}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, BoolValueXColumnStatsValues) {
+    auto left = make_bool_value(true);
+    std::vector<ColumnStatsValues> right{make_bool_csv(false, false), make_bool_csv(true, true)};
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    // ALL_MATCH XOR NONE_MATCH = ALL_MATCH, ALL_MATCH XOR ALL_MATCH = NONE_MATCH
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::XOR);
+    ASSERT_EQ(result, (std::vector{SC::ALL_MATCH, SC::NONE_MATCH}));
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, BoolValueXBoolValue) {
+    auto left = make_bool_value(true);
+    auto right = make_bool_value(false);
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    auto result = visit_binary_boolean_stats(lv, rv, OperationType::AND);
+    ASSERT_TRUE(result.empty());
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, NonBoolValueRaises) {
+    std::vector<StatsComparison> left{SC::ALL_MATCH};
+    auto right = make_int_value(42);
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    ASSERT_THROW(visit_binary_boolean_stats(lv, rv, OperationType::AND), std::runtime_error);
+}
+
+TEST(VisitBinaryBooleanStatsNewCases, NonBoolValueRaisesReversed) {
+    auto left = make_int_value(42);
+    std::vector<StatsComparison> right{SC::ALL_MATCH};
+    StatsVariantData lv = left;
+    StatsVariantData rv = right;
+    ASSERT_THROW(visit_binary_boolean_stats(lv, rv, OperationType::AND), std::runtime_error);
+}
