@@ -320,7 +320,7 @@ jobs:
           npm_config_prefix=$(npm config get prefix)
           npm_bin_dir="$npm_config_prefix"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
-            npm_bin_dir=$(echo "$npm_bin_dir" | sed 's|^$[A-Z]$:|/\1|' | tr '[:upper:]' '[:lower:]' | sed 's|\\|/|g')
+            npm_bin_dir=$(echo "$npm_bin_dir" | sed 's|^$[A-Za-z]$:|/\1|' | tr '[:upper:]' '[:lower:]' | sed 's|\\|/|g')
           fi
           npm_bin_dir="${npm_bin_dir}/bin"
           echo "$npm_bin_dir" >> $GITHUB_PATH
