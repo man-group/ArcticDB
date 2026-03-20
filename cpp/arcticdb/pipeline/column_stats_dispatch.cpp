@@ -30,6 +30,32 @@ size_t stats_variant_size(const StatsVariantData& v) {
     );
 }
 
+bool value_is_nan(const Value& val) {
+    if (is_floating_point_type(val.data_type())) {
+        return details::visit_type(val.data_type(), [&val]<typename TagType>(TagType) -> bool {
+            using RawType = TagType::raw_type;
+            if constexpr (std::is_floating_point_v<RawType>) {
+                return std::isnan(val.get<RawType>());
+            }
+            return false;
+        });
+    }
+    return false;
+}
+
+StatsComparison to_stats_comparison_for_boolean(const ColumnStatsValues& csv) {
+    return unary_boolean_stats(csv, OperationType::IDENTITY);
+}
+
+StatsComparison to_stats_comparison_for_boolean(const Value& val) {
+    util::check(
+            is_bool_type(val.data_type()),
+            "Expected bool type in to_stats_comparison_for_boolean, got {}",
+            get_user_friendly_type_string(val.descriptor())
+    );
+    return val.get<bool>() ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+}
+
 StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation) {
     switch (operation) {
     case OperationType::AND:
@@ -55,36 +81,91 @@ StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right
     }
 }
 
+namespace {
+
+std::vector<StatsComparison> pairwise_binary_boolean(
+        const std::vector<StatsComparison>& l, const std::vector<StatsComparison>& r, OperationType operation
+) {
+    util::check(
+            l.size() == r.size(), "Mismatched vector sizes in pairwise_binary_boolean: {} vs {}", l.size(), r.size()
+    );
+    std::vector<StatsComparison> result;
+    result.reserve(l.size());
+    for (size_t i = 0; i < l.size(); ++i) {
+        result.push_back(binary_boolean_stats(l[i], r[i], operation));
+    }
+    return result;
+}
+
+std::vector<StatsComparison> convert_csv_vector(const std::vector<ColumnStatsValues>& csvs) {
+    std::vector<StatsComparison> result;
+    result.reserve(csvs.size());
+    for (const auto& csv : csvs) {
+        result.push_back(to_stats_comparison_for_boolean(csv));
+    }
+    return result;
+}
+
+std::vector<StatsComparison> broadcast_value(StatsComparison val, size_t size) { return std::vector(size, val); }
+
+} // namespace
+
 std::vector<StatsComparison> visit_binary_boolean_stats(
         const StatsVariantData& left, const StatsVariantData& right, OperationType operation
 ) {
-    // TODO aseaton remaining cases Monday: 11292565671
-    // StatsComparison & Value -> Only if Value is a bool
-    // StatsComparison & ColumnStatsValues -> Only if ColumnStatsValues are a bool
-    // Value & Value -> Only if Value is a bool
-    // ColumnStatsValues & ColumnStatsValues -> Only if a bool
-    // Value & ColumnStatsValues -> Only if a bool
     return std::visit(
             util::overload{
+                    // StatsComparison x StatsComparison
                     [operation](const std::vector<StatsComparison>& l, const std::vector<StatsComparison>& r)
+                            -> std::vector<StatsComparison> { return pairwise_binary_boolean(l, r, operation); },
+                    // StatsComparison x ColumnStatsValues
+                    [operation](const std::vector<StatsComparison>& l, const std::vector<ColumnStatsValues>& r)
                             -> std::vector<StatsComparison> {
-                        util::check(
-                                l.size() == r.size(),
-                                "Mismatched vector sizes in visit_binary_boolean_stats: {} vs {}",
-                                l.size(),
-                                r.size()
-                        );
-                        std::vector<StatsComparison> result;
-                        result.reserve(l.size());
-                        for (size_t i = 0; i < l.size(); ++i) {
-                            result.push_back(binary_boolean_stats(l.at(i), r.at(i), operation));
-                        }
-                        return result;
+                        return pairwise_binary_boolean(l, convert_csv_vector(r), operation);
                     },
-                    [&](const auto&, const auto&) -> std::vector<StatsComparison> {
-                        size_t sz = std::max(stats_variant_size(left), stats_variant_size(right));
-                        log::version().warn("Unsupported case in visit_binary_boolean_stats");
-                        return std::vector(sz, StatsComparison::UNKNOWN);
+                    // ColumnStatsValues x StatsComparison
+                    [operation](const std::vector<ColumnStatsValues>& l, const std::vector<StatsComparison>& r)
+                            -> std::vector<StatsComparison> {
+                        return pairwise_binary_boolean(convert_csv_vector(l), r, operation);
+                    },
+                    // ColumnStatsValues x ColumnStatsValues
+                    [operation](const std::vector<ColumnStatsValues>& l, const std::vector<ColumnStatsValues>& r)
+                            -> std::vector<StatsComparison> {
+                        return pairwise_binary_boolean(convert_csv_vector(l), convert_csv_vector(r), operation);
+                    },
+                    // StatsComparison x Value
+                    [operation](const std::vector<StatsComparison>& l, const std::shared_ptr<Value>& r)
+                            -> std::vector<StatsComparison> {
+                        return pairwise_binary_boolean(
+                                l, broadcast_value(to_stats_comparison_for_boolean(*r), l.size()), operation
+                        );
+                    },
+                    // Value x StatsComparison
+                    [operation](const std::shared_ptr<Value>& l, const std::vector<StatsComparison>& r)
+                            -> std::vector<StatsComparison> {
+                        return pairwise_binary_boolean(
+                                broadcast_value(to_stats_comparison_for_boolean(*l), r.size()), r, operation
+                        );
+                    },
+                    // ColumnStatsValues x Value
+                    [operation](const std::vector<ColumnStatsValues>& l, const std::shared_ptr<Value>& r)
+                            -> std::vector<StatsComparison> {
+                        auto converted_l = convert_csv_vector(l);
+                        return pairwise_binary_boolean(
+                                converted_l, broadcast_value(to_stats_comparison_for_boolean(*r), l.size()), operation
+                        );
+                    },
+                    // Value x ColumnStatsValues
+                    [operation](const std::shared_ptr<Value>& l, const std::vector<ColumnStatsValues>& r)
+                            -> std::vector<StatsComparison> {
+                        auto converted_r = convert_csv_vector(r);
+                        return pairwise_binary_boolean(
+                                broadcast_value(to_stats_comparison_for_boolean(*l), r.size()), converted_r, operation
+                        );
+                    },
+                    // Value x Value
+                    [](const std::shared_ptr<Value>&, const std::shared_ptr<Value>&) -> std::vector<StatsComparison> {
+                        return {};
                     }
             },
             left,
