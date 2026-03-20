@@ -14,7 +14,9 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
 
 #include <memory>
@@ -49,6 +51,27 @@ StatsVariantData compute_stats(
 namespace column_stats_detail {
 
 size_t stats_variant_size(const StatsVariantData& v);
+
+bool value_is_nan(const Value& val);
+
+template<DataType StatsType, DataType ValType>
+void check_no_mixed_bool_comparison(const Value& stats_val, const Value& query_val) {
+    constexpr bool stats_is_bool = is_bool_type(StatsType);
+    constexpr bool val_is_bool = is_bool_type(ValType);
+    if constexpr (stats_is_bool && !val_is_bool) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Invalid comparison: cannot compare bool column ({}) with non-bool value ({})",
+                get_user_friendly_type_string(stats_val.descriptor()),
+                get_user_friendly_type_string(query_val.descriptor())
+        );
+    } else if constexpr (!stats_is_bool && val_is_bool) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Invalid comparison: cannot compare non-bool column ({}) with bool value ({})",
+                get_user_friendly_type_string(stats_val.descriptor()),
+                get_user_friendly_type_string(query_val.descriptor())
+        );
+    }
+}
 
 template<typename Func>
 struct FlippedComparator;
@@ -90,11 +113,14 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
         return details::visit_type(val_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
             using ValTag = std::remove_reference_t<decltype(val_tag)>;
 
-            // bools are disabled in this part of the grammar at the moment, Monday: 11292565671
             // Monday: 8065794446 we should disallow comparing time types to non-time numeric types
             // This is also wrong downstream in the rest of the processing pipeline
-            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
-                          (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
+            constexpr bool stats_supported = is_numeric_type(StatsTag::data_type) ||
+                                             is_time_type(StatsTag::data_type) || is_bool_type(StatsTag::data_type);
+            constexpr bool val_supported = is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type) ||
+                                           is_bool_type(ValTag::data_type);
+            check_no_mixed_bool_comparison<StatsTag::data_type, ValTag::data_type>(*stats_lhs.min, val_rhs);
+            if constexpr (stats_supported && val_supported) {
                 using StatsRawType = StatsTag::raw_type;
                 using ValRawType = ValTag::raw_type;
                 using comp = Comparable<StatsRawType, ValRawType>;
@@ -144,6 +170,9 @@ std::vector<StatsComparison> visit_binary_comparator_stats(
             right
     );
 }
+
+StatsComparison to_stats_comparison_for_boolean(const ColumnStatsValues& csv);
+StatsComparison to_stats_comparison_for_boolean(const Value& val);
 
 StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, ValueSet& value_set, OperationType op);
 
