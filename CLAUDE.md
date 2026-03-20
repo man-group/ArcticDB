@@ -58,6 +58,8 @@ Copy `Makefile.local.example` to `Makefile.local` for Man-specific settings (pro
 
 ### Environment Setup
 
+If `Makefile.local` is missing, prompt the user to create it, using `Makefile.local.example` as an example.
+
 If `VIRTUAL_ENV` is not set:
 
 - Ask for the NAME they want to use for the venv
@@ -86,11 +88,13 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make activate NAME=x` | Print activate path. Use: `source $(make activate NAME=x)` | `VENV_DIR` |
 | `make lint` | Run formatters in-place | |
 | `make lint-check` | Check formatting without changes | |
-| `make build` / `build-debug` | Configure and build `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
+| `make build` / `build-debug` | Configure, build, and symlink `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
 | `make configure` / `configure-debug` | CMake configure only | |
 | `make test-cpp` / `test-cpp-debug` | Build and run C++ unit tests | `FILTER=` for gtest_filter |
 | `make symlink` / `symlink-debug` | Symlink built extension into `python/` | |
 | `make test-py` | Run Python tests | `TYPE=unit\|integration\|...`, `FILE=` path to file/test, `ARGS=` |
+| `make build-and-test-py` | Release build + symlink + Python tests | `RELEASE_PRESET`, `CMAKE_JOBS`, `TYPE=`, `FILE=`, `ARGS=` |
+| `make build-and-test-py-debug` | Debug build + symlink + Python tests | `DEBUG_PRESET`, `CMAKE_JOBS`, `TYPE=`, `FILE=`, `ARGS=` |
 | `make wheel` | Build a pip wheel into `dist/` | |
 | `make bench-cpp` | Build and run C++ benchmarks | `FILTER=` |
 | `make install-editable` | Install arcticdb in editable mode (no C++ rebuild) | |
@@ -163,7 +167,7 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ### Code Style
 
-Code style is enforced by `./build_tooling/format.py`. **Always run `make lint` after making code changes.**
+Code style is enforced by `make lint` **Always run `make lint` after making code changes.**
 
 ### Git Commits
 

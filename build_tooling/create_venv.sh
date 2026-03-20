@@ -6,7 +6,7 @@
 #
 # The script:
 #   1. Creates the venv
-#   2. Installs runtime + test dependencies from setup.cfg
+#   2. Installs arcticdb in editable mode with test dependencies (skipping C++ build)
 #   3. Installs lint/format tools
 #
 # Note: protobuf stubs are NOT generated here. Use `make setup` for a full
@@ -39,15 +39,10 @@ PYTHON="$VENV_DIR/bin/python"
 echo "Upgrading pip"
 $PROXY_CMD "$PIP" install --upgrade pip
 
-echo "Installing dependencies from setup.cfg"
-"$PYTHON" "$SCRIPT_DIR/parse_setup_deps.py" "$REPO_ROOT/setup.cfg" \
-    > "$VENV_DIR/_deps.txt"
-$PROXY_CMD "$PIP" install -r "$VENV_DIR/_deps.txt"
-rm -f "$VENV_DIR/_deps.txt"
+echo "Installing dependencies (editable install, no C++ build)"
+cd "$REPO_ROOT"
+$PROXY_CMD "$PIP" install wheel
+ARCTIC_CMAKE_PRESET=skip $PROXY_CMD "$PIP" install -e ".[Testing]"
 
 echo "Installing lint/format tools"
 $PROXY_CMD "$PYTHON" "$SCRIPT_DIR/format.py" --install-tools
-
-echo ""
-echo "Activate with:"
-echo "source \$(make activate NAME=$(basename "$VENV_DIR"))"

@@ -259,11 +259,12 @@ setup.py
 ### Key Build Commands
 
 ```bash
-# Editable install (development)
-CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
+# Build (release/debug)
+make build          # or: make build-debug
+make configure      # CMake configure only
 
 # Build wheel
-pip wheel .
+make wheel
 
 # CMake presets available
 linux-debug, linux-release, linux-conda-debug, linux-conda-release
@@ -299,14 +300,14 @@ windows-cl-debug, windows-cl-release, macos-debug, macos-release
 
 ```bash
 # Python tests
-python -m pytest python/tests/unit/
-python -m pytest python/tests/integration/
+make test-py                          # unit tests (default)
+make test-py TYPE=integration         # integration tests
 
-# C++ tests (after building with -DTEST=ON)
-cpp/out/linux-debug-build/arcticdb/test_unit_arcticdb --gtest_filter="TestSuite.*"
+# C++ tests (builds with -DTEST=ON automatically)
+make test-cpp-debug FILTER=TestSuite.*
 
 # Python benchmarks
-cd python && python -m asv run HEAD^!
+make bench-py
 ```
 
 ---
