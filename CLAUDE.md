@@ -166,7 +166,7 @@ same threadpool, as this can deadlock. This means you might need to use synchron
 Do not write comments except where they are very valuable. Keep them as brief as possible. Do not delete existing comments
 unless they are incorrect.
 
-Prefer writing pytests as standalone functions rather than wrapping them in a class.
+Prefer writing pytests as standalone functions rather than wrapping them in a class. Do not add comments to the pytests that you write.
 
 ### Backwards Compatibility
 

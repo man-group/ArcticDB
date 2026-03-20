@@ -119,4 +119,26 @@ std::shared_ptr<std::unordered_set<std::string>> ValueSet::get_fixed_width_strin
         return typed_set_fixed_width_strings_.at(width);
     }
 }
+void ValueSet::compute_min_max() const {
+    util::variant_match(numeric_base_set_, [this](const auto& set_ptr) {
+        if (!set_ptr || set_ptr->empty()) {
+            return;
+        }
+        auto [min_it, max_it] = std::minmax_element(set_ptr->begin(), set_ptr->end());
+        using ElemType = std::decay_t<decltype(*min_it)>;
+        cached_min_ = construct_value<ElemType>(*min_it);
+        cached_max_ = construct_value<ElemType>(*max_it);
+    });
+}
+
+const std::optional<Value>& ValueSet::min_value() const {
+    std::call_once(min_max_flag_, [this] { compute_min_max(); });
+    return cached_min_;
+}
+
+const std::optional<Value>& ValueSet::max_value() const {
+    std::call_once(min_max_flag_, [this] { compute_min_max(); });
+    return cached_max_;
+}
+
 } // namespace arcticdb
