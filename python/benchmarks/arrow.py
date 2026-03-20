@@ -206,7 +206,7 @@ class ArrowBools:
         ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         num_rows_list, sparsity_list = self.params
         ac.delete_library(self.lib_name_prewritten)
-        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))
+        lib = ac.create_library(self.lib_name_prewritten)
         lib._nvs._set_allow_arrow_input()
         for rows in num_rows_list:
             for sparsity in sparsity_list:
