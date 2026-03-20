@@ -25,7 +25,7 @@ on:
 
 jobs:
   linux_64:
-    uses: ./.github/workflows/conda_build_and_test.yml
+    uses: ./.github/workflows/build_with_conda_and_test.yml
     secrets: inherit
     with:
       runner:                    ubuntu-22.04
@@ -44,7 +44,7 @@ jobs:
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
   linux_aarch64:
-    uses: ./.github/workflows/conda_build_and_test.yml
+    uses: ./.github/workflows/build_with_conda_and_test.yml
     secrets: inherit
     with:
       runner:                    ubuntu-22.04-arm
@@ -62,7 +62,7 @@ jobs:
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
   osx_arm64:
-    uses: ./.github/workflows/conda_build_and_test.yml
+    uses: ./.github/workflows/build_with_conda_and_test.yml
     secrets: inherit
     with:
       runner:                    macos-14
@@ -79,7 +79,7 @@ jobs:
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
   win_64:
-    uses: ./.github/workflows/conda_build_and_test.yml
+    uses: ./.github/workflows/build_with_conda_and_test.yml
     secrets: inherit
     with:
       runner:                    windows-latest
