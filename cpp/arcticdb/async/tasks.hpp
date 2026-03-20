@@ -366,6 +366,7 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
         interval timer;
         timer.start();
         std::unordered_set<std::string> failed_targets;
+        // Copy so that retries start from the full target list rather than a mutated one
         auto targets = target_stores_;
         if (check_key_exists_on_targets_) {
             targets.erase(
