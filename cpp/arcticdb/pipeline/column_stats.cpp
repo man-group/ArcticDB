@@ -214,43 +214,55 @@ std::optional<Clause> ColumnStats::clause() const {
 
 bool ColumnStats::operator==(const ColumnStats& right) const { return column_stats_ == right.column_stats_; }
 
-arcticc::pb2::descriptors_pb2::ColumnStatsHeader build_column_stats_header(
-        const SegmentInMemory& stats_segment, const StreamDescriptor& data_descriptor
-) {
+void ColumnStats::merge(const ColumnStats& other) {
+    for (const auto& [column, stat_types] : other.column_stats_) {
+        column_stats_[column].insert(stat_types.begin(), stat_types.end());
+    }
+}
+
+arcticc::pb2::descriptors_pb2::ColumnStatsHeader ColumnStats::build_header(
+        const StreamDescriptor& data_descriptor, const StreamDescriptor& stats_descriptor
+) const {
     using namespace arcticc::pb2::descriptors_pb2;
     ColumnStatsHeader header;
     header.set_major_version(1);
     header.set_minor_version(0);
-    for (size_t i = 0; i < stats_segment.num_columns(); ++i) {
-        const auto& field = stats_segment.field(i);
-        auto name = std::string{field.name()};
-        if (name == start_index_column_name || name == end_index_column_name) {
-            continue;
-        }
-        auto* mapping = header.add_stats();
-        mapping->set_stats_seg_offset(static_cast<uint32_t>(i));
 
-        ColumnStatsType type;
-        std::string source_column;
-        if (name.substr(0, 4) == "MIN(") {
-            type = COLUMN_STATS_MIN;
-            source_column = name.substr(4, name.size() - 5);
-        } else if (name.substr(0, 4) == "MAX(") {
-            type = COLUMN_STATS_MAX;
-            source_column = name.substr(4, name.size() - 5);
-        } else {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unrecognised column stats field name format: {}", name);
-        }
-        mapping->set_type(type);
+    // Maps external ColumnStatType to internal types with their proto enum values
+    const std::map<ColumnStatType, std::vector<std::pair<ColumnStatTypeInternal, ColumnStatsType>>>
+            external_to_internal = {
+                    {ColumnStatType::MINMAX,
+                     {{ColumnStatTypeInternal::MIN, COLUMN_STATS_MIN},
+                      {ColumnStatTypeInternal::MAX, COLUMN_STATS_MAX}}},
+    };
 
-        auto opt_offset = data_descriptor.find_field(source_column);
+    for (const auto& [source_column, stat_types] : column_stats_) {
+        auto data_col_offset = data_descriptor.find_field(source_column);
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                opt_offset.has_value(),
-                "Column stats field '{}' references column '{}' not found in data descriptor",
-                name,
+                data_col_offset.has_value(),
+                "Column stats source column '{}' not found in data descriptor",
                 source_column
         );
-        mapping->set_data_col_offset(static_cast<uint32_t>(*opt_offset));
+
+        for (const auto& stat_type : stat_types) {
+            auto it = external_to_internal.find(stat_type);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    it != external_to_internal.end(), "Unrecognised ColumnStatType"
+            );
+            for (const auto& [internal_type, proto_type] : it->second) {
+                auto stats_col_name = to_segment_column_name(source_column, internal_type);
+                auto stats_seg_offset = stats_descriptor.find_field(stats_col_name);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        stats_seg_offset.has_value(),
+                        "Column stats field '{}' not found in stats segment descriptor",
+                        stats_col_name
+                );
+                auto* mapping = header.add_stats();
+                mapping->set_stats_seg_offset(static_cast<uint32_t>(*stats_seg_offset));
+                mapping->set_data_col_offset(static_cast<uint32_t>(*data_col_offset));
+                mapping->set_type(proto_type);
+            }
+        }
     }
     return header;
 }

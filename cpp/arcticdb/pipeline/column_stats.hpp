@@ -26,7 +26,12 @@ class ColumnStats {
     );
 
     void drop(const ColumnStats& to_drop, bool warn_if_missing = true);
+    void merge(const ColumnStats& other);
     ankerl::unordered_dense::set<std::string> segment_column_names() const;
+
+    arcticc::pb2::descriptors_pb2::ColumnStatsHeader build_header(
+            const StreamDescriptor& data_descriptor, const StreamDescriptor& stats_descriptor
+    ) const;
 
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
     std::optional<Clause> clause() const;
@@ -37,9 +42,5 @@ class ColumnStats {
     // Use ordered map/set here for consistent ordering in the resulting stats objects
     std::map<std::string, std::set<ColumnStatType>> column_stats_;
 };
-
-arcticc::pb2::descriptors_pb2::ColumnStatsHeader build_column_stats_header(
-        const SegmentInMemory& stats_segment, const StreamDescriptor& data_descriptor
-);
 
 } // namespace arcticdb

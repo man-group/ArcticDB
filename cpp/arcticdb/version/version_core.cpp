@@ -1939,14 +1939,15 @@ void create_column_stats_impl(
     auto data_descriptor = get_data_stream_descriptor(store, versioned_item);
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
+    std::optional<ColumnStats> old_column_stats;
     try {
         old_segment = store->read(column_stats_key).get().second;
         auto* meta = old_segment->metadata();
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
         meta->UnpackTo(&old_header);
-        ColumnStats old_column_stats{old_header, data_descriptor};
+        old_column_stats.emplace(old_header, data_descriptor);
         // No need to redo work for any stats that already exist
-        column_stats.drop(old_column_stats, false);
+        column_stats.drop(*old_column_stats, false);
         // If all the column stats we are being asked to create already exist, there's no work to do
         if (column_stats.segment_column_names().empty()) {
             return;
@@ -1987,7 +1988,7 @@ void create_column_stats_impl(
     if (!old_segment.has_value()) {
         // Old segment doesn't exist, just write new one
         google::protobuf::Any any;
-        any.PackFrom(build_column_stats_header(new_segment, data_descriptor));
+        any.PackFrom(column_stats.build_header(data_descriptor, new_segment.descriptor()));
         new_segment.set_metadata(std::move(any));
         store->update(column_stats_key, std::move(new_segment), update_opts).get();
         return;
@@ -1998,8 +1999,10 @@ void create_column_stats_impl(
                 "Cannot create column stats, existing column stats row-groups do not match"
         );
         old_segment->concatenate(std::move(new_segment));
+        ColumnStats all_stats = *old_column_stats;
+        all_stats.merge(column_stats);
         google::protobuf::Any any;
-        any.PackFrom(build_column_stats_header(*old_segment, data_descriptor));
+        any.PackFrom(all_stats.build_header(data_descriptor, old_segment->descriptor()));
         old_segment->reset_metadata();
         old_segment->set_metadata(std::move(any));
         store->update(column_stats_key, std::move(*old_segment), update_opts).get();
@@ -2044,7 +2047,7 @@ void drop_column_stats_impl(
                 }
             }
             google::protobuf::Any any;
-            any.PackFrom(build_column_stats_header(segment_in_memory, data_descriptor));
+            any.PackFrom(column_stats.build_header(data_descriptor, segment_in_memory.descriptor()));
             segment_in_memory.reset_metadata();
             segment_in_memory.set_metadata(std::move(any));
             storage::UpdateOpts update_opts;
