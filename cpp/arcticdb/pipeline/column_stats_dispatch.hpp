@@ -10,6 +10,7 @@
 
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/pipeline/value.hpp>
+#include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
@@ -27,7 +28,9 @@ using StatsVariantData = std::variant<
         // A fixed value, like 5 in q["a"] > 5
         std::shared_ptr<Value>,
         // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
-        std::vector<ColumnStatsValues>>;
+        std::vector<ColumnStatsValues>,
+        // A value set from an isin/isnotin expression
+        std::shared_ptr<ValueSet>>;
 
 using StatsRowVector = std::vector<const ColumnStatsRow*>;
 
@@ -139,6 +142,12 @@ std::vector<StatsComparison> visit_binary_comparator_stats(
             right
     );
 }
+
+StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, ValueSet& value_set, OperationType op);
+
+std::vector<StatsComparison> visit_binary_membership_stats(
+        const StatsVariantData& left, const StatsVariantData& right, OperationType operation
+);
 
 StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation);
 

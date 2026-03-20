@@ -92,6 +92,9 @@ StatsVariantData evaluate_ast_node_against_stats(
                 auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
                 return compute_stats(expression_context, *expr, stats_rows);
             },
+            [&](const ValueSetName& value_set_name) -> StatsVariantData {
+                return expression_context.value_sets_.get_value(value_set_name.value);
+            },
             [&](const auto&) -> StatsVariantData { return std::vector(stats_rows.size(), StatsComparison::UNKNOWN); }
     );
 }
@@ -116,9 +119,11 @@ StatsVariantData dispatch_binary_stats(
     case OperationType::OR:
     case OperationType::XOR:
         return column_stats_detail::visit_binary_boolean_stats(left, right, operation);
+    case OperationType::ISIN:
+    case OperationType::ISNOTIN:
+        return column_stats_detail::visit_binary_membership_stats(left, right, operation);
     default: {
         // Not yet implemented: ADD SUB MUL DIV (binary operators) Monday: 11292578954
-        // ISIN ISNOTIN (binary membership) Monday: 11292567032
         size_t sz =
                 std::max(column_stats_detail::stats_variant_size(left), column_stats_detail::stats_variant_size(right));
         return std::vector(sz, StatsComparison::UNKNOWN);
@@ -143,6 +148,9 @@ StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationTyp
                 },
                 [](const std::shared_ptr<Value>&) -> StatsVariantData {
                     util::raise_rte("Do not expect a Value in dispatch_unary_stats!");
+                },
+                [](const std::shared_ptr<ValueSet>&) -> StatsVariantData {
+                    util::raise_rte("Do not expect a ValueSet in dispatch_unary_stats!");
                 }
         );
     }

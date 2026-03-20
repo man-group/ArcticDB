@@ -509,6 +509,30 @@ def test_filter_numeric_isnotin_hashing_overflow(
     assert_frame_equal(df, result)
 
 
+def test_filter_isin_with_nan_in_set(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """Our isin handling doesn't match Pandas, which returns NaN rows from isin([np.nan])."""
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_with_nan_in_set"
+    df = pd.DataFrame({"a": [1.0, np.nan, 3.0]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["a"].isin([np.nan, 3.0])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [3.0]})
+    assert_frame_equal(expected, result)
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin([np.nan, 3.0])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [1.0, np.nan]})
+    assert_frame_equal(expected, result)
+
+
 _uint64_max = np.iinfo(np.uint64).max
 
 
