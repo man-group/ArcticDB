@@ -35,7 +35,7 @@ jobs:
       free_disk_space:           true
       install_mongodb:           true
       hypothesis_profile:        ci_linux
-      run_cpp_tests:             ${{inputs.run_cpp_tests || true}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled || false}}
@@ -53,7 +53,7 @@ jobs:
       cache_key:                 conda-env-linux_aarch64
       free_disk_space:           true
       install_mongodb:           true
-      run_cpp_tests:             ${{inputs.run_cpp_tests || true}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled || false}}
@@ -70,7 +70,7 @@ jobs:
       preset:                    macos-conda-release
       cache_key:                 conda-env-osx_arm64
       hypothesis_profile:        ci_macos
-      run_cpp_tests:             ${{inputs.run_cpp_tests || true}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled || false}}
@@ -87,7 +87,8 @@ jobs:
       preset:                    windows-cl-conda-release
       cache_key:                 conda-env-win_64
       skip_lmdb_tests:           true
-      run_cpp_tests:             ${{inputs.run_cpp_tests || true}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests}}
+      # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
       cpp_tests_enabled:         false
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled || false}}
