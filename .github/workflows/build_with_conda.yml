@@ -13,10 +13,12 @@ on:
   push:
     branches:
       - master
+
   pull_request:
+
   workflow_dispatch:
     inputs:
-      run_cpp_tests:             {required: true,  type: boolean, default: true,  description: Run C++ tests}
+      disable_cpp_tests:         {required: false, type: boolean, default: false,  description: Disable C++ tests}
       persistent_storage:        {required: false, type: choice,  default: 'no',  description: Persistent storage type, options: ['no', 'AWS_S3', 'GCPXML', 'AZURE']}
       debug_enabled:             {required: false, type: boolean, default: false, description: Run the build with debugging enabled}
       run_enable_logging:        {required: false, type: boolean, default: false, description: Enable debug logging}
@@ -35,7 +37,7 @@ jobs:
       free_disk_space:           true
       install_mongodb:           true
       hypothesis_profile:        ci_linux
-      run_cpp_tests:             ${{inputs.run_cpp_tests != false}}
+      run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
@@ -53,7 +55,7 @@ jobs:
       cache_key:                 conda-env-linux_aarch64
       free_disk_space:           true
       install_mongodb:           true
-      run_cpp_tests:             ${{inputs.run_cpp_tests != false}}
+      run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
@@ -70,7 +72,7 @@ jobs:
       preset:                    macos-conda-release
       cache_key:                 conda-env-osx_arm64
       hypothesis_profile:        ci_macos
-      run_cpp_tests:             ${{inputs.run_cpp_tests != false}}
+      run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
@@ -86,7 +88,7 @@ jobs:
       platform:                  win_64
       preset:                    windows-cl-conda-release
       cache_key:                 conda-env-win_64
-      run_cpp_tests:             ${{inputs.run_cpp_tests != false}}
+      run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
       run_enable_logging:        ${{inputs.run_enable_logging == true}}
