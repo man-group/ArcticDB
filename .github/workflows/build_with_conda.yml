@@ -35,11 +35,11 @@ jobs:
       free_disk_space:           true
       install_mongodb:           true
       hypothesis_profile:        ci_linux
-      run_cpp_tests:             ${{inputs.run_cpp_tests}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests == null && true || inputs.run_cpp_tests}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
-      debug_enabled:             ${{inputs.debug_enabled || false}}
-      run_enable_logging:        ${{inputs.run_enable_logging || false}}
+      debug_enabled:             ${{inputs.debug_enabled == null && false || inputs.debug_enabled}}
+      run_enable_logging:        ${{inputs.run_enable_logging == null && false || inputs.run_enable_logging}}
       run_commandline:           ${{inputs.run_commandline || ''}}
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
@@ -53,11 +53,11 @@ jobs:
       cache_key:                 conda-env-linux_aarch64
       free_disk_space:           true
       install_mongodb:           true
-      run_cpp_tests:             ${{inputs.run_cpp_tests}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests == null && true || inputs.run_cpp_tests}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
-      debug_enabled:             ${{inputs.debug_enabled || false}}
-      run_enable_logging:        ${{inputs.run_enable_logging || false}}
+      debug_enabled:             ${{inputs.debug_enabled == null && false || inputs.debug_enabled}}
+      run_enable_logging:        ${{inputs.run_enable_logging == null && false || inputs.run_enable_logging}}
       run_commandline:           ${{inputs.run_commandline || ''}}
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
@@ -70,11 +70,11 @@ jobs:
       preset:                    macos-conda-release
       cache_key:                 conda-env-osx_arm64
       hypothesis_profile:        ci_macos
-      run_cpp_tests:             ${{inputs.run_cpp_tests}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests == null && true || inputs.run_cpp_tests}}
       cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
-      debug_enabled:             ${{inputs.debug_enabled || false}}
-      run_enable_logging:        ${{inputs.run_enable_logging || false}}
+      debug_enabled:             ${{inputs.debug_enabled == null && false || inputs.debug_enabled}}
+      run_enable_logging:        ${{inputs.run_enable_logging == null && false || inputs.run_enable_logging}}
       run_commandline:           ${{inputs.run_commandline || ''}}
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
@@ -86,13 +86,13 @@ jobs:
       platform:                  win_64
       preset:                    windows-cl-conda-release
       cache_key:                 conda-env-win_64
-      run_cpp_tests:             ${{inputs.run_cpp_tests}}
+      run_cpp_tests:             ${{inputs.run_cpp_tests == null && true || inputs.run_cpp_tests}}
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
-      debug_enabled:             ${{inputs.debug_enabled || false}}
-      run_enable_logging:        ${{inputs.run_enable_logging || false}}
+      debug_enabled:             ${{inputs.debug_enabled == null && false || inputs.debug_enabled}}
+      run_enable_logging:        ${{inputs.run_enable_logging == null && false || inputs.run_enable_logging}}
       run_commandline:           ${{inputs.run_commandline || ''}}
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
-
+      
   can_merge_conda:
     name: All conda jobs completed
     needs: [linux_64, linux_aarch64, osx_arm64, win_64]
