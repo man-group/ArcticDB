@@ -108,8 +108,8 @@ class ArrowSparseNumeric:
         return f"sparse_{num_rows}_{sparsity}{suffix}"
 
     def _generate_table(self, num_rows, sparsity, pa_type=pa.int64()):
-        np.random.seed(42)
-        mask = np.random.random(num_rows) < sparsity
+        rng = np.random.default_rng(42)
+        mask = rng.random(num_rows) < sparsity
         columns = {}
         for i in range(self.num_cols):
             vals = np.arange(i * num_rows, (i + 1) * num_rows, dtype=np.int64)
@@ -186,17 +186,17 @@ class ArrowBools:
     lib_name_prewritten = "arrow_bools_prewritten"
     lib_name_fresh = "arrow_bools_fresh"
     num_cols = 9
-    params = ([1_000_000, 10_000_000], [0.0, 0.5])
+    params = ([1_000_000, 10_000_000], [0.0, 0.1, 0.5, 0.9])
     param_names = ["rows", "sparsity"]
 
     def symbol_name(self, num_rows: int, sparsity: float):
         return f"bools_{num_rows}_{sparsity}"
 
     def _generate_table(self, num_rows, sparsity):
-        np.random.seed(42)
-        vals = np.random.random(num_rows) < 0.5
+        rng = np.random.default_rng(42)
+        vals = rng.random(num_rows) < 0.5
         if sparsity > 0.0:
-            null_mask = np.random.random(num_rows) < sparsity
+            null_mask = rng.random(num_rows) < sparsity
             columns = {f"col{i}": pa.array(np.where(null_mask, None, vals), pa.bool_()) for i in range(self.num_cols)}
         else:
             columns = {f"col{i}": pa.array(vals, pa.bool_()) for i in range(self.num_cols)}

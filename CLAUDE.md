@@ -158,6 +158,10 @@ python -m pytest python/tests/unit/arcticdb/test_arctic.py::test_function_name
 
 ## Benchmarking
 
+When running benchmarks make sure to always:
+- Build with optimizations in release.
+- Store all benchmark results in an .md file for reference.
+
 ### C++ Benchmarks (Google Benchmark)
 
 ```bash
