@@ -36,6 +36,11 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
+      - name: Debug inputs
+        run: |
+          echo "run_cpp_tests=${{inputs.run_cpp_tests}}"
+          echo "cpp_tests_enabled=${{inputs.cpp_tests_enabled}}"
+
       - uses: actions/checkout@v6.0.1
 
       - name: Configure sccache
