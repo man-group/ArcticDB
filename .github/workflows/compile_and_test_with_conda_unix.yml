@@ -1,23 +1,19 @@
-name: Conda Build and Test
+name: Conda Build and Test (Unix)
 on:
   workflow_call:
     inputs:
-      # Platform parameters
       runner:                    {required: true,  type: string,  description: GitHub runner to execute on}
-      platform:                  {required: true,  type: string,  description: Platform identifier e.g. linux_64 or win_64}
+      platform:                  {required: true,  type: string,  description: Platform identifier e.g. linux_64 or osx_arm64}
       preset:                    {required: true,  type: string,  description: CMake preset name e.g. linux-conda-release}
       cache_key:                 {required: true,  type: string,  description: Unique conda environment cache key per platform}
 
-      # Feature flags
-      free_disk_space:           {required: false, type: boolean, default: false, description: Free disk space before tests. Linux only}
+      free_disk_space:           {required: false, type: boolean, default: false, description: Free disk space before build. Linux only}
       install_mongodb:           {required: false, type: boolean, default: false, description: Install MongoDB for tests. Linux only}
       run_cpp_tests:             {required: false, type: boolean, default: true,  description: Whether to run C++ tests}
       cpp_tests_enabled:         {required: false, type: boolean, default: true,  description: Whether C++ tests are supported on this platform}
-      skip_lmdb_tests:           {required: false, type: boolean, default: false, description: Skip LMDB tests. Windows only}
       hypothesis_profile:        {required: false, type: string,  default: '',    description: Hypothesis profile e.g. ci_linux or ci_macos}
 
-      # Passthrough from user inputs
-      persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type e.g. AWS_S3 or AZURE}
+      persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type}
       debug_enabled:             {required: false, type: boolean, default: false, description: Enable tmate debug session}
       run_enable_logging:        {required: false, type: boolean, default: false, description: Enable ArcticDB debug logging}
       run_commandline:           {required: false, type: string,  default: '',    description: Custom commandline to run before tests}
@@ -36,15 +32,11 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
       SCCACHE_GHA_ENABLED: "true"
-      IS_WINDOWS: ${{contains(inputs.platform, 'win')}}
     defaults:
       run:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v6.0.1
-        # Do not use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -61,45 +53,20 @@ jobs:
         with:
           environment-file: environment-dev.yml
           environment-name: arcticdb
-          init-shell: >-
-            ${{contains(inputs.platform, 'win') && 'bash cmd.exe' || 'bash'}}
+          init-shell: bash
           cache-environment: true
           cache-environment-key: ${{inputs.cache_key}}
           post-cleanup: 'none'
 
-      - name: Build ArcticDB with conda (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: cmd /C call {0}
-        run: |
-          set CMAKE_GENERATOR_PLATFORM=
-          set CMAKE_GENERATOR_TOOLSET=
-          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
-        env:
-          ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: ${{inputs.preset}}
-
-      - name: Build ArcticDB with conda (Unix)
-        if: env.IS_WINDOWS != 'true'
+      - name: Build ArcticDB with conda
         run: |
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
-      - name: Show sccache stats (Unix)
-        if: env.IS_WINDOWS != 'true'
+      - name: Show sccache stats
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
-
-      - name: Show sccache stats (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: cmd /C call {0}
-        run: |
-          if defined SCCACHE_PATH (
-            %SCCACHE_PATH% --show-stats
-          ) else (
-            sccache --show-stats
-          )
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
@@ -111,7 +78,6 @@ jobs:
             cpp/out/${{inputs.preset}}-build/
             python/arcticdb_ext*
             python/**/*.so
-            python/**/*.pyd
 
   # ==================== JOB 2: C++ TESTS ====================
   cpp_tests:
@@ -132,9 +98,6 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v6.0.1
-        # Do not use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -199,7 +162,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
-    # ==================== JOB 3: PYTHON TESTS ====================
+  # ==================== JOB 3: PYTHON TESTS ====================
   python_tests:
     name: Python Tests (${{inputs.platform}}) - ${{matrix.type}}
     needs: [compile]
@@ -216,7 +179,6 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
       SCCACHE_GHA_ENABLED: "true"
-      IS_WINDOWS: ${{contains(inputs.platform, 'win')}}
     defaults:
       run:
         shell: bash -l {0}
@@ -230,9 +192,6 @@ jobs:
           docker-images: false
 
       - uses: actions/checkout@v6.0.1
-        # Do not use recursive submodules checkout to simulate conda feedstock build
-        # with:
-        #   submodules: recursive
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -255,32 +214,14 @@ jobs:
         with:
           environment-file: environment-dev.yml
           environment-name: arcticdb
-          init-shell: >-
-            ${{contains(inputs.platform, 'win') && 'bash cmd.exe' || 'bash'}}
+          init-shell: bash
           cache-environment: true
           cache-environment-key: ${{inputs.cache_key}}
           post-cleanup: 'none'
 
-      - name: Install ArcticDB from artifacts (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: cmd /C call {0}
+      - name: Install ArcticDB from artifacts
         run: |
-          set ARCTIC_CMAKE_PRESET=
-          if exist "cpp\out\${{inputs.preset}}-build" (
-            dir /b python\arcticdb_ext*.pyd >nul 2>&1
-            if not errorlevel 1 (
-              echo Build artifacts found, skipping CMake build
-              set ARCTIC_CMAKE_PRESET=skip
-            )
-          )
-          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
-        env:
-          ARCTICDB_USING_CONDA: 1
-
-      - name: Install ArcticDB from artifacts (Unix)
-        if: env.IS_WINDOWS != 'true'
-        run: |
-          if [ -d "cpp/out/${{inputs.preset}}-build" ] && (ls python/arcticdb_ext*.so python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+          if [ -d "cpp/out/${{inputs.preset}}-build" ] && (ls python/arcticdb_ext*.so 2>/dev/null | head -1 | grep -q .); then
             echo "Build artifacts found, skipping CMake build"
             export ARCTIC_CMAKE_PRESET=skip
           fi
@@ -306,41 +247,14 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install Azurite (Unix)
-        if: env.IS_WINDOWS != 'true'
+      - name: Install Azurite
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
           max_attempts: 3
           command: npm install -g azurite
 
-      - name: Install Azurite (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: bash -elo pipefail {0}
-        run: |
-          npm install -g azurite
-          npm_config_prefix=$(npm config get prefix)
-          npm_bin_dir="$npm_config_prefix"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            npm_bin_dir=$(echo "$npm_bin_dir" | sed 's|\\|/|g')
-            if [[ "$npm_bin_dir" =~ ^([A-Za-z]):/(.*) ]]; then
-              drive_letter="${BASH_REMATCH[1]}"
-              rest="${BASH_REMATCH[2]}"
-              npm_bin_dir="/${drive_letter,,}/${rest}"
-            fi
-          fi
-          npm_bin_dir="${npm_bin_dir}/bin"
-          echo "$npm_bin_dir" >> $GITHUB_PATH
-          export PATH="$npm_bin_dir:$PATH"
-          which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
-
-      - name: Check no arcticdb file depend on tests package (Unix)
-        if: env.IS_WINDOWS != 'true'
-        run: build_tooling/checks.sh
-
-      - name: Check no arcticdb file depend on tests package (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: bash -elo pipefail {0}
+      - name: Check no arcticdb file depend on tests package
         run: build_tooling/checks.sh
 
       - name: Set persistent storage variables
@@ -363,17 +277,10 @@ jobs:
         if: inputs.debug_enabled
         uses: mxschmitt/action-tmate@v3
 
-      - name: Install pytest-repeat (Unix)
-        if: env.IS_WINDOWS != 'true'
+      - name: Install pytest-repeat
         run: python -m pip --retries 3 --timeout 180 install pytest-repeat
 
-      - name: Install pytest-repeat (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: bash -elo pipefail {0}
-        run: python -m pip --retries 3 --timeout 180 install pytest-repeat
-
-      - name: Test with pytest (Unix)
-        if: env.IS_WINDOWS != 'true'
+      - name: Test with pytest
         run: |
           openssl version -d || true
           ulimit -a || true
@@ -397,28 +304,4 @@ jobs:
           HYPOTHESIS_PROFILE: ${{inputs.hypothesis_profile || 'dev'}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
           STORAGE_TYPE: ${{inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage}}
-          NODE_OPTIONS: --openssl-legacy-provider
-
-      - name: Test with pytest (Windows)
-        if: env.IS_WINDOWS == 'true'
-        shell: bash -elo pipefail {0}
-        run: |
-          echo "Run commandline: $COMMANDLINE"
-          eval "$COMMANDLINE"
-          export ARCTICDB_RAND_SEED=$RANDOM
-          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
-            command="python -m $ARCTICDB_PYTEST_ARGS"
-            echo "Run custom pytest command: $command"
-            eval "$command"
-          else
-            cd python
-            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
-              -m "not lmdb" \
-              tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
-          fi
-        env:
-          ARCTICDB_USING_CONDA: 1
-          COMMANDLINE: ${{inputs.run_commandline}}
-          ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
           NODE_OPTIONS: --openssl-legacy-provider

@@ -25,7 +25,7 @@ on:
 
 jobs:
   linux_64:
-    uses: ./.github/workflows/build_with_conda_and_test.yml
+    uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
     secrets: inherit
     with:
       runner:                    ubuntu-22.04
@@ -44,7 +44,7 @@ jobs:
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
   linux_aarch64:
-    uses: ./.github/workflows/build_with_conda_and_test.yml
+    uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
     secrets: inherit
     with:
       runner:                    ubuntu-22.04-arm
@@ -62,7 +62,7 @@ jobs:
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
   osx_arm64:
-    uses: ./.github/workflows/build_with_conda_and_test.yml
+    uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
     secrets: inherit
     with:
       runner:                    macos-14
@@ -79,17 +79,14 @@ jobs:
       run_custom_pytest_command: ${{inputs.run_custom_pytest_command || ''}}
 
   win_64:
-    uses: ./.github/workflows/build_with_conda_and_test.yml
+    uses: ./.github/workflows/compile_and_test_with_conda_win.yml
     secrets: inherit
     with:
       runner:                    windows-latest
       platform:                  win_64
       preset:                    windows-cl-conda-release
       cache_key:                 conda-env-win_64
-      skip_lmdb_tests:           true
       run_cpp_tests:             ${{inputs.run_cpp_tests}}
-      # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
-      cpp_tests_enabled:         false
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled || false}}
       run_enable_logging:        ${{inputs.run_enable_logging || false}}
