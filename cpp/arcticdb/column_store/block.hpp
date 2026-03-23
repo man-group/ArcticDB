@@ -132,7 +132,7 @@ class ExternalMemBlock : public IMemBlock {
 class ExternalPackedMemBlock : public ExternalMemBlock {
   public:
     ExternalPackedMemBlock(
-            const uint8_t* data, size_t logical_size, size_t shift, size_t offset, entity::timestamp ts, bool owning
+            const uint8_t* data, size_t logical_size, size_t offset, entity::timestamp ts, size_t shift, bool owning
     );
 
     MemBlockType get_type() const final;

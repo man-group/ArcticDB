@@ -426,7 +426,7 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type
     auto string_format = output_string_format(column_name, read_options);
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), {}};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{0}};
     case ArrowOutputStringFormat::LARGE_STRING:
         return {make_scalar_type(DataType::UTF_DYNAMIC64), detachable_block_config::Regular{sizeof(int64_t)}};
     case ArrowOutputStringFormat::SMALL_STRING:
@@ -518,7 +518,7 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowBoolHandler::
 }
 
 void ArrowBoolHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
-    // No-op: the the validity bitmap is populated upstream.
+    // No-op: The validity bitmap extra buffer is populated with zeros upstream.
     // The packed data buffer does not need initialization since missing values are masked by the bitmap.
 }
 

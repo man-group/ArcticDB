@@ -15,7 +15,7 @@ SegmentInMemory::SegmentInMemory() : impl_(std::make_shared<SegmentInMemoryImpl>
 
 SegmentInMemory::SegmentInMemory(
         const StreamDescriptor& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-        const BlockConfigPerColumn& block_config_per_column
+        const std::optional<BlockConfigPerColumn>& block_config_per_column
 ) :
     impl_(std::make_shared<SegmentInMemoryImpl>(
             tsd, expected_column_size, allocation_type, allow_sparse, block_config_per_column
@@ -23,7 +23,7 @@ SegmentInMemory::SegmentInMemory(
 
 SegmentInMemory::SegmentInMemory(
         StreamDescriptor&& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-        const BlockConfigPerColumn& block_config_per_column
+        const std::optional<BlockConfigPerColumn>& block_config_per_column
 ) :
     impl_(std::make_shared<SegmentInMemoryImpl>(
             std::move(tsd), expected_column_size, allocation_type, allow_sparse, block_config_per_column

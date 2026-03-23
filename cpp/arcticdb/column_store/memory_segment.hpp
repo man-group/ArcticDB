@@ -31,13 +31,13 @@ class SegmentInMemory {
     explicit SegmentInMemory(
             const StreamDescriptor& tsd, size_t expected_column_size = 0,
             AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            const BlockConfigPerColumn& block_config_per_column = std::nullopt
+            const std::optional<BlockConfigPerColumn>& block_config_per_column = std::nullopt
     );
 
     explicit SegmentInMemory(
             StreamDescriptor&& tsd, size_t expected_column_size = 0,
             AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            const BlockConfigPerColumn& block_config_per_column = std::nullopt
+            const std::optional<BlockConfigPerColumn>& block_config_per_column = std::nullopt
     );
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept;

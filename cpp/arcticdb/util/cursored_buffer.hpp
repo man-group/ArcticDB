@@ -22,7 +22,10 @@ struct CursoredBuffer {
   public:
     CursoredBuffer() = default;
 
-    CursoredBuffer(size_t size, AllocationType allocation_type, DetachableBlockConfig block_config = {}) :
+    CursoredBuffer(
+            size_t size, AllocationType allocation_type,
+            DetachableBlockConfig block_config = detachable_block_config::Regular{0}
+    ) :
         cursor_(allocation_type == AllocationType::PRESIZED || allocation_type == AllocationType::DETACHABLE
                         ? static_cast<int64_t>(size)
                         : 0),

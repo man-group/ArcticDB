@@ -108,8 +108,10 @@ enum class AllocationType : uint8_t { DYNAMIC = 0, PRESIZED = 1, DETACHABLE = 2 
 
 namespace detachable_block_config {
 struct Regular {
-    size_t extra_bytes = 0;
+    Regular() = default;
+    explicit Regular(size_t extra_bytes) : extra_bytes(extra_bytes) {}
     bool operator==(const Regular&) const = default;
+    size_t extra_bytes = 0;
 };
 struct Packed {
     bool operator==(const Packed&) const = default;

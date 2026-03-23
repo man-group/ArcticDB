@@ -94,8 +94,12 @@ void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value) {
 }
 
 void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest) {
-    for (size_t i = 0; i < num_bits; ++i) {
-        set_bit_at(dest, i, get_bit_at(src, src_bit_offset + i));
+    if (src_bit_offset % 8 == 0) {
+        memcpy(dest, src + src_bit_offset / 8, bitset_packed_size_bytes(num_bits));
+    } else {
+        for (size_t i = 0; i < num_bits; ++i) {
+            set_bit_at(dest, i, get_bit_at(src, src_bit_offset + i));
+        }
     }
 }
 

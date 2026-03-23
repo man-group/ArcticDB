@@ -16,6 +16,7 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
+#include <arcticdb/util/variant.hpp>
 
 #ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>
@@ -85,7 +86,8 @@ class ChunkedBufferImpl {
     ChunkedBufferImpl() = default;
 
     explicit ChunkedBufferImpl(
-            entity::AllocationType allocation_type, entity::DetachableBlockConfig block_config = {}
+            entity::AllocationType allocation_type,
+            entity::DetachableBlockConfig block_config = entity::detachable_block_config::Regular{0}
     ) :
         allocation_type_(allocation_type),
         block_config_(block_config) {
@@ -97,7 +99,8 @@ class ChunkedBufferImpl {
     }
 
     ChunkedBufferImpl(
-            size_t size, entity::AllocationType allocation_type, entity::DetachableBlockConfig block_config = {}
+            size_t size, entity::AllocationType allocation_type,
+            entity::DetachableBlockConfig block_config = entity::detachable_block_config::Regular{0}
     ) :
         allocation_type_(allocation_type),
         block_config_(block_config) {
@@ -492,9 +495,7 @@ class ChunkedBufferImpl {
         if (!no_blocks() && last_block()->empty())
             free_last_block();
 
-        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalMemBlock));
-        new (ptr) ExternalMemBlock(data, size, last_offset(), ts, false, extra_bytes);
-        blocks_.emplace_back(reinterpret_cast<ExternalMemBlock*>(ptr));
+        blocks_.emplace_back(create_external_block<ExternalMemBlock>(data, size, last_offset(), false, extra_bytes));
         bytes_ += size;
         if (block_offsets_.empty())
             block_offsets_.emplace_back(0);
@@ -505,9 +506,7 @@ class ChunkedBufferImpl {
         if (!no_blocks() && last_block()->empty())
             free_last_block();
 
-        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalPackedMemBlock));
-        new (ptr) ExternalPackedMemBlock(data, size, shift, last_offset(), ts, false);
-        blocks_.emplace_back(reinterpret_cast<ExternalPackedMemBlock*>(ptr));
+        blocks_.emplace_back(create_external_block<ExternalPackedMemBlock>(data, size, last_offset(), shift, false));
         bytes_ += size;
         if (block_offsets_.empty())
             block_offsets_.emplace_back(0);
@@ -663,13 +662,21 @@ class ChunkedBufferImpl {
             auto* packed_src = static_cast<ExternalPackedMemBlock*>(source);
             // Copying packed bits is less efficient than a memcpy.
             // We don't use memcpy because it would result in a dest block with shift != 0
-            // Sparrow does not currently expose a convinient API to set a non-zero offset for bool columns.
-            // TODO: Use memcpy once sparrow exposes `slice_inplace` API.
+            // Sparrow does not currently expose a convenient API to set a non-zero offset for bool columns.
+            // TODO: Use memcpy once sparrow exposes `slice_inplace` API. Monday ref: 11570513612
             copy_packed_bits(packed_src->data(), packed_src->shift() + pos, size, result->data());
             break;
         }
         }
         return result;
+    }
+
+    template<typename Block, typename... ExtraArgs>
+    requires std::is_base_of_v<ExternalMemBlock, Block>
+    BlockType* create_external_block(const uint8_t* data, size_t capacity, size_t offset, ExtraArgs&&... extra) const {
+        auto [ptr, ts] = Allocator::aligned_alloc(sizeof(Block));
+        new (ptr) Block(data, capacity, offset, ts, std::forward<ExtraArgs>(extra)...);
+        return reinterpret_cast<Block*>(ptr);
     }
 
     BlockType* create_regular_block(size_t capacity, size_t offset) const {
@@ -688,20 +695,19 @@ class ChunkedBufferImpl {
                 allocation_type_ == entity::AllocationType::DETACHABLE,
                 "Can create detachable blocks only for detachable allocation type"
         );
-        if (auto* regular = std::get_if<entity::detachable_block_config::Regular>(&block_config_)) {
-            auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalMemBlock));
-            // When producing a string column for arrow with variable length format we need an extra value for the
-            // final offset. Thus, we add the extra bytes when allocating new detachable blocks.
-            auto* data = allocate_detachable_memory(capacity + regular->extra_bytes);
-            new (ptr) ExternalMemBlock(data, capacity, offset, ts, true, regular->extra_bytes);
-            return reinterpret_cast<ExternalMemBlock*>(ptr);
-        } else {
-            auto packed_bytes = bitset_packed_size_bytes(capacity);
-            auto [ptr, ts] = Allocator::aligned_alloc(sizeof(ExternalPackedMemBlock));
-            auto* data = allocate_detachable_memory(packed_bytes);
-            new (ptr) ExternalPackedMemBlock(data, capacity, 0, offset, ts, true);
-            return reinterpret_cast<ExternalPackedMemBlock*>(ptr);
-        }
+        return util::variant_match(
+                block_config_,
+                [&](const entity::detachable_block_config::Regular& regular) -> BlockType* {
+                    // When producing a string column for arrow with variable length format we need an extra value for
+                    // the final offset. Thus, we add the extra bytes when allocating new detachable blocks.
+                    auto* data = allocate_detachable_memory(capacity + regular.extra_bytes);
+                    return create_external_block<ExternalMemBlock>(data, capacity, offset, true, regular.extra_bytes);
+                },
+                [&](const entity::detachable_block_config::Packed&) -> BlockType* {
+                    auto* data = allocate_detachable_memory(bitset_packed_size_bytes(capacity));
+                    return create_external_block<ExternalPackedMemBlock>(data, capacity, offset, size_t{0}, true);
+                }
+        );
     }
 
     void free_block(BlockType* block) const {

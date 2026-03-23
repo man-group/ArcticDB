@@ -323,7 +323,7 @@ SegmentInMemoryImpl::SegmentInMemoryImpl() :
 
 SegmentInMemoryImpl::SegmentInMemoryImpl(
         const StreamDescriptor& desc, size_t expected_column_size, AllocationType allocation_type,
-        Sparsity allow_sparse, const BlockConfigPerColumn& block_config_per_column
+        Sparsity allow_sparse, const std::optional<BlockConfigPerColumn>& block_config_per_column
 ) :
     descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{desc.id(), desc.index()})),
     string_pool_(std::make_shared<StringPool>()),
@@ -392,7 +392,7 @@ void SegmentInMemoryImpl::generate_column_map() const {
 
 void SegmentInMemoryImpl::create_columns(
         size_t old_size, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
-        const BlockConfigPerColumn& block_config_per_column
+        const std::optional<BlockConfigPerColumn>& block_config_per_column
 ) {
     columns_.reserve(descriptor_->field_count());
     util::check(
@@ -452,7 +452,7 @@ bool SegmentInMemoryImpl::is_index_sorted() const {
  */
 size_t SegmentInMemoryImpl::on_descriptor_change(
         const StreamDescriptor& descriptor, size_t expected_column_size, AllocationType allocation_type,
-        Sparsity allow_sparse, const BlockConfigPerColumn& block_config_per_column
+        Sparsity allow_sparse, const std::optional<BlockConfigPerColumn>& block_config_per_column
 ) {
     ARCTICDB_TRACE(
             log::storage(),

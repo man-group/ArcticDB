@@ -226,7 +226,7 @@ class Column {
     Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
     Column(TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-           DetachableBlockConfig block_config = {});
+           DetachableBlockConfig block_config = detachable_block_config::Regular{0});
 
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 

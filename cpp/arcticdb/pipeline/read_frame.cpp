@@ -41,7 +41,9 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(context->slice_and_keys_, true, context->incompletes_after_).value();
 }
 
-std::pair<StreamDescriptor, std::vector<DetachableBlockConfig>> get_filtered_descriptor_and_block_config(
+using BlockConfigPerColumn = SegmentInMemory::BlockConfigPerColumn;
+
+std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
@@ -52,9 +54,9 @@ std::pair<StreamDescriptor, std::vector<DetachableBlockConfig>> get_filtered_des
     return util::variant_match(
             index,
             [&desc, &filter_columns, &read_options](const auto& idx
-            ) -> std::pair<StreamDescriptor, std::vector<DetachableBlockConfig>> {
+            ) -> std::pair<StreamDescriptor, BlockConfigPerColumn> {
                 const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-                auto block_config_per_column = std::vector<DetachableBlockConfig>();
+                BlockConfigPerColumn block_config_per_column;
                 block_config_per_column.reserve(fields->size());
                 auto handlers = TypeHandlerRegistry::instance();
 
@@ -76,7 +78,7 @@ std::pair<StreamDescriptor, std::vector<DetachableBlockConfig>> get_filtered_des
     );
 }
 
-std::pair<StreamDescriptor, std::vector<DetachableBlockConfig>> get_filtered_descriptor_and_block_config(
+std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
 ) {
     return get_filtered_descriptor_and_block_config(
