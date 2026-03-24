@@ -206,10 +206,6 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v2.0.0
         id: cpu-cores
 
-      - name: Print cache key
-        run: |
-          echo "Cache key: conda-env-${{inputs.platform}}"
-
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
         with:
@@ -294,6 +290,7 @@ jobs:
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
           else
+            python setup.py protoc --build-lib python
             cd python
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
               tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
