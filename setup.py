@@ -77,7 +77,7 @@ def cleanup_vcpkg_artifacts():
 
 class CompileProto(Command):
     # When adding new protobuf versions, also update: setup.cfg, python/arcticdb/__init__.py
-    _PROTOBUF_TO_GRPC_VERSION = {"3": "<1.31", "4": ">=1.49", "5": ">=1.68.1", "6": ">=1.73.0"}
+    _PROTOBUF_TO_GRPC_VERSION = {"4": ">=1.49"}
 
     description = '"protoc" generate code _pb2.py from .proto files'
     user_options = [

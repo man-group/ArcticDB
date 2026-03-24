@@ -5,10 +5,8 @@ on:
       runner:                    {required: true,  type: string,  description: GitHub runner to execute on}
       platform:                  {required: true,  type: string,  description: Platform identifier e.g. win_64}
       preset:                    {required: true,  type: string,  description: CMake preset name e.g. windows-cl-conda-release}
-      cache_key:                 {required: true,  type: string,  description: Unique conda environment cache key per platform}
 
       run_cpp_tests:             {required: false, type: boolean, default: true,  description: Whether to run C++ tests}
-
       persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type}
       debug_enabled:             {required: false, type: boolean, default: false, description: Enable tmate debug session}
       run_enable_logging:        {required: false, type: boolean, default: false, description: Enable ArcticDB debug logging}
@@ -51,7 +49,7 @@ jobs:
           environment-name: arcticdb
           init-shell: bash cmd.exe
           cache-environment: true
-          cache-environment-key: ${{inputs.cache_key}}
+          cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Build ArcticDB with conda
@@ -132,7 +130,7 @@ jobs:
           environment-name: arcticdb
           init-shell: bash cmd.exe
           cache-environment: true
-          cache-environment-key: ${{inputs.cache_key}}
+          cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts
