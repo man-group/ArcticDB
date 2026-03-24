@@ -152,4 +152,4 @@ install-editable: ## Install arcticdb in editable mode
 
 # ── bench-py ─────────────────────────────────────────────────────────────────
 bench-py: install-editable ## Run ASV Python benchmarks (BENCH= for --bench filter)
-	$(VENV_PYTHON) -m asv run --python=same -v --show-stderr $(if $(BENCH),--bench $(BENCH))
+	$(_VENV_PYTHON) -m asv run --python=same -v --show-stderr $(if $(BENCH),--bench $(BENCH))
