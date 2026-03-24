@@ -321,18 +321,18 @@ def test_correct_versions_in_destination(
     assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
 
 
-# @settings(deadline=None, suppress_health_check=(hypothesis.HealthCheck.function_scoped_fixture,))
-# @given(to_copy=st.permutations(["s2", 4, 6]), existing=st.booleans())
-# def test_correct_versions_in_destination_force(
-#     to_copy, existing, check_single_threaded, lib_with_gaps_and_reused_keys, version_store_factory
-# ):
-#     try:
-#         _tmp_test_body(to_copy, existing, lib_with_gaps_and_reused_keys, version_store_factory)
-#     except:
-#         import traceback
+@settings(deadline=None, suppress_health_check=(hypothesis.HealthCheck.function_scoped_fixture,))
+@given(to_copy=st.permutations(["s2", 4, 6]), existing=st.booleans())
+def test_correct_versions_in_destination_force(
+    to_copy, existing, check_single_threaded, lib_with_gaps_and_reused_keys, version_store_factory
+):
+    try:
+        _tmp_test_body(to_copy, existing, lib_with_gaps_and_reused_keys, version_store_factory)
+    except:
+        import traceback
 
-#         traceback.print_exc()
-#         raise
+        traceback.print_exc()
+        raise
 
 
 def _tmp_test_body(to_copy, existing, lib_with_gaps_and_reused_keys, version_store_factory):

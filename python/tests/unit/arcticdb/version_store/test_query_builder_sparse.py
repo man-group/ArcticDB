@@ -177,44 +177,44 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
     assert_frame_equal(expected, received)
 
 
-# @use_of_function_scoped_fixtures_in_hypothesis_checked
-# @settings(deadline=None)
-# @given(
-#     df=data_frames(
-#         columns(
-#             ["sparse1", "sparse2"],
-#             elements=strategies.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
-#             fill=strategies.just(np.nan),
-#         ),
-#     ),
-# )
-# def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
-#     assume(not df.empty and not df["sparse1"].isnull().all() and not df["sparse2"].isnull().all())
-#     lib = lmdb_version_store_v1
-#     sym = "test_query_builder_sparse_hypothesis"
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        columns(
+            ["sparse1", "sparse2"],
+            elements=strategies.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
+            fill=strategies.just(np.nan),
+        ),
+    ),
+)
+def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
+    assume(not df.empty and not df["sparse1"].isnull().all() and not df["sparse2"].isnull().all())
+    lib = lmdb_version_store_v1
+    sym = "test_query_builder_sparse_hypothesis"
 
-#     df.index = pd.date_range("2024-01-01", periods=len(df))
+    df.index = pd.date_range("2024-01-01", periods=len(df))
 
-#     lib.write(sym, df, sparsify_floats=True)
+    lib.write(sym, df, sparsify_floats=True)
 
-#     # Filter
-#     expected = df[df["sparse1"].isnull()]
-#     q = QueryBuilder()
-#     q = q[q["sparse1"].isnull()]
-#     received = lib.read(sym, query_builder=q).data
-#     assert_frame_equal(expected, received)
+    # Filter
+    expected = df[df["sparse1"].isnull()]
+    q = QueryBuilder()
+    q = q[q["sparse1"].isnull()]
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
 
-#     # Projection
-#     expected = df
-#     expected["projected"] = expected["sparse1"] + expected["sparse2"]
-#     q = QueryBuilder()
-#     q = q.apply("projected", q["sparse1"] + q["sparse2"])
-#     received = lib.read(sym, query_builder=q).data
-#     assert_frame_equal(expected, received)
+    # Projection
+    expected = df
+    expected["projected"] = expected["sparse1"] + expected["sparse2"]
+    q = QueryBuilder()
+    q = q.apply("projected", q["sparse1"] + q["sparse2"])
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
 
-#     # Groupby + aggregation
-#     expected = df.groupby("sparse1").agg({"sparse2": "sum"})
-#     q = QueryBuilder().groupby("sparse1").agg({"sparse2": "sum"})
-#     received = lib.read(sym, query_builder=q).data
-#     received.sort_index(inplace=True)
-#     assert_frame_equal(expected, received)
+    # Groupby + aggregation
+    expected = df.groupby("sparse1").agg({"sparse2": "sum"})
+    q = QueryBuilder().groupby("sparse1").agg({"sparse2": "sum"})
+    received = lib.read(sym, query_builder=q).data
+    received.sort_index(inplace=True)
+    assert_frame_equal(expected, received)
