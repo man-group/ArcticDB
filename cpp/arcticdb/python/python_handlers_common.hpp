@@ -25,6 +25,7 @@ inline void register_type_handlers() {
     register_python_string_types();
 
     register_arrow_string_types();
+    register_arrow_bool_type();
 
     register_python_handler_data_factory();
     register_arrow_handler_data_factory();

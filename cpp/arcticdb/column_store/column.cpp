@@ -217,9 +217,9 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
 
 Column::Column(
         TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-        size_t extra_bytes_per_block
+        DetachableBlockConfig block_config
 ) :
-    data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
+    data_(expected_rows * entity::data_type_size(type), allocation_type, block_config),
     type_(type),
     allow_sparse_(allow_sparse) {
     ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -311,6 +311,12 @@ uint8_t* Column::allocate_data(std::size_t bytes) {
 void Column::advance_data(std::size_t size) { data_.advance(position_t(size)); }
 
 void Column::advance_shapes(std::size_t size) { shapes_.advance(position_t(size)); }
+
+void Column::allocate_and_advance_by(std::size_t bytes) {
+    util::check(bytes != 0, "allocate_and_advance_by data called with zero size");
+    data_.ensure_bytes(bytes);
+    advance_data(bytes);
+}
 
 [[nodiscard]] ChunkedBuffer& Column::buffer() { return data_.buffer(); }
 

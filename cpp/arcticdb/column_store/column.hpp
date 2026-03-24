@@ -226,7 +226,7 @@ class Column {
     Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
     Column(TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-           size_t extra_bytes_per_block = 0);
+           DetachableBlockConfig block_config = detachable_block_config::Regular{0});
 
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 
@@ -498,6 +498,8 @@ class Column {
     void advance_data(std::size_t size);
 
     void advance_shapes(std::size_t size);
+
+    void allocate_and_advance_by(std::size_t bytes);
 
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
