@@ -158,6 +158,10 @@ python -m pytest python/tests/unit/arcticdb/test_arctic.py::test_function_name
 
 ## Benchmarking
 
+When running benchmarks make sure to always:
+- Build with optimizations in release.
+- Store all benchmark results in an .md file for reference.
+
 ### C++ Benchmarks (Google Benchmark)
 
 ```bash
@@ -174,12 +178,17 @@ Benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`.
 
 ASV benchmarks live in `python/benchmarks/`. Requires `asv` and `virtualenv` installed.
 
+**Run from the project root** — `asv.conf.json` is at the root, not inside `python/`.
+
 ```bash
-cd python
 python -m asv run -v --show-stderr HEAD^!              # Benchmark current commit
 python -m asv run -v --show-stderr --bench <regex>     # Run subset matching regex
 python -m asv run --python=$(which python) -v          # Use current env (faster)
 ```
+
+After modifying benchmark code, always:
+1. Run the formatter: `python ./build_tooling/format.py --in-place --type python`
+2. Run the affected benchmarks to update `benchmarks.json`
 
 See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
 
