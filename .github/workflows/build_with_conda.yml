@@ -33,12 +33,8 @@ jobs:
       runner:                    ubuntu-22.04
       platform:                  linux_64
       preset:                    linux-conda-release
-      cache_key:                 conda-env-linux_64
-      free_disk_space:           true
-      install_mongodb:           true
       hypothesis_profile:        ci_linux
       run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
-      cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
       run_enable_logging:        ${{inputs.run_enable_logging == true}}
@@ -52,11 +48,7 @@ jobs:
       runner:                    ubuntu-22.04-arm
       platform:                  linux_aarch64
       preset:                    linux-conda-release
-      cache_key:                 conda-env-linux_aarch64
-      free_disk_space:           true
-      install_mongodb:           true
       run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
-      cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
       run_enable_logging:        ${{inputs.run_enable_logging == true}}
@@ -70,10 +62,10 @@ jobs:
       runner:                    macos-14
       platform:                  osx_arm64
       preset:                    macos-conda-release
-      cache_key:                 conda-env-osx_arm64
       hypothesis_profile:        ci_macos
+      install_mongodb:           false # MongoDB is not available for macOS arm64
+      free_disk_space:           false # Do not clean on macOS 
       run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
-      cpp_tests_enabled:         true
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
       run_enable_logging:        ${{inputs.run_enable_logging == true}}
@@ -87,7 +79,6 @@ jobs:
       runner:                    windows-latest
       platform:                  win_64
       preset:                    windows-cl-conda-release
-      cache_key:                 conda-env-win_64
       run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}

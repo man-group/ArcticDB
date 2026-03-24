@@ -5,10 +5,9 @@ on:
       runner:                    {required: true,  type: string,  description: GitHub runner to execute on}
       platform:                  {required: true,  type: string,  description: Platform identifier e.g. linux_64 or osx_arm64}
       preset:                    {required: true,  type: string,  description: CMake preset name e.g. linux-conda-release}
-      cache_key:                 {required: true,  type: string,  description: Unique conda environment cache key per platform}
 
-      free_disk_space:           {required: false, type: boolean, default: false, description: Free disk space before build. Linux only}
-      install_mongodb:           {required: false, type: boolean, default: false, description: Install MongoDB for tests. Linux only}
+      free_disk_space:           {required: false, type: boolean, default: true, description: Free disk space before build. Linux only}
+      install_mongodb:           {required: false, type: boolean, default: true,  description: Install MongoDB for tests. Linux only}
       run_cpp_tests:             {required: false, type: boolean, default: true,  description: Whether to run C++ tests}
       cpp_tests_enabled:         {required: false, type: boolean, default: true,  description: Whether C++ tests are supported on this platform}
       hypothesis_profile:        {required: false, type: string,  default: '',    description: Hypothesis profile e.g. ci_linux or ci_macos}
@@ -60,7 +59,7 @@ jobs:
           environment-name: arcticdb
           init-shell: bash
           cache-environment: true
-          cache-environment-key: ${{inputs.cache_key}}
+          cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Build ArcticDB with conda
@@ -135,7 +134,7 @@ jobs:
           environment-name: arcticdb
           init-shell: bash
           cache-environment: true
-          cache-environment-key: ${{inputs.cache_key}}
+          cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Configure C++ Tests
@@ -221,7 +220,7 @@ jobs:
           environment-name: arcticdb
           init-shell: bash
           cache-environment: true
-          cache-environment-key: ${{inputs.cache_key}}
+          cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts
