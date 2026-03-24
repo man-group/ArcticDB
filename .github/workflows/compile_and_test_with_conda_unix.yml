@@ -206,6 +206,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v2.0.0
         id: cpu-cores
 
+      - name: Print cache key
+        run: |
+          echo "Cache key: conda-env-${{inputs.platform}}"
+
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
         with:
