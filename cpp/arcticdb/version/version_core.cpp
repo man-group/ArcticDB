@@ -1151,10 +1151,10 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    const ProcessingConfig processing_config{// This looks wrong
-                                             opt_false(read_options.dynamic_schema()),
-                                             pipeline_context->rows_,
-                                             pipeline_context->descriptor().index().type()
+    const ProcessingConfig processing_config{
+            opt_false(read_options.dynamic_schema()),
+            pipeline_context->rows_,
+            pipeline_context->descriptor().index().type()
     };
     for (auto& clause : read_query->clauses_) {
         clause->set_processing_config(processing_config);
@@ -2955,10 +2955,8 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         }
                         ranges::sort(slices_and_keys);
                         pipeline_context->slice_and_keys_.clear();
-                        const size_t row_count = slices_and_keys.empty()
-                                                         ? 0
-                                                         : slices_and_keys.back().slice().row_range.second -
-                                                                   slices_and_keys.front().slice().row_range.first;
+                        const size_t row_count = slices_and_keys.back().slice().row_range.second -
+                                                 slices_and_keys.front().slice().row_range.first;
                         const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                 row_count,
                                 pipeline_context->descriptor(),

@@ -3198,7 +3198,7 @@ class Library:
 
         This operation creates a new version, unless the data is already compacted.
 
-        Note that the metadata from the version being compacted is maintained with the newly created version.
+        The metadata from the version being compacted is maintained with the newly created version.
 
         !!! warning
             This API is under development and is subject to change. The API is not subject to semver and can change in
@@ -3208,7 +3208,7 @@ class Library:
 
             Dynamic schema is not yet supported.
 
-            Sparse data is no yet supported.
+            Sparse data is not yet supported.
 
         Parameters
         ----------

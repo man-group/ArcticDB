@@ -3920,8 +3920,6 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
-    # TODO: Add option to change the metadata? Or always maintain it as-is?
-    # Either way the returned metadata field should be right
     def compact_data_experimental(
         self,
         symbol: str,
@@ -3935,7 +3933,7 @@ class NativeVersionStore:
 
         This operation creates a new version, unless the data is already compacted.
 
-        Note that the metadata from the version being compacted is maintained with the newly created version.
+        The metadata from the version being compacted is maintained with the newly created version.
 
         !!! warning
             This API is under development and is subject to change. The API is not subject to semver and can change in
@@ -3945,7 +3943,7 @@ class NativeVersionStore:
 
             Dynamic schema is not yet supported.
 
-            Sparse data is no yet supported.
+            Sparse data is not yet supported.
 
         Parameters
         ----------

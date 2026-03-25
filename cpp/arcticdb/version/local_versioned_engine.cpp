@@ -1304,6 +1304,8 @@ VersionedItem LocalVersionedEngine::compact_data_internal(
         );
         return *versioned_item;
     } else {
+        // compact_data_impl returns nullopt if the data was already compacted, in which case the versioned item we
+        // return is for the existing version
         return {std::move(*update_info.previous_index_key_)};
     }
 }
