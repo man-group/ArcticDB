@@ -54,6 +54,10 @@ jobs:
 
       - name: Build ArcticDB with conda
         shell: cmd /C call {0}
+
+        # Clear CMAKE_GENERATOR_PLATFORM and CMAKE_GENERATOR_TOOLSET to prevent them from overriding the CMake preset configuration.
+        # GitHub runner images or Conda activation scripts may set these, which can conflict
+        # with the generator, architecture, and toolset already defined in the preset.
         run: |
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
