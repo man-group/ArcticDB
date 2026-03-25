@@ -737,19 +737,11 @@ class VersionMapImpl {
             return false;
         }
 
-        const bool has_loaded_earliest_include_deleted = entry->load_progress_.is_earliest_version_loaded;
-        const bool has_loaded_earliest_undeleted =
-                entry->tombstone_all_.has_value() &&
-                entry->load_progress_.oldest_loaded_index_version_ <= entry->tombstone_all_->version_id();
-        const bool has_loaded_earliest =
-                has_loaded_earliest_include_deleted ||
-                (!requested_load_strategy.should_include_deleted() && has_loaded_earliest_undeleted);
-
         if (requested_load_type == LoadType::DOWNTO) {
-            return loaded_as_far_as_version_id(*entry, requested_load_strategy.load_until_version_.value());
+            return loaded_as_far_as_version_id(*entry, requested_load_strategy);
         }
 
-        if (has_loaded_earliest) {
+        if (has_loaded_earliest_version(*entry, requested_load_strategy)) {
             return true;
         }
 
@@ -849,48 +841,52 @@ class VersionMapImpl {
         return true;
     }
 
+    bool inline has_loaded_earliest_version(const VersionMapEntry& entry, const LoadStrategy& requested_load_strategy)
+            const {
+        const bool has_loaded_earliest_include_deleted = entry.load_progress_.is_earliest_version_loaded;
+        const bool tombstone_all_covers_remainder =
+                entry.is_tombstoned_via_tombstone_all(entry.load_progress_.oldest_loaded_index_version_);
+        return has_loaded_earliest_include_deleted ||
+               (!requested_load_strategy.should_include_deleted() && tombstone_all_covers_remainder);
+    }
+
     /**
-     * Whether entry contains as much of the version map as specified by load_param. Checks whether
-     * oldest_loaded_index_version_ in entry is earlier than that specified in load_param.
+     * Whether entry contains as much of the version map as specified by load_param.
      *
-     * @param entry the version map state to check
-     * @param load_param the load request to test for completeness
      * @return true if and only if entry already contains data at least as far back as load_param requests
      */
-    bool loaded_as_far_as_version_id(const VersionMapEntry& entry, SignedVersionId requested_version_id) const {
+    bool loaded_as_far_as_version_id(const VersionMapEntry& entry, const LoadStrategy& requested_load_strategy) const {
+        const bool has_loaded_earliest = has_loaded_earliest_version(entry, requested_load_strategy);
+        const SignedVersionId requested_version_id = requested_load_strategy.load_until_version_.value();
         auto opt_latest = entry.get_first_index(true).first;
-        if (requested_version_id >= 0) {
-            // For positive version IDs, we need to check two things:
-            // 1. We have loaded far enough back: oldest_loaded_index_version_ <= requested_version_id
-            // 2. The requested version is within our known range: requested_version_id <= latest_known_version_id
-            // Without check 2, we'd incorrectly claim to have versions that were written after our cache was populated
-            if (opt_latest.has_value() && static_cast<VersionId>(requested_version_id) <= opt_latest->version_id() &&
-                entry.load_progress_.oldest_loaded_index_version_ <= static_cast<VersionId>(requested_version_id)) {
-                ARCTICDB_DEBUG(
-                        log::version(),
-                        "Loaded as far as required value {}, have {} to {}",
-                        requested_version_id,
-                        entry.load_progress_.oldest_loaded_index_version_,
-                        opt_latest->version_id()
-                );
-                return true;
+        if (!opt_latest.has_value()) {
+            return false;
+        }
+        VersionId resolved_version_id;
+        if (requested_version_id < 0) {
+            auto negative_resolved_version_id =
+                    get_version_id_negative_index(opt_latest->version_id(), requested_version_id);
+            if (negative_resolved_version_id.has_value()) {
+                resolved_version_id = static_cast<VersionId>(*negative_resolved_version_id);
+            } else {
+                return false;
             }
         } else {
-            if (opt_latest.has_value()) {
-                auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), requested_version_id);
-                if (opt_version_id.has_value() &&
-                    entry.load_progress_.oldest_loaded_index_version_ <= *opt_version_id) {
-                    ARCTICDB_DEBUG(
-                            log::version(),
-                            "Loaded as far as required value {}, have {} and there are {} total versions",
-                            requested_version_id,
-                            entry.load_progress_.oldest_loaded_index_version_,
-                            opt_latest->version_id()
-                    );
-                    return true;
-                }
-            }
+            resolved_version_id = static_cast<VersionId>(requested_version_id);
         }
+
+        if (resolved_version_id <= opt_latest->version_id() &&
+            (entry.load_progress_.oldest_loaded_index_version_ <= resolved_version_id || has_loaded_earliest)) {
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "Loaded as far as required value {}, have {} to {}",
+                    resolved_version_id,
+                    entry.load_progress_.oldest_loaded_index_version_,
+                    opt_latest->version_id()
+            );
+            return true;
+        }
+
         return false;
     }
 
