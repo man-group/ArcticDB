@@ -15,6 +15,8 @@
 #include <arcticdb/stream/merge.hpp>
 
 #include <arcticdb/processing/clause.hpp>
+
+#include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -1694,9 +1696,27 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
+    arcticc::pb2::descriptors_pb2::ColumnStatsHeader merged_header;
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
+        auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
+        auto offset_base = seg.descriptor().field_count();
+        if (auto* meta = finalized.metadata()) {
+            arcticc::pb2::descriptors_pb2::ColumnStatsHeader sub_header;
+            bool unpacked = meta->UnpackTo(&sub_header);
+            util::check(
+                    unpacked, "Could not unpack meta to a ColumnStatsHeader in ColumnStatsGenerationClause#process"
+            );
+            for (const auto& stat : sub_header.stats()) {
+                auto* new_stat = merged_header.add_stats();
+                *new_stat = stat;
+                new_stat->set_stats_seg_offset(stat.stats_seg_offset() + offset_base);
+            }
+        }
+        seg.concatenate(std::move(finalized));
     }
+    google::protobuf::Any any;
+    any.PackFrom(merged_header);
+    seg.set_metadata(std::move(any));
     seg.set_row_id(0);
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }
