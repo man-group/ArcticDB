@@ -1518,6 +1518,63 @@ TEST(VersionMap, PartialLoadCacheEarliestVersionNotLoaded) {
     ); // We didn't load the earliest version, so this should be false
 }
 
+// Regression test: after loading the version chain via FROM_TIME with a tombstone_all boundary,
+// a subsequent DOWNTO query for a version below the oldest loaded index should be a cache hit
+// because the tombstone_all means all older versions are deleted and we've loaded everything relevant.
+TEST(VersionMap, DowntoCacheHitAfterFromTimeWithTombstoneAll) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+
+    // Set up: v0 <- v1 <- tombstone_all(v1) <- v2 <- v3
+    // tombstone_all covers v0 and v1, v2 and v3 are undeleted.
+    using Type = VersionChainOperation::Type;
+    write_versions(
+            store,
+            version_map,
+            id,
+            {
+                    {Type::WRITE, 0},
+                    {Type::WRITE, 1},
+                    {Type::TOMBSTONE_ALL},
+                    {Type::WRITE, 2},
+                    {Type::WRITE, 3},
+            }
+    );
+
+    // Fresh version map (empty cache)
+    version_map = std::make_shared<VersionMap>();
+
+    // Load via FROM_TIME with timestamp 0 (undeleted only).
+    // Walking the chain: v3(ts=3), v2(ts=2), tombstone_all(v1), v1(tombstoned) -> STOP.
+    // Stops at v1 because tombstone_all(v1) covers oldest_loaded(v1). Does NOT load v0.
+    // After this, has_loaded_earliest_undeleted is true (tombstone_all covers remainder).
+    version_map->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
+            __FUNCTION__
+    );
+
+    // DOWNTO v0 (undeleted only) should be a cache hit because tombstone_all covers everything
+    // below the oldest loaded index — there are no undeleted versions we haven't seen.
+    ASSERT_TRUE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)}
+    ));
+
+    // Negative index resolving to v0 should also be a cache hit
+    ASSERT_TRUE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-4)}
+    ));
+
+    // However, DOWNTO v0 with INCLUDE_DELETED should NOT be a cache hit because
+    // we haven't actually loaded v0 (we stopped at the tombstone_all boundary).
+    ASSERT_FALSE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}
+    ));
+}
+
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
 
 TEST_F(VersionMapStore, StressTestWrite) {
