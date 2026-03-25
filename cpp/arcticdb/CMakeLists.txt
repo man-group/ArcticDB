@@ -188,7 +188,7 @@ set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
         arrow/arrow_handlers.hpp
-        arrow/arrow_output_frame.hpp
+        arrow/arrow_c_interface.hpp
         arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
@@ -434,7 +434,7 @@ set(arcticdb_srcs
         version/python_bindings_common.hpp
         # CPP files
         arrow/arrow_handlers.cpp
-        arrow/arrow_output_frame.cpp
+        arrow/arrow_c_interface.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp

@@ -10,7 +10,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/pipeline/pandas_output_frame.hpp>
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 
 namespace py = pybind11;
 

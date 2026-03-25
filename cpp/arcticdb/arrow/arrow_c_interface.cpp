@@ -6,13 +6,44 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 
 #include <vector>
 
 #include <sparrow/record_batch.hpp>
 
 namespace arcticdb {
+
+RecordBatchData::RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
+
+RecordBatchData::~RecordBatchData() { release(); }
+
+RecordBatchData::RecordBatchData(RecordBatchData&& other) : array_(other.array_), schema_(other.schema_) {
+    other.array_ = {};
+    other.schema_ = {};
+}
+
+RecordBatchData& RecordBatchData::operator=(RecordBatchData&& other) {
+    if (this != &other) {
+        release();
+        array_ = other.array_;
+        schema_ = other.schema_;
+        other.array_ = {};
+        other.schema_ = {};
+    }
+    return *this;
+}
+
+void RecordBatchData::release() {
+    if (array_.release) {
+        array_.release(&array_);
+        array_.release = nullptr;
+    }
+    if (schema_.release) {
+        schema_.release(&schema_);
+        schema_.release = nullptr;
+    }
+}
 
 ArrowOutputFrame::ArrowOutputFrame(std::shared_ptr<std::vector<sparrow::record_batch>>&& data) :
     data_(std::move(data)) {}
