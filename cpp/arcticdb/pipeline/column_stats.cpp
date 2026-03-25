@@ -7,8 +7,6 @@
 
 #include <semimap/semimap.h>
 
-#include <charconv>
-
 namespace arcticdb {
 
 SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments) {
@@ -69,69 +67,8 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
     return TypeToOperatorStringMap::get(type);
 }
 
-std::string to_segment_column_name_v1(
-        const std::string& column, ColumnStatTypeInternal column_stat_type,
-        std::optional<uint64_t> minor_version = std::nullopt
-) {
-    // Increment when modifying
-    const uint64_t latest_minor_version = 0;
-    return fmt::format(
-            "v1.{}_{}({})",
-            minor_version.value_or(latest_minor_version),
-            type_to_operator_string(column_stat_type),
-            column
-    );
-}
-
-std::string to_segment_column_name(
-        const std::string& column, ColumnStatTypeInternal column_stat_type,
-        std::optional<std::pair<uint64_t, uint64_t>> version = std::nullopt
-) {
-    if (!version.has_value()) {
-        // Use latest version
-        return to_segment_column_name_v1(column, column_stat_type);
-    } else {
-        // Use version specified
-        switch (version->first) {
-        case 1:
-            return to_segment_column_name_v1(column, column_stat_type, version->second);
-        default:
-            compatibility::raise<ErrorCode::E_UNRECOGNISED_COLUMN_STATS_VERSION>(
-                    "Unrecognised major version number in column stats column name: {}", version->first
-            );
-        }
-    }
-}
-
-// Expected to be of the form "<operation>(<column name>)"
-std::pair<std::string, ColumnStatType> from_segment_column_name_v1(std::string_view pattern) {
-    const semi::map<std::string, ColumnStatType> name_to_type_map;
-    const ankerl::unordered_dense::map<std::string, ColumnStatTypeInternal> operator_string_to_type{
-            {"MIN", ColumnStatTypeInternal::MIN}, {"MAX", ColumnStatTypeInternal::MAX}
-    };
-    std::optional<ColumnStatTypeInternal> type;
-    for (const auto& [name, type_candidate] : operator_string_to_type) {
-        if (pattern.find(name) == 0) {
-            pattern = pattern.substr(name.size());
-            type = type_candidate;
-            break;
-        }
-    }
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            type.has_value(), "Unexpected column stat column prefix {}", pattern
-    );
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            pattern.find('(') == 0 && pattern.rfind(')') == pattern.size() - 1,
-            "Unexpected column stat column format: {}",
-            pattern
-    );
-    struct Tag {};
-    using InternalToExternalColumnStatType = semi::static_map<ColumnStatTypeInternal, ColumnStatType, Tag>;
-    InternalToExternalColumnStatType::get(ColumnStatTypeInternal::MIN) = ColumnStatType::MINMAX;
-    InternalToExternalColumnStatType::get(ColumnStatTypeInternal::MAX) = ColumnStatType::MINMAX;
-    return std::make_pair(
-            std::string(pattern.substr(1, pattern.size() - 2)), InternalToExternalColumnStatType::get(*type)
-    );
+std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type) {
+    return fmt::format("{}({})", type_to_operator_string(type), column);
 }
 
 std::string type_to_name(ColumnStatType type) {
@@ -167,15 +104,27 @@ ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_se
     }
 }
 
-ColumnStats::ColumnStats(const FieldCollection& column_stats_fields) {
-    for (const auto& field : column_stats_fields) {
-        if (field.name() != start_index_column_name && field.name() != end_index_column_name) {
-            auto [column_name, index_type] = from_segment_column_name(field.name());
-            if (auto it = column_stats_.find(column_name); it == column_stats_.end()) {
-                column_stats_[column_name] = {index_type};
-            } else {
-                it->second.emplace(index_type);
-            }
+ColumnStats::ColumnStats(
+        const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header, const StreamDescriptor& data_descriptor
+) {
+    using namespace arcticc::pb2::descriptors_pb2;
+    for (const auto& mapping : header.stats()) {
+        auto column_name = std::string{data_descriptor.field(mapping.data_col_offset()).name()};
+        ColumnStatType external_type;
+        switch (mapping.type()) {
+        case COLUMN_STATS_MIN:
+        case COLUMN_STATS_MAX:
+            external_type = ColumnStatType::MINMAX;
+            break;
+        default:
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "Unrecognised column stats type in header: {}", static_cast<int>(mapping.type())
+            );
+        }
+        if (auto it = column_stats_.find(column_name); it == column_stats_.end()) {
+            column_stats_[column_name] = {external_type};
+        } else {
+            it->second.emplace(external_type);
         }
     }
 }
@@ -210,9 +159,6 @@ void ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
 }
 
 ankerl::unordered_dense::set<std::string> ColumnStats::segment_column_names() const {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            version_.has_value(), "Cannot construct column stat column names without specified versions"
-    );
     struct Tag {};
     using ExternalToInternalColumnStatType =
             semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
@@ -222,7 +168,7 @@ ankerl::unordered_dense::set<std::string> ColumnStats::segment_column_names() co
     for (const auto& [column, column_stat_types] : column_stats_) {
         for (const auto& column_stat_type : column_stat_types) {
             for (const auto& column_stat_type_internal : ExternalToInternalColumnStatType::get(column_stat_type)) {
-                res.emplace(to_segment_column_name(column, column_stat_type_internal, version_));
+                res.emplace(to_segment_column_name(column, column_stat_type_internal));
             }
         }
     }
@@ -268,53 +214,57 @@ std::optional<Clause> ColumnStats::clause() const {
 
 bool ColumnStats::operator==(const ColumnStats& right) const { return column_stats_ == right.column_stats_; }
 
-// Expected to be of the form "vX.Y"
-void ColumnStats::parse_version(std::string_view version_string) {
-    auto dot_position = version_string.find('.');
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            dot_position != std::string::npos,
-            "Unexpected version string in column stats column name (expected vX.Y): {}",
-            version_string
-    );
-    auto candidate = version_string.substr(1, dot_position - 1);
-    uint64_t major_version = 0;
-    auto result = std::from_chars(candidate.data(), candidate.data() + candidate.size(), major_version);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            result.ec != std::errc::invalid_argument,
-            "Expected positive integer in version string, but got: {}",
-            candidate
-    );
-
-    candidate = version_string.substr(dot_position + 1, std::string::npos);
-    uint64_t minor_version = 0;
-    result = std::from_chars(candidate.data(), candidate.data() + candidate.size(), minor_version);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            result.ec != std::errc::invalid_argument,
-            "Expected positive integer in version string, but got: {}",
-            candidate
-    );
-
-    version_ = std::make_pair(major_version, minor_version);
+void ColumnStats::merge(const ColumnStats& other) {
+    for (const auto& [column, stat_types] : other.column_stats_) {
+        column_stats_[column].insert(stat_types.begin(), stat_types.end());
+    }
 }
 
-// Expected to be of the form "vX.Y_<version specific pattern>"
-std::pair<std::string, ColumnStatType> ColumnStats::from_segment_column_name(std::string_view segment_column_name) {
-    auto underscore_position = segment_column_name.find('_');
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            underscore_position != std::string::npos,
-            "Unexpected column stats column name (expected vX.Y_<version specific pattern>): {}",
-            segment_column_name
-    );
-    parse_version(segment_column_name.substr(0, underscore_position));
-    auto version_specific_pattern = segment_column_name.substr(underscore_position + 1);
-    switch (version_->first) {
-    case 1:
-        return from_segment_column_name_v1(version_specific_pattern);
-    default:
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                "Unsupported major version {} when parsing column stats column name", version_->first
+arcticc::pb2::descriptors_pb2::ColumnStatsHeader ColumnStats::build_header(
+        const StreamDescriptor& data_descriptor, const StreamDescriptor& stats_descriptor
+) const {
+    using namespace arcticc::pb2::descriptors_pb2;
+    ColumnStatsHeader header;
+    header.set_major_version(1);
+    header.set_minor_version(0);
+
+    // Maps external ColumnStatType to internal types with their proto enum values
+    const std::map<ColumnStatType, std::vector<std::pair<ColumnStatTypeInternal, ColumnStatsType>>>
+            external_to_internal = {
+                    {ColumnStatType::MINMAX,
+                     {{ColumnStatTypeInternal::MIN, COLUMN_STATS_MIN},
+                      {ColumnStatTypeInternal::MAX, COLUMN_STATS_MAX}}},
+    };
+
+    for (const auto& [source_column, stat_types] : column_stats_) {
+        auto data_col_offset = data_descriptor.find_field(source_column);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                data_col_offset.has_value(),
+                "Column stats source column '{}' not found in data descriptor",
+                source_column
         );
+
+        for (const auto& stat_type : stat_types) {
+            auto it = external_to_internal.find(stat_type);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    it != external_to_internal.end(), "Unrecognised ColumnStatType"
+            );
+            for (const auto& [internal_type, proto_type] : it->second) {
+                auto stats_col_name = to_segment_column_name(source_column, internal_type);
+                auto stats_seg_offset = stats_descriptor.find_field(stats_col_name);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        stats_seg_offset.has_value(),
+                        "Column stats field '{}' not found in stats segment descriptor",
+                        stats_col_name
+                );
+                auto* mapping = header.add_stats();
+                mapping->set_stats_seg_offset(static_cast<uint32_t>(*stats_seg_offset));
+                mapping->set_data_col_offset(static_cast<uint32_t>(*data_col_offset));
+                mapping->set_type(proto_type);
+            }
+        }
     }
+    return header;
 }
 
 } // namespace arcticdb

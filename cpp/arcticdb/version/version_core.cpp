@@ -8,6 +8,7 @@
 
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <google/protobuf/any.pb.h>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -1909,6 +1910,12 @@ folly::Future<SegmentInMemory> prepare_output_frame(
             .thenValue([frame](auto&&) { return frame; });
 }
 
+static StreamDescriptor get_data_stream_descriptor(
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item
+) {
+    return store->read_timeseries_descriptor(versioned_item.key_).get().second.as_stream_descriptor();
+}
+
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
     // Note that we use the creation timestamp and content hash of the related index key
     // This gives a strong paper-trail if archaeology is required
@@ -1933,13 +1940,18 @@ void create_column_stats_impl(
             std::vector<std::shared_ptr<Clause>>{std::make_shared<Clause>(std::move(*clause))}
     );
 
+    auto data_descriptor = get_data_stream_descriptor(store, versioned_item);
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
+    std::optional<ColumnStats> old_column_stats;
     try {
         old_segment = store->read(column_stats_key).get().second;
-        ColumnStats old_column_stats{old_segment->fields()};
+        auto* meta = old_segment->metadata();
+        arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
+        meta->UnpackTo(&old_header);
+        old_column_stats.emplace(old_header, data_descriptor);
         // No need to redo work for any stats that already exist
-        column_stats.drop(old_column_stats, false);
+        column_stats.drop(*old_column_stats, false);
         // If all the column stats we are being asked to create already exist, there's no work to do
         if (column_stats.segment_column_names().empty()) {
             return;
@@ -1979,6 +1991,9 @@ void create_column_stats_impl(
     update_opts.upsert_ = true;
     if (!old_segment.has_value()) {
         // Old segment doesn't exist, just write new one
+        google::protobuf::Any any;
+        any.PackFrom(column_stats.build_header(data_descriptor, new_segment.descriptor()));
+        new_segment.set_metadata(std::move(any));
         store->update(column_stats_key, std::move(new_segment), update_opts).get();
         return;
     } else {
@@ -1988,6 +2003,12 @@ void create_column_stats_impl(
                 "Cannot create column stats, existing column stats row-groups do not match"
         );
         old_segment->concatenate(std::move(new_segment));
+        ColumnStats all_stats = *old_column_stats;
+        all_stats.merge(column_stats);
+        google::protobuf::Any any;
+        any.PackFrom(all_stats.build_header(data_descriptor, old_segment->descriptor()));
+        old_segment->reset_metadata();
+        old_segment->set_metadata(std::move(any));
         store->update(column_stats_key, std::move(*old_segment), update_opts).get();
     }
 }
@@ -2003,6 +2024,7 @@ void drop_column_stats_impl(
         // Drop all column stats
         store->remove_key(column_stats_key, remove_opts).get();
     } else {
+        auto data_descriptor = get_data_stream_descriptor(store, versioned_item);
         SegmentInMemory segment_in_memory;
         try {
             segment_in_memory = store->read(column_stats_key).get().second;
@@ -2010,7 +2032,10 @@ void drop_column_stats_impl(
             log::version().warn("No column stats exist to drop: {}", e.what());
             return;
         }
-        ColumnStats column_stats{segment_in_memory.fields()};
+        auto* meta = segment_in_memory.metadata();
+        arcticc::pb2::descriptors_pb2::ColumnStatsHeader header;
+        meta->UnpackTo(&header);
+        ColumnStats column_stats{header, data_descriptor};
         column_stats.drop(*column_stats_to_drop);
         auto columns_to_keep = column_stats.segment_column_names();
         if (columns_to_keep.empty()) {
@@ -2025,6 +2050,10 @@ void drop_column_stats_impl(
                     segment_in_memory.drop_column(column_name);
                 }
             }
+            google::protobuf::Any any;
+            any.PackFrom(column_stats.build_header(data_descriptor, segment_in_memory.descriptor()));
+            segment_in_memory.reset_metadata();
+            segment_in_memory.set_metadata(std::move(any));
             storage::UpdateOpts update_opts;
             update_opts.upsert_ = true;
             store->update(column_stats_key, std::move(segment_in_memory), update_opts).get();
@@ -2051,9 +2080,13 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
-        auto stream_descriptor =
-                std::get<StreamDescriptor>(store->read_metadata_and_descriptor(column_stats_key).get());
-        return ColumnStats(stream_descriptor.fields());
+        auto result = store->read_metadata_and_descriptor(column_stats_key).get();
+        auto& opt_any = std::get<1>(result);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(opt_any.has_value(), "Column stats segment has no metadata");
+        arcticc::pb2::descriptors_pb2::ColumnStatsHeader header;
+        opt_any->UnpackTo(&header);
+        auto data_descriptor = get_data_stream_descriptor(store, versioned_item);
+        return ColumnStats{header, data_descriptor};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }
