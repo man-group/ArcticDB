@@ -6,8 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <algorithm>
-
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
 
@@ -34,12 +32,12 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
     }
     auto output_col = res.begin();
     auto output_ptr = output_col->value().buffer().data();
-    auto capacity = type_size * output_col->value().row_count();
+    uint64_t capacity = type_size * output_col->value().row_count();
     for (auto& input_col : columns) {
         const auto& input_blocks = input_col.value()->buffer().blocks();
         for (const auto& block : input_blocks) {
             auto input_ptr = block->data();
-            auto remaining_bytes = block->physical_bytes();
+            uint64_t remaining_bytes = block->physical_bytes();
             while (remaining_bytes > 0) {
                 auto bytes_to_copy = std::min(remaining_bytes, capacity);
                 memcpy(output_ptr, input_ptr, bytes_to_copy);
