@@ -2,7 +2,7 @@ name: Conda Build and Test (Unix)
 on:
   workflow_call:
     inputs:
-      runner:                    {required: true,  type: string,  description: GitHub runner to execute on}
+      os:                        {required: true,  type: string,  description: GitHub os to execute on}
       platform:                  {required: true,  type: string,  description: Platform identifier e.g. linux_64 or osx_arm64}
       preset:                    {required: true,  type: string,  description: CMake preset name e.g. linux-conda-release}
 
@@ -24,7 +24,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    runs-on: ${{inputs.runner}}
+    runs-on: ${{inputs.os}}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
@@ -85,7 +85,7 @@ jobs:
       always() &&
       !cancelled() &&
       inputs.run_cpp_tests
-    runs-on: ${{inputs.runner}}
+    runs-on: ${{inputs.os}}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
@@ -166,7 +166,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    runs-on: ${{inputs.runner}}
+    runs-on: ${{inputs.os}}
     strategy:
       fail-fast: false
       matrix:

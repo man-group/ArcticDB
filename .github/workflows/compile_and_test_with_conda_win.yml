@@ -2,7 +2,7 @@ name: Conda Build and Test (Windows)
 on:
   workflow_call:
     inputs:
-      runner:                    {required: true,  type: string,  description: GitHub runner to execute on}
+      os:                        {required: true,  type: string,  description: GitHub os to execute on}
       platform:                  {required: true,  type: string,  description: Platform identifier e.g. win_64}
       preset:                    {required: true,  type: string,  description: CMake preset name e.g. windows-cl-conda-release}
 
@@ -20,7 +20,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    runs-on: ${{inputs.runner}}
+    runs-on: ${{inputs.os}}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
@@ -91,7 +91,7 @@ jobs:
     if: |
       always() &&
       !cancelled()
-    runs-on: ${{inputs.runner}}
+    runs-on: ${{inputs.os}}
     strategy:
       fail-fast: false
       matrix:

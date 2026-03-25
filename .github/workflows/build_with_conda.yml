@@ -30,7 +30,7 @@ jobs:
     uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
     secrets: inherit
     with:
-      runner:                    ubuntu-22.04
+      os:                        ubuntu-22.04
       platform:                  linux_64
       preset:                    linux-conda-release
       hypothesis_profile:        ci_linux
@@ -45,7 +45,7 @@ jobs:
     uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
     secrets: inherit
     with:
-      runner:                    ubuntu-22.04-arm
+      os:                        ubuntu-22.04-arm
       platform:                  linux_aarch64
       preset:                    linux-conda-release
       run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
@@ -59,7 +59,7 @@ jobs:
     uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
     secrets: inherit
     with:
-      runner:                    macos-14
+      os:                        macos-14
       platform:                  osx_arm64
       preset:                    macos-conda-release
       hypothesis_profile:        ci_macos
@@ -76,7 +76,7 @@ jobs:
     uses: ./.github/workflows/compile_and_test_with_conda_win.yml
     secrets: inherit
     with:
-      runner:                    windows-latest
+      os:                        windows-latest
       platform:                  win_64
       preset:                    windows-cl-conda-release
       run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
