@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <algorithm>
+
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
 
