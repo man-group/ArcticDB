@@ -2931,14 +2931,16 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
     std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, version_info, *read_query, {});
     return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
             .thenValue(
-                    [pipeline_context = std::move(pipeline_context), store, write_options, target_partial_index_key](
-                            std::vector<SliceAndKey>&& slices_and_keys
+                    [pipeline_context = std::move(pipeline_context),
+                     store,
+                     write_options,
+                     target_partial_index_key,
+                     read_query](std::vector<SliceAndKey>&& slices_and_keys
                     ) -> folly::Future<std::optional<VersionedItem>> {
                         if (slices_and_keys.empty()) {
                             return folly::makeFuture(std::optional<VersionedItem>());
                         }
-                        // TODO: There must be a more efficient way to do this
-                        std::set<RowRange> new_row_ranges_set;
+                        std::unordered_set<RowRange> new_row_ranges_set;
                         for (const auto& slice_and_key : slices_and_keys) {
                             new_row_ranges_set.insert(slice_and_key.slice().row_range);
                         }
