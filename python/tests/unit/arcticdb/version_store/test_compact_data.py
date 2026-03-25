@@ -450,7 +450,7 @@ def test_compact_data_hypothesis(in_memory_store_factory, num_rows, num_cols, ro
         np.int64,
         np.float32,
         np.float64,
-        np.bool,
+        bool,
         np.datetime64,
     ]
     col_types = rng.choice(supported_types, num_cols)
@@ -462,7 +462,7 @@ def test_compact_data_hypothesis(in_memory_store_factory, num_rows, num_cols, ro
             arr = rng.integers(np.iinfo(col_type).min, np.iinfo(col_type).max, num_rows, col_type, True)
         elif np.issubdtype(col_type, np.floating):
             arr = rng.random(num_rows, col_type)
-        elif col_type == np.bool:
+        elif col_type == bool:
             arr = rng.random(num_rows) > 0.5
         else:
             # datetime
