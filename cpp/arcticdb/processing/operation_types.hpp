@@ -10,6 +10,7 @@
 
 #include <unordered_set>
 #include <optional>
+#include <cmath>
 
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
@@ -37,6 +38,7 @@ enum class OperationType : uint8_t {
     SUB,
     MUL,
     DIV,
+    MOD,
     // Comparison
     EQ,
     NE,
@@ -70,6 +72,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(SUB)
         TO_STR(MUL)
         TO_STR(DIV)
+        TO_STR(MOD)
         TO_STR(EQ)
         TO_STR(NE)
         TO_STR(LT)
@@ -103,6 +106,7 @@ struct PlusOperator;
 struct MinusOperator;
 struct TimesOperator;
 struct DivideOperator;
+struct ModOperator;
 struct MembershipOperator;
 
 namespace arithmetic_promoted_type::details {
@@ -230,6 +234,24 @@ struct binary_operation_promoted_type {
                                                                     2 * max_width>>>>>>>>;
 };
 
+// Modulo cannot overflow, so no width-doubling is needed (unlike +/-/*).
+// For mixed signed/unsigned integers, always use a signed type so that Python/Pandas
+// sign semantics (result sign follows divisor) can produce negative results.
+template<class LHS, class RHS>
+struct binary_operation_promoted_type<LHS, RHS, ModOperator> {
+    static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
+    using type = std::conditional_t<
+            std::is_floating_point_v<LHS> || std::is_floating_point_v<RHS>,
+            std::conditional_t<
+                    std::is_floating_point_v<LHS> && std::is_floating_point_v<RHS>,
+                    std::conditional_t<max_width == 8, double, float>,
+                    double>,
+            std::conditional_t<
+                    std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
+                    arithmetic_promoted_type::details::unsigned_width_t<max_width>,
+                    arithmetic_promoted_type::details::signed_width_t<max_width>>>;
+};
+
 template<class LHS, class RHS>
 struct ternary_operation_promoted_type {
     static constexpr size_t max_width = arithmetic_promoted_type::details::max_width_v<LHS, RHS>;
@@ -353,6 +375,33 @@ struct DivideOperator {
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, DivideOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) / static_cast<V>(u);
+    }
+};
+
+struct ModOperator {
+    template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, ModOperator>::type>
+    V apply(T t, U u) {
+        if constexpr (std::is_floating_point_v<V>) {
+            const auto lhs = static_cast<V>(t);
+            const auto rhs = static_cast<V>(u);
+            // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
+            auto result = std::fmod(lhs, rhs);
+            if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
+                result += rhs;
+            }
+            return result;
+        } else {
+            auto lhs = static_cast<V>(t);
+            auto rhs = static_cast<V>(u);
+            auto result = lhs % rhs;
+            if constexpr (std::is_signed_v<V>) {
+                // Match Python/Pandas modulo semantics where the result has the sign of the divisor.
+                if (result != V{0} && ((rhs < V{0}) != (result < V{0}))) {
+                    result += rhs;
+                }
+            }
+            return result;
+        }
     }
 };
 
@@ -712,6 +761,19 @@ struct formatter<arcticdb::DivideOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::DivideOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "/");
+    }
+};
+
+template<>
+struct formatter<arcticdb::ModOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::ModOperator, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "%");
     }
 };
 
