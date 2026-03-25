@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/util/string_utils.hpp>
+
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
 
@@ -54,6 +56,12 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
                 }
             }
         }
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                input_col->unique(),
+                "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
+                input_col->use_count()
+        );
         input_col->reset();
     }
     return res;
@@ -89,10 +97,17 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     if (segments.empty()) {
         return {};
     }
-    ankerl::unordered_dense::map<std::string_view, std::vector<std::optional<std::shared_ptr<Column>>>> column_map;
+    // Use string over string_view for the keys in this map, as we are going to free the segments soon, which would
+    // then invalidate the pointers in those string views
+    ankerl::unordered_dense::map<
+            std::string,
+            std::vector<std::optional<std::shared_ptr<Column>>>,
+            util::TransparentStringHash,
+            std::equal_to<>>
+            column_map;
     // Build up the set of all columns in all segments
     // Also track the order they were added in
-    std::vector<std::string_view> col_names_in_order;
+    std::vector<std::string> col_names_in_order;
     uint64_t total_rows{0};
     for (const auto& segment : segments) {
         total_rows += segment.row_count();
@@ -104,10 +119,15 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
         }
     }
     SlicingInfo slicing_info{total_rows, max_rows_per_segment_};
+    std::vector<SegmentInMemory> res(slicing_info.num_segments);
+    for (auto& segment : res) {
+        // This won't be sufficient with dynamic schema
+        segment.attach_descriptor(std::make_shared<StreamDescriptor>(segments.front().descriptor().clone()));
+    }
     // For each segment, append the column to the corresponding vector in columns if it is present, or a nullopt if it
     // is missing from this segment (dynamic schema)
     for (const auto& segment : segments) {
-        for (const auto col_name : col_names_in_order) {
+        for (const auto& col_name : col_names_in_order) {
             if (auto col_idx = segment.column_index(col_name); col_idx.has_value()) {
                 column_map.at(col_name).emplace_back(segment.column_ptr(*col_idx));
             } else {
@@ -115,15 +135,15 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
             }
         }
     }
+    // This ensures that the refcount of the column shared pointers is 1 when they are reset after having their data
+    // copied into the result column, and so the memory is freed as early as possible
+    segments.clear();
     std::vector<StringPool> string_pools(slicing_info.num_segments);
-    ankerl::unordered_dense::map<std::string_view, std::vector<std::optional<Column>>> resliced_column_map;
+    ankerl::unordered_dense::
+            map<std::string_view, std::vector<std::optional<Column>>, util::TransparentStringHash, std::equal_to<>>
+                    resliced_column_map;
     for (auto&& [col_name, columns] : column_map) {
         resliced_column_map.emplace(col_name, reslice_columns(std::move(columns), slicing_info, string_pools));
-    }
-    std::vector<SegmentInMemory> res(slicing_info.num_segments);
-    for (auto& segment : res) {
-        // This won't be sufficient with dynamic schema
-        segment.attach_descriptor(std::make_shared<StreamDescriptor>(segments.front().descriptor().clone()));
     }
     for (const auto& col_name : col_names_in_order) {
         auto& sliced_cols = resliced_column_map.at(col_name);
