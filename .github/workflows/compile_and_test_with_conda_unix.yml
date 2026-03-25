@@ -35,6 +35,9 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -95,6 +98,9 @@ jobs:
         shell: bash -l {0}
     steps:
       - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -189,6 +195,9 @@ jobs:
           docker-images: false
 
       - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
