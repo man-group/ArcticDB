@@ -29,6 +29,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 
 #include <boost/regex.hpp>
 
@@ -2298,8 +2299,7 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
     max_rows_per_segment_ = 2 * min_rows_per_segment_;
 }
 
-// Given the set of row ranges in the input data, constructs a superset set of the row ranges we need to pass to calls
-// to process.
+// Given the set of row ranges in the input data, a superset of the set of row ranges to pass to process
 std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRange>& row_ranges) const {
     if (row_ranges.empty()) {
         return {};
@@ -2314,7 +2314,7 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
         const bool current_below_min_rows_per_segment = current.diff() < min_rows_per_segment_;
         const bool below_rows_per_segment_with_this_slice = current.diff() + row_range->diff() <= rows_per_segment_;
         // This is equivalent to:
-        // (current.diff() + row_range->diff()) - rows_per_segment_ < rows_per_segment_ - current.diff()
+        // |(current.diff() + row_range->diff()) - rows_per_segment_| < rows_per_segment_ - current.diff()
         // but without any subtractions which can underflow with unsigned integers
         const bool closer_to_rows_per_segment_with_this_slice_than_without =
                 (2 * current.diff()) + row_range->diff() < 2 * rows_per_segment_;
@@ -2329,6 +2329,7 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
     if (current.diff() >= min_rows_per_segment_ || res.empty()) {
         res.emplace(current);
     } else {
+        // Extend last entry of result to include current
         auto last_it = std::prev(res.end());
         auto last_row_range = *last_it;
         last_row_range.second = current.second;
@@ -2350,15 +2351,14 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
 
 std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
-    // TODO: Consider where unordered_sets can be used for improved algorithmic complexity
-    // Extract the unique row ranges and col ranges
+    // Extract the unique row ranges
     std::set<RowRange> row_ranges;
     for (const auto& range_and_key : ranges_and_keys) {
         row_ranges.insert(range_and_key.row_range());
     }
     auto processing_row_ranges = structure_row_ranges(row_ranges);
-    // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges unless they are too
-    // big, as this implies those row-slices do not need to change
+    // We can eliminate elements of ranges_and_key where their row range is in processing_row_ranges unless they have
+    // more than max_rows_per_segment_ rows, as it implies they do not need to change
     auto retained_processing_row_ranges = processing_row_ranges;
     std::erase_if(
             ranges_and_keys,
@@ -2396,6 +2396,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
                 ++row_range;
             }
         } else {
+            // Moving to the next column slice
             res.emplace_back(std::move(current));
             current = std::vector<size_t>{idx};
             col_range = range_and_key.col_range();
@@ -2414,26 +2415,15 @@ std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(s
 
 std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_ids) const {
     util::check(!entity_ids.empty(), "Unexpected empty entity_ids in CompactDataClause::process");
-    const auto proc =
-            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-                    *component_manager_, entity_ids
-            );
-    // TODO: Add a collection utils file that will turn a collection of shared pointers into the same collection of
-    // non-pointer objects, and vice versa
-    std::vector<SegmentInMemory> segments;
-    segments.reserve(proc.segments_->size());
-    std::ranges::transform(*proc.segments_, std::back_inserter(segments), [](std::shared_ptr<SegmentInMemory> segment) {
-        return std::move(*segment);
-    });
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager_, entity_ids
+    );
+    std::vector<SegmentInMemory> segments = util::extract_from_pointers(std::move(*proc.segments_));
     SegmentReslicer reslicer{max_rows_per_segment_};
     segments = reslicer.reslice_segments(std::move(segments));
 
     ColRange col_range = *proc.col_ranges_->front();
-    std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs;
-    segment_ptrs.reserve(segments.size());
-    std::ranges::transform(segments, std::back_inserter(segment_ptrs), [](SegmentInMemory segment) {
-        return std::make_shared<SegmentInMemory>(std::move(segment));
-    });
+    std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs = util::extract_to_pointers(std::move(segments));
     std::vector<std::shared_ptr<RowRange>> row_ranges;
     std::vector<std::shared_ptr<ColRange>> col_ranges;
     auto row_range_start = proc.row_ranges_->front()->first;
@@ -2442,11 +2432,10 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
         row_ranges.emplace_back(std::make_shared<RowRange>(row_range_start, row_range_start + segment->row_count()));
         row_range_start += segment->row_count();
     }
-    ProcessingUnit res;
-    res.set_segments(std::move(segment_ptrs));
-    res.set_row_ranges(std::move(row_ranges));
-    res.set_col_ranges(std::move(col_ranges));
-    return push_entities(*component_manager_, std::move(res));
+    proc.set_segments(std::move(segment_ptrs));
+    proc.set_row_ranges(std::move(row_ranges));
+    proc.set_col_ranges(std::move(col_ranges));
+    return push_entities(*component_manager_, std::move(proc));
 }
 
 const ClauseInfo& CompactDataClause::clause_info() const { return clause_info_; }

@@ -372,6 +372,7 @@ set(arcticdb_srcs
         util/buffer.hpp
         util/buffer_pool.hpp
         util/clock.hpp
+        util/collection_utils.hpp
         util/configs_map.hpp
         util/constants.hpp
         util/constructors.hpp
