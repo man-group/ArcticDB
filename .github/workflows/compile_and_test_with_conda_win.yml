@@ -17,9 +17,6 @@ jobs:
   # ==================== JOB 1: COMPILE ====================
   compile:
     name: Compile (${{inputs.platform}})
-    if: |
-      always() &&
-      !cancelled()
     runs-on: ${{inputs.os}}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -94,7 +91,8 @@ jobs:
     needs: [compile]
     if: |
       always() &&
-      !cancelled()
+      !cancelled() &&
+      !failure()
     runs-on: ${{inputs.os}}
     strategy:
       fail-fast: false
