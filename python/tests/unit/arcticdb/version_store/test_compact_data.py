@@ -28,7 +28,7 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     expected = vit_before_compaction.data
     pre_compaction_data_keys = len(lib.read_index(sym))
     with qs.query_stats():
-        compacted_version = lib.compact_data_experimental(sym, rows_per_segment=method_arg).version
+        lib.compact_data_experimental(sym, rows_per_segment=method_arg)
         stats = qs.get_query_stats()
     qs.reset_stats()
     rows_per_segment = (
@@ -59,9 +59,7 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     if expected_get_count == 0:
         assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
     else:
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == pre_compaction_data_keys - (
-            post_compaction_data_keys - new_data_keys
-        )
+        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == expected_get_count
     if expected_put_count == 0:
         assert (
             "Memory_PutObject" not in stats["storage_operations"]
@@ -318,7 +316,7 @@ def test_compact_data_single_row(in_memory_store_factory):
     sym = "test_compact_data_single_row"
     df = pd.DataFrame({"col": [42]})
     lib.write(sym, df)
-    generic_compact_data_test(lib, sym)
+    generic_compact_data_test_noop(lib, sym)
 
 
 @pytest.mark.parametrize("rows_per_segment", [5, 10, 20])
