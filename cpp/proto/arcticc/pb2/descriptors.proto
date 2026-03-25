@@ -335,3 +335,25 @@ message SymbolListDescriptor
 {
     bool enabled = 1;
 }
+
+enum ColumnStatsType {
+    // Older clients reading a new enum value written by a newer client will decode to this first
+    // element, so make sure they don't mis-interpret it as a statistic they understand.
+    // https://protobuf.dev/best-practices/dos-donts/#unspecified-enum
+    COLUMN_STATS_UNKNOWN = 0;
+    COLUMN_STATS_MIN = 1;
+    COLUMN_STATS_MAX = 2;
+}
+
+message StatColMapping {
+    uint32 stats_seg_offset = 1;  // offset in to fields in the KeyType::COLUMN_STATS's StreamDescriptor
+    uint32 data_col_offset = 2;  // offset in to TimeseriesDescriptor#fields_ (in the Index key)
+    ColumnStatsType type = 3;
+}
+
+// Stored in the user defined metadata for KeyType::COLUMN_STATS
+message ColumnStatsHeader {
+    uint32 major_version = 1;
+    uint32 minor_version = 2;
+    repeated StatColMapping stats = 3;
+}
