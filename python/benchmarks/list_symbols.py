@@ -70,3 +70,117 @@ class ListSymbolsWithoutCache:
     def _check_test_counter(self):
         assert self.test_counter == 1
         self.test_counter += 1
+
+
+class ListSymbolsWithCompactedCache:
+    """Measure list_symbols when the cache is already compacted with some journal entries on top.
+
+    This is the common production scenario: the cache has been compacted and a moderate number
+    of writes/deletes have happened since the last compaction."""
+
+    rounds = 1
+    number = 3
+    timeout = 600
+    warmup_time = 0
+
+    storages = [Storage.LMDB, Storage.AMAZON]
+    num_symbols = [1_000, 10_000]
+    num_journal_entries = [0, 100]
+
+    params = [num_symbols, num_journal_entries, storages]
+    param_names = ["num_symbols", "num_journal_entries", "storage"]
+
+    def __init__(self):
+        self.logger = get_logger()
+        self.lib = None
+
+    def setup_cache(self):
+        return create_libraries_across_storages(self.storages)
+
+    def teardown(self, *args):
+        if self.lib is not None:
+            self.lib._nvs.version_store.clear()
+
+    def setup(self, lib_for_storage, num_symbols, num_journal_entries, storage):
+        self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
+
+        simple_df = pd.DataFrame({"a": [1]})
+
+        # Write symbols in batches to avoid very large payloads
+        batch_size = 1000
+        for start in range(0, num_symbols, batch_size):
+            end = min(start + batch_size, num_symbols)
+            payloads = [WritePayload(f"sym_{i}", simple_df) for i in range(start, end)]
+            self.lib.write_batch(payloads)
+
+        # Trigger compaction by calling list_symbols
+        self.lib.list_symbols()
+
+        # Add journal entries on top of the compacted cache
+        for i in range(num_journal_entries):
+            self.lib.write(f"sym_{i}", simple_df)
+
+    def time_list_symbols(self, *args):
+        self.lib.list_symbols()
+
+    def peakmem_list_symbols(self, *args):
+        self.lib.list_symbols()
+
+
+class ListSymbolsWithDeletes:
+    """Measure list_symbols with a mix of adds and deletes since last compaction.
+
+    Tests the merge path where some symbols have been deleted and new ones added."""
+
+    rounds = 1
+    number = 3
+    timeout = 600
+    warmup_time = 0
+
+    storages = [Storage.LMDB, Storage.AMAZON]
+    num_symbols = [1_000, 10_000]
+
+    params = [num_symbols, storages]
+    param_names = ["num_symbols", "storage"]
+
+    def __init__(self):
+        self.logger = get_logger()
+        self.lib = None
+
+    def setup_cache(self):
+        return create_libraries_across_storages(self.storages)
+
+    def teardown(self, *args):
+        if self.lib is not None:
+            self.lib._nvs.version_store.clear()
+
+    def setup(self, lib_for_storage, num_symbols, storage):
+        self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
+
+        simple_df = pd.DataFrame({"a": [1]})
+
+        batch_size = 1000
+        for start in range(0, num_symbols, batch_size):
+            end = min(start + batch_size, num_symbols)
+            payloads = [WritePayload(f"sym_{i}", simple_df) for i in range(start, end)]
+            self.lib.write_batch(payloads)
+
+        # Compact
+        self.lib.list_symbols()
+
+        # Delete 10% of symbols and add new ones
+        num_to_delete = num_symbols // 10
+        for i in range(num_to_delete):
+            self.lib.delete(f"sym_{i}")
+        for i in range(num_to_delete):
+            self.lib.write(f"sym_new_{i}", simple_df)
+
+    def time_list_symbols(self, *args):
+        self.lib.list_symbols()
+
+    def peakmem_list_symbols(self, *args):
+        self.lib.list_symbols()
