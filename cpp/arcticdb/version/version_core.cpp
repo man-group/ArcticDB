@@ -1924,50 +1924,45 @@ void create_column_stats_impl(
         const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
-    if (column_stats.empty()) {
+    auto clause = column_stats.clause();
+    if (!clause.has_value()) {
         log::version().warn("Cannot create empty column stats");
         return;
     }
-
-    auto pipeline_context = std::make_shared<PipelineContext>();
-    pipeline_context->stream_id_ = versioned_item.key_.id();
-    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item);
-    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            !pipeline_context->multi_key_, "Column stats generation not supported with recursively normalized symbols"
-    );
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(maybe_isr.has_value(), "Version not found while creating columns stats");
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
-            maybe_isr->tsd().normalization().input_type_case() !=
-                    proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame,
-            "Cannot create column stats on pickled data"
+    auto read_query = std::make_shared<ReadQuery>(
+            std::vector<std::shared_ptr<Clause>>{std::make_shared<Clause>(std::move(*clause))}
     );
 
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
     try {
         old_segment = store->read(column_stats_key).get().second;
-    } catch (...) {
-        // Old segment doesn't exist
-    }
-
-    if (old_segment) {
-        auto* meta = old_segment->metadata();
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
-        meta->UnpackTo(&old_header);
-        ColumnStats old_column_stats{old_header, maybe_isr->tsd().fields()};
+        old_segment->metadata()->UnpackTo(&old_header);
+        ColumnStats old_column_stats{old_header};
         // No need to redo work for any stats that already exist
         column_stats.drop(old_column_stats, false);
         // If all the column stats we are being asked to create already exist, there's no work to do
         if (column_stats.segment_column_names().empty()) {
             return;
         }
+    } catch (...) {
+        // Old segment doesn't exist
     }
 
-    auto clause = column_stats.clause(maybe_isr->tsd().fields());
-    auto read_query = std::make_shared<ReadQuery>(
-            std::vector{std::make_shared<Clause>(std::move(*clause))}
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = versioned_item.key_.id();
+    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item);
+    if (maybe_isr.has_value()) {
+        read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), *read_query, read_options);
+    }
+
+    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+            !pipeline_context->multi_key_, "Column stats generation not supported with recursively normalized symbols"
     );
-    read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), *read_query, read_options);
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+            !pipeline_context->is_pickled(), "Cannot create column stats on pickled data"
+    );
 
     auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
@@ -2012,29 +2007,36 @@ void drop_column_stats_impl(
         return;
     }
 
-    TimeseriesDescriptor tsd;
-    try {
-        tsd = store->read_timeseries_descriptor(versioned_item.key_, read_opts).get().second;
-    } catch (const std::exception& e) {
-        log::version().warn("Index key not found for stats. Cannot drop subset of column stats. "
-                            "Try again with column_stats=None to delete all. {} {}", versioned_item.key_, e.what());
-        return;
-    }
-
     arcticc::pb2::descriptors_pb2::ColumnStatsHeader column_stats_header;
     bool unpacked = segment_in_memory.metadata()->UnpackTo(&column_stats_header);
     util::check(unpacked, "Failed to unpack column stats header while dropping column stats");
-    ColumnStats column_stats{column_stats_header, tsd.fields()};
-    auto dropped_offsets = column_stats.drop(*column_stats_to_drop);
+    ColumnStats column_stats{column_stats_header};
+    auto dropped_names = column_stats.drop(*column_stats_to_drop);
     if (column_stats.empty()) {
         // Drop all column stats
         store->remove_key(column_stats_key, remove_opts).get();
     } else {
-        // Sort in descending order so that dropping higher-indexed columns first
-        // doesn't invalidate the indices of lower-indexed columns
-        std::sort(dropped_offsets.begin(), dropped_offsets.end(), std::greater<>());
-        for (size_t dropped_offset : dropped_offsets) {
-            segment_in_memory.drop_column(dropped_offset);
+        ankerl::unordered_dense::set<std::string> dropped_names_set(dropped_names.begin(), dropped_names.end());
+        arcticc::pb2::descriptors_pb2::ColumnStatsHeader new_header;
+        new_header.set_version(column_stats_header.version());
+        // Stats columns start at field index 2 (after start_index=0 and end_index=1)
+        auto new_offset = static_cast<size_t>(index::Fields::end_index);
+        for (const auto& stat : column_stats_header.stats()) {
+            auto field_name = std::string{segment_in_memory.descriptor().field(stat.stats_seg_offset()).name()};
+            if (dropped_names_set.count(field_name) == 0) {
+                auto* new_stat = new_header.add_stats();
+                new_stat->set_data_col_name(stat.data_col_name());
+                new_stat->set_type(stat.type());
+                new_stat->set_stats_seg_offset(new_offset++);
+            }
+        }
+        google::protobuf::Any any;
+        any.PackFrom(new_header);
+        segment_in_memory.reset_metadata();
+        segment_in_memory.set_metadata(std::move(any));
+
+        for (const auto& name : dropped_names) {
+            segment_in_memory.drop_column(name);
         }
         storage::UpdateOpts update_opts;
         update_opts.upsert_ = true;
@@ -2066,11 +2068,10 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
         auto metadata = store->read_metadata(column_stats_key, read_opts).get().second;
         util::check(metadata, "Found Column Stats key without metadata? {}", column_stats_key);
 
-        TimeseriesDescriptor tsd = store->read_timeseries_descriptor(versioned_item.key_, read_opts).get().second;
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader column_stats_header;
         bool unpacked = metadata->UnpackTo(&column_stats_header);
         util::check(unpacked, "Failed to unpack column stats header while getting column stats info");
-        return ColumnStats{column_stats_header, tsd.fields()};
+        return ColumnStats{column_stats_header};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }

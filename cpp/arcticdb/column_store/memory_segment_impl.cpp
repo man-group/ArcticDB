@@ -510,19 +510,6 @@ SegmentInMemoryImpl SegmentInMemoryImpl::clone() const {
     return output;
 }
 
-void SegmentInMemoryImpl::drop_column(size_t column_index) {
-    std::lock_guard lock(*column_map_mutex_);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            column_index < columns_.size(), "Column index out of range in drop_column"
-    );
-    auto it = std::begin(columns_);
-    std::advance(it, column_index);
-    columns_.erase(it);
-    auto& field = descriptor_->fields().at(column_index);
-    column_map_->erase(field.name());
-    descriptor_->erase_field(column_index);
-}
-
 void SegmentInMemoryImpl::drop_column(std::string_view name) {
     std::lock_guard lock(*column_map_mutex_);
     auto opt_column_index = column_index(name);

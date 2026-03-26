@@ -21,7 +21,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     std::vector<TypeDescriptor> type_descriptors;
     std::vector<std::string> field_names;
     std::vector<arcticc::pb2::descriptors_pb2::ColumnStatsType> stat_types;
-    std::vector<uint32_t> data_col_offsets;
+    std::vector<std::string> data_col_names;
     for (auto& segment : segments) {
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader header;
         auto metadata = segment.metadata();
@@ -51,7 +51,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
                     // Skip start_index and end_index which are statistics
                     auto& header_info = header.stats().at(idx - end_index_offset - 1);
                     stat_types.emplace_back(header_info.type());
-                    data_col_offsets.emplace_back(header_info.data_col_offset());
+                    data_col_names.emplace_back(header_info.data_col_name());
                 }
             }
         }
@@ -67,7 +67,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
         );
         if (idx > end_index_offset) {
             auto* new_stats = merged_header.add_stats();
-            new_stats->set_data_col_offset(data_col_offsets.at(stat_idx));
+            new_stats->set_data_col_name(data_col_names.at(stat_idx));
             new_stats->set_stats_seg_offset(idx);
             new_stats->set_type(stat_types.at(stat_idx));
             ++stat_idx;
@@ -132,16 +132,13 @@ ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_se
                 column_stats_[column].emplace(*opt_index_type);
             }
         }
-        // we leave offsets_ empty in this case - there is no segment to index in to
     }
 }
 
-ColumnStats::ColumnStats(
-        const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header, const FieldCollection& data_fields
-) {
+ColumnStats::ColumnStats(const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header) {
     using namespace arcticc::pb2::descriptors_pb2;
     for (const auto& mapping : header.stats()) {
-        auto column_name = std::string{data_fields.at(mapping.data_col_offset()).name()};
+        auto column_name = mapping.data_col_name();
         ColumnStatType external_type;
         switch (mapping.type()) {
         case COLUMN_STATS_MIN_V1:
@@ -153,18 +150,23 @@ ColumnStats::ColumnStats(
                     "Unrecognised column stats type in header: {}", static_cast<int>(mapping.type())
             );
         }
-        if (auto it = column_stats_.find(column_name); it == column_stats_.end()) {
-            column_stats_[column_name] = {external_type};
-            offsets_[column_name] = {{external_type, {mapping.stats_seg_offset()}}};
-        } else {
-            it->second.emplace(external_type);
-            offsets_.at(column_name).at(external_type).push_back(mapping.stats_seg_offset());
-        }
+        column_stats_[column_name].emplace(external_type);
     }
 }
 
-std::vector<size_t> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
-    std::vector<size_t> dropped_offsets;
+namespace {
+std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
+    struct Tag {};
+    using Map = semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
+    Map::get(ColumnStatType::MINMAX) =
+            std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(Map::contains(type), "Unknown column stat type");
+    return Map::get(type);
+}
+} // namespace
+
+std::vector<std::string> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_missing) {
+    std::vector<std::string> dropped_names;
     for (const auto& [column, column_stat_types] : to_drop.column_stats_) {
         if (auto it = column_stats_.find(column); it == column_stats_.end()) {
             if (warn_if_missing) {
@@ -184,17 +186,8 @@ std::vector<size_t> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_m
                         );
                     }
                 } else {
-                    auto offsets_col_it = offsets_.find(column);
-                    util::check(offsets_col_it != offsets_.end(), "offsets_ in invalid state");
-                    auto& offsets_map = offsets_col_it->second;
-
-                    auto offsets_type_it = offsets_map.find(column_stat_type);
-                    util::check(offsets_type_it != offsets_map.end(), "offsets_ in invalid state");
-                    dropped_offsets.insert(dropped_offsets.end(), offsets_type_it->second.begin(), offsets_type_it->second.end());
-
-                    offsets_map.erase(offsets_type_it);
-                    if (offsets_map.empty()) {
-                        offsets_.erase(offsets_col_it);
+                    for (const auto& internal_type : external_to_internal(column_stat_type)) {
+                        dropped_names.emplace_back(to_segment_column_name(column, internal_type));
                     }
                 }
             }
@@ -207,20 +200,15 @@ std::vector<size_t> ColumnStats::drop(const ColumnStats& to_drop, bool warn_if_m
             ++it;
         }
     }
-    return dropped_offsets;
+    return dropped_names;
 }
 
 ankerl::unordered_dense::set<std::string> ColumnStats::segment_column_names() const {
-    struct Tag {};
-    using ExternalToInternalColumnStatType =
-            semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
-    ExternalToInternalColumnStatType::get(ColumnStatType::MINMAX) =
-            std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
     ankerl::unordered_dense::set<std::string> res;
     for (const auto& [column, column_stat_types] : column_stats_) {
         for (const auto& column_stat_type : column_stat_types) {
-            for (const auto& column_stat_type_internal : ExternalToInternalColumnStatType::get(column_stat_type)) {
-                res.emplace(to_segment_column_name(column, column_stat_type_internal));
+            for (const auto& internal_type : external_to_internal(column_stat_type)) {
+                res.emplace(to_segment_column_name(column, internal_type));
             }
         }
     }
@@ -238,13 +226,12 @@ std::unordered_map<std::string, std::unordered_set<std::string>> ColumnStats::to
     return res;
 }
 
-std::optional<Clause> ColumnStats::clause(const FieldCollection& all_fields) const {
+std::optional<Clause> ColumnStats::clause() const {
     if (column_stats_.empty()) {
         return std::nullopt;
     }
     std::unordered_set<std::string> input_columns;
     auto index_generation_aggregators = std::make_shared<std::vector<ColumnStatsAggregator>>();
-    std::shared_ptr<FieldCollection> all_fields_ptr = std::make_shared<FieldCollection>(all_fields.clone());
     for (const auto& [column, column_stat_types] : column_stats_) {
         input_columns.emplace(column);
 
@@ -254,8 +241,7 @@ std::optional<Clause> ColumnStats::clause(const FieldCollection& all_fields) con
                 index_generation_aggregators->emplace_back(MinMaxAggregator(
                         ColumnName(column),
                         ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::COLUMN_STATS_MIN_V1)),
-                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1)),
-                        all_fields_ptr
+                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1))
                 ));
                 break;
             default:

@@ -139,8 +139,6 @@ class SegmentInMemory {
 
     void drop_column(std::string_view name);
 
-    void drop_column(size_t index);
-
     template<typename T>
     std::optional<T> scalar_at(position_t row, position_t col) const {
         return impl_->scalar_at<T>(row, col);

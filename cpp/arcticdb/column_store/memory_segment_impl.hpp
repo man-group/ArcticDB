@@ -486,7 +486,6 @@ class SegmentInMemoryImpl {
 
     void attach_descriptor(std::shared_ptr<StreamDescriptor> desc);
 
-    void drop_column(size_t index);
     void drop_column(std::string_view name);
 
     const Field& field(size_t index) const;

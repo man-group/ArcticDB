@@ -55,14 +55,14 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto min_col = std::make_shared<Column>(make_scalar_type(min_->data_type()), Sparsity::PERMITTED);
             min_col->push_back<RawType>(min_->get<RawType>());
             arcticc::pb2::descriptors_pb2::StatColMapping* stats_metadata = header.add_stats();
-            stats_metadata->set_data_col_offset(input_column_position_);
+            stats_metadata->set_data_col_name(data_col_name_);
             stats_metadata->set_stats_seg_offset(0);
             stats_metadata->set_type(arcticc::pb2::descriptors_pb2::COLUMN_STATS_MIN_V1);
 
             auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
             max_col->push_back<RawType>(max_->get<RawType>());
             stats_metadata = header.add_stats();
-            stats_metadata->set_data_col_offset(input_column_position_);
+            stats_metadata->set_data_col_name(data_col_name_);
             stats_metadata->set_stats_seg_offset(1);
             stats_metadata->set_type(arcticc::pb2::descriptors_pb2::COLUMN_STATS_MAX_V1);
 

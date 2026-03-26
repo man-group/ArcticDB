@@ -352,7 +352,7 @@ enum ColumnStatsType {
 
 message StatColMapping {
     uint32 stats_seg_offset = 1;  // offset in to fields in the KeyType::COLUMN_STATS's StreamDescriptor
-    uint32 data_col_offset = 2;  // offset in to TimeseriesDescriptor#fields_ (in the Index key)
+    string data_col_name = 2;  // column name in the data segment
     ColumnStatsType type = 3;
 }
 

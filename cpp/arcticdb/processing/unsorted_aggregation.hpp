@@ -8,17 +8,14 @@
 
 #pragma once
 
-#include "entity/field_collection.hpp"
-
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
+
 namespace arcticdb {
 class SegmentInMemory;
 class MinMaxAggregatorData {
   public:
-    MinMaxAggregatorData(size_t input_column_position) : input_column_position_(input_column_position) {
-
-    };
+    MinMaxAggregatorData(std::string data_col_name) : data_col_name_(std::move(data_col_name)) {};
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregatorData)
 
     void aggregate(const ColumnWithStrings& input_column);
@@ -27,20 +24,17 @@ class MinMaxAggregatorData {
   private:
     std::optional<Value> min_;
     std::optional<Value> max_;
-    size_t input_column_position_;
+    std::string data_col_name_;
 };
 
 class MinMaxAggregator {
   public:
     explicit MinMaxAggregator(
-            ColumnName column_name, ColumnName output_column_name_min, ColumnName output_column_name_max,
-            std::shared_ptr<FieldCollection> all_fields
+            ColumnName column_name, ColumnName output_column_name_min, ColumnName output_column_name_max
     ) :
         column_name_(std::move(column_name)),
         output_column_name_min_(std::move(output_column_name_min)),
-        output_column_name_max_(std::move(output_column_name_max)),
-        input_column_position_(all_fields->find_field(column_name_.value)) {
-        util::check(input_column_position_, "MinMaxAggregator Could not find position of column name {}", column_name_.value);
+        output_column_name_max_(std::move(output_column_name_max)) {
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregator)
@@ -49,13 +43,12 @@ class MinMaxAggregator {
     [[nodiscard]] std::vector<ColumnName> get_output_column_names() const {
         return {output_column_name_min_, output_column_name_max_};
     }
-    [[nodiscard]] MinMaxAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(*input_column_position_); }
+    [[nodiscard]] MinMaxAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(column_name_.value); }
 
   private:
     ColumnName column_name_;
     ColumnName output_column_name_min_;
     ColumnName output_column_name_max_;
-    std::optional<size_t> input_column_position_;
 };
 
 class AggregatorDataBase {

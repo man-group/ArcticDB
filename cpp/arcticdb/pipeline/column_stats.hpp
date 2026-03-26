@@ -17,29 +17,20 @@ enum class ColumnStatType { MINMAX };
 // Total universe of column stats we support - min and max are treated separately here
 using ColumnStatTypeInternal = arcticc::pb2::descriptors_pb2::ColumnStatsType;
 
-struct ColumnStatMetadata {
-    ColumnStatType type;
-    // Offsets for these statistics in to the segment in which they are saved on disk
-    // Empty if the stats have not been serialized yet.
-    std::vector<size_t> stats_seg_offsets;
-};
-
 static const char* const start_index_column_name = "start_index";
 static const char* const end_index_column_name = "end_index";
 
 class ColumnStats {
   public:
     explicit ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats);
-    explicit ColumnStats(
-        const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header, const FieldCollection& data_fields
-    );
+    explicit ColumnStats(const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header);
 
-    // Returns dropped offsets in to the segment's fields
-    std::vector<size_t> drop(const ColumnStats& to_drop, bool warn_if_missing = true);
+    // Returns the segment column names of the dropped stats (e.g. "v1_MIN(col)", "v1_MAX(col)")
+    std::vector<std::string> drop(const ColumnStats& to_drop, bool warn_if_missing = true);
     ankerl::unordered_dense::set<std::string> segment_column_names() const;
 
     std::unordered_map<std::string, std::unordered_set<std::string>> to_map() const;
-    std::optional<Clause> clause(const FieldCollection& all_fields) const;
+    std::optional<Clause> clause() const;
     bool empty() const;
 
     bool operator==(const ColumnStats& right) const;
@@ -47,10 +38,6 @@ class ColumnStats {
   private:
     // Use ordered map/set here for consistent ordering in the resulting stats objects
     std::map<std::string, std::set<ColumnStatType>> column_stats_;
-
-    // eg, "col_a" -> "MINMAX" -> [4,5] to indicate that min max stats for "col_a" are in offsets
-    // 4 and 5 of the column stats segment
-    std::unordered_map<std::string, std::unordered_map<ColumnStatType, std::vector<size_t>>> offsets_;
 };
 
 } // namespace arcticdb
