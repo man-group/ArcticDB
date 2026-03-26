@@ -129,6 +129,59 @@ class ListSymbolsWithCompactedCache:
         self.lib.list_symbols()
 
 
+class ListSymbolsCompaction:
+    """Measure list_symbols when compaction is triggered with many uncompacted journal entries.
+
+    This is the scenario where streaming optimization matters most: many journal entries
+    need to be merged during compaction."""
+
+    rounds = 1
+    number = 1
+    timeout = 1200
+    warmup_time = 0
+
+    storages = [Storage.LMDB, Storage.AMAZON]
+    num_symbols = [1_000]
+    num_versions = [10, 100]
+
+    params = [num_symbols, num_versions, storages]
+    param_names = ["num_symbols", "num_versions", "storage"]
+
+    def __init__(self):
+        self.logger = get_logger()
+        self.lib = None
+
+    def setup_cache(self):
+        return create_libraries_across_storages(self.storages)
+
+    def teardown(self, *args):
+        if self.lib is not None:
+            self.lib._nvs.version_store.clear()
+
+    def setup(self, lib_for_storage, num_symbols, num_versions, storage):
+        self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
+
+        simple_df = pd.DataFrame({"a": [1]})
+
+        # Write multiple versions per symbol to create many journal entries
+        # Total entries = num_symbols * num_versions
+        for v in range(num_versions):
+            batch_size = 1000
+            for start in range(0, num_symbols, batch_size):
+                end = min(start + batch_size, num_symbols)
+                payloads = [WritePayload(f"sym_{i}", simple_df) for i in range(start, end)]
+                self.lib.write_batch(payloads)
+
+    def time_list_symbols(self, *args):
+        # This triggers compaction since there are many uncompacted entries
+        self.lib.list_symbols()
+
+    def peakmem_list_symbols(self, *args):
+        self.lib.list_symbols()
+
+
 class ListSymbolsWithDeletes:
     """Measure list_symbols with a mix of adds and deletes since last compaction.
 

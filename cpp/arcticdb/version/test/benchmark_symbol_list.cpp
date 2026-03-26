@@ -7,9 +7,12 @@
  */
 
 #include <benchmark/benchmark.h>
-#include <malloc.h>
 #include <atomic>
 #include <thread>
+
+#ifdef __linux__
+#include <malloc.h>
+#endif
 
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/version/version_map.hpp>
@@ -35,24 +38,37 @@ std::shared_ptr<Store> create_s3_mock_store(const std::string& lib_name = "bench
     storage::LibraryPath path{lib_name.c_str(), "store"};
     auto storages = storage::create_storages(path, storage::OpenMode::DELETE, {vs});
     auto library = std::make_shared<storage::Library>(path, std::move(storages));
-    return std::make_shared<async::AsyncStore<>>(async::AsyncStore(library, codec::default_lz4_codec(), EncodingVersion::V1));
+    return std::make_shared<async::AsyncStore<>>(
+            async::AsyncStore(library, codec::default_lz4_codec(), EncodingVersion::V1)
+    );
 }
 
 // Tracks peak heap usage by polling mallinfo2 from a background thread.
+// Only functional on Linux with glibc; on other platforms it reports zero.
 struct PeakHeapTracker {
     std::atomic<bool> running_{false};
     std::atomic<size_t> peak_uordblks_{0};
     size_t baseline_{0};
     std::thread sampler_;
 
+    static size_t current_heap_bytes() {
+#ifdef __linux__
+        return mallinfo2().uordblks;
+#else
+        return 0;
+#endif
+    }
+
     void start() {
+#ifdef __linux__
         malloc_trim(0);
-        baseline_ = mallinfo2().uordblks;
+#endif
+        baseline_ = current_heap_bytes();
         peak_uordblks_ = baseline_;
         running_ = true;
         sampler_ = std::thread([this] {
             while (running_.load(std::memory_order_relaxed)) {
-                auto current = mallinfo2().uordblks;
+                auto current = current_heap_bytes();
                 auto prev = peak_uordblks_.load(std::memory_order_relaxed);
                 while (current > prev && !peak_uordblks_.compare_exchange_weak(prev, current, std::memory_order_relaxed)
                 )
@@ -66,8 +82,7 @@ struct PeakHeapTracker {
         running_ = false;
         if (sampler_.joinable())
             sampler_.join();
-        // One final sample
-        auto current = mallinfo2().uordblks;
+        auto current = current_heap_bytes();
         auto prev = peak_uordblks_.load(std::memory_order_relaxed);
         if (current > prev)
             peak_uordblks_.store(current, std::memory_order_relaxed);
@@ -112,7 +127,7 @@ static void BM_symbol_list_load(benchmark::State& state) {
         auto result = sl.load<std::set<StreamId>>(version_map, store, true);
 
         auto peak_delta = tracker.stop();
-        auto retained = mallinfo2().uordblks - tracker.baseline_;
+        auto retained = PeakHeapTracker::current_heap_bytes() - tracker.baseline_;
 
         state.counters["PeakMB"] = benchmark::Counter(static_cast<double>(peak_delta) / (1024.0 * 1024.0));
         state.counters["RetainedMB"] = benchmark::Counter(static_cast<double>(retained) / (1024.0 * 1024.0));
@@ -166,7 +181,7 @@ static void BM_symbol_list_load_many_entries(benchmark::State& state) {
         auto result = sl.load<std::set<StreamId>>(version_map, store, true);
 
         auto peak_delta = tracker.stop();
-        auto retained = mallinfo2().uordblks - tracker.baseline_;
+        auto retained = PeakHeapTracker::current_heap_bytes() - tracker.baseline_;
 
         state.counters["PeakMB"] = benchmark::Counter(static_cast<double>(peak_delta) / (1024.0 * 1024.0));
         state.counters["RetainedMB"] = benchmark::Counter(static_cast<double>(retained) / (1024.0 * 1024.0));
@@ -211,8 +226,7 @@ static void BM_symbol_list_compaction(benchmark::State& state) {
 
         state.counters["PeakMB"] = benchmark::Counter(static_cast<double>(peak_delta) / (1024.0 * 1024.0));
         state.counters["NumSymbols"] = benchmark::Counter(static_cast<double>(result.size()));
-        state.counters["TotalEntries"] =
-                benchmark::Counter(static_cast<double>(num_symbols * entries_per_symbol));
+        state.counters["TotalEntries"] = benchmark::Counter(static_cast<double>(num_symbols * entries_per_symbol));
 
         benchmark::DoNotOptimize(result);
     }
@@ -222,6 +236,8 @@ static void BM_symbol_list_compaction(benchmark::State& state) {
 
 BENCHMARK(BM_symbol_list_compaction)
         ->Args({1'000, 100})
+        ->Args({1'000, 1'000})
+        ->Args({10'000, 100})
         ->Unit(benchmark::kMillisecond)
         ->Iterations(1);
 
@@ -291,8 +307,7 @@ static void BM_symbol_list_compaction_s3(benchmark::State& state) {
 
         state.counters["PeakMB"] = benchmark::Counter(static_cast<double>(peak_delta) / (1024.0 * 1024.0));
         state.counters["NumSymbols"] = benchmark::Counter(static_cast<double>(result.size()));
-        state.counters["TotalEntries"] =
-                benchmark::Counter(static_cast<double>(num_symbols * entries_per_symbol));
+        state.counters["TotalEntries"] = benchmark::Counter(static_cast<double>(num_symbols * entries_per_symbol));
 
         benchmark::DoNotOptimize(result);
     }
@@ -300,7 +315,4 @@ static void BM_symbol_list_compaction_s3(benchmark::State& state) {
     ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
 }
 
-BENCHMARK(BM_symbol_list_compaction_s3)
-        ->Args({1'000, 100})
-        ->Unit(benchmark::kMillisecond)
-        ->Iterations(1);
+BENCHMARK(BM_symbol_list_compaction_s3)->Args({1'000, 100})->Unit(benchmark::kMillisecond)->Iterations(1);
