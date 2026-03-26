@@ -33,25 +33,25 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
         remaining_rows -= rows_to_consume;
     }
     auto output_col = res.begin();
-    auto output_ptr = output_col->value().buffer().data();
-    uint64_t capacity = type_size * output_col->value().row_count();
+    auto dest_ptr = output_col->value().buffer().data();
+    uint64_t output_col_capacity = type_size * output_col->value().row_count();
     for (auto& input_col : columns) {
         const auto& input_blocks = input_col.value()->buffer().blocks();
         for (const auto& block : input_blocks) {
-            auto input_ptr = block->data();
+            auto src_ptr = block->data();
             uint64_t remaining_bytes = block->physical_bytes();
             while (remaining_bytes > 0) {
-                auto bytes_to_copy = std::min(remaining_bytes, capacity);
-                memcpy(output_ptr, input_ptr, bytes_to_copy);
-                input_ptr += bytes_to_copy;
-                output_ptr += bytes_to_copy;
+                auto bytes_to_copy = std::min(remaining_bytes, output_col_capacity);
+                memcpy(dest_ptr, src_ptr, bytes_to_copy);
+                src_ptr += bytes_to_copy;
+                dest_ptr += bytes_to_copy;
                 remaining_bytes -= bytes_to_copy;
-                capacity -= bytes_to_copy;
-                if (capacity == 0) {
+                output_col_capacity -= bytes_to_copy;
+                if (output_col_capacity == 0) {
                     ++output_col;
                     if (output_col != res.end()) {
-                        output_ptr = output_col->value().buffer().data();
-                        capacity = type_size * output_col->value().row_count();
+                        dest_ptr = output_col->value().buffer().data();
+                        output_col_capacity = type_size * output_col->value().row_count();
                     }
                 }
             }
@@ -112,9 +112,8 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     for (const auto& segment : segments) {
         total_rows += segment.row_count();
         for (const auto& field : segment.descriptor().fields()) {
-            if (auto it = column_map.find(field.name()); it == column_map.end()) {
+            if (column_map.emplace(std::piecewise_construct, std::make_tuple(field.name()), std::make_tuple()).second) {
                 col_names_in_order.emplace_back(field.name());
-                column_map.emplace(field.name(), std::vector<std::optional<std::shared_ptr<Column>>>{});
             }
         }
     }
@@ -122,6 +121,8 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     std::vector<SegmentInMemory> res(slicing_info.num_segments);
     for (auto& segment : res) {
         // This won't be sufficient with dynamic schema
+        // In that case, col_names_in_order will represent the correct columns. The types should probably be calculated
+        // in reslice_columns
         segment.attach_descriptor(std::make_shared<StreamDescriptor>(segments.front().descriptor().clone()));
     }
     // For each segment, append the column to the corresponding vector in columns if it is present, or a nullopt if it

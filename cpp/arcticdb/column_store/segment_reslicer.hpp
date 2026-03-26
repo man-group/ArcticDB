@@ -47,6 +47,7 @@ class SegmentReslicer {
 
     ARCTICDB_NO_MOVE_OR_COPY(SegmentReslicer)
 
+    // Main entry point. The other methods are public for testing purposes only
     std::vector<SegmentInMemory> reslice_segments(std::vector<SegmentInMemory>&& segments);
     std::vector<std::optional<Column>> reslice_columns(
             std::vector<std::optional<std::shared_ptr<Column>>>&& columns, const SlicingInfo& slicing_info,
