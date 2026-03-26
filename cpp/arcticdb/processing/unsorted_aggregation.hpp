@@ -39,8 +39,8 @@ class MinMaxAggregator {
         column_name_(std::move(column_name)),
         output_column_name_min_(std::move(output_column_name_min)),
         output_column_name_max_(std::move(output_column_name_max)),
-        input_column_position_(all_fields->find_field(column_name.value)) {
-        util::check(input_column_position_, "Could not find {}", column_name.value);
+        input_column_position_(all_fields->find_field(column_name_.value)) {
+        util::check(input_column_position_, "MinMaxAggregator Could not find position of column name {}", column_name_.value);
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregator)

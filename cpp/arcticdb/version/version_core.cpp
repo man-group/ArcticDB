@@ -2060,7 +2060,7 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
         storage::ReadKeyOpts read_opts;
         read_opts.dont_warn_about_missing_key = true;
         auto metadata = store->read_metadata(column_stats_key, read_opts).get().second;
-        util::check("Found Column Stats key without metadata? {}", column_stats_key);
+        util::check(metadata, "Found Column Stats key without metadata? {}", column_stats_key);
 
         TimeseriesDescriptor tsd = store->read_timeseries_descriptor(versioned_item.key_, read_opts).get().second;
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader column_stats_header;

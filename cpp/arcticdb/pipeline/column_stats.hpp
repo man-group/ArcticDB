@@ -15,8 +15,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
 // Total universe of column stats we support - min and max are treated separately here
-// TODO aseaton just use the protobuf type
-enum class ColumnStatTypeInternal { MIN, MAX };
+using ColumnStatTypeInternal = arcticc::pb2::descriptors_pb2::ColumnStatsType;
 
 struct ColumnStatMetadata {
     ColumnStatType type;

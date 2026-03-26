@@ -25,6 +25,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     for (auto& segment : segments) {
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader header;
         auto metadata = segment.metadata();
+        util::check(metadata != nullptr, "Column stats segment has no metadata");
         bool unpacked = metadata->UnpackTo(&header);
         util::check(unpacked, "Could not unpack column stats metadata?");
         for (const auto& [idx, field] : folly::enumerate(segment.descriptor().fields())) {
@@ -57,14 +58,20 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     }
 
     arcticc::pb2::descriptors_pb2::ColumnStatsHeader merged_header;
+    merged_header.set_version(1); // see descriptors.proto for explanation of the versioning scheme
+    auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
+    size_t stat_idx = 0;
     for (const auto& [idx, type_descriptor] : folly::enumerate(type_descriptors)) {
         merged.add_column(
                 FieldRef{type_descriptor, field_names.at(idx)}, 0, AllocationType::DYNAMIC
         );
-        auto* new_stats = merged_header.add_stats();
-        new_stats->set_data_col_offset(data_col_offsets.at(idx));
-        new_stats->set_stats_seg_offset(idx);
-        new_stats->set_type(stat_types.at(idx));
+        if (idx > end_index_offset) {
+            auto* new_stats = merged_header.add_stats();
+            new_stats->set_data_col_offset(data_col_offsets.at(stat_idx));
+            new_stats->set_stats_seg_offset(idx);
+            new_stats->set_type(stat_types.at(stat_idx));
+            ++stat_idx;
+        }
     }
     for (auto& segment : segments) {
         merged.append(segment);
@@ -83,8 +90,8 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
     struct Tag {};
     using TypeToOperatorStringMap = semi::static_map<ColumnStatTypeInternal, std::string, Tag>;
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::MIN) = "MIN";
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::MAX) = "MAX";
+    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MIN_V1) = "v1_MIN";
+    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MAX_V1) = "v1_MAX";
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             TypeToOperatorStringMap::contains(type), "Unknown column stat type requested"
     );
@@ -137,8 +144,8 @@ ColumnStats::ColumnStats(
         auto column_name = std::string{data_fields.at(mapping.data_col_offset()).name()};
         ColumnStatType external_type;
         switch (mapping.type()) {
-        case COLUMN_STATS_MIN:
-        case COLUMN_STATS_MAX:
+        case COLUMN_STATS_MIN_V1:
+        case COLUMN_STATS_MAX_V1:
             external_type = ColumnStatType::MINMAX;
             break;
         default:
@@ -208,7 +215,7 @@ ankerl::unordered_dense::set<std::string> ColumnStats::segment_column_names() co
     using ExternalToInternalColumnStatType =
             semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
     ExternalToInternalColumnStatType::get(ColumnStatType::MINMAX) =
-            std::unordered_set<ColumnStatTypeInternal>{ColumnStatTypeInternal::MIN, ColumnStatTypeInternal::MAX};
+            std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
     ankerl::unordered_dense::set<std::string> res;
     for (const auto& [column, column_stat_types] : column_stats_) {
         for (const auto& column_stat_type : column_stat_types) {
@@ -246,8 +253,8 @@ std::optional<Clause> ColumnStats::clause(const FieldCollection& all_fields) con
             case ColumnStatType::MINMAX:
                 index_generation_aggregators->emplace_back(MinMaxAggregator(
                         ColumnName(column),
-                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MIN)),
-                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::MAX)),
+                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::COLUMN_STATS_MIN_V1)),
+                        ColumnName(to_segment_column_name(column, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1)),
                         all_fields_ptr
                 ));
                 break;
