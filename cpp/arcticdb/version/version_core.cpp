@@ -1970,9 +1970,6 @@ void create_column_stats_impl(
     );
 
     std::vector<SegmentInMemory> segments_in_memory;
-    if (old_segment) {
-        segments_in_memory.emplace_back(std::move(*old_segment));
-    }
     for (auto& seg : segs) {
         segments_in_memory.emplace_back(seg.release_segment(store));
     }
@@ -1981,7 +1978,34 @@ void create_column_stats_impl(
 
     storage::UpdateOpts update_opts;
     update_opts.upsert_ = true;
-    store->update(column_stats_key, std::move(new_segment), update_opts).get();
+    if (!old_segment.has_value()) {
+        store->update(column_stats_key, std::move(new_segment), update_opts).get();
+    } else {
+        // Verify that the row-slices match between old and new stats
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                new_segment.column(0) == old_segment->column(0) && new_segment.column(1) == old_segment->column(1),
+                "Cannot create column stats, existing column stats row-groups do not match"
+        );
+        // Merge the ColumnStatsHeader metadata from old and new segments
+        arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
+        old_segment->metadata()->UnpackTo(&old_header);
+        arcticc::pb2::descriptors_pb2::ColumnStatsHeader new_header;
+        new_segment.metadata()->UnpackTo(&new_header);
+        auto next_offset = old_segment->descriptor().field_count();
+        for (const auto& stat : new_header.stats()) {
+            auto* merged_stat = old_header.add_stats();
+            merged_stat->set_data_col_name(stat.data_col_name());
+            merged_stat->set_type(stat.type());
+            merged_stat->set_stats_seg_offset(next_offset++);
+        }
+        // Add new stat columns to the old segment
+        old_segment->concatenate(std::move(new_segment));
+        google::protobuf::Any any;
+        any.PackFrom(old_header);
+        old_segment->reset_metadata();
+        old_segment->set_metadata(std::move(any));
+        store->update(column_stats_key, std::move(*old_segment), update_opts).get();
+    }
 }
 
 void drop_column_stats_impl(

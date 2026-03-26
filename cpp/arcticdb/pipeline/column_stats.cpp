@@ -62,9 +62,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
     size_t stat_idx = 0;
     for (const auto& [idx, type_descriptor] : folly::enumerate(type_descriptors)) {
-        merged.add_column(
-                FieldRef{type_descriptor, field_names.at(idx)}, 0, AllocationType::DYNAMIC
-        );
+        merged.add_column(FieldRef{type_descriptor, field_names.at(idx)}, 0, AllocationType::DYNAMIC);
         if (idx > end_index_offset) {
             auto* new_stats = merged_header.add_stats();
             new_stats->set_data_col_name(data_col_names.at(stat_idx));
@@ -85,7 +83,6 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     merged.set_metadata(std::move(any));
     return merged;
 }
-
 
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
     struct Tag {};
@@ -158,8 +155,8 @@ namespace {
 std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
     struct Tag {};
     using Map = semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
-    Map::get(ColumnStatType::MINMAX) =
-            std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
+    Map::get(ColumnStatType::MINMAX
+    ) = std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(Map::contains(type), "Unknown column stat type");
     return Map::get(type);
 }
@@ -180,7 +177,8 @@ std::vector<std::string> ColumnStats::drop(const ColumnStats& to_drop, bool warn
                 if (none_erased) {
                     if (warn_if_missing) {
                         log::version().warn(
-                                "Requested column stats drop but column '{}' does not have the specified column stat '{}'",
+                                "Requested column stats drop but column '{}' does not have the specified column stat "
+                                "'{}'",
                                 column,
                                 type_to_name(column_stat_type)
                         );
@@ -252,9 +250,7 @@ std::optional<Clause> ColumnStats::clause() const {
     return ColumnStatsGenerationClause(std::move(input_columns), index_generation_aggregators);
 }
 
-bool ColumnStats::empty() const {
-    return column_stats_.empty();
-}
+bool ColumnStats::empty() const { return column_stats_.empty(); }
 
 bool ColumnStats::operator==(const ColumnStats& right) const { return column_stats_ == right.column_stats_; }
 

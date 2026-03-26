@@ -34,8 +34,7 @@ class MinMaxAggregator {
     ) :
         column_name_(std::move(column_name)),
         output_column_name_min_(std::move(output_column_name_min)),
-        output_column_name_max_(std::move(output_column_name_max)) {
-    }
+        output_column_name_max_(std::move(output_column_name_max)) {}
 
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregator)
 
