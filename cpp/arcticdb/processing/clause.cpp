@@ -2351,6 +2351,7 @@ std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRan
 
 std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
+    log::version().debug("CompactDataClause structuring {} data keys for processing", ranges_and_keys.size());
     // Extract the unique row ranges
     std::set<RowRange> row_ranges;
     for (const auto& range_and_key : ranges_and_keys) {
@@ -2373,6 +2374,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
             }
     );
     if (ranges_and_keys.empty()) {
+        log::version().info("No work to do in CompactDataClause, data is already compacted");
         return {};
     }
     // Order by column slice (i.e. all segments in first column slice from top to bottom, then second column slice, etc)
@@ -2406,6 +2408,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     if (!current.empty()) {
         res.emplace_back(std::move(current));
     }
+    log::version().debug("CompactDataClause processing {} data keys in {} batches", ranges_and_keys.size(), res.size());
     return res;
 }
 
@@ -2414,15 +2417,23 @@ std::vector<std::vector<EntityId>> CompactDataClause::structure_for_processing(s
 }
 
 std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_ids) const {
-    util::check(!entity_ids.empty(), "Unexpected empty entity_ids in CompactDataClause::process");
+    auto input_segment_count = entity_ids.size();
+    util::check(input_segment_count != 0, "Unexpected empty entity_ids in CompactDataClause::process");
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, entity_ids
+    );
+    ColRange col_range = *proc.col_ranges_->front();
+    log::version().debug(
+            "CompactDataClause processing {} segments in Col{} with row ranges spanning [{:d}, {:d}]",
+            input_segment_count,
+            col_range,
+            proc.row_ranges_->front()->first,
+            proc.row_ranges_->back()->second
     );
     std::vector<SegmentInMemory> segments = util::extract_from_pointers(std::move(*proc.segments_));
     SegmentReslicer reslicer{max_rows_per_segment_};
     segments = reslicer.reslice_segments(std::move(segments));
 
-    ColRange col_range = *proc.col_ranges_->front();
     std::vector<std::shared_ptr<SegmentInMemory>> segment_ptrs = util::extract_to_pointers(std::move(segments));
     std::vector<std::shared_ptr<RowRange>> row_ranges;
     std::vector<std::shared_ptr<ColRange>> col_ranges;
@@ -2435,6 +2446,14 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     proc.set_segments(std::move(segment_ptrs));
     proc.set_row_ranges(std::move(row_ranges));
     proc.set_col_ranges(std::move(col_ranges));
+    log::version().debug(
+            "CompactDataClause compacted {} segments into {} segments in Col{} with row ranges spanning [{:d}, {:d}]",
+            input_segment_count,
+            proc.segments_->size(),
+            col_range,
+            proc.row_ranges_->front()->first,
+            proc.row_ranges_->back()->second
+    );
     return push_entities(*component_manager_, std::move(proc));
 }
 
