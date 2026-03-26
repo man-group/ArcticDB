@@ -321,7 +321,7 @@ def test_compact_data_single_row(in_memory_store_factory):
 
 def test_compact_data_empty_dataframe(in_memory_store_factory):
     lib = in_memory_store_factory(segment_row_size=10)
-    sym = "test_compact_data_single_row"
+    sym = "test_compact_data_empty_dataframe"
     df = pd.DataFrame({"col": np.array([], dtype=np.int64)})
     lib.write(sym, df)
     generic_compact_data_test_noop(lib, sym)

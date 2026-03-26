@@ -58,7 +58,7 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
         }
         ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
-                input_col->unique(),
+                input_col->use_count() == 1,
                 "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
                 input_col->use_count()
         );
