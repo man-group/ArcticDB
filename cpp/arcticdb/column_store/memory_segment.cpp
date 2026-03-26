@@ -126,6 +126,8 @@ void SegmentInMemory::concatenate(SegmentInMemory&& other, bool unique_column_na
 
 void SegmentInMemory::drop_column(std::string_view name) { impl_->drop_column(name); }
 
+void SegmentInMemory::drop_column(size_t index) { impl_->drop_column(index); }
+
 std::optional<std::string_view> SegmentInMemory::string_at(position_t row, position_t col) const {
     return impl_->string_at(row, col);
 }

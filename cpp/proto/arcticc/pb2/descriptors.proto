@@ -336,6 +336,7 @@ message SymbolListDescriptor
     bool enabled = 1;
 }
 
+// TODO aseaton rename all with a _V_1_0 suffix
 enum ColumnStatsType {
     // Older clients reading a new enum value written by a newer client will decode to this first
     // element, so make sure they don't mis-interpret it as a statistic they understand.
@@ -345,6 +346,7 @@ enum ColumnStatsType {
     COLUMN_STATS_MAX = 2;
 }
 
+// TODO aseaton put a version number in here too, versioning for the whole scheme
 message StatColMapping {
     uint32 stats_seg_offset = 1;  // offset in to fields in the KeyType::COLUMN_STATS's StreamDescriptor
     uint32 data_col_offset = 2;  // offset in to TimeseriesDescriptor#fields_ (in the Index key)
