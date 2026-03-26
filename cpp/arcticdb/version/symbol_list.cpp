@@ -205,15 +205,14 @@ struct StreamingJournalResult {
 };
 
 StreamingJournalResult load_journal_streaming(
-        const std::shared_ptr<Store>& store, SymbolListData& data,
-        WillAttemptCompaction will_attempt_compaction, bool collect_keys
+        const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction,
+        bool collect_keys
 ) {
     StreamingJournalResult result;
     size_t uncompacted_keys_found = 0;
 
-    const auto batch_delete_size = collect_keys
-            ? ConfigsMap::instance()->get_int("SymbolList.BatchDeleteDuringCompaction", 0)
-            : 0;
+    const auto batch_delete_size =
+            collect_keys ? ConfigsMap::instance()->get_int("SymbolList.BatchDeleteDuringCompaction", 0) : 0;
     std::vector<AtomKey> delete_batch;
 
     store->iterate_type(KeyType::SYMBOL_LIST, [&](auto&& key) {
