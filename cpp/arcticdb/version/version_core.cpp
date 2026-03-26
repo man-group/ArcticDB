@@ -1936,6 +1936,11 @@ void create_column_stats_impl(
             !pipeline_context->multi_key_, "Column stats generation not supported with recursively normalized symbols"
     );
     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(maybe_isr.has_value(), "Version not found while creating columns stats");
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+            maybe_isr->tsd().normalization().input_type_case() !=
+                    proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame,
+            "Cannot create column stats on pickled data"
+    );
 
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
@@ -1963,10 +1968,6 @@ void create_column_stats_impl(
             std::vector{std::make_shared<Clause>(std::move(*clause))}
     );
     read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), *read_query, read_options);
-
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
-            !pipeline_context->is_pickled(), "Cannot create column stats on pickled data"
-    );
 
     auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
@@ -2029,6 +2030,9 @@ void drop_column_stats_impl(
         // Drop all column stats
         store->remove_key(column_stats_key, remove_opts).get();
     } else {
+        // Sort in descending order so that dropping higher-indexed columns first
+        // doesn't invalidate the indices of lower-indexed columns
+        std::sort(dropped_offsets.begin(), dropped_offsets.end(), std::greater<>());
         for (size_t dropped_offset : dropped_offsets) {
             segment_in_memory.drop_column(dropped_offset);
         }
