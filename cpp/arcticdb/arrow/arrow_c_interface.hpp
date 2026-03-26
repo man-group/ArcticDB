@@ -21,18 +21,20 @@ class record_batch;
 
 namespace arcticdb {
 
-// Owns an ArrowArray/ArrowSchema pair representing a record batch via the Arrow C Data Interface.
+// Arrow C Data interface to pass ArrowArray/ArrowSchema pair representing a record batch between C++ and Python
 //
 // Write path (Python -> C++):
 //   1. Python calls _export_to_c into array_/schema_, setting release callbacks that decref
 //      the underlying PyArrow buffers.
-//   2. py_ndf_to_frame builds non-owning sparrow record batches from the Arrow C structs.
+//   2. py_ndf_to_frame moves array_/schema_ into owning sparrow::record_batches via
+//      record_batch(ArrowArray&&, ArrowSchema&&). Sparrow takes ownership and will call
+//      release on destruction.
 //   3. The sparrow record batches are converted to a SegmentInMemory whose external blocks
-//      point into the ArrowArray buffers. InputFrame stores shared_ptr<RecordBatchData> to
-//      keep the buffers alive for the segment's lifetime.
+//      point into the ArrowArray buffers. InputFrame stores a reference to the sparrow
+//      record_batches to keep the buffers alive for the segment's lifetime.
 //   4. WriteToSegmentTask slices the InputFrame and writes each slice to storage.
-//   5. Once all slices are persisted the InputFrame is destroyed, dropping the shared_ptrs
-//      and calling release which decrefs the PyArrow buffers.
+//   5. Once all slices are persisted the InputFrame is destroyed, sparrow record_batches are
+//      destroyed, calling release which decrefs the PyArrow buffers.
 //
 // Read path (C++ -> Python):
 //   1. Arrow buffers are allocated in allocate_chunked_frame / decode_or_expand.
@@ -40,20 +42,13 @@ namespace arcticdb {
 //      on the allocator used.
 //   3. ArrowOutputFrame holds the sparrow::record_batches and is returned to Python.
 //   4. Python calls extract_record_batches() to create RecordBatchData via
-//      sparrow::extract_arrow_structures.
-//   5. Python calls _import_from_c which takes ownership and sets release to nullptr.
-//   6. ~RecordBatchData sees nullptr and skips the release call.
+//      sparrow::extract_arrow_structures (which makes the sparrow::record_batch non-owning).
+//   5. Python calls _import_from_c which takes ownership.
 struct RecordBatchData {
     RecordBatchData() : array_{}, schema_{} {}
     RecordBatchData(ArrowArray array, ArrowSchema schema);
-    ~RecordBatchData();
 
-    ARCTICDB_NO_COPY(RecordBatchData);
-
-    RecordBatchData(RecordBatchData&& other);
-    RecordBatchData& operator=(RecordBatchData&& other);
-
-    void release();
+    ARCTICDB_MOVE_ONLY_DEFAULT(RecordBatchData);
 
     ArrowArray array_;
     ArrowSchema schema_;

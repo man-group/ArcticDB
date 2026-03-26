@@ -56,7 +56,7 @@ struct InputFrame {
         );
     }
 
-    void set_segment(SegmentInMemory&& seg, const std::vector<std::shared_ptr<RecordBatchData>>& record_batches);
+    void set_segment(SegmentInMemory&& seg, std::shared_ptr<std::vector<sparrow::record_batch>> arrow_buffer_owners);
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
@@ -92,11 +92,12 @@ struct InputFrame {
     struct InputSegment {
         SegmentInMemory seg;
         StreamDescriptor desc_for_tsd;
-        // Keeps the Arrow buffers alive for the lifetime of the segment.
-        std::vector<std::shared_ptr<RecordBatchData>> record_batches;
-        InputSegment(SegmentInMemory&& segment, const std::vector<std::shared_ptr<RecordBatchData>>& rbs) :
+        // The segment holds non-owning external pointers to arrow buffers. The sparrow::record_batch-es own the buffers
+        // and serve as RAII to decref on destruction.
+        std::shared_ptr<std::vector<sparrow::record_batch>> arrow_buffer_owners;
+        InputSegment(SegmentInMemory&& segment, std::shared_ptr<std::vector<sparrow::record_batch>> owners) :
             seg(std::move(segment)),
-            record_batches(rbs) {
+            arrow_buffer_owners(std::move(owners)) {
             desc_for_tsd = seg.descriptor().clone();
             for (auto& field : desc_for_tsd.fields()) {
                 if (field.type().data_type() == DataType::UTF_DYNAMIC32) {

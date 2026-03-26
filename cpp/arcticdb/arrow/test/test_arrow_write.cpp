@@ -318,16 +318,18 @@ std::shared_ptr<RecordBatchData> create_record_batch_with_allocation_tracking(
     return std::make_shared<RecordBatchData>(arr, schema);
 }
 
-TEST(ArrowWriteMemoryLifetime, SparrowUsesCustomAllocator) {
+TEST(ArrowWriteMemoryLifetime, SparrowCallsReleaseOnDestruction) {
     AllocationCounter counter;
 
-    auto record_batch = create_record_batch_with_allocation_tracking(&counter);
-    // After we allocate we should have 1 allocation and 0 deallocations
+    auto rbd = create_record_batch_with_allocation_tracking(&counter);
     ASSERT_EQ(counter.num_allocations, 1);
     ASSERT_EQ(counter.num_deallocations, 0);
 
-    record_batch.reset();
-    // After we free the RecordBatchData the underlying buffer should be deallocated
+    {
+        // Move the arrow structs into an owning sparrow::record_batch
+        sparrow::record_batch owning_batch(std::move(rbd->array_), std::move(rbd->schema_));
+    }
+    // sparrow::record_batch destroyed — should have called release, freeing the buffer
     ASSERT_EQ(counter.num_allocations, 1);
     ASSERT_EQ(counter.num_deallocations, 1);
 }
