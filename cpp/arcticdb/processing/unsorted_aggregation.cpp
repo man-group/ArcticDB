@@ -48,19 +48,33 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             output_column_names.size()
     );
     SegmentInMemory seg;
+    arcticc::pb2::descriptors_pb2::ColumnStatsHeader header;
     if (min_.has_value()) {
-        details::visit_type(min_->data_type(), [&output_column_names, &seg, this](auto col_tag) {
+        details::visit_type(min_->data_type(), [&output_column_names, &seg, &header, this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
             auto min_col = std::make_shared<Column>(make_scalar_type(min_->data_type()), Sparsity::PERMITTED);
             min_col->push_back<RawType>(min_->get<RawType>());
+            arcticc::pb2::descriptors_pb2::StatColMapping* stats_metadata = header.add_stats();
+            stats_metadata->set_data_col_name(data_col_name_);
+            stats_metadata->set_stats_seg_offset(0);
+            stats_metadata->set_type(arcticc::pb2::descriptors_pb2::COLUMN_STATS_MIN_V1);
 
             auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
             max_col->push_back<RawType>(max_->get<RawType>());
+            stats_metadata = header.add_stats();
+            stats_metadata->set_data_col_name(data_col_name_);
+            stats_metadata->set_stats_seg_offset(1);
+            stats_metadata->set_type(arcticc::pb2::descriptors_pb2::COLUMN_STATS_MAX_V1);
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
         });
     }
+
+    google::protobuf::Any any;
+    bool packed = any.PackFrom(header);
+    util::check(packed, "Failed to pack header in to Any?");
+    seg.set_metadata(std::move(any));
     return seg;
 }
 

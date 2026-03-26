@@ -38,10 +38,10 @@ def generate_symbol(lib, sym):
         inplace=True,
     )
     expected_column_stats = expected_column_stats.iloc[[0, 1]]
-    expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
-    expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
-    expected_column_stats["v1.0_MIN(col_2)"] = [df0["col_2"].min(), df1["col_2"].min()]
-    expected_column_stats["v1.0_MAX(col_2)"] = [df0["col_2"].max(), df1["col_2"].max()]
+    expected_column_stats["v1_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
+    expected_column_stats["v1_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
+    expected_column_stats["v1_MIN(col_2)"] = [df0["col_2"].min(), df1["col_2"].min()]
+    expected_column_stats["v1_MAX(col_2)"] = [df0["col_2"].max(), df1["col_2"].max()]
     return expected_column_stats
 
 
@@ -58,7 +58,7 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment, any_output_for
     sym = "test_column_stats_basic_flow"
     expected_column_stats = generate_symbol(lib, sym)
     expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
         axis=1,
         inplace=True,
     )
@@ -99,8 +99,8 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment, any_output_forma
         inplace=True,
     )
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2]]
-    expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]
-    expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]
+    expected_column_stats["v1_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]
+    expected_column_stats["v1_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -116,7 +116,7 @@ def test_column_stats_as_of(lmdb_version_store_tiny_segment, any_output_format):
     expected_column_stats = generate_symbol(lib, sym)
     expected_column_stats = expected_column_stats.iloc[[0]]
     expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
         axis=1,
         inplace=True,
     )
@@ -173,7 +173,7 @@ def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny
     assert lib.get_column_stats_info(sym) == {"col_1": {"MINMAX"}}
 
     expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
         axis=1,
         inplace=True,
     )
@@ -282,7 +282,7 @@ def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment, any_outp
 
     expected_column_stats = base_expected_column_stats.copy()
     expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1.0_MIN(col_1)", "v1.0_MAX(col_1)"]),
+        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
         axis=1,
         inplace=True,
     )
@@ -330,8 +330,8 @@ def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment, 
         inplace=True,
     )
     expected_column_stats = expected_column_stats.iloc[[0, 1]]
-    expected_column_stats["v1.0_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
-    expected_column_stats["v1.0_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
+    expected_column_stats["v1_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
+    expected_column_stats["v1_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
 
     column_stats_dict = {"col_1": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
@@ -360,8 +360,6 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     lib.append(sym, df3)
     lib.append(sym, df4)
 
-    df = lib.read(sym).data
-
     expected_column_stats = lib.read_index(sym)
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index"]),
@@ -369,28 +367,28 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
         inplace=True,
     )
     expected_column_stats = expected_column_stats.iloc[[0, 1, 2, 3, 4]]
-    expected_column_stats["v1.0_MIN(col_1)"] = [
+    expected_column_stats["v1_MIN(col_1)"] = [
         df0["col_1"].min(),
         np.nan,
         df2["col_1"].min(),
         np.nan,
         df4["col_1"].min(),
     ]
-    expected_column_stats["v1.0_MAX(col_1)"] = [
+    expected_column_stats["v1_MAX(col_1)"] = [
         df0["col_1"].max(),
         np.nan,
         df2["col_1"].max(),
         np.nan,
         df4["col_1"].max(),
     ]
-    expected_column_stats["v1.0_MIN(col_2)"] = [
+    expected_column_stats["v1_MIN(col_2)"] = [
         df0["col_2"].min(),
         df1["col_2"].min(),
         np.nan,
         np.nan,
         df4["col_2"].min(),
     ]
-    expected_column_stats["v1.0_MAX(col_2)"] = [
+    expected_column_stats["v1_MAX(col_2)"] = [
         df0["col_2"].max(),
         df1["col_2"].max(),
         np.nan,
@@ -446,44 +444,44 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
         inplace=True,
     )
     expected_column_stats = expected_column_stats.iloc[[0, 1]]
-    expected_column_stats["v1.0_MIN(int_widening)"] = [df0["int_widening"].min(), df1["int_widening"].min()]
-    expected_column_stats["v1.0_MAX(int_widening)"] = [df0["int_widening"].max(), df1["int_widening"].max()]
+    expected_column_stats["v1_MIN(int_widening)"] = [df0["int_widening"].min(), df1["int_widening"].min()]
+    expected_column_stats["v1_MAX(int_widening)"] = [df0["int_widening"].max(), df1["int_widening"].max()]
 
-    expected_column_stats["v1.0_MIN(int_narrowing)"] = [df0["int_narrowing"].min(), df1["int_narrowing"].min()]
-    expected_column_stats["v1.0_MAX(int_narrowing)"] = [df0["int_narrowing"].max(), df1["int_narrowing"].max()]
+    expected_column_stats["v1_MIN(int_narrowing)"] = [df0["int_narrowing"].min(), df1["int_narrowing"].min()]
+    expected_column_stats["v1_MAX(int_narrowing)"] = [df0["int_narrowing"].max(), df1["int_narrowing"].max()]
 
-    expected_column_stats["v1.0_MIN(unsigned_to_wider_signed_int)"] = [
+    expected_column_stats["v1_MIN(unsigned_to_wider_signed_int)"] = [
         df0["unsigned_to_wider_signed_int"].min(),
         df1["unsigned_to_wider_signed_int"].min(),
     ]
-    expected_column_stats["v1.0_MAX(unsigned_to_wider_signed_int)"] = [
+    expected_column_stats["v1_MAX(unsigned_to_wider_signed_int)"] = [
         df0["unsigned_to_wider_signed_int"].max(),
         df1["unsigned_to_wider_signed_int"].max(),
     ]
 
-    expected_column_stats["v1.0_MIN(wider_signed_to_unsigned_int)"] = [
+    expected_column_stats["v1_MIN(wider_signed_to_unsigned_int)"] = [
         df0["wider_signed_to_unsigned_int"].min(),
         df1["wider_signed_to_unsigned_int"].min(),
     ]
-    expected_column_stats["v1.0_MAX(wider_signed_to_unsigned_int)"] = [
+    expected_column_stats["v1_MAX(wider_signed_to_unsigned_int)"] = [
         df0["wider_signed_to_unsigned_int"].max(),
         df1["wider_signed_to_unsigned_int"].max(),
     ]
 
-    expected_column_stats["v1.0_MIN(unsigned_to_signed_int_same_width)"] = [
+    expected_column_stats["v1_MIN(unsigned_to_signed_int_same_width)"] = [
         df0["unsigned_to_signed_int_same_width"].min(),
         df1["unsigned_to_signed_int_same_width"].min(),
     ]
-    expected_column_stats["v1.0_MAX(unsigned_to_signed_int_same_width)"] = [
+    expected_column_stats["v1_MAX(unsigned_to_signed_int_same_width)"] = [
         df0["unsigned_to_signed_int_same_width"].max(),
         df1["unsigned_to_signed_int_same_width"].max(),
     ]
 
-    expected_column_stats["v1.0_MIN(int_to_float)"] = [df0["int_to_float"].min(), df1["int_to_float"].min()]
-    expected_column_stats["v1.0_MAX(int_to_float)"] = [df0["int_to_float"].max(), df1["int_to_float"].max()]
+    expected_column_stats["v1_MIN(int_to_float)"] = [df0["int_to_float"].min(), df1["int_to_float"].min()]
+    expected_column_stats["v1_MAX(int_to_float)"] = [df0["int_to_float"].max(), df1["int_to_float"].max()]
 
-    expected_column_stats["v1.0_MIN(float_to_int)"] = [df0["float_to_int"].min(), df1["float_to_int"].min()]
-    expected_column_stats["v1.0_MAX(float_to_int)"] = [df0["float_to_int"].max(), df1["float_to_int"].max()]
+    expected_column_stats["v1_MIN(float_to_int)"] = [df0["float_to_int"].min(), df1["float_to_int"].min()]
+    expected_column_stats["v1_MAX(float_to_int)"] = [df0["float_to_int"].max(), df1["float_to_int"].max()]
     column_stats_dict = {
         "int_widening": {"MINMAX"},
         "int_narrowing": {"MINMAX"},
@@ -498,26 +496,26 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
 
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
-    assert column_stats.dtypes["v1.0_MIN(int_widening)"] == np.uint16
-    assert column_stats.dtypes["v1.0_MAX(int_widening)"] == np.uint16
+    assert column_stats.dtypes["v1_MIN(int_widening)"] == np.uint16
+    assert column_stats.dtypes["v1_MAX(int_widening)"] == np.uint16
 
-    assert column_stats.dtypes["v1.0_MIN(int_narrowing)"] == np.int16
-    assert column_stats.dtypes["v1.0_MAX(int_narrowing)"] == np.int16
+    assert column_stats.dtypes["v1_MIN(int_narrowing)"] == np.int16
+    assert column_stats.dtypes["v1_MAX(int_narrowing)"] == np.int16
 
-    assert column_stats.dtypes["v1.0_MIN(unsigned_to_wider_signed_int)"] == np.int32
-    assert column_stats.dtypes["v1.0_MAX(unsigned_to_wider_signed_int)"] == np.int32
+    assert column_stats.dtypes["v1_MIN(unsigned_to_wider_signed_int)"] == np.int32
+    assert column_stats.dtypes["v1_MAX(unsigned_to_wider_signed_int)"] == np.int32
 
-    assert column_stats.dtypes["v1.0_MIN(wider_signed_to_unsigned_int)"] == np.int32
-    assert column_stats.dtypes["v1.0_MAX(wider_signed_to_unsigned_int)"] == np.int32
+    assert column_stats.dtypes["v1_MIN(wider_signed_to_unsigned_int)"] == np.int32
+    assert column_stats.dtypes["v1_MAX(wider_signed_to_unsigned_int)"] == np.int32
 
-    assert column_stats.dtypes["v1.0_MIN(unsigned_to_signed_int_same_width)"] == np.int32
-    assert column_stats.dtypes["v1.0_MAX(unsigned_to_signed_int_same_width)"] == np.int32
+    assert column_stats.dtypes["v1_MIN(unsigned_to_signed_int_same_width)"] == np.int32
+    assert column_stats.dtypes["v1_MAX(unsigned_to_signed_int_same_width)"] == np.int32
 
-    assert column_stats.dtypes["v1.0_MIN(int_to_float)"] == np.float64
-    assert column_stats.dtypes["v1.0_MAX(int_to_float)"] == np.float64
+    assert column_stats.dtypes["v1_MIN(int_to_float)"] == np.float64
+    assert column_stats.dtypes["v1_MAX(int_to_float)"] == np.float64
 
-    assert column_stats.dtypes["v1.0_MIN(float_to_int)"] == np.float64
-    assert column_stats.dtypes["v1.0_MAX(float_to_int)"] == np.float64
+    assert column_stats.dtypes["v1_MIN(float_to_int)"] == np.float64
+    assert column_stats.dtypes["v1_MAX(float_to_int)"] == np.float64
 
 
 def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_output_format):

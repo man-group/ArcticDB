@@ -10,11 +10,12 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
+
 namespace arcticdb {
 class SegmentInMemory;
 class MinMaxAggregatorData {
   public:
-    MinMaxAggregatorData() = default;
+    MinMaxAggregatorData(std::string data_col_name) : data_col_name_(std::move(data_col_name)) {};
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregatorData)
 
     void aggregate(const ColumnWithStrings& input_column);
@@ -23,6 +24,7 @@ class MinMaxAggregatorData {
   private:
     std::optional<Value> min_;
     std::optional<Value> max_;
+    std::string data_col_name_;
 };
 
 class MinMaxAggregator {
@@ -33,13 +35,14 @@ class MinMaxAggregator {
         column_name_(std::move(column_name)),
         output_column_name_min_(std::move(output_column_name_min)),
         output_column_name_max_(std::move(output_column_name_max)) {}
+
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregator)
 
     [[nodiscard]] ColumnName get_input_column_name() const { return column_name_; }
     [[nodiscard]] std::vector<ColumnName> get_output_column_names() const {
         return {output_column_name_min_, output_column_name_max_};
     }
-    [[nodiscard]] MinMaxAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(); }
+    [[nodiscard]] MinMaxAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(column_name_.value); }
 
   private:
     ColumnName column_name_;

@@ -335,3 +335,34 @@ message SymbolListDescriptor
 {
     bool enabled = 1;
 }
+
+enum ColumnStatsType {
+    // Older clients reading a new enum value written by a newer client will decode to this first
+    // element, so make sure they don't mis-interpret it as a statistic they understand.
+    // https://protobuf.dev/best-practices/dos-donts/#unspecified-enum
+    COLUMN_STATS_UNKNOWN = 0;
+
+    // The version numbers here refer to the format of a given statistic. For example we might start
+    // off saving string min and max truncated to 8 bytes in a uint64_t, and later change to saving it truncated
+    // to a different length. That would necessitate a COLUMN_STATS_MIN_V2 so that old readers do not
+    // misinterpret the new statistics format.
+    COLUMN_STATS_MIN_V1 = 1;
+    COLUMN_STATS_MAX_V1 = 2;
+}
+
+message StatColMapping {
+    uint32 stats_seg_offset = 1;  // offset in to fields in the KeyType::COLUMN_STATS's StreamDescriptor
+    string data_col_name = 2;  // column name in the data segment
+    ColumnStatsType type = 3;
+}
+
+// Stored in the user defined metadata for KeyType::COLUMN_STATS
+message ColumnStatsHeader {
+    // This version number refers to the format of this header structure.
+    // For example if we ever want to stop using StatColMapping and move to a different encoding,
+    // we would increment the version number. This helps to avoid older clients mis-interpreting
+    // existing fields (like an empty StatColMapping in this example).
+    uint32 version = 1;
+    repeated StatColMapping stats = 2;
+    // end of fields in version 1
+}
