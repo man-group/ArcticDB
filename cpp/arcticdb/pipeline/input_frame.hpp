@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -29,7 +30,6 @@ concept ValidIndex = util::any_of<
 struct InputFrame {
   public:
     InputFrame();
-    InputFrame(SegmentInMemory&& seg);
 
     template<ValidIndex Index, typename DescriptorT>
     requires std::same_as<std::decay_t<DescriptorT>, StreamDescriptor>
@@ -56,7 +56,7 @@ struct InputFrame {
         );
     }
 
-    void set_segment(SegmentInMemory&& seg);
+    void set_segment(SegmentInMemory&& seg, std::shared_ptr<std::vector<sparrow::record_batch>> arrow_buffer_owners);
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
@@ -92,7 +92,12 @@ struct InputFrame {
     struct InputSegment {
         SegmentInMemory seg;
         StreamDescriptor desc_for_tsd;
-        explicit InputSegment(SegmentInMemory&& segment) : seg(std::move(segment)) {
+        // The segment holds non-owning external pointers to arrow buffers. The sparrow::record_batch-es own the buffers
+        // and serve as RAII to decref on destruction.
+        std::shared_ptr<std::vector<sparrow::record_batch>> arrow_buffer_owners;
+        InputSegment(SegmentInMemory&& segment, std::shared_ptr<std::vector<sparrow::record_batch>> owners) :
+            seg(std::move(segment)),
+            arrow_buffer_owners(std::move(owners)) {
             desc_for_tsd = seg.descriptor().clone();
             for (auto& field : desc_for_tsd.fields()) {
                 if (field.type().data_type() == DataType::UTF_DYNAMIC32) {

@@ -11,9 +11,14 @@
 #include <sparrow/record_batch.hpp>
 
 #include <arcticdb/arrow/test/arrow_test_utils.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/util/allocator.hpp>
+#include <arcticdb/util/native_handler.hpp>
+#include <arcticdb/util/test/generators.hpp>
 
 using namespace arcticdb;
 
@@ -267,5 +272,111 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
                 ASSERT_EQ(*col.scalar_at<typename type_info::RawType>(row), row);
             }
         });
+    }
+}
+
+struct AllocationCounter {
+    size_t num_allocations = 0;
+    size_t num_deallocations = 0;
+};
+
+// Allocator that counts allocations and deallocations
+template<typename T>
+struct TrackingAllocator {
+    using value_type = T;
+    AllocationCounter* counter_;
+
+    explicit TrackingAllocator(AllocationCounter* counter) : counter_(counter) {}
+
+    T* allocate(std::size_t n) {
+        ++counter_->num_allocations;
+        return std::allocator<T>{}.allocate(n);
+    }
+
+    void deallocate(T* p, std::size_t n) {
+        ++counter_->num_deallocations;
+        std::allocator<T>{}.deallocate(p, n);
+    }
+
+    bool operator==(const TrackingAllocator& other) const { return counter_ == other.counter_; }
+};
+
+std::shared_ptr<RecordBatchData> create_record_batch_with_allocation_tracking(
+        AllocationCounter* counter, size_t num_rows = 100
+) {
+    auto allocator = TrackingAllocator<uint8_t>(counter);
+    auto* ints = allocator.allocate(num_rows);
+    std::iota(ints, ints + num_rows, 0);
+
+    auto data_buffer = sparrow::u8_buffer<uint8_t>(ints, num_rows, allocator);
+    auto primitive_array = sparrow::primitive_array<uint8_t>(std::move(data_buffer), num_rows);
+    auto array = sparrow::array{std::move(primitive_array)};
+    array.set_name("col");
+    auto record_batch = sparrow::record_batch{};
+    record_batch.add_column("col", std::move(array));
+    auto [arr, schema] = sparrow::extract_arrow_structures(std::move(record_batch));
+    return std::make_shared<RecordBatchData>(arr, schema);
+}
+
+TEST(ArrowWriteMemoryLifetime, SparrowCallsReleaseOnDestruction) {
+    AllocationCounter counter;
+
+    auto rbd = create_record_batch_with_allocation_tracking(&counter);
+    ASSERT_EQ(counter.num_allocations, 1);
+    ASSERT_EQ(counter.num_deallocations, 0);
+
+    {
+        // Move the arrow structs into an owning sparrow::record_batch
+        sparrow::record_batch owning_batch(std::move(rbd->array_), std::move(rbd->schema_));
+    }
+    // sparrow::record_batch destroyed — should have called release, freeing the buffer
+    ASSERT_EQ(counter.num_allocations, 1);
+    ASSERT_EQ(counter.num_deallocations, 1);
+}
+
+TEST(ArrowWriteMemoryLifetime, InputFrameKeepsBufferAlive) {
+    constexpr auto num_record_batches = 5;
+    constexpr auto num_rows_per_record_batch = 100;
+    AllocationCounter counter;
+    auto engine = get_test_engine();
+    const std::string symbol = "input_frame_keeps_buffer_alive";
+
+    auto record_batches = std::vector<std::shared_ptr<RecordBatchData>>();
+    for (auto i = 0; i < num_record_batches; ++i) {
+        record_batches.emplace_back(create_record_batch_with_allocation_tracking(&counter, num_rows_per_record_batch));
+    }
+
+    // Record batches are allocated
+    ASSERT_EQ(counter.num_allocations, num_record_batches);
+    ASSERT_EQ(counter.num_deallocations, 0);
+
+    auto input_frame = std::make_shared<pipelines::InputFrame>();
+    input_frame->norm_meta.mutable_experimental_arrow()->set_has_index(false);
+    convert::record_batches_to_frame(record_batches, *input_frame);
+    input_frame->desc().set_id(symbol);
+    input_frame->set_index_range();
+
+    record_batches.clear();
+    // record_batches vector is cleared but we don't deallocate yet because input frame keeps the buffers alive
+    ASSERT_EQ(counter.num_allocations, num_record_batches);
+    ASSERT_EQ(counter.num_deallocations, 0);
+
+    engine.write_versioned_dataframe_internal(symbol, input_frame, false, false, false);
+    input_frame.reset();
+    // After the write is done and the InputFrame is destructed and we deallocate the input buffers
+    ASSERT_EQ(counter.num_allocations, num_record_batches);
+    ASSERT_EQ(counter.num_deallocations, num_record_batches);
+
+    // Read back and verify
+    auto read_query = std::make_shared<ReadQuery>();
+    register_native_handler_data_factory();
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto read_result =
+            engine.read_dataframe_version_internal(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
+    constexpr auto num_rows = num_record_batches * num_rows_per_record_batch;
+    ASSERT_EQ(seg.row_count(), num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        ASSERT_EQ(*seg.scalar_at<uint8_t>(i, 0), static_cast<uint8_t>(i % num_rows_per_record_batch));
     }
 }

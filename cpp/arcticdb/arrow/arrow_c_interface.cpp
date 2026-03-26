@@ -6,13 +6,15 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 
 #include <vector>
 
 #include <sparrow/record_batch.hpp>
 
 namespace arcticdb {
+
+RecordBatchData::RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
 
 ArrowOutputFrame::ArrowOutputFrame(std::shared_ptr<std::vector<sparrow::record_batch>>&& data) :
     data_(std::move(data)) {}
