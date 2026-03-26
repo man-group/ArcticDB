@@ -21,7 +21,7 @@ template<typename T>
 std::vector<T> extract_from_pointers(std::vector<std::shared_ptr<T>>&& input) {
     std::vector<T> res;
     res.reserve(input.size());
-    std::ranges::transform(input, std::back_inserter(res), [](std::shared_ptr<T> value) { return std::move(*value); });
+    std::ranges::transform(input, std::back_inserter(res), [](std::shared_ptr<T>& value) { return std::move(*value); });
     return res;
 }
 

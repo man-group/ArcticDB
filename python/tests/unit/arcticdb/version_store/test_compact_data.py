@@ -319,6 +319,14 @@ def test_compact_data_single_row(in_memory_store_factory):
     generic_compact_data_test_noop(lib, sym)
 
 
+def test_compact_data_empty_dataframe(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_compact_data_single_row"
+    df = pd.DataFrame({"col": np.array([], dtype=np.int64)})
+    lib.write(sym, df)
+    generic_compact_data_test_noop(lib, sym)
+
+
 @pytest.mark.parametrize("rows_per_segment", [5, 10, 20])
 def test_compact_data_total_rows_equals_rows_per_segment(in_memory_store_factory, rows_per_segment):
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)

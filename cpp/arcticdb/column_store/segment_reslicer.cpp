@@ -140,6 +140,8 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     // copied into the result column, and so the memory is freed as early as possible
     segments.clear();
     std::vector<StringPool> string_pools(slicing_info.num_segments);
+    // We can use string_view keys here as they point to the keys in column_map, which are still live while this
+    // variable is in use
     ankerl::unordered_dense::
             map<std::string_view, std::vector<std::optional<Column>>, util::TransparentStringHash, std::equal_to<>>
                     resliced_column_map;

@@ -1626,4 +1626,4 @@ def test_compact_data(lmdb_library, rows_per_segment, prune_previous_versions):
     rows_per_segment = 100_000 if rows_per_segment is None else rows_per_segment
     assert len(lib._dev_tools.library_tool().read_index(sym)) == max(len(df) // rows_per_segment, 1)
     prune_previous_versions = False if prune_previous_versions is None else prune_previous_versions
-    assert len(lib.list_versions(sym)) == 1 if prune_previous_versions else 11
+    assert len(lib.list_versions(sym)) == (1 if prune_previous_versions else 11)

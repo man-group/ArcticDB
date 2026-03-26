@@ -3953,7 +3953,7 @@ class NativeVersionStore:
             The target number of rows for each segment after the compaction. If None, uses the library configuration
             setting. Note that subsequent calls to write, append, and update will continue to use the library
             configuration setting.
-        prune_previous_versions : bool, default=None
+        prune_previous_version : bool, default=None
             Remove previous versions from version list. Uses library default if left as None.
 
         Returns
