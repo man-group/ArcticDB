@@ -992,6 +992,49 @@ TEST_F(SymbolListSuite, AddAndCompact) {
     collect(futures).get();
 }
 
+TEST_F(SymbolListSuite, DirectPathEquivalence) {
+    // Setup: add symbols and force compaction
+    for (int i = 0; i < 50; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    {
+        SymbolList sl{version_map_};
+        sl.load<std::set<StreamId>>(version_map_, store_, false);
+    }
+
+    // Add journal entries: new symbols + deletes of existing ones
+    for (int i = 40; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+    for (int i = 0; i < 10; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+    }
+
+    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
+
+    // Load via compaction-eligible path (will not actually compact since threshold is default)
+    SymbolList sl1{version_map_};
+    auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
+
+    // Load via direct path (no_compaction=true)
+    SymbolList sl2{version_map_};
+    auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
+
+    EXPECT_EQ(compaction_result, direct_result);
+    // 50 original + 10 new = 60. The remove_symbol journal entries are resolved
+    // as ADD because the version map still shows those symbols as existing.
+    EXPECT_EQ(direct_result.size(), 60u);
+}
+
 struct SymbolListRace : SymbolListSuite, testing::WithParamInterface<std::tuple<char, bool, bool, bool>> {};
 
 TEST_P(SymbolListRace, Run) {
