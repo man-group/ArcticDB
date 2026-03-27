@@ -3920,6 +3920,84 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
+    def compact_data_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> VersionedItem:
+        """
+        Compact the data keys associated with the latest version of a symbol such that the number of rows in each
+        segment is close to rows_per_segment. After compaction, all segments will have a row count within 33% of
+        rows_per_segment.
+
+        This operation creates a new version, unless the data is already compacted.
+
+        The metadata from the version being compacted is maintained with the newly created version.
+
+        !!! warning
+            This API is under development and is subject to change. The API is not subject to semver and can change in
+            minor or patch releases.
+
+            String columns are not yet supported.
+
+            Dynamic schema is not yet supported.
+
+            Sparse data is not yet supported.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_version : bool, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
+            schema enabled, or the data is sparse
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> len(lib.read_index("sym"))
+        100
+        >>> lib.compact_data_experimental("sym")
+        >>> len(lib.read_index("sym"))
+        1
+        """
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+        cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
+        return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
+
+    # TODO: Mark these and Library methods as deprecated
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
