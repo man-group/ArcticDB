@@ -53,7 +53,11 @@ struct PeakHeapTracker {
 
     static size_t current_heap_bytes() {
 #ifdef __linux__
+#if __GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 33)
         return mallinfo2().uordblks;
+#else
+        return static_cast<size_t>(mallinfo().uordblks);
+#endif
 #else
         return 0;
 #endif
