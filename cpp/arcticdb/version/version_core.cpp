@@ -2877,7 +2877,8 @@ folly::Future<VersionedItem> merge_update_impl(
     const IndexDescriptor::Type index_type = pipeline_context->descriptor().index().type();
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             (index_type == IndexDescriptor::Type::TIMESTAMP &&
-             pipeline_context->descriptor().sorted() == SortedValue::ASCENDING) ||
+             (pipeline_context->descriptor().sorted() == SortedValue::ASCENDING &&
+              pipeline_context->descriptor().sorted() == SortedValue::UNKNOWN)) ||
                     index_type == IndexDescriptor::Type::ROWCOUNT,
             "Only timeseries ascending indexed target data is supported for merge update"
     );

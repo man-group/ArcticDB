@@ -1329,8 +1329,8 @@ def _validate_merge_update_inputs(target: pd.DataFrame, source: pd.DataFrame, on
     assert not isinstance(target.index, pd.MultiIndex), "MultiIndex is not supported"
     is_datetime = isinstance(target.index, pd.DatetimeIndex)
 
-    # Row-range indexed DataFrames must specify at least one column to match on,
-    # since there's no meaningful index to join on.
+    # Row-range indexed DataFrames must specify at least one column to match on, since there's no meaningful index to
+    # join on.
     if not is_datetime:
         assert on is not None and len(on) > 0, "Row range index requires at least one on column"
 
@@ -1354,9 +1354,8 @@ def _prepare_merge_frames(
 ) -> tuple:
     """Prepare copies of target and source for pd.merge.
 
-    Promotes the datetime index into a regular column if match_on_index is True.
-    Replaces None/NaN with a sentinel in object-typed key columns so pd.merge
-    treats them as equal.
+    Promotes the datetime index into a regular column if match_on_index is True. Replaces None/NaN with a sentinel in
+    object-typed key columns so pd.merge treats them as equal.
 
     Returns (target_merge, source_merge, merge_on).
     """
@@ -1364,17 +1363,16 @@ def _prepare_merge_frames(
     target_merge = target.copy(deep=True)
     source_merge = source.copy(deep=True)
 
-    # For datetime indexes, promote the index into a regular column so it can
-    # participate in pd.merge alongside any user-specified match columns.
+    # For datetime indexes, promote the index into a regular column so it can participate in pd.merge alongside any
+    # user-specified match columns.
     if match_on_index:
         idx_col = "__merge_index__"
         target_merge[idx_col] = target.index.values
         source_merge[idx_col] = source.index.values
         merge_on = [idx_col] + merge_on
 
-    # pd.merge treats NaN != NaN by default, so rows with None/NaN in key columns
-    # would never match. Replace them with a unique sentinel object so they compare
-    # as equal. The sentinel can never collide with real data values.
+    # pd.merge treats NaN != NaN by default, so rows with None/NaN in key columns would never match. Replace them with
+    # a unique sentinel object so they compare as equal. The sentinel can never collide with real data values.
     _na_sentinel = object()
     for c in merge_on:
         if target_merge[c].dtype == object:
@@ -1385,28 +1383,23 @@ def _prepare_merge_frames(
     return target_merge, source_merge, merge_on
 
 
-def _find_matching_rows(target_merge: pd.DataFrame, source_merge: pd.DataFrame, merge_on: List[str]) -> pd.DataFrame:
+def _find_matching_rows(target_merge: pd.DataFrame, source_merge: pd.DataFrame, on: List[str]) -> pd.DataFrame:
     """Find matching row pairs between target and source via an inner join.
 
-    Tags each frame with positional indices (__target_idx__, __source_idx__), then
-    performs an inner merge on the key columns. Only key + position columns are
-    included to avoid suffixed duplicates for shared value column names.
+    Tags each frame with positional indices (__target_idx__, __source_idx__), then performs an inner merge on the
+    columns in "on". Only key + position columns are included to avoid suffixed duplicates for shared value column
+    names.
 
     Returns the merged DataFrame with __target_idx__ and __source_idx__ columns.
     """
-    # Store original positional indices so we can trace back which rows matched
-    # after the merge reindexes the result.
+    # Store original positional indices so we can trace back which rows matched after the merge reindexes the result.
     target_merge["__target_idx__"] = np.arange(len(target_merge))
     source_merge["__source_idx__"] = np.arange(len(source_merge))
 
-    # Inner join on the key columns. Only rows present in both DataFrames are kept.
-    # We select only the key columns + position trackers to avoid creating suffixed
-    # duplicates for value columns that share names across target and source.
-    return pd.merge(
-        target_merge[merge_on + ["__target_idx__"]],
-        source_merge[merge_on + ["__source_idx__"]],
-        on=merge_on,
-    )
+    # Inner join on the columns in "on". Only rows present in both DataFrames are kept. We select only the columns in
+    # "on" and position trackers to avoid creating suffixed duplicates for value columns that share names across target
+    # and source.
+    return pd.merge(target_merge[on + ["__target_idx__"]], source_merge[on + ["__source_idx__"]], on=on)
 
 
 def _apply_updates(
@@ -1417,26 +1410,25 @@ def _apply_updates(
 ) -> pd.DataFrame:
     """Apply source values to target at matched positions and restore dtypes.
 
-    Validates that no target row is matched by multiple source rows, then overwrites
-    each non-key column at matched positions.
+    Validates that no target row is matched by multiple source rows, then overwrites each column not in "on" at matched
+    positions.
     """
     result = target.copy(deep=True)
 
     if not matching_rows.empty:
-        # Guard against ambiguous updates: if multiple source rows match the same
-        # target row, we can't decide which source values to use.
+        # Guard against ambiguous updates: if multiple source rows match the same target row, we can't decide which
+        # source values to use.
         dup_targets = matching_rows.groupby("__target_idx__")["__source_idx__"].nunique()
         multi = dup_targets[dup_targets > 1]
         if not multi.empty:
             raise ValueError(f"Multiple source rows match the same target row. Target row is {multi.index[0]}")
 
-        # Extract the parallel arrays of matched positions.
-        # target_indices[i] and source_indices[i] form a matched pair.
+        # Extract the parallel arrays of matched positions. target_indices[i] and source_indices[i] form a matched pair.
         target_indices = matching_rows["__target_idx__"].values
         source_indices = matching_rows["__source_idx__"].values
 
-        # Overwrite each non-key column in result at the matched target positions
-        # with the corresponding source values.
+        # Overwrite each column not in "on" column in result at the matched target positions with the corresponding
+        # source values.
         for col in update_columns:
             col_loc = result.columns.get_loc(col)
             result.iloc[target_indices, col_loc] = source.iloc[source_indices][col].values
@@ -1478,16 +1470,15 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     is_datetime = isinstance(target.index, pd.DatetimeIndex)
     on_set = set(on)
 
-    # Columns not in the match key are the ones we'll overwrite with source values.
+    # Columns not in "on" are the ones we'll overwrite with source values.
     update_columns = [col for col in target.columns if col not in on_set]
 
-    # If every column is a key column, there's nothing to update.
+    # If every column is in "on", there's nothing to update.
     if not update_columns:
         return target.copy(deep=True)
 
-    # If `on` contains duplicates (e.g. ["city", "city", "state"]), pd.merge would
-    # treat them as separate join keys and create suffixed columns (city_x, city_y).
-    # dict.fromkeys preserves order while removing duplicates.
+    # If `on` contains duplicates (e.g. ["city", "city", "state"]), pd.merge would treat them as separate join keys and
+    # create suffixed columns (city_x, city_y). dict.fromkeys preserves order while removing duplicates.
     merge_on = list(dict.fromkeys(on))
 
     target_merge, source_merge, merge_on = _prepare_merge_frames(target, source, merge_on, match_on_index=is_datetime)
@@ -1495,13 +1486,6 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     matching_rows = _find_matching_rows(target_merge, source_merge, merge_on)
 
     return _apply_updates(target, source, matching_rows, update_columns)
-
-
-def _values_equal(a, b):
-    """Comparison that treats None and np.nan as equal."""
-    if pd.isna(a) and pd.isna(b):
-        return True
-    return a == b
 
 
 def merge(

@@ -98,11 +98,11 @@ void rebuild_sequence_column_in_new_pool(
             }
         }
     } else {
-        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
-            if (is_a_string(row.value())) {
-                const std::string_view string_value = old_string_pool.get_const_view(row.value());
+        arcticdb::for_each<TDT>(target_column, [&](auto& value) {
+            if (is_a_string(value)) {
+                const std::string_view string_value = old_string_pool.get_const_view(value);
                 const OffsetString& new_offset = new_string_pool.get(string_value);
-                row.value() = new_offset.offset();
+                value = new_offset.offset();
             }
         });
     }
