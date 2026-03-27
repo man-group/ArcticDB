@@ -105,7 +105,7 @@ def test_read_from_time_now(in_memory_store_factory, clear_query_stats):
             lib.write(sym, make_df())
         qs.enable()
         qs.reset_stats()
-        lib.read(sym, as_of=pd.Timestamp.now())
+        lib.read(sym, as_of=pd.Timestamp.now("UTC"))
         stats = qs.get_query_stats()
         assert get_version_reads(stats) == 0
         assert get_version_ref_reads(stats) == 1
@@ -277,7 +277,7 @@ def test_from_time_then_downto_with_tombstone_all(in_memory_store_factory, clear
         lib.write(sym, make_df())
         lib.write(sym, make_df())
         # FROM_TIME(now) loads all version keys including tombstone_all
-        lib.read(sym, as_of=pd.Timestamp.now())
+        lib.read(sym, as_of=pd.Timestamp.now("UTC"))
         qs.enable()
         qs.reset_stats()
         # DOWNTO(2) - oldest live version after delete+rewrite
@@ -296,7 +296,7 @@ def test_from_time_then_downto_nonexistent_with_tombstone_all(in_memory_store_fa
         lib.delete(sym)
         lib.write(sym, make_df())
         lib.write(sym, make_df())
-        lib.read(sym, as_of=pd.Timestamp.now())
+        lib.read(sym, as_of=pd.Timestamp.now("UTC"))
         qs.enable()
         qs.reset_stats()
         # DOWNTO(0) - version 0 was deleted, but cache should know this
@@ -319,7 +319,7 @@ def test_alternating_reads_after_delete_rewrite(in_memory_store_factory, clear_q
         qs.enable()
         qs.reset_stats()
         # FROM_TIME loads all versions - writes already populated cache so no storage reads
-        lib.read(sym, as_of=pd.Timestamp.now())
+        lib.read(sym, as_of=pd.Timestamp.now("UTC"))
         stats = qs.get_query_stats()
         assert get_version_reads(stats) == 0
         assert get_version_ref_reads(stats) == 0
