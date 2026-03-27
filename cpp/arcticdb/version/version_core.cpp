@@ -2940,7 +2940,8 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         if (slices_and_keys.empty()) {
                             return folly::makeFuture(std::optional<VersionedItem>());
                         }
-                        std::unordered_set<RowRange> new_row_ranges_set;
+                        // Use an ordered set so we can binary search afterwards
+                        std::set<RowRange> new_row_ranges_set;
                         for (const auto& slice_and_key : slices_and_keys) {
                             new_row_ranges_set.insert(slice_and_key.slice().row_range);
                         }
@@ -2948,11 +2949,32 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                                 std::make_move_iterator(new_row_ranges_set.begin()),
                                 std::make_move_iterator(new_row_ranges_set.end())
                         );
+                        // When there is column slicing, this means we only binary search for the first_row once per
+                        // row slice in the original data
+                        std::unordered_set<size_t> first_rows_to_keep;
                         for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
-                            if (ranges::none_of(new_row_ranges, [&slice_and_key](const RowRange& row_range) {
-                                    return row_range.contains(slice_and_key.slice().row_range.first);
-                                })) {
+                            auto first_row = slice_and_key.slice().row_range.first;
+                            if (first_rows_to_keep.contains(first_row)) {
                                 slices_and_keys.emplace_back(std::move(slice_and_key));
+                            } else {
+                                auto begin = new_row_ranges.cbegin();
+                                auto end = new_row_ranges.cend();
+                                auto mid = begin + std::distance(begin, end) / 2;
+                                while (begin != end) {
+                                    if (mid->contains(first_row)) {
+                                        break;
+                                    } else if (first_row < mid->first) {
+                                        end = mid;
+                                        mid = begin + std::distance(begin, end) / 2;
+                                    } else { // first_row >= mid->second
+                                        begin = std::next(mid);
+                                        mid = begin + std::distance(begin, end) / 2;
+                                    }
+                                }
+                                if (begin == end) {
+                                    slices_and_keys.emplace_back(std::move(slice_and_key));
+                                    first_rows_to_keep.emplace(first_row);
+                                }
                             }
                         }
                         ranges::sort(slices_and_keys);
