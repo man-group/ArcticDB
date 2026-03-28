@@ -4022,15 +4022,10 @@ class NativeVersionStore:
         )
 
         result = self.version_store.defragment_symbol_data(symbol, segment_size, prune_previous_version)
-        return VersionedItem(
-            symbol=result.symbol,
-            library=self._library.library_path,
-            version=result.version,
-            metadata=None,
-            data=None,
-            host=self.env,
-            timestamp=result.timestamp,
-        )
+        version_query = self._get_version_query(result.version)
+        _, udm = self.version_store.read_metadata(symbol, version_query)
+        meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
+        return self._convert_thin_cxx_item_to_python(result, meta)
 
     def library(self):
         return self._library

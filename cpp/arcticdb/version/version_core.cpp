@@ -2620,13 +2620,14 @@ VersionedItem defragment_symbol_data_impl(
     return util::variant_match(
             std::move(result),
             [&slices, &pre_defragmentation_info, &store](CompactionWrittenKeys&& written_keys) -> VersionedItem {
+                const auto& user_meta_ptr = pre_defragmentation_info.pipeline_context->user_meta_;
                 return collate_and_write(
                         store,
                         pre_defragmentation_info.pipeline_context,
                         slices,
                         std::move(written_keys),
                         pre_defragmentation_info.append_after.value(),
-                        std::nullopt
+                        user_meta_ptr ? std::make_optional(*user_meta_ptr) : std::nullopt
                 );
             },
             [](Error&& error) -> VersionedItem {
