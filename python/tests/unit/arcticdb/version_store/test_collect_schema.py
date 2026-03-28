@@ -8,9 +8,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
-import polars as pl
 import pytest
+
+import polars as pl
 
 from arcticdb_ext.exceptions import KeyNotFoundException
 from arcticdb.exceptions import SchemaException
@@ -21,6 +21,7 @@ from arcticdb.util.test import assert_frame_equal_with_arrow, config_context
 
 @pytest.mark.parametrize("num_rows", [0, 1])
 def test_collect_schema_basic(lmdb_library, num_rows):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
@@ -48,6 +49,7 @@ def test_collect_schema_basic(lmdb_library, num_rows):
 
 
 def test_collect_schema_as_of(lmdb_library):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
@@ -64,6 +66,7 @@ def test_collect_schema_as_of(lmdb_library):
 
 
 def test_collect_schema_while_versions_being_added(lmdb_library):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
@@ -132,6 +135,7 @@ def test_collect_schema_multiindex(lmdb_library):
 
 
 def test_collect_schema_string_types(lmdb_library):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
@@ -167,6 +171,7 @@ def test_collect_schema_string_types(lmdb_library):
 
 
 def test_collect_schema_column_filtering(lmdb_library):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()
@@ -211,6 +216,7 @@ def test_collect_schema_timeseries(lmdb_library):
 
 
 def test_collect_schema_with_query(lmdb_library):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_library
     lib._nvs.set_output_format(OutputFormat.POLARS)
     lib._nvs._set_allow_arrow_input()

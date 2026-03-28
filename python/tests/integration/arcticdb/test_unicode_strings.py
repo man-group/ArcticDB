@@ -5,7 +5,6 @@ from pandas.testing import assert_frame_equal
 import pandas as pd
 import numpy as np
 
-from arcticdb.dependencies import pyarrow as pa
 from arcticdb.options import OutputFormat
 from arcticdb.util.arrow import cast_string_columns
 from arcticdb import QueryBuilder
@@ -23,6 +22,7 @@ def create_dataframe(strings):
 
 
 def test_fixed_width_blns(lmdb_version_store, any_arrow_string_format):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
@@ -38,6 +38,7 @@ def test_fixed_width_blns(lmdb_version_store, any_arrow_string_format):
 
 
 def test_write_blns(lmdb_version_store, any_arrow_string_format):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
@@ -56,6 +57,7 @@ def test_write_blns(lmdb_version_store, any_arrow_string_format):
 
 
 def test_append_blns(lmdb_version_store, any_arrow_string_format):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
@@ -81,6 +83,7 @@ def test_append_blns(lmdb_version_store, any_arrow_string_format):
 
 
 def test_update_blns(lmdb_version_store, any_arrow_string_format):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
@@ -109,6 +112,7 @@ def test_update_blns(lmdb_version_store, any_arrow_string_format):
 
 
 def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()

@@ -8,7 +8,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 
 from arcticdb.exceptions import InternalException, NormalizationException
@@ -16,6 +15,7 @@ from arcticdb.util.test import assert_frame_equal
 
 
 def test_write_arrow_read_pandas_no_index(lmdb_version_store_arrow):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store_arrow
     sym = "test_write_arrow_read_pandas_no_index"
     table = pa.table({"col0": pa.array([0, 1], pa.int64()), "col1": pa.array(["a", "bb"], pa.string())})
@@ -27,6 +27,7 @@ def test_write_arrow_read_pandas_no_index(lmdb_version_store_arrow):
 
 
 def test_write_arrow_read_pandas_with_index(lmdb_version_store_arrow):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store_arrow
     sym = "test_write_arrow_read_pandas_with_index"
     table = pa.table(
@@ -61,6 +62,7 @@ def test_write_pandas_df_with_specified_index_column(lmdb_version_store_v1):
 
 
 def test_append_arrow_with_pandas(lmdb_version_store_arrow):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store_arrow
     sym = "test_append_arrow_with_pandas"
     df = pd.DataFrame({"col1": np.arange(2, dtype=np.int64), "col2": np.arange(2, dtype=np.float32)})
@@ -78,6 +80,7 @@ def test_append_arrow_with_pandas(lmdb_version_store_arrow):
 
 
 def test_update_arrow_with_pandas(lmdb_version_store_arrow):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store_arrow
     sym = "test_update_arrow_with_pandas"
     df = pd.DataFrame({"col1": np.arange(2, dtype=np.int64)}, index=pd.date_range("2025-01-01", periods=2))
