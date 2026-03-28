@@ -14,7 +14,7 @@ import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException, SchemaException
 from arcticdb_ext import set_config_int
-from arcticdb.util.test import random_integers, assert_frame_equal
+from arcticdb.util.test import random_integers, assert_frame_equal, config_context
 from arcticdb.config import set_log_level
 from arcticdb.util.test_utils import generate_random_numpy_array, supported_types_list
 from arcticdb.util.logger import get_logger
@@ -695,6 +695,22 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
     assert list(lmdb_version_store.list_versions(sym))[0]["version"] == 0
     with pytest.raises(InternalException):
         lmdb_version_store.defragment_symbol_data(sym)
+
+
+def test_defragment_preserves_metadata(sym, lmdb_version_store):
+    meta = {"key": "value", "number": 42}
+    df1 = pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2020-01-01", periods=2))
+    df2 = pd.DataFrame({"a": [3, 4]}, index=pd.date_range("2020-01-03", periods=2))
+
+    lmdb_version_store.write(sym, df1, metadata=meta)
+    lmdb_version_store.append(sym, df2)
+
+    with config_context("SymbolDataCompact.SegmentCount", 1):
+        assert lmdb_version_store.is_symbol_fragmented(sym)
+        versioned_item = lmdb_version_store.defragment_symbol_data(sym)
+
+    assert versioned_item.metadata == meta
+    assert lmdb_version_store.read_metadata(sym).metadata == meta
 
 
 @pytest.mark.parametrize(
