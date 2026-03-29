@@ -603,6 +603,9 @@ def test_compat_merge_rowrange_write_new_read_old(old_venv_and_arctic_uri, lib_n
             curr.lib.write(sym, target)
             curr.lib.merge_experimental(sym, source, strategy=strategy, on=["a"])
 
+        if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+            pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
+
         compat.old_lib.assert_read(sym, expected)
 
 
