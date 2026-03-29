@@ -19,10 +19,12 @@ struct IChunkedBufferRandomAccessor {
     template<class Base>
     struct Interface : Base {
         typename TDT::DataTypeTag::raw_type at(size_t idx) const { return folly::poly_call<0>(*this, idx); };
+        typename TDT::DataTypeTag::raw_type& operator[](size_t idx) { return *folly::poly_call<1>(*this, idx); };
+        typename TDT::DataTypeTag::raw_type* ptr_at(size_t idx) { return folly::poly_call<1>(*this, idx); };
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::at>;
+    using Members = folly::PolyMembers<&T::at, &T::ptr_at>;
 };
 
 template<typename TDT>
@@ -34,15 +36,15 @@ class ChunkedBufferSingleBlockAccessor {
 
   public:
     ChunkedBufferSingleBlockAccessor(ColumnData* parent) {
-        auto typed_block = parent->next<TDT>();
-        // Cache the base pointer of the block, as typed_block->data() has an if statement for internal vs external
-        base_ptr_ = reinterpret_cast<const RawType*>(typed_block->data());
+        // Get mutable pointer directly from the block rather than through TypedBlockData (which only exposes const)
+        base_ptr_ = reinterpret_cast<RawType*>(parent->buffer().blocks()[0]->data());
     }
 
     RawType at(size_t idx) const { return *(base_ptr_ + idx); }
+    RawType* ptr_at(size_t idx) { return base_ptr_ + idx; }
 
   private:
-    const RawType* base_ptr_;
+    RawType* base_ptr_;
 };
 
 template<typename TDT>
@@ -51,14 +53,17 @@ class ChunkedBufferRegularBlocksAccessor {
 
   public:
     ChunkedBufferRegularBlocksAccessor(ColumnData* parent) {
-        // Cache the base pointers of each block, as typed_block->data() has an if statement for internal vs external
-        base_ptrs_.reserve(parent->num_blocks());
-        while (auto typed_block = parent->next<TDT>()) {
-            base_ptrs_.emplace_back(reinterpret_cast<const RawType*>(typed_block->data()));
+        // Get mutable pointers directly from the blocks rather than through TypedBlockData (which only exposes const)
+        const auto& blocks = parent->buffer().blocks();
+        base_ptrs_.reserve(blocks.size());
+        for (const auto& block : blocks) {
+            base_ptrs_.emplace_back(reinterpret_cast<RawType*>(block->data()));
         }
     }
 
-    RawType at(size_t idx) const {
+    RawType at(size_t idx) const { return *const_cast<ChunkedBufferRegularBlocksAccessor*>(this)->ptr_at(idx); }
+
+    RawType* ptr_at(size_t idx) {
         // quot is the block index, rem is the offset within the block
         auto div = std::div(static_cast<long long>(idx), values_per_block_);
         ARCTICDB_DEBUG_CHECK(
@@ -66,12 +71,12 @@ class ChunkedBufferRegularBlocksAccessor {
                 div.quot < static_cast<long long>(base_ptrs_.size()),
                 "ColumnData::at called with out of bounds index"
         );
-        return *(base_ptrs_[div.quot] + div.rem);
+        return base_ptrs_[div.quot] + div.rem;
     }
 
   private:
     static constexpr auto values_per_block_ = BufferSize / sizeof(RawType);
-    std::vector<const RawType*> base_ptrs_;
+    std::vector<RawType*> base_ptrs_;
 };
 
 template<typename TDT>
@@ -81,12 +86,14 @@ class ChunkedBufferIrregularBlocksAccessor {
   public:
     ChunkedBufferIrregularBlocksAccessor(ColumnData* parent) : parent_(parent) {}
 
-    RawType at(size_t idx) const {
+    RawType at(size_t idx) const { return *const_cast<ChunkedBufferIrregularBlocksAccessor*>(this)->ptr_at(idx); }
+
+    RawType* ptr_at(size_t idx) {
         auto pos_bytes = idx * sizeof(RawType);
         auto block_and_offset = parent_->buffer().block_and_offset(pos_bytes);
         auto ptr = block_and_offset.block_->data();
         ptr += block_and_offset.offset_;
-        return *reinterpret_cast<const RawType*>(ptr);
+        return reinterpret_cast<RawType*>(ptr);
     }
 
   private:
@@ -109,7 +116,9 @@ class ColumnDataRandomAccessorSparse {
             chunked_buffer_random_accessor_ = ChunkedBufferIrregularBlocksAccessor<TDT>(parent);
         }
     }
-    RawType at(size_t idx) const {
+    RawType at(size_t idx) const { return *const_cast<ColumnDataRandomAccessorSparse*>(this)->ptr_at(idx); }
+
+    RawType* ptr_at(size_t idx) {
         ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
                 parent_->bit_vector(),
@@ -128,7 +137,7 @@ class ColumnDataRandomAccessorSparse {
         // This is the same as using rank_corrected, but we always require the idx bit to be true, so do the -1
         // ourselves for efficiency
         auto physical_offset = parent_->bit_vector()->rank(idx, bit_index_) - 1;
-        return chunked_buffer_random_accessor_.at(physical_offset);
+        return chunked_buffer_random_accessor_.ptr_at(physical_offset);
     }
 
   private:
@@ -153,6 +162,7 @@ class ColumnDataRandomAccessorDense {
         }
     }
     RawType at(size_t idx) const { return chunked_buffer_random_accessor_.at(idx); }
+    RawType* ptr_at(size_t idx) { return chunked_buffer_random_accessor_.ptr_at(idx); }
 
   private:
     ChunkedBufferRandomAccessor<TDT> chunked_buffer_random_accessor_;

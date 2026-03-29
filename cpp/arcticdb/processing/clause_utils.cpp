@@ -296,8 +296,8 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     }
     for (size_t idx = 0; idx < index_fields.size(); ++idx) {
         if (non_matching_name_indices.contains(idx)) {
-            // This is the same naming scheme used in _normalization.py for unnamed multiindex levels. Ensures that any
-            // subsequent processing that checks for columns of this format will continue to work
+            // This is the samsame naming scheme used in _normalization.py for unnamed multiindex levels. Ensures that
+            // any subsequent processing that checks for columns of this format will continue to work
             stream_desc.fields().add_field(
                     index_fields.at(idx).type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx)
             );
