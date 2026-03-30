@@ -6,16 +6,21 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import multiprocessing
+import sys
 import time
 from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 import pytest
 from arcticdb import Arctic
+from arcticdb_ext import set_config_int, unset_config_int
 
 from arcticdb.util.test import assert_frame_equal
 
 from tests.util.mark import SKIP_CONDA_MARK
+
+FORK_SUPPORTED = pytest.mark.skipif(sys.platform == "win32", reason="fork/forkserver not available on Windows")
 
 
 def df(symbol):
@@ -81,3 +86,29 @@ def test_parallel_reads_arctic(storage_name, request, lib_name):
         p.join()
     finally:
         ac.delete_library(lib_name)
+
+
+def _check_config_in_child(args):
+    """Worker function: verify ConfigsMap was propagated via pickle."""
+    store, key, expected = args
+    from arcticdb_ext import get_config_int
+    actual = get_config_int(key)
+    assert actual == expected, f"Config {key}: expected {expected}, got {actual}"
+
+
+@pytest.mark.parametrize("start_method", [
+    "spawn",
+    pytest.param("fork", marks=FORK_SUPPORTED),
+    pytest.param("forkserver", marks=FORK_SUPPORTED),
+])
+def test_configs_propagated_to_child_process(lmdb_version_store, start_method):
+    """ConfigsMap settings must survive spawn/forkserver process boundaries."""
+    set_config_int("TestPropagation", 12345)
+    try:
+        ctx = multiprocessing.get_context(start_method)
+        p = ctx.Pool(1)
+        p.map(_check_config_in_child, [(lmdb_version_store, "TestPropagation", 12345)])
+        p.close()
+        p.join()
+    finally:
+        unset_config_int("TestPropagation")
