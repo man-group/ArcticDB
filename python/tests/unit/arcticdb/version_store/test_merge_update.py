@@ -1449,20 +1449,6 @@ class TestMergeTimeseriesUpdateAndInsert:
         with pytest.raises(UserInputException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
-    class TestMergeMultiindex:
-        """Not implemented yet"""
-
-        def test_merge_not_implemented_with_multiindex_yet(self, lmdb_library, monkeypatch):
-            lib = lmdb_library
-            target = pd.DataFrame(
-                {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.MultiIndex.from_tuples([("A", 1), ("B", 2), ("C", 3)])
-            )
-            lib.write("sym", target)
-            source = pd.DataFrame({"a": [2], "b": [3.0]}, index=pd.MultiIndex.from_tuples([("A", 1)]))
-            monkeypatch.setattr(lib.__class__, "merge_experimental", raise_wrapper(UserInputException), raising=False)
-            with pytest.raises(UserInputException):
-                lib.merge_experimental("sym", source)
-
 
 @pytest.mark.parametrize(
     "strategy",
@@ -1768,3 +1754,96 @@ class TestMergeRowrangeUpdate:
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+
+class TestMergeMultiindexUpdate:
+    """MultiIndex with datetime first level behaves like datetime-indexed merge.
+    MultiIndex without datetime first level behaves like row-range-indexed merge."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+
+    def test_datetime_first_level(self, lmdb_library):
+        lib = lmdb_library
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+        lib.write("sym", target)
+
+        source_dates = pd.to_datetime(["2024-01-02"])
+        source_idx = pd.MultiIndex.from_arrays([source_dates, ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+
+        # 2024-01-02 matches: cat and val updated from source
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["date", "cat"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_non_datetime_first_level(self, lmdb_library):
+        lib = lmdb_library
+        idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 20, 30], "val": [1.0, 2.0, 3.0]}, index=idx)
+        lib.write("sym", target)
+
+        source_idx = pd.MultiIndex.from_arrays([["X"], [99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [20], "val": [20.0]}, index=source_idx)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["key"])
+
+        # key=20 matches row 1. cat, num, val updated from source
+        expected_idx = pd.MultiIndex.from_arrays([["A", "X", "C"], [1, 99, 3]], names=["cat", "num"])
+        expected = pd.DataFrame({"key": [10, 20, 30], "val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_repeated_names_in_multiindex_levels(self, lmdb_library):
+        """Two MultiIndex levels share the same name."""
+        lib = lmdb_library
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["x", "x"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+        lib.write("sym", target)
+
+        source_dates = pd.to_datetime(["2024-01-02"])
+        source_idx = pd.MultiIndex.from_arrays([source_dates, ["X"]], names=["x", "x"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["x", "x"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_index_level_name_matches_column_name(self, lmdb_library):
+        """A MultiIndex level has the same name as a data column."""
+        lib = lmdb_library
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["date", "val"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+        lib.write("sym", target)
+
+        source_dates = pd.to_datetime(["2024-01-02"])
+        source_idx = pd.MultiIndex.from_arrays([source_dates, ["X"]], names=["date", "val"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+
+        # Index level "val" updated to "X", data column "val" updated to 20.0
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["date", "val"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_repeated_level_names_and_column_name_collision(self, lmdb_library):
+        """Both duplicate level names and a level name matching a data column name."""
+        lib = lmdb_library
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["val", "val"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+        lib.write("sym", target)
+
+        source_dates = pd.to_datetime(["2024-01-02"])
+        source_idx = pd.MultiIndex.from_arrays([source_dates, ["X"]], names=["val", "val"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+
+        # Level 0 "val" (datetime, match key), level 1 "val" updated to "X", data "val" updated to 20.0
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["val", "val"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(lib.read("sym").data, expected)
