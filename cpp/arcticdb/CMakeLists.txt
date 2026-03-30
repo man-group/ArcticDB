@@ -363,7 +363,6 @@ set(arcticdb_srcs
         stream/stream_utils.hpp
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
-        toolbox/storage_mover.hpp
         toolbox/query_stats.hpp
         util/allocator.hpp
         util/allocation_tracing.hpp
