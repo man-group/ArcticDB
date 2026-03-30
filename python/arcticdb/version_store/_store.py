@@ -41,9 +41,12 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext import (
     get_config_int,
-    get_all_config_int, set_all_config_int,
-    get_all_config_string, set_all_config_string,
-    get_all_config_double, set_all_config_double,
+    get_all_config_int,
+    set_all_config_int,
+    get_all_config_string,
+    set_all_config_string,
+    get_all_config_double,
+    set_all_config_double,
 )
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,

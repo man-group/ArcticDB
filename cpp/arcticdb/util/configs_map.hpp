@@ -44,10 +44,12 @@ class ConfigsMap {
                                                                                                                        \
     void unset_##LABEL(const std::string& label) { map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); }   \
                                                                                                                        \
-    const std::unordered_map<std::string, TYPE>& get_all_##LABEL() const { return map_of_##LABEL; }                     \
+    const std::unordered_map<std::string, TYPE>& get_all_##LABEL() const { return map_of_##LABEL; }                    \
                                                                                                                        \
-    void set_all_##LABEL(const std::unordered_map<std::string, TYPE>& entries) {                                        \
-        for (const auto& [k, v] : entries) { map_of_##LABEL[k] = v; }                                                  \
+    void set_all_##LABEL(const std::unordered_map<std::string, TYPE>& entries) {                                       \
+        for (const auto& [k, v] : entries) {                                                                           \
+            map_of_##LABEL[k] = v;                                                                                     \
+        }                                                                                                              \
     }
 
     // Also update python_module.cpp::register_configs_map_api() if below is changed:
