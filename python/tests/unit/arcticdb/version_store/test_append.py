@@ -703,7 +703,7 @@ def test_defragment_preserves_metadata(sym, lmdb_version_store):
     df2 = pd.DataFrame({"a": [3, 4]}, index=pd.date_range("2020-01-03", periods=2))
 
     lmdb_version_store.write(sym, df1, metadata=meta)
-    lmdb_version_store.append(sym, df2)
+    lmdb_version_store.append(sym, df2, metadata=meta)
 
     with config_context("SymbolDataCompact.SegmentCount", 1):
         assert lmdb_version_store.is_symbol_fragmented(sym)
