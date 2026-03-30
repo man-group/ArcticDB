@@ -582,6 +582,9 @@ jobs:
         if: matrix.os == 'linux'
         uses: ./.github/actions/install_mongodb
 
+      - name: Install zs3 (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
+
       - name: Install the wheel and dependencies
         run: |
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV

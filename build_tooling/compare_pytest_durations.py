@@ -38,24 +38,26 @@ def load_df(lib, symbol):
     return pl.from_pandas(pdf)
 
 
-def compare(current_df, master_df, threshold_pct):
-    """Return a DataFrame of tests whose duration diverged by more than threshold_pct."""
+def build_full_comparison(current_df, master_df):
+    """Join current and master on test identity and compute pct_change for every test."""
     join_keys = ["test_name", "python_version", "test_type", "cache_type"]
 
-    # Keep only passed tests – skipped/errored durations are meaningless.
     cur = current_df.filter(pl.col("status") == "passed").select(join_keys + ["time"])
     mst = master_df.filter(pl.col("status") == "passed").select(join_keys + ["time"])
 
-    diverged = (
+    return (
         cur.join(mst, on=join_keys, suffix="_master")
         .filter(pl.col("time_master") > 0)
         .with_columns(
             ((pl.col("time") - pl.col("time_master")) / pl.col("time_master") * 100).alias("pct_change")
         )
-        .filter(pl.col("pct_change").abs() > threshold_pct)
         .sort("pct_change", descending=True)
     )
-    return diverged
+
+
+def filter_diverged(full_comparison, threshold_pct):
+    """Return only the tests whose duration diverged by more than threshold_pct."""
+    return full_comparison.filter(pl.col("pct_change").abs() > threshold_pct)
 
 
 def format_report(diverged, master_symbol, threshold_pct):
@@ -132,7 +134,16 @@ def main(run_id, threshold, output):
     current_df = load_df(lib, current_symbol)
     master_df = load_df(lib, master_symbol)
 
-    diverged = compare(current_df, master_df, threshold)
+    full = build_full_comparison(current_df, master_df)
+
+    print("=" * 80)
+    print("Full duration comparison (all tests)")
+    print("=" * 80)
+    with pl.Config(tbl_rows=-1, tbl_cols=-1, fmt_str_lengths=80):
+        print(full)
+    print()
+
+    diverged = filter_diverged(full, threshold)
     report = format_report(diverged, master_symbol, threshold)
     print(report)
 
@@ -140,7 +151,8 @@ def main(run_id, threshold, output):
         Path(output).write_text(report)
         print(f"\nReport written to {output}")
 
-    if not diverged.is_empty():
+    slower = diverged.filter(pl.col("pct_change") > 0)
+    if not slower.is_empty():
         sys.exit(1)
 
 
