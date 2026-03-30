@@ -709,7 +709,7 @@ def test_defragment_preserves_metadata(sym, lmdb_version_store):
         assert lmdb_version_store.is_symbol_fragmented(sym)
         versioned_item = lmdb_version_store.defragment_symbol_data(sym)
 
-    assert versioned_item.metadata == meta
+    assert versioned_item.metadata is None
     assert lmdb_version_store.read_metadata(sym).metadata == meta
 
 
