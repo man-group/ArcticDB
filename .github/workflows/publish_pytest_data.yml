@@ -10,6 +10,7 @@ on:
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
 permissions:
   contents: read
+  pull-requests: write
 jobs:
   sync_pytest_xmls:
     runs-on: ubuntu-22.04
@@ -45,7 +46,7 @@ jobs:
         run: |
           apt update
           apt install -y git
-          python3 -m pip install arcticdb[Testing] click "pandas<3" pytz
+          python3 -m pip install arcticdb[Testing] click "pandas<3" pytz polars
 
       - name: Setup softlink for SSL
         shell: bash -el {0}
@@ -65,3 +66,31 @@ jobs:
         run: |
           ls -R ${{ env.ARTEFACT_PATH }}
           python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --use-github-actions
+
+      - name: Compare durations against master
+        id: compare
+        if: always()
+        continue-on-error: true
+        run: |
+          cd build_tooling
+          python3 compare_pytest_durations.py --run-id ${{ github.run_id }} --threshold 10 --output /tmp/duration_report.md
+
+      - name: Post duration report to PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f /tmp/duration_report.md ]; then
+            echo "No duration report found - skipping PR comment."
+            exit 0
+          fi
+          # Delete previous duration report comment if it exists
+          COMMENT_ID=$(gh api repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments \
+            --jq '.[] | select(.body | startswith("## Pytest Duration Report")) | .id' | head -1)
+          if [ -n "$COMMENT_ID" ]; then
+            gh api repos/${{ github.repository }}/issues/comments/$COMMENT_ID -X DELETE
+          fi
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body-file /tmp/duration_report.md
