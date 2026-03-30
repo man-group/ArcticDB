@@ -44,47 +44,45 @@ def test_set_config_int():
 
 def test_get_all_set_all_config_roundtrip():
     """Bulk export/import round-trip for all ConfigsMap types."""
-    # Set some values
     set_config_int("BulkTestInt_A", 100)
     set_config_int("BulkTestInt_B", 200)
     set_config_string("BulkTestStr_X", "hello")
     set_config_double("BulkTestDbl_Y", 3.14)
+    try:
+        # Export
+        all_ints = get_all_config_int()
+        all_strings = get_all_config_string()
+        all_doubles = get_all_config_double()
 
-    # Export
-    all_ints = get_all_config_int()
-    all_strings = get_all_config_string()
-    all_doubles = get_all_config_double()
+        assert all_ints["BULKTESTINT_A"] == 100
+        assert all_ints["BULKTESTINT_B"] == 200
+        assert all_strings["BULKTESTSTR_X"] == "hello"
+        assert abs(all_doubles["BULKTESTDBL_Y"] - 3.14) < 1e-9
 
-    assert all_ints["BULKTESTINT_A"] == 100
-    assert all_ints["BULKTESTINT_B"] == 200
-    assert all_strings["BULKTESTSTR_X"] == "hello"
-    assert abs(all_doubles["BULKTESTDBL_Y"] - 3.14) < 1e-9
+        # Clear the values we set
+        unset_config_int("BulkTestInt_A")
+        unset_config_int("BulkTestInt_B")
+        unset_config_string("BulkTestStr_X")
+        unset_config_double("BulkTestDbl_Y")
 
-    # Clear the values we set
-    unset_config_int("BulkTestInt_A")
-    unset_config_int("BulkTestInt_B")
-    unset_config_string("BulkTestStr_X")
-    unset_config_double("BulkTestDbl_Y")
+        assert get_config_int("BulkTestInt_A") is None
+        assert get_config_string("BulkTestStr_X") is None
+        assert get_config_double("BulkTestDbl_Y") is None
 
-    assert get_config_int("BulkTestInt_A") is None
-    assert get_config_string("BulkTestStr_X") is None
-    assert get_config_double("BulkTestDbl_Y") is None
+        # Re-import from the saved snapshot
+        set_all_config_int(all_ints)
+        set_all_config_string(all_strings)
+        set_all_config_double(all_doubles)
 
-    # Re-import from the saved snapshot
-    set_all_config_int(all_ints)
-    set_all_config_string(all_strings)
-    set_all_config_double(all_doubles)
-
-    assert get_config_int("BulkTestInt_A") == 100
-    assert get_config_int("BulkTestInt_B") == 200
-    assert get_config_string("BulkTestStr_X") == "hello"
-    assert abs(get_config_double("BulkTestDbl_Y") - 3.14) < 1e-9
-
-    # Cleanup
-    unset_config_int("BulkTestInt_A")
-    unset_config_int("BulkTestInt_B")
-    unset_config_string("BulkTestStr_X")
-    unset_config_double("BulkTestDbl_Y")
+        assert get_config_int("BulkTestInt_A") == 100
+        assert get_config_int("BulkTestInt_B") == 200
+        assert get_config_string("BulkTestStr_X") == "hello"
+        assert abs(get_config_double("BulkTestDbl_Y") - 3.14) < 1e-9
+    finally:
+        unset_config_int("BulkTestInt_A")
+        unset_config_int("BulkTestInt_B")
+        unset_config_string("BulkTestStr_X")
+        unset_config_double("BulkTestDbl_Y")
 
 
 def test_config_preserved_in_pickle_roundtrip(version_store_factory):

@@ -485,6 +485,10 @@ class NativeVersionStore:
     def __setstate__(self, state):
         # Restore ConfigsMap before any library creation so that
         # settings like AWS.LogLevel are available when S3ApiInstance initializes.
+        # Note: this merges into the process-wide ConfigsMap singleton rather than
+        # replacing it, which is the desired behaviour for spawn/forkserver (where the
+        # child starts with an empty map). In the same process a loads() call will
+        # overwrite any keys present in the snapshot.
         configs = state.get("configs_map")
         if configs:
             set_all_config_int(configs.get("int", {}))

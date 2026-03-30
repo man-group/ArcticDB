@@ -101,12 +101,11 @@ def _check_config_in_child(args):
     "start_method",
     [
         "spawn",
-        pytest.param("fork", marks=FORK_SUPPORTED),
         pytest.param("forkserver", marks=FORK_SUPPORTED),
     ],
 )
 def test_configs_propagated_to_child_process(lmdb_version_store, start_method):
-    """ConfigsMap settings must survive spawn/forkserver process boundaries."""
+    """ConfigsMap settings must survive spawn/forkserver process boundaries via pickle."""
     set_config_int("TestPropagation", 12345)
     try:
         ctx = multiprocessing.get_context(start_method)

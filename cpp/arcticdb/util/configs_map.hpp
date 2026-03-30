@@ -48,7 +48,7 @@ class ConfigsMap {
                                                                                                                        \
     void set_all_##LABEL(const std::unordered_map<std::string, TYPE>& entries) {                                       \
         for (const auto& [k, v] : entries) {                                                                           \
-            map_of_##LABEL[k] = v;                                                                                     \
+            map_of_##LABEL[boost::to_upper_copy<std::string>(k)] = v;                                                  \
         }                                                                                                              \
     }
 
