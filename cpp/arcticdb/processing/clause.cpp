@@ -23,6 +23,7 @@
 #include <arcticdb/util/movable_priority_queue.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
@@ -344,6 +345,98 @@ auto map_column_values_to_rows(const ColumnWithStrings& column) {
         }
     });
     return target_values;
+}
+
+size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP || descriptor.field(0).name() != name,
+            "Column \"{}\" specified in the 'on' parameter cannot have the same name as the timestamp index column. "
+            "Descriptor: {}",
+            name,
+            descriptor
+    );
+    const std::string repetition_prefix = fmt::format("__col_{}__", name);
+    const std::string mangled_name = stream::mangled_name(name);
+    auto field_it = std::ranges::find_if(descriptor.fields(), [&](const Field& field) {
+        return field.name() == name || field.name() == mangled_name || field.name().starts_with(repetition_prefix);
+    });
+    if (field_it == descriptor.fields().end()) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Error while performing merge update with matching on columns. The \"on\" parameter contains a column "
+                "named \"{}\", but no such column exists in the following descriptor: {}",
+                name,
+                descriptor
+        );
+    }
+    if (field_it->name() == mangled_name) {
+        // Pandas multiindex and the column appears as a secondary index column of the multiindex
+        const auto name_or_repeated_it = std::find_if(field_it, descriptor.fields().end(), [&](const Field& field) {
+            return field.name().starts_with(repetition_prefix) || field.name() == name;
+        });
+        if (name_or_repeated_it != descriptor.fields().end()) {
+            if (name_or_repeated_it->name() == name) {
+                // The secondary index is mangled but the data column is unchanged
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        "Error while performing merge update with matching on columns. Column \"{}\" specified in the "
+                        "'on' parameter matches both a data column and an a secondary multiindex index column name. "
+                        "Descriptor: {}",
+                        name,
+                        descriptor
+                );
+            } else {
+                // When the primary index is not datetime index the name of the primary index in the descriptor is not
+                // changed, but any data column with the same name would get "__col_" prefix
+                std::string_view repetition_index = name_or_repeated_it->name().substr(repetition_prefix.size());
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
+                        "column named \"{}\", but the column appears more than once in the descriptor: {}. Once as the "
+                        "primary index and once at position {} in the descriptor",
+                        name,
+                        descriptor,
+                        repetition_index
+                );
+            }
+        } else {
+            // Appears only in the secondary index, and there are no variants of this column.
+            return std::distance(descriptor.fields().begin(), field_it);
+        }
+    } else if (field_it->name() == name) {
+        const auto mangled_or_repeated_field_it =
+                std::find_if(field_it, descriptor.fields().end(), [&](const Field& field) {
+                    return field.name() == mangled_name || field.name().starts_with(repetition_prefix);
+                });
+        if (mangled_or_repeated_field_it == descriptor.fields().end()) {
+            return std::distance(descriptor.fields().begin(), field_it);
+        }
+        if (mangled_or_repeated_field_it->name() == mangled_name) {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
+                    "column named \"{}\" which appears both as a primary and a secondary index column in the "
+                    "descriptor: {}",
+                    name,
+                    descriptor
+            );
+        }
+        std::string_view repetition_index = mangled_or_repeated_field_it->name().substr(repetition_prefix.size());
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
+                "column named \"{}\" which appears as a primary index but and as a data column at position {} in the "
+                "descriptor: {}",
+                name,
+                repetition_index,
+                descriptor
+        );
+    } else {
+        std::string_view repetition_index = field_it->name().substr(repetition_prefix.size());
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
+                "column named \"{}\" which appears, more than once in the dataframe with descriptor {}, first "
+                "repetition at: {}",
+                name,
+                descriptor,
+                repetition_index
+        );
+    }
 }
 
 } // namespace
@@ -2188,13 +2281,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
     const std::string_view column_name = on_.front();
     std::vector<std::vector<size_t>> result;
     result.resize(source_->num_rows);
-    const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            source_field_position,
-            "Column '{}' specified in the 'on' parameter is not present in the source DataFrame",
-            column_name
-    );
-    const Field& source_field = source_descriptor.field(*source_field_position);
+    const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
+    const Field& source_field = source_descriptor.field(source_field_position);
     details::visit_type(source_field.type().data_type(), [&](auto source_field_dt) {
         using SourceTDT = ScalarTagType<std::decay_t<decltype(source_field_dt)>>;
         using SourceRawType = typename SourceTDT::DataTypeTag::raw_type;
@@ -2206,7 +2294,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                         std::conditional_t<is_sequence_type(SourceTDT::data_type()), PyObject* const, SourceRawType>;
                 auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(target_column);
                 const size_t column_position_in_source_tensors =
-                        *source_field_position - source_descriptor.index().field_count();
+                        source_field_position - source_descriptor.index().field_count();
                 std::span source_data(
                         static_cast<const SourceType*>(source_->field_tensors()[column_position_in_source_tensors].data(
                         )),
@@ -2492,18 +2580,14 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
     // been processed, on the assumption that if a column has one such string it will probably have many.
     std::optional<ScopedGILLock> scoped_gil_lock;
     for (std::string_view column_name : on) {
-        const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                source_field_position,
-                "Column '{}' specified in the 'on' parameter is not present in the source DataFrame",
-                column_name
-        );
+        const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 target_descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
                         target_descriptor.field(0).name() != column_name,
                 "Column '{}' specified in the 'on' parameter cannot have the same name as the timestamp index column"
         );
-        const Field& source_field = source_descriptor.field(*source_field_position);
+
+        const Field& source_field = source_descriptor.field(source_field_position);
         details::visit_type(source_field.type().data_type(), [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
             using SourceTDT = ScalarTagType<SourceDataTypeTag>;
             using SourceType = std::conditional_t<
@@ -2511,7 +2595,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                     PyObject* const*,
                     const typename SourceDataTypeTag::raw_type*>;
             const size_t column_position_in_source_tensors =
-                    *source_field_position - source_descriptor.index().field_count();
+                    source_field_position - source_descriptor.index().field_count();
             std::span source_data(
                     static_cast<SourceType>(source_tensors[column_position_in_source_tensors].data()) +
                             source_row_start,

@@ -1326,8 +1326,10 @@ def assert_schema_match(left: pd.DataFrame, right: pd.DataFrame):
 
 def _validate_merge_update_inputs(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[str]]) -> List[str]:
     """Validate inputs for merge_update and return the normalized `on` list."""
-    assert not isinstance(target.index, pd.MultiIndex), "MultiIndex is not supported"
-    is_datetime = isinstance(target.index, pd.DatetimeIndex)
+    if isinstance(target.index, pd.MultiIndex):
+        is_datetime = isinstance(target.index.get_level_values(0), pd.DatetimeIndex)
+    else:
+        is_datetime = isinstance(target.index, pd.DatetimeIndex)
 
     # Row-range indexed DataFrames must specify at least one column to match on, since there's no meaningful index to
     # join on.
@@ -1337,12 +1339,19 @@ def _validate_merge_update_inputs(target: pd.DataFrame, source: pd.DataFrame, on
     if on is None:
         on = []
 
-    # Verify all requested match columns exist in both DataFrames.
+    # Verify all requested match columns exist in both DataFrames. For MultiIndex, on columns may also reference index
+    # level names (since ArcticDB stores non-datetime index levels as regular columns internally).
     on_set = set(on)
-    missing_target = on_set - set(target.columns)
+    target_available = set(target.columns)
+    source_available = set(source.columns)
+    if isinstance(target.index, pd.MultiIndex):
+        target_available |= set(target.index.names)
+    if isinstance(source.index, pd.MultiIndex):
+        source_available |= set(source.index.names)
+    missing_target = on_set - target_available
     if missing_target:
         raise ValueError(f"Missing columns in target: {missing_target}")
-    missing_source = on_set - set(source.columns)
+    missing_source = on_set - source_available
     if missing_source:
         raise ValueError(f"Missing columns in source: {missing_source}")
 
@@ -1442,6 +1451,52 @@ def _apply_updates(
     return result
 
 
+def _merge_update_multiindex(target: pd.DataFrame, source: pd.DataFrame, on: List[str]) -> pd.DataFrame:
+    """Flatten MultiIndex, delegate to merge_update, reconstruct MultiIndex."""
+    index_names = list(target.index.names)
+    data_columns = list(target.columns)
+    overlap = [col for col in data_columns if col and col in index_names]
+    if len(overlap) > 0:
+        raise ValueError(
+            f"Cannot perform merge_update on a DataFrame with MultiIndex columns that overlap with index. Overlap: {overlap}"
+        )
+    is_datetime_level0 = isinstance(target.index.get_level_values(0), pd.DatetimeIndex)
+
+    # Save original dtypes for index levels being flattened.
+    original_index_dtypes = {i: target.index.get_level_values(i).dtype for i in range(len(index_names))}
+
+    # Flatten: keep level 0 as index if DatetimeIndex, reset the rest to regular columns.
+    levels_to_reset = list(range(1, len(index_names))) if is_datetime_level0 else list(range(len(index_names)))
+    flat_target = target.reset_index(level=levels_to_reset)
+    flat_source = source.reset_index(level=levels_to_reset)
+    flattened_cols = [c for c in flat_target.columns if c not in data_columns]
+
+    # Restore dtypes that reset_index may have changed.
+    for col, level in zip(flattened_cols, levels_to_reset):
+        expected = original_index_dtypes[level]
+        if flat_target[col].dtype != expected:
+            flat_target[col] = flat_target[col].astype(expected)
+        if flat_source[col].dtype != expected:
+            flat_source[col] = flat_source[col].astype(expected)
+
+    result = merge_update(flat_target, flat_source, on=on)
+
+    # Reconstruct MultiIndex, restoring dtypes that set_index may change.
+    result = result.set_index(flattened_cols, append=is_datetime_level0)
+    levels = []
+    for i in range(result.index.nlevels):
+        values = result.index.get_level_values(i)
+        if values.dtype != original_index_dtypes[i]:
+            values = values.astype(original_index_dtypes[i])
+        levels.append(values)
+    result.index = pd.MultiIndex.from_arrays(levels, names=index_names)
+
+    if len(result.columns) == 0:
+        result.columns = target.columns
+
+    return result
+
+
 def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[str]] = None) -> pd.DataFrame:
     """
     Special case of merge when the strategy is MergeStrategy(matched=update, not_matched_by_target=do_nothing)
@@ -1467,6 +1522,9 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     Pandas DataFrame representing the target updated with the values from source.
     """
     on = _validate_merge_update_inputs(target, source, on)
+
+    if isinstance(target.index, pd.MultiIndex):
+        return _merge_update_multiindex(target, source, on)
 
     is_datetime = isinstance(target.index, pd.DatetimeIndex)
     on_set = set(on)

@@ -358,6 +358,365 @@ class TestMergeOracleRowRange:
             merge(target, source, STRATEGY, on=["a"])
 
 
+class TestMergeOracleMultiIndexDatetime:
+    """MultiIndex with datetime first level — matching uses level-0 datetime, non-key levels are updated."""
+
+    def test_single_match(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-02"]), ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["date", "cat"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_no_match(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-05"]), ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [99.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        assert_frame_equal(result, target)
+
+    def test_all_match(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([dates, ["X", "Y"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [10.0, 20.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["X", "Y"]], names=["date", "cat"])
+        expected = pd.DataFrame({"val": [10.0, 20.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_empty_source(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [pd.DatetimeIndex([], dtype="datetime64[ns]"), pd.Index([], dtype="object")], names=["date", "cat"]
+        )
+        source = pd.DataFrame({"val": pd.array([], dtype="float64")}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        assert_frame_equal(result, target)
+
+    def test_empty_target(self):
+        target_idx = pd.MultiIndex.from_arrays(
+            [pd.DatetimeIndex([], dtype="datetime64[ns]"), pd.Index([], dtype="object")], names=["date", "cat"]
+        )
+        target = pd.DataFrame({"val": pd.array([], dtype="float64")}, index=target_idx)
+
+        dates = pd.to_datetime(["2024-01-01"])
+        source_idx = pd.MultiIndex.from_arrays([dates, ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [10.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        assert_frame_equal(result, target)
+
+    def test_on_data_column_not_in_index(self):
+        """on references a regular data column — index levels are updated on match."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["a", "b", "c"]], names=["date", "cat"])
+        target = pd.DataFrame({"key": [1, 2, 3], "val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-02", "2024-01-03"]), ["X", "Y"]], names=["date", "cat"]
+        )
+        source = pd.DataFrame({"key": [2, 99], "val": [20.0, 30.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["key"])
+        # Row 1 matches (date + key=2), row 2 does not (key=3 vs 99)
+        # cat index level IS updated because it's not in on
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["a", "X", "c"]], names=["date", "cat"])
+        expected = pd.DataFrame({"key": [1, 2, 3], "val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_on_index_level(self):
+        """on references an index level name — that level is used for matching and preserved."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["a", "b", "c"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-02", "2024-01-03"]), ["b", "WRONG"]], names=["date", "cat"]
+        )
+        source = pd.DataFrame({"val": [20.0, 30.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["cat"])
+        # Row 1 matches (date + cat="b"), row 2 does not (cat="c" vs "WRONG")
+        # cat index level is NOT updated because it's in on
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["a", "b", "c"]], names=["date", "cat"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_three_levels(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"], [1, 2, 3]], names=["date", "cat", "num"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-02"]), ["X"], [99]], names=["date", "cat", "num"]
+        )
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"], [1, 99, 3]], names=["date", "cat", "num"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_duplicate_datetime_one_source_matches_multiple_targets(self):
+        dates = pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-01"]), ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [99.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["X", "X", "C"]], names=["date", "cat"])
+        expected = pd.DataFrame({"val": [99.0, 99.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_multiple_source_rows_match_same_target_raises(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+
+        source_dates = pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")])
+        source_idx = pd.MultiIndex.from_arrays([source_dates, ["X", "Y"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [10.0, 20.0]}, index=source_idx)
+
+        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+            merge(target, source, STRATEGY)
+
+    def test_repeated_level_names(self):
+        """Two MultiIndex levels share the same name."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["x", "x"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-02"]), ["X"]], names=["x", "x"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["x", "x"])
+        expected = pd.DataFrame({"val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_level_name_matches_column_name_raises(self):
+        """A MultiIndex level has the same name as a data column — oracle cannot flatten unambiguously."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["date", "val"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-02"]), ["X"]], names=["date", "val"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+
+        with pytest.raises(ValueError, match="overlap"):
+            merge(target, source, STRATEGY)
+
+    def test_repeated_level_names_and_column_name_collision_raises(self):
+        """Both duplicate level names and a level name matching a data column name — oracle raises."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["val", "val"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-02"]), ["X"]], names=["val", "val"])
+        source = pd.DataFrame({"val": [20.0]}, index=source_idx)
+
+        with pytest.raises(ValueError, match="overlap"):
+            merge(target, source, STRATEGY)
+
+    def test_no_data_columns(self):
+        """MultiIndex with no data columns — only index levels exist."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        idx = pd.MultiIndex.from_arrays([dates, ["a", "b", "c"]], names=["date", "cat"])
+        target = pd.DataFrame(index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-02"]), ["X"]], names=["date", "cat"])
+        source = pd.DataFrame(index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["a", "X", "c"]], names=["date", "cat"])
+        expected = pd.DataFrame(index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_on_ambiguous_column_and_level_raises(self):
+        """When an on entry matches both a data column and an index level name, raise."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B"]], names=["date", "cat"])
+        target = pd.DataFrame({"cat": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-01"]), ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"cat": [99.0]}, index=source_idx)
+
+        with pytest.raises(ValueError, match="overlap"):
+            merge(target, source, STRATEGY, on=["cat"])
+
+    def test_result_is_deep_copy(self):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02"])
+        idx = pd.MultiIndex.from_arrays([dates, ["A", "B"]], names=["date", "cat"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([pd.to_datetime(["2024-01-01"]), ["X"]], names=["date", "cat"])
+        source = pd.DataFrame({"val": [99.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY)
+        result.iloc[0, 0] = 999
+        assert target.iloc[0, 0] == 1.0
+
+
+class TestMergeOracleMultiIndexNonDatetime:
+    """MultiIndex without datetime first level — behaves like row-range, requires on columns."""
+
+    def test_basic(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 20, 30], "val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X"], [99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [20], "val": [20.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["key"])
+        expected_idx = pd.MultiIndex.from_arrays([["A", "X", "C"], [1, 99, 3]], names=["cat", "num"])
+        expected = pd.DataFrame({"key": [10, 20, 30], "val": [1.0, 20.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_no_matches(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B"], [1, 2]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 20], "val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X"], [99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [99], "val": [99.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["key"])
+        assert_frame_equal(result, target)
+
+    def test_all_match(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B"], [1, 2]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 20], "val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [88, 99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [20, 10], "val": [200.0, 100.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["key"])
+        expected_idx = pd.MultiIndex.from_arrays([["Y", "X"], [99, 88]], names=["cat", "num"])
+        expected = pd.DataFrame({"key": [10, 20], "val": [100.0, 200.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_multiple_on_columns(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame({"k1": [10, 20, 30], "k2": ["x", "y", "z"], "val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [88, 99]], names=["cat", "num"])
+        source = pd.DataFrame({"k1": [20, 30], "k2": ["y", "wrong"], "val": [200.0, 300.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["k1", "k2"])
+        # Only row 1 matches (k1=20, k2="y")
+        expected_idx = pd.MultiIndex.from_arrays([["A", "X", "C"], [1, 88, 3]], names=["cat", "num"])
+        expected = pd.DataFrame({"k1": [10, 20, 30], "k2": ["x", "y", "z"], "val": [1.0, 200.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_on_data_column_not_in_index(self):
+        """on references a regular data column — index levels are updated on match."""
+        idx = pd.MultiIndex.from_arrays([["a", "b", "c"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 20, 30], "val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X"], [99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [20], "val": [200.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["key"])
+        # key=20 matches row 1. Index levels cat and num ARE updated
+        expected_idx = pd.MultiIndex.from_arrays([["a", "X", "c"], [1, 99, 3]], names=["cat", "num"])
+        expected = pd.DataFrame({"key": [10, 20, 30], "val": [1.0, 200.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_on_index_level(self):
+        """on references an index level name — that level is used for matching and preserved."""
+        idx = pd.MultiIndex.from_arrays([["a", "b", "c"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["b", "WRONG"], [99, 99]], names=["cat", "num"])
+        source = pd.DataFrame({"val": [200.0, 300.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["cat"])
+        # cat="b" matches row 1. cat is NOT updated (it's in on), but num and val ARE updated
+        expected_idx = pd.MultiIndex.from_arrays([["a", "b", "c"], [1, 99, 3]], names=["cat", "num"])
+        expected = pd.DataFrame({"val": [1.0, 200.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_no_data_columns(self):
+        """MultiIndex with no data columns — on must reference an index level."""
+        idx = pd.MultiIndex.from_arrays([["a", "b", "c"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame(index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["b"], [99]], names=["cat", "num"])
+        source = pd.DataFrame(index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["cat"])
+        # cat="b" matches row 1. cat preserved (in on), num updated 2→99
+        expected_idx = pd.MultiIndex.from_arrays([["a", "b", "c"], [1, 99, 3]], names=["cat", "num"])
+        expected = pd.DataFrame(index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_requires_on_column_none_raises(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B"], [1, 2]], names=["cat", "num"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+        source = pd.DataFrame({"val": [10.0]}, index=pd.MultiIndex.from_arrays([["X"], [9]], names=["cat", "num"]))
+        with pytest.raises(AssertionError):
+            merge(target, source, STRATEGY, on=None)
+
+    def test_requires_on_column_empty_list_raises(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B"], [1, 2]], names=["cat", "num"])
+        target = pd.DataFrame({"val": [1.0, 2.0]}, index=idx)
+        source = pd.DataFrame({"val": [10.0]}, index=pd.MultiIndex.from_arrays([["X"], [9]], names=["cat", "num"]))
+        with pytest.raises(AssertionError):
+            merge(target, source, STRATEGY, on=[])
+
+    def test_one_source_matches_multiple_targets(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 10, 30], "val": [1.0, 2.0, 3.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X"], [99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [10], "val": [99.0]}, index=source_idx)
+
+        result = merge(target, source, STRATEGY, on=["key"])
+        expected_idx = pd.MultiIndex.from_arrays([["X", "X", "C"], [99, 99, 3]], names=["cat", "num"])
+        expected = pd.DataFrame({"key": [10, 10, 30], "val": [99.0, 99.0, 3.0]}, index=expected_idx)
+        assert_frame_equal(result, expected)
+
+    def test_multiple_source_rows_match_same_target_raises(self):
+        idx = pd.MultiIndex.from_arrays([["A", "B"], [1, 2]], names=["cat", "num"])
+        target = pd.DataFrame({"key": [10, 20], "val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [88, 99]], names=["cat", "num"])
+        source = pd.DataFrame({"key": [20, 20], "val": [200.0, 300.0]}, index=source_idx)
+
+        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+            merge(target, source, STRATEGY, on=["key"])
+
+    def test_on_ambiguous_column_and_level_raises(self):
+        """When an on entry matches both a data column and an index level name, raise."""
+        idx = pd.MultiIndex.from_arrays([["A", "B"], [1, 2]], names=["cat", "num"])
+        target = pd.DataFrame({"cat": [10, 20], "val": [1.0, 2.0]}, index=idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["X", "Y"], [88, 99]], names=["cat", "num"])
+        source = pd.DataFrame({"cat": [10, 20], "val": [99.0, 88.0]}, index=source_idx)
+
+        with pytest.raises(ValueError, match="overlap"):
+            merge(target, source, STRATEGY, on=["cat"])
+
+
 class TestMergeOracleSchemaValidation:
 
     def test_schema_mismatch_columns_raises(self):
