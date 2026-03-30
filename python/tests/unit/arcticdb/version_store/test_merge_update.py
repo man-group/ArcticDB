@@ -44,14 +44,15 @@ def generic_merge_test(
 ):
     if isinstance(target, pd.DataFrame):
         target = [target]
-    for df in target:
+    lib.write(sym, target[0])
+    for df in target[1:]:
         lib.append(sym, df)
     lib.merge_experimental(sym, source, strategy=strategy, on=on)
 
     concat_target = pd.concat(target)
     # For row range indexes, reset the index after concat so that the expected DataFrame has a contiguous RangeIndex
-    # matching what ArcticDB returns on read.
-    if not isinstance(concat_target.index, pd.DatetimeIndex):
+    # matching what ArcticDB returns on read. DatetimeIndex and MultiIndex are preserved as-is.
+    if not isinstance(concat_target.index, (pd.DatetimeIndex, pd.MultiIndex)):
         concat_target = concat_target.reset_index(drop=True)
     expected = merge(concat_target, source, strategy, on=on)
     read_vit = lib.read(sym)
@@ -430,8 +431,7 @@ class TestMergeTimeseriesUpdate:
         source = pd.DataFrame({"a": [5], "b": [20.0], "c": ["B"]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
         generic_merge_test(lib, "sym", target, source, self.strategy)
 
-    @pytest.mark.skip(reason="Not implemented yet")
-    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, strategy):
+    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
@@ -696,8 +696,9 @@ class TestMergeTimeseriesUpdate:
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2))
         lib.write("sym", target)
         source = pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
-        with pytest.raises(UserInputException):
+        with pytest.raises(UserInputException) as exc_info:
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["nonexistent"])
+        assert '"nonexistent"' in str(exc_info.value)
 
     def test_on_with_repeated_index_values(self, lmdb_library):
         lib = lmdb_library
@@ -716,20 +717,21 @@ class TestMergeTimeseriesUpdate:
     def test_on_columns_with_repeated_name(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame(
-            [[1, 2], [3, 4]],
-            columns=["my_duplicated_column", "my_duplicated_column"],
+            [[1, 2, 3], [4, 5, 6]],
+            columns=["a", "my_duplicated_column", "my_duplicated_column"],
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
         )
         source = pd.DataFrame(
-            [[1, 2], [3, 4]],
-            columns=["my_duplicated_column", "my_duplicated_column"],
+            [[1, 2, 3], [4, 5, 6]],
+            columns=["a", "my_duplicated_column", "my_duplicated_column"],
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
         )
         lib.write("sym", target)
         with pytest.raises(UserInputException) as exc_info:
-            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
-            assert '"my_duplicated_column"' in str(exc_info.value)
-            assert "multiple" in str(exc_info.value)
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["my_duplicated_column"])
+        assert '"my_duplicated_column"' in str(exc_info.value)
+        assert "more than once" in str(exc_info.value)
+        assert "first repetition at: 1" in str(exc_info.value)
 
     @pytest.mark.parametrize("index_name", (None, "index_name"))
     def test_on_column_is_named_as_the_index(self, lmdb_library, index_name):
@@ -749,8 +751,8 @@ class TestMergeTimeseriesUpdate:
         lib.write("sym", target)
         with pytest.raises(UserInputException) as exc_info:
             lib.merge_experimental("sym", source, strategy=self.strategy, on=[repeated_column])
-            assert f"{index_name}" in str(exc_info.value)
-            assert "index column" in str(exc_info.value)
+        assert f'"{repeated_column}"' in str(exc_info.value)
+        assert "timestamp index column" in str(exc_info.value)
 
     def test_on_list_contains_the_same_column_twice(self, lmdb_library):
         lib = lmdb_library
@@ -1449,20 +1451,6 @@ class TestMergeTimeseriesUpdateAndInsert:
         with pytest.raises(UserInputException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
-    class TestMergeMultiindex:
-        """Not implemented yet"""
-
-        def test_merge_not_implemented_with_multiindex_yet(self, lmdb_library, monkeypatch):
-            lib = lmdb_library
-            target = pd.DataFrame(
-                {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.MultiIndex.from_tuples([("A", 1), ("B", 2), ("C", 3)])
-            )
-            lib.write("sym", target)
-            source = pd.DataFrame({"a": [2], "b": [3.0]}, index=pd.MultiIndex.from_tuples([("A", 1)]))
-            monkeypatch.setattr(lib.__class__, "merge_experimental", raise_wrapper(UserInputException), raising=False)
-            with pytest.raises(UserInputException):
-                lib.merge_experimental("sym", source)
-
 
 @pytest.mark.parametrize(
     "strategy",
@@ -1768,3 +1756,253 @@ class TestMergeRowrangeUpdate:
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+    def test_on_column_named_same_as_index(self, lmdb_library):
+        """Row-range index name is protobuf-only and does not collide with data columns.
+        on=["col"] should match the data column and work without error."""
+        lib = lmdb_library
+        target = pd.DataFrame({"col": [1, 2, 3], "val": [10.0, 20.0, 30.0]})
+        target.index.name = "col"
+        source = pd.DataFrame({"col": [2], "val": [99.0]})
+        source.index.name = "col"
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["col"])
+        result = lib.read("sym").data
+        expected = pd.DataFrame({"col": [1, 2, 3], "val": [10.0, 99.0, 30.0]})
+        expected.index.name = "col"
+        assert_frame_equal(result, expected)
+
+    def test_on_duplicate_data_columns_raises(self, lmdb_library):
+        """Two data columns with the same name: on=["col"] is ambiguous → UserInputException."""
+        lib = lmdb_library
+        target = pd.DataFrame(
+            np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]),
+            columns=["col", "col", "other"],
+        )
+        source = pd.DataFrame(np.array([[10.0, 20.0, 30.0]]), columns=["col", "col", "other"])
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["col"])
+
+
+class TestMergeMultiindexUpdate:
+    """MultiIndex with datetime first level behaves like datetime-indexed merge.
+    MultiIndex without datetime first level behaves like row-range-indexed merge."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+
+    # -- Duplicate "col" in on= should raise --------------------------------------------
+    #
+    # Not tested: cases where two or more non-first MI levels share the same name.
+    # ArcticDB stores all MI levels except the first as __idx__<name> internal columns
+    # (the first level becomes either the datetime index or the row-range index). When
+    # two non-first levels share a name, normalization creates duplicate __idx__<name>
+    # columns and write() itself fails with ArcticException. This applies to both
+    # datetime and rowrange. The only duplicate-level-name case that survives write is
+    # rowrange ["col","col"] (2 levels) — only the second level gets __idx__col.
+
+    @pytest.mark.parametrize(
+        "index_names, data_cols",
+        [
+            (["col", "col"], ["val"]),  # dup in levels
+            (["col", "col"], ["col"]),  # dup in levels and data
+        ],
+        ids=["dup_index", "dup_both"],
+    )
+    def test_duplicate_col_in_on_rowrange_dup_levels_raises(self, lmdb_library, index_names, data_cols):
+        """Rowrange 2-level MI with duplicate level names: write succeeds, merge raises."""
+        level_values = [["A", "B", "C"], [1, 2, 3]]
+        idx = pd.MultiIndex.from_arrays(level_values, names=index_names)
+        src_idx = pd.MultiIndex.from_arrays([[v[0]] for v in level_values], names=index_names)
+
+        target = pd.DataFrame({c: [1.0, 2.0, 3.0] for c in data_cols}, index=idx)
+        source = pd.DataFrame({c: [99.0] for c in data_cols}, index=src_idx)
+
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy, on=["col"])
+
+    @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
+    @pytest.mark.parametrize(
+        "index_names, data_cols",
+        [
+            (["col", "other"], ["col"]),  # first level name matches data col
+            (["cat", "col"], ["col"]),  # secondary level matches data col
+        ],
+        ids=["first_level-dup_data", "secondary_level-dup_data"],
+    )
+    def test_duplicate_col_in_on_level_matches_data_raises(self, lmdb_library, is_datetime, index_names, data_cols):
+        # For rowrange, the first MI level becomes the row-range index and C++ does not
+        # check its name against data columns. This is a known bug.
+        level_values = [["A", "B", "C"], [1, 2, 3], [10, 20, 30]]
+        on = []
+        if is_datetime:
+            on.append("date")
+            all_names = ["date"] + index_names
+            all_target_vals = [pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])] + level_values
+        else:
+            on.append("col")
+            all_names = index_names
+            all_target_vals = level_values
+        all_target_vals = all_target_vals[: len(all_names)]
+        all_source_vals = [[v[0]] for v in all_target_vals]
+
+        idx = pd.MultiIndex.from_arrays(all_target_vals, names=all_names)
+        src_idx = pd.MultiIndex.from_arrays(all_source_vals, names=all_names)
+
+        target = pd.DataFrame({c: [1.0, 2.0, 3.0] for c in data_cols}, index=idx)
+        source = pd.DataFrame({c: [99.0] for c in data_cols}, index=src_idx)
+
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            assert len(on) > 0
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy, on=on)
+
+    @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
+    def test_duplicate_col_in_on_dup_data_columns_raises(self, lmdb_library, is_datetime):
+        """Actual duplicate data column names (not deduped by dict comprehension)."""
+        if is_datetime:
+            idx = pd.MultiIndex.from_arrays(
+                [pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]), ["A", "B", "C"]],
+                names=["date", "cat"],
+            )
+            src_idx = pd.MultiIndex.from_arrays(
+                [pd.to_datetime(["2024-01-01"]), ["A"]],
+                names=["date", "cat"],
+            )
+        else:
+            idx = pd.MultiIndex.from_arrays(
+                [["A", "B", "C"], [1, 2, 3]],
+                names=["cat", "other"],
+            )
+            src_idx = pd.MultiIndex.from_arrays([["A"], [1]], names=["cat", "other"])
+        target = pd.DataFrame(
+            np.array([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+            columns=["col", "col"],
+            index=idx,
+        )
+        source = pd.DataFrame(
+            np.array([[99.0, 100.0]]),
+            columns=["col", "col"],
+            index=src_idx,
+        )
+
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy, on=["col"])
+
+    def test_duplicate_col_in_on_data_col_matches_datetime_first_level(self, lmdb_library):
+        """MI datetime first level "date" + data col "date": on=["date"] is ambiguous."""
+        idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]), ["A", "B", "C"]],
+            names=["date", "cat"],
+        )
+        src_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-01"]), ["A"]],
+            names=["date", "cat"],
+        )
+        target = pd.DataFrame({"date": [1.0, 2.0, 3.0], "val": [10.0, 20.0, 30.0]}, index=idx)
+        source = pd.DataFrame({"date": [99.0], "val": [50.0]}, index=src_idx)
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy, on=["date"])
+
+    def test_duplicate_col_in_on_nonfirst_level_matches_datetime_first_level(self, lmdb_library):
+        """MI datetime first level "date" + non-first level also "date": on=["date"] is ambiguous."""
+        idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"]), ["A", "B", "C"]],
+            names=["date", "date"],
+        )
+        src_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-01"]), ["A"]],
+            names=["date", "date"],
+        )
+        target = pd.DataFrame({"val": [1.0, 2.0, 3.0]}, index=idx)
+        source = pd.DataFrame({"val": [99.0]}, index=src_idx)
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy, on=["date"])
+
+    # -- No column name collisions: positive tests ----------------------------------------
+
+    @staticmethod
+    def _make_mi_frames(is_datetime):
+        """Build target and source DataFrames with a 3-level MultiIndex and 2 data columns.
+
+        index = [idx, a, b], data = [c, d]
+        When is_datetime=True, "idx" is a DatetimeIndex; otherwise it is categorical.
+
+        Source overlaps target on one index row to produce an update,
+        and has one non-matching row that should be ignored (strategy = do_nothing).
+        """
+        if is_datetime:
+            idx_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+            src_idx_vals = pd.to_datetime(["2024-01-02", "2024-01-05"])
+        else:
+            idx_vals = ["P", "Q", "R"]
+            src_idx_vals = ["Q", "Z"]
+        target_idx = pd.MultiIndex.from_arrays(
+            [idx_vals, ["A", "B", "C"], [1, 2, 3]], names=["idx", "a", "b"]
+        )
+        source_idx = pd.MultiIndex.from_arrays(
+            [src_idx_vals, ["B", "X"], [2, 9]], names=["idx", "a", "b"]
+        )
+        target = pd.DataFrame(
+            {"c": [1.0, 2.0, 3.0], "d": [10.0, 20.0, 30.0]}, index=target_idx
+        )
+        source = pd.DataFrame(
+            {"c": [99.0, 88.0], "d": [999.0, 888.0]}, index=source_idx
+        )
+        return target, source
+
+    def test_default_on_datetime(self, lmdb_library):
+        """on=None with datetime first level: match on all index levels."""
+        target, source = self._make_mi_frames(is_datetime=True)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy)
+
+    def test_default_on_rowrange_raises(self, lmdb_library):
+        """on=None with rowrange first level: requires explicit on parameter."""
+        target, source = self._make_mi_frames(is_datetime=False)
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy)
+
+    @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
+    def test_on_index_column(self, lmdb_library, is_datetime):
+        """on contains a column that is part of the multiindex (non-first level)."""
+        target, source = self._make_mi_frames(is_datetime)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, on=["a"])
+
+    @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
+    def test_on_data_column(self, lmdb_library, is_datetime):
+        """on contains a column that is a data column, not in the multiindex."""
+        target, source = self._make_mi_frames(is_datetime)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, on=["c"])
+
+    @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
+    def test_on_mixed_index_and_data_column(self, lmdb_library, is_datetime):
+        """on contains one multiindex level and one data column."""
+        target, source = self._make_mi_frames(is_datetime)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, on=["a", "c"])
+
+    def test_no_data_columns_datetime(self, lmdb_library):
+        """MI datetime with no data columns — only index levels, on=None."""
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["idx", "a"])
+        target = pd.DataFrame(index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-02", "2024-01-05"]), ["X", "Z"]], names=["idx", "a"]
+        )
+        source = pd.DataFrame(index=source_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy)
+
+    def test_no_data_columns_rowrange(self, lmdb_library):
+        """MI rowrange with no data columns — on must reference an index level."""
+        target_idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["a", "b"])
+        target = pd.DataFrame(index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["B", "X"], [2, 9]], names=["a", "b"])
+        source = pd.DataFrame(index=source_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, on=["a"])
