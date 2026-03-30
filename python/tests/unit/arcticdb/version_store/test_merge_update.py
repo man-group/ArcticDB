@@ -806,6 +806,18 @@ class TestMergeTimeseriesUpdate:
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
 
+    def test_two_segments_same_timestamp_repeated_source_values(self, lmdb_library):
+        lib = lmdb_library
+
+        t0 = pd.Timestamp("2000-01-01")
+        t1 = pd.Timestamp("2000-01-02")
+
+        df1 = pd.DataFrame({"a": [1], "b": [0.0]}, index=pd.DatetimeIndex([t1]))
+        df2 = pd.DataFrame({"a": [0], "b": [255.0]}, index=pd.DatetimeIndex([t1]))
+        source = pd.DataFrame({"a": [0, 1, 0], "b": [0.0, 0.0, 0.0]}, index=pd.DatetimeIndex([t0, t1, t1]))
+
+        generic_merge_test(lib, "sym", [df1, df2], source, self.strategy, on=["a"])
+
 
 class TestMergeTimeseriesInsert:
     @pytest.mark.parametrize(
