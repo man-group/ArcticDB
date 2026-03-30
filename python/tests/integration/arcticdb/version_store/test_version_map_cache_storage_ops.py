@@ -50,12 +50,9 @@ def get_version_ref_reads(stats):
 # =============================================================================
 # Each returns a ChainInfo with metadata about the created version chain.
 
-ChainInfo = namedtuple("ChainInfo", ["latest_version", 
-                                     "oldest_undeleted_version", 
-                                     "mid_version", 
-                                     "snapshot", 
-                                     "mid_ts", 
-                                     "total_versions"])
+ChainInfo = namedtuple(
+    "ChainInfo", ["latest_version", "oldest_undeleted_version", "mid_version", "snapshot", "mid_ts", "total_versions"]
+)
 
 
 def _ts_from_version_info(version_info):
@@ -597,6 +594,7 @@ def test_client_b_reloads_for_unknown_version(in_memory_store_factory, clear_que
 # Tests that a first read with one as_of type correctly populates (or doesn't
 # populate) the cache for a second read with a different as_of type.
 # Parametrized across all chain shapes.
+
 
 def _resolve_cross_as_of(label, chain_info):
     if label == "latest":
