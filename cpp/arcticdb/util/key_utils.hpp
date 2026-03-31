@@ -187,22 +187,47 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     // symbol. In that case all keys will be for the same symbol and we can use the less expensive to hash AtomKeyPacked
     // struct as rehashing when the set grows is expensive for AtomKeys. In case the keys are for different symbols
     // (e.g. when deleting a snapshot) AtomKey must be used as we need the symbol_id per key.
-    ankerl::unordered_dense::set<AtomKey> res;
-    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
     const StreamId& first_stream_id = keys.begin()->id();
     bool same_stream_id = true;
     for (const auto& index_key : keys) {
-        same_stream_id = first_stream_id == index_key.id();
+        if (first_stream_id != index_key.id()) {
+            same_stream_id = false;
+            break;
+        }
+    }
+
+    // Read all index keys in parallel
+    std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> read_futures;
+    std::vector<IndexTypeKey> read_keys;
+    read_futures.reserve(keys.size());
+    read_keys.reserve(keys.size());
+    for (const auto& index_key : keys) {
+        if (index_key.type() == KeyType::TABLE_INDEX || index_key.type() == KeyType::MULTI_KEY) {
+            read_keys.push_back(index_key);
+            read_futures.push_back(store->read(index_key, opts));
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "recurse_index_keys: expected index or multi-index key, received {}", index_key.type()
+            );
+        }
+    }
+
+    auto read_results = folly::collectAll(read_futures).get();
+
+    // Process results sequentially
+    ankerl::unordered_dense::set<AtomKey> res;
+    ankerl::unordered_dense::set<AtomKeyPacked> res_packed;
+    for (size_t i = 0; i < read_results.size(); ++i) {
+        const auto& index_key = read_keys[i];
         try {
+            auto segment = std::move(read_results[i]).value().second;
             if (index_key.type() == KeyType::MULTI_KEY) {
-                // recurse_index_key includes the input key in the returned set, remove this here
-                auto sub_keys = recurse_index_key(store, index_key);
-                sub_keys.erase(index_key);
+                auto sub_keys = recurse_segment(store, std::move(segment), std::nullopt);
                 for (auto&& key : sub_keys) {
                     res.emplace(std::move(key));
                 }
             } else if (index_key.type() == KeyType::TABLE_INDEX) {
-                KeySegment key_segment(store->read_sync(index_key, opts).second, SymbolStructure::SAME);
+                KeySegment key_segment(std::move(segment), SymbolStructure::SAME);
                 auto data_keys = key_segment.materialise();
                 util::variant_match(data_keys, [&]<typename KeyType>(std::vector<KeyType>& atom_keys) {
                     for (KeyType& key : atom_keys) {

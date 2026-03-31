@@ -1024,7 +1024,6 @@ folly::Future<folly::Unit> delete_trees_responsibly(
 ) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
-
     util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
@@ -1066,13 +1065,23 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
         {
             auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
+            std::vector<StreamId> stream_ids;
+            std::vector<folly::Future<std::shared_ptr<VersionMapEntry>>> reload_futures;
+            stream_ids.reserve(min_versions.size());
+            reload_futures.reserve(min_versions.size());
             for (const auto& min : min_versions) {
                 auto load_strategy =
                         load_type == LoadType::DOWNTO
                                 ? LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(min.second)}
                                 : LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY};
-                const auto entry = version_map->check_reload(store, min.first, load_strategy, __FUNCTION__);
-                entry_map.try_emplace(std::move(min.first), entry);
+                stream_ids.push_back(min.first);
+                reload_futures.push_back(
+                        async::submit_io_task(CheckReloadTask{store, version_map, min.first, load_strategy})
+                );
+            }
+            auto results = folly::collectAll(reload_futures).get();
+            for (size_t i = 0; i < results.size(); ++i) {
+                entry_map.try_emplace(std::move(stream_ids[i]), std::move(results[i]).value());
             }
         }
 
@@ -1161,24 +1170,13 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
         ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
 
-        // Delete any associated column stats keys first
-        remove_keys_fut = store->remove_keys(std::move(vks_column_stats), remove_opts)
-                                  .thenValue([store = store,
-                                              vks_to_delete = std::move(vks_to_delete),
-                                              remove_opts](auto&&) mutable {
-                                      log::version().debug("Column Stats keys deleted.");
-                                      return store->remove_keys(std::move(vks_to_delete), remove_opts);
-                                  })
-                                  .thenValue([store = store,
-                                              vks_data_to_delete = std::move(vks_data_to_delete),
-                                              remove_opts](auto&&) mutable {
-                                      log::version().debug("Index keys deleted.");
-                                      return store->remove_keys(std::move(vks_data_to_delete), remove_opts);
-                                  })
-                                  .thenValue([](auto&&) {
-                                      log::version().debug("Data keys deleted.");
-                                      return folly::Unit();
-                                  });
+        remove_keys_fut = folly::collectAll(
+                                  store->remove_keys(std::move(vks_column_stats), remove_opts),
+                                  store->remove_keys(std::move(vks_to_delete), remove_opts),
+                                  store->remove_keys(std::move(vks_data_to_delete), remove_opts)
+        )
+                                  .via(&async::io_executor())
+                                  .thenValue([](auto&&) { return folly::Unit(); });
     }
     return remove_keys_fut;
 }
