@@ -16,9 +16,7 @@ namespace arcticdb::pipelines {
 
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
-void InputFrame::set_segment(
-        SegmentInMemory&& seg, std::shared_ptr<std::vector<sparrow::record_batch>> arrow_buffer_owners
-) {
+void InputFrame::set_segment(SegmentInMemory&& seg, std::vector<sparrow::record_batch>&& arrow_buffer_owners) {
     num_rows = seg.row_count();
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
     if (norm_meta.experimental_arrow().has_index()) {

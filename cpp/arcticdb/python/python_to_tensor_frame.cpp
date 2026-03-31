@@ -343,13 +343,13 @@ void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>
     // Move the ArrowArray/ArrowSchema out of each RecordBatchData into owning sparrow record_batches.
     // sparrow::record_batch(ArrowArray&&, ArrowSchema&&) takes ownership and will decref the arrow buffers on
     // destruction.
-    auto sparrow_record_batches = std::make_shared<std::vector<sparrow::record_batch>>();
-    sparrow_record_batches->reserve(record_batches.size());
+    auto sparrow_record_batches = std::vector<sparrow::record_batch>();
+    sparrow_record_batches.reserve(record_batches.size());
     for (const auto& rbd : record_batches) {
-        sparrow_record_batches->emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
+        sparrow_record_batches.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
     auto [seg, index_column_position] = arrow_data_to_segment(
-            *sparrow_record_batches,
+            sparrow_record_batches,
             arrow_norm_metadata.has_index() ? arrow_norm_metadata.index_column_name() : std::optional<std::string>()
     );
     if (index_column_position.has_value()) {

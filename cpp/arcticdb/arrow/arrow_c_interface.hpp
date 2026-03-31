@@ -28,10 +28,10 @@ namespace arcticdb {
 //      the underlying PyArrow buffers.
 //   2. py_ndf_to_frame moves array_/schema_ into owning sparrow::record_batches via
 //      record_batch(ArrowArray&&, ArrowSchema&&). Sparrow takes ownership and will call
-//      release on destruction.
-//   3. The sparrow record batches are converted to a SegmentInMemory whose external blocks
-//      point into the ArrowArray buffers. InputFrame stores a reference to the sparrow
-//      record_batches to keep the buffers alive for the segment's lifetime.
+//      release (decref) on destruction.
+//   3. The sparrow record batches are used to construct a SegmentInMemory whose external blocks
+//      point into the ArrowArray buffers. InputFrame stores the sparrow record_batches
+//      to keep the buffers alive for the segment's lifetime.
 //   4. WriteToSegmentTask slices the InputFrame and writes each slice to storage.
 //   5. Once all slices are persisted the InputFrame is destroyed, sparrow record_batches are
 //      destroyed, calling release which decrefs the PyArrow buffers.
