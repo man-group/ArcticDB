@@ -90,7 +90,7 @@ def test_parallel_reads_arctic(storage_name, request, lib_name):
 
 def _check_config_in_child(args):
     """Worker function: verify ConfigsMap was propagated via pickle."""
-    store, key, expected = args
+    _store, key, expected = args
     from arcticdb_ext import get_config_int
 
     actual = get_config_int(key)
@@ -109,17 +109,15 @@ def test_configs_propagated_to_child_process(lmdb_version_store, start_method):
     set_config_int("TestPropagation", 12345)
     try:
         ctx = multiprocessing.get_context(start_method)
-        p = ctx.Pool(1)
-        p.map(_check_config_in_child, [(lmdb_version_store, "TestPropagation", 12345)])
-        p.close()
-        p.join()
+        with ctx.Pool(1) as p:
+            p.map(_check_config_in_child, [(lmdb_version_store, "TestPropagation", 12345)])
     finally:
         unset_config_int("TestPropagation")
 
 
 def _check_config_in_child_via_library(args):
     """Worker function: verify ConfigsMap was propagated via Library pickle."""
-    lib, key, expected = args
+    _lib, key, expected = args
     from arcticdb_ext import get_config_int
 
     actual = get_config_int(key)
@@ -138,9 +136,7 @@ def test_configs_propagated_to_child_process_via_library(lmdb_library, start_met
     set_config_int("TestLibPropagation", 67890)
     try:
         ctx = multiprocessing.get_context(start_method)
-        p = ctx.Pool(1)
-        p.map(_check_config_in_child_via_library, [(lmdb_library, "TestLibPropagation", 67890)])
-        p.close()
-        p.join()
+        with ctx.Pool(1) as p:
+            p.map(_check_config_in_child_via_library, [(lmdb_library, "TestLibPropagation", 67890)])
     finally:
         unset_config_int("TestLibPropagation")
