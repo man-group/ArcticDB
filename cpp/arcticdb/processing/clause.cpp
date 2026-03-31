@@ -2445,7 +2445,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
         // Optimizes the case of repeated index values. All matched rows corresponding to a particular index value must
         // be the same, so just copy the matched rows in case index values are repeated.
         while (++source_row < source_row_end && source_index[source_row] == source_ts) {
-            matched_rows[source_row - source_row_start] = matched_rows[source_row - 1];
+            const size_t source_row_offset = source_row - source_row_start;
+            matched_rows[source_row_offset] = matched_rows[source_row_offset - 1];
         }
     }
     return matched_rows;
