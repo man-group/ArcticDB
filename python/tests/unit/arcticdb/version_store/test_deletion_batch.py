@@ -18,7 +18,7 @@ ErrorCode
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_basic(basic_store):
+def test_batch_delete_versions_basic(basic_store, check_single_threaded):
     """Test basic functionality of batch_delete_versions with multiple symbols."""
     lib = basic_store
 
@@ -53,7 +53,7 @@ def test_batch_delete_versions_basic(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_with_snapshots(basic_store):
+def test_batch_delete_versions_with_snapshots(basic_store, check_single_threaded):
     """Test batch_delete_versions with snapshots."""
     lib = basic_store
 
@@ -86,7 +86,7 @@ def test_batch_delete_versions_with_snapshots(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_partial_symbols(basic_store):
+def test_batch_delete_versions_partial_symbols(basic_store, check_single_threaded):
     """Test batch_delete_versions with a subset of symbols."""
     lib = basic_store
 
@@ -131,7 +131,7 @@ def test_batch_delete_versions_partial_symbols(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_empty_input(basic_store):
+def test_batch_delete_versions_empty_input(basic_store, check_single_threaded):
     """Test batch_delete_versions with empty input lists."""
     lib = basic_store
 
@@ -168,7 +168,7 @@ def test_batch_delete_versions_empty_input(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_invalid_input(basic_store):
+def test_batch_delete_versions_invalid_input(basic_store, check_single_threaded):
     """Test batch_delete_versions with invalid inputs."""
     lib = basic_store
 
@@ -216,7 +216,7 @@ def test_batch_delete_versions_invalid_input(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_with_tombstones(basic_store):
+def test_batch_delete_versions_with_tombstones(basic_store, check_single_threaded):
     """Test batch_delete_versions with tombstone functionality."""
     lib = basic_store
 
