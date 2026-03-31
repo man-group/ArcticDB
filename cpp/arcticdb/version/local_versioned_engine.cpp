@@ -1554,6 +1554,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
                                 store(), version_map, index_key, std::move(stream_update_info.previous_index_key_)
                         }
                 )
+                        .via(&async::cpu_executor())
                         .thenValue([this, index_key](auto&& atom_key_vec) {
                             return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
                         });
