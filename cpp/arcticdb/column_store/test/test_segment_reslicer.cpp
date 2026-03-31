@@ -16,7 +16,6 @@ class SegmentReslicerDenseNumericStaticSchemaFixture : public testing::Test {};
 
 using test_types =
         ::testing::Types<bool, uint8_t, uint16_t, uint32_t, uint64_t, int8_t, int16_t, int32_t, int64_t, float, double>;
-// using test_types = ::testing::Types<bool>;
 
 TYPED_TEST_SUITE(SegmentReslicerDenseNumericStaticSchemaFixture, test_types);
 
@@ -85,7 +84,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
     std::vector<std::optional<std::shared_ptr<Column>>> input_columns;
     input_columns.emplace_back(std::make_shared<Column>(std::move(input_col)));
     uint64_t max_rows_per_slice{4};
-    uint64_t rows_in_second_slice{total_rows - max_rows_per_slice};
+    uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
     SegmentReslicer reslicer{max_rows_per_slice};
     SegmentReslicer::SlicingInfo slicing_info{total_rows, max_rows_per_slice};
     auto res = reslicer.reslice_dense_numeric_static_schema_columns(std::move(input_columns), slicing_info);
@@ -94,11 +93,11 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
     ASSERT_TRUE(res.back().has_value());
     auto& col_0 = *res.front();
     auto& col_1 = *res.back();
-    ASSERT_EQ(col_0.row_count(), max_rows_per_slice);
-    ASSERT_EQ(col_1.row_count(), rows_in_second_slice);
+    ASSERT_EQ(col_0.row_count(), rows_in_first_slice);
+    ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
     // This happens for the whole segment later in the real flow
-    col_0.set_row_data(max_rows_per_slice - 1);
-    col_1.set_row_data(rows_in_second_slice - 1);
+    col_0.set_row_data(rows_in_first_slice - 1);
+    col_1.set_row_data(max_rows_per_slice - 1);
     ASSERT_FALSE(col_0.is_sparse());
     ASSERT_FALSE(col_1.is_sparse());
     std::vector<RawType> expected_values = []() {
@@ -109,17 +108,17 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
         }
     }();
     for (size_t idx = 0; idx < total_rows; ++idx) {
-        auto opt_val = idx < max_rows_per_slice ? col_0.scalar_at<RawType>(idx)
-                                                : col_1.scalar_at<RawType>(idx - max_rows_per_slice);
+        auto opt_val = idx < rows_in_first_slice ? col_0.scalar_at<RawType>(idx)
+                                                 : col_1.scalar_at<RawType>(idx - rows_in_first_slice);
         ASSERT_TRUE(opt_val.has_value());
         ASSERT_EQ(*opt_val, expected_values.at(idx));
     }
-    ASSERT_EQ(col_0.buffer().bytes(), max_rows_per_slice * sizeof(RawType));
-    ASSERT_EQ(col_1.buffer().bytes(), rows_in_second_slice * sizeof(RawType));
+    ASSERT_EQ(col_0.buffer().bytes(), rows_in_first_slice * sizeof(RawType));
+    ASSERT_EQ(col_1.buffer().bytes(), max_rows_per_slice * sizeof(RawType));
     ASSERT_EQ(col_0.num_blocks(), 1);
     ASSERT_EQ(col_1.num_blocks(), 1);
-    ASSERT_EQ(col_0.buffer().blocks().front()->capacity(), max_rows_per_slice * sizeof(RawType));
-    ASSERT_EQ(col_1.buffer().blocks().front()->capacity(), rows_in_second_slice * sizeof(RawType));
+    ASSERT_EQ(col_0.buffer().blocks().front()->capacity(), rows_in_first_slice * sizeof(RawType));
+    ASSERT_EQ(col_1.buffer().blocks().front()->capacity(), max_rows_per_slice * sizeof(RawType));
 }
 
 TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) {

@@ -14,6 +14,7 @@
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 
 using namespace arcticdb;
 
@@ -24,7 +25,7 @@ class CompactDataFixture : public ::testing::Test {
         // selecting very interesting cases (i.e. ones where no compaction is required)
         const auto rows_per_segment = *rc::gen::inRange<uint64_t>(1, 1000);
         auto row_range_boundaries =
-                *rc::gen::unique<std::vector<uint64_t>>(rc::gen::inRange<uint64_t>(1, rows_per_segment));
+                *rc::gen::unique<std::vector<uint64_t>>(rc::gen::inRange<uint64_t>(1, 10 * rows_per_segment));
         row_range_boundaries.emplace_back(0);
         RC_PRE(row_range_boundaries.size() >= 2);
         std::ranges::sort(row_range_boundaries);
@@ -37,7 +38,6 @@ class CompactDataFixture : public ::testing::Test {
         clause = CompactDataClause{rows_per_segment};
         // If there are fewer total rows than min_rows_per_segment_ then everything will be combined into one
         min_rows_per_segment = std::min(clause->min_rows_per_segment_, row_range_boundaries.back());
-        max_rows_per_segment = clause->max_rows_per_segment_;
     }
 
     // Optional because the default constructor of CompactDataClause is deleted, but we cannot instantiate it until
@@ -45,7 +45,6 @@ class CompactDataFixture : public ::testing::Test {
     std::optional<CompactDataClause> clause;
     std::set<RowRange> row_ranges;
     uint64_t min_rows_per_segment;
-    uint64_t max_rows_per_segment;
 };
 
 RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureRowRanges, ()) {
@@ -53,9 +52,6 @@ RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureRowRanges, ()) {
     for (const auto& row_range : res) {
         const auto rows = row_range.diff();
         RC_ASSERT(rows >= min_rows_per_segment);
-        // This invariant guarantees that the maximum number of rows passed to a single call to
-        // CompactDataClause::process can be split in 2 to produce 2 row slices each with at most max_rows_per_segment
-        RC_ASSERT(rows <= 2 * max_rows_per_segment);
     }
 }
 
@@ -79,8 +75,6 @@ RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureForProcessing, ()) {
         const auto total_rows = ranges_and_keys.at(proc_unit.back()).row_range().second -
                                 ranges_and_keys.at(proc_unit.front()).row_range().first;
         RC_ASSERT(total_rows >= min_rows_per_segment);
-        // See StructureRowRanges for why this invariant is the right one
-        RC_ASSERT(total_rows <= max_rows_per_segment);
         const auto& col_range = ranges_and_keys.at(proc_unit.front()).col_range();
         for (auto idx = proc_unit.cbegin(); idx != proc_unit.cend(); ++idx) {
             // All segments in a processing unit should have the same column range with static schema
@@ -95,7 +89,7 @@ RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureForProcessing, ()) {
             }
         }
     }
-    const auto flattened = flatten_vectors(std::move(proc_unit_ids));
+    const auto flattened = util::flatten_vectors(std::move(proc_unit_ids));
     // This is asserting that the order of reading ranges_and_keys is 0, 1, 2,...
     if (!flattened.empty()) {
         for (auto idx = flattened.cbegin(); idx != std::prev(flattened.cend()); ++idx) {

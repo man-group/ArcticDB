@@ -35,6 +35,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <iterator>
 #include <aws/core/utils/stream/ResponseStream.h>
@@ -844,7 +845,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
                             return folly::collect(work_futures).via(&async::io_executor());
                         });
     }
-    return std::move(entity_ids_vec_fut).thenValueInline(flatten_vectors<EntityId>);
+    return std::move(entity_ids_vec_fut).thenValueInline(util::flatten_vectors<EntityId>);
 }
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
@@ -2923,12 +2924,12 @@ folly::Future<VersionedItem> merge_update_impl(
 }
 
 folly::Future<std::optional<VersionedItem>> compact_data_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const WriteOptions& write_options,
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const WriteOptions& write_options,
         const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
-    std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, version_info, *read_query, {});
+    std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, versioned_item, *read_query, {});
     return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
             .thenValue(
                     [pipeline_context = std::move(pipeline_context),

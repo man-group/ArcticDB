@@ -9,6 +9,7 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 
 namespace arcticdb {
 namespace ranges = std::ranges;
@@ -18,7 +19,7 @@ using namespace proto::descriptors;
 std::vector<std::vector<EntityId>> structure_by_row_slice(
         ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_vectors(std::move(entity_ids_vec));
+    auto entity_ids = util::flatten_vectors(std::move(entity_ids_vec));
     return structure_by_row_slice(component_manager, std::move(entity_ids));
 }
 

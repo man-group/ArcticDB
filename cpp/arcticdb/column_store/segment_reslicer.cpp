@@ -14,7 +14,7 @@
 namespace arcticdb {
 
 SegmentReslicer::SegmentReslicer(uint64_t max_rows_per_segment) : max_rows_per_segment_(max_rows_per_segment) {
-    util::check(max_rows_per_segment > 0, "SegmentReslicer max rows per segment must be >0");
+    util::check(max_rows_per_segment_ > 0, "SegmentReslicer max rows per segment must be >0");
 }
 
 std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static_schema_columns(
@@ -25,8 +25,8 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
     const auto& type = columns.front().value()->type();
     const auto type_size = get_type_size(type.data_type());
     auto remaining_rows{slicing_info.total_rows};
-    while (remaining_rows > 0) {
-        auto rows_to_consume = std::min(remaining_rows, slicing_info.rows_per_segment);
+    for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
+        auto rows_to_consume = std::min(slicing_info.rows_in_slice(idx), remaining_rows);
         res.emplace_back(
                 std::make_optional<Column>(type, rows_to_consume, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED)
         );
@@ -119,11 +119,15 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     }
     SlicingInfo slicing_info{total_rows, max_rows_per_segment_};
     std::vector<SegmentInMemory> res(slicing_info.num_segments);
+    // This won't be sufficient with dynamic schema
+    // In that case, col_names_in_order will represent the correct columns. The types should probably be calculated
+    // in reslice_columns
+    const auto& desc = segments.front().descriptor();
     for (auto& segment : res) {
-        // This won't be sufficient with dynamic schema
-        // In that case, col_names_in_order will represent the correct columns. The types should probably be calculated
-        // in reslice_columns
-        segment.attach_descriptor(std::make_shared<StreamDescriptor>(segments.front().descriptor().clone()));
+        // add_column also adds to the FieldCollection, so start with an empty one
+        segment.attach_descriptor(std::make_shared<StreamDescriptor>(
+                desc.segment_desc_, std::make_shared<FieldCollection>(), desc.stream_id_
+        ));
     }
     // For each segment, append the column to the corresponding vector in columns if it is present, or a nullopt if it
     // is missing from this segment (dynamic schema)
@@ -138,6 +142,8 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     }
     // This ensures that the refcount of the column shared pointers is 1 when they are reset after having their data
     // copied into the result column, and so the memory is freed as early as possible
+    // When adding support for string columns, we will need to extract the string pools first (ColumnWithStrings is
+    // probably the appropriate data structure for this case)
     segments.clear();
     std::vector<StringPool> string_pools(slicing_info.num_segments);
     // We can use string_view keys here as they point to the keys in column_map, which are still live while this
@@ -163,7 +169,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
         }
     }
     for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
-        auto rows_to_consume = std::min(slicing_info.rows_per_segment, total_rows);
+        auto rows_to_consume = std::min(slicing_info.rows_in_slice(idx), total_rows);
         res.at(idx).set_row_data(rows_to_consume - 1);
         total_rows -= rows_to_consume;
         res.at(idx).set_string_pool(std::make_shared<StringPool>(std::move(string_pools.at(idx))));

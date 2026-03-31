@@ -19,7 +19,7 @@ import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
 )
-from arcticdb.util.test import assert_frame_equal, config_context
+from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
 
 
 def generic_compact_data_test(lib, sym, method_arg=None):
@@ -55,35 +55,33 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     post_compaction_data_keys = len(index)
     new_data_keys = len(index[index["version_id"] > vit_before_compaction.version])
     expected_get_count = pre_compaction_data_keys - (post_compaction_data_keys - new_data_keys)
-    expected_put_count = new_data_keys
-    if expected_get_count == 0:
-        assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
-    else:
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == expected_get_count
-    if expected_put_count == 0:
-        assert (
-            "Memory_PutObject" not in stats["storage_operations"]
-            or "TABLE_DATA" not in stats["storage_operations"]["Memory_PutObject"]
-        )
-    else:
-        assert stats["storage_operations"]["Memory_PutObject"]["TABLE_DATA"]["count"] == new_data_keys
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == expected_get_count
+    assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == new_data_keys
+    # Second compaction should always be a no-op
+    generic_compact_data_test_noop(lib, sym, rows_per_segment)
 
 
 def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
+    pickled = lib.is_symbol_pickled(sym)
     vit_before_compaction = lib.read(sym)
+    expected = vit_before_compaction.data
     pre_compaction_data_keys = len(lib.read_index(sym))
     with qs.query_stats():
         compacted_version = lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment).version
         stats = qs.get_query_stats()
     qs.reset_stats()
     assert vit_before_compaction.version == compacted_version
-    received_df = lib.read(sym).data
-    assert_frame_equal(vit_before_compaction.data, received_df)
+    received = lib.read(sym).data
+    if pickled:
+        assert received == expected
+    else:
+        assert_frame_equal(expected, received)
     index = lib.read_index(sym)
     assert len(index) == pre_compaction_data_keys
     new_data_keys = len(index[index["version_id"] > vit_before_compaction.version])
     assert new_data_keys == 0
-    assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+    # No objects should be written at all in this case
     assert "Memory_PutObject" not in stats["storage_operations"]
 
 
@@ -139,7 +137,9 @@ def test_compact_data_maintain_metadata(lmdb_version_store_v1):
 
 @pytest.mark.parametrize("lib_config_value", [1, 2, 3, 5, 7, 10])
 @pytest.mark.parametrize("method_arg", [1, 2, 3, 5, 7, 10])
-def test_compact_data_explicit_rows_per_segment(in_memory_store_factory, lib_config_value, method_arg):
+def test_compact_data_explicit_rows_per_segment(
+    in_memory_store_factory, clear_query_stats, lib_config_value, method_arg
+):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=lib_config_value)
     sym = "test_compact_data_explicit_rows_per_segment"
@@ -154,10 +154,32 @@ def test_compact_data_explicit_rows_per_segment(in_memory_store_factory, lib_con
     generic_compact_data_test(lib, sym, method_arg)
 
 
+@pytest.mark.parametrize("method_argument", [1, 8, 10, 13, 100])
+def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_query_stats, method_argument):
+    rng = np.random.default_rng()
+    lib = in_memory_store_factory(segment_row_size=100)
+    sym = "test_compact_data_widely_varying_row_counts"
+    df = pd.DataFrame(
+        {
+            "ints": np.arange(303, dtype=np.int64),
+            "floats": np.arange(303, dtype=np.float32),
+            "bools": rng.random(303) > 0.5,
+        }
+    )
+    # Produce alternating 100 and 1 row segments
+    lib.write(sym, df[:100])
+    lib.append(sym, df[100:101])
+    lib.append(sym, df[101:201])
+    lib.append(sym, df[201:202])
+    lib.append(sym, df[202:302])
+    lib.append(sym, df[302:])
+    generic_compact_data_test(lib, sym, method_argument)
+
+
 @pytest.mark.parametrize("rows_per_segment", [1, 2, 3, 5, 7, 10])
 @pytest.mark.parametrize("initial_rows", [20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
 @pytest.mark.parametrize("append_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-def test_compact_data_append(in_memory_store_factory, rows_per_segment, initial_rows, append_rows):
+def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, append_rows):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)
     sym = "test_compact_data_append"
@@ -176,7 +198,7 @@ def test_compact_data_append(in_memory_store_factory, rows_per_segment, initial_
 @pytest.mark.parametrize("rows_per_segment", [1, 2, 3, 5, 7, 10])
 @pytest.mark.parametrize("initial_rows", [20, 21, 22, 23, 24, 25, 26, 27, 28, 29])
 @pytest.mark.parametrize("update_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-def test_compact_data_update(in_memory_store_factory, rows_per_segment, initial_rows, update_rows):
+def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, update_rows):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)
     sym = "test_compact_data_update"
@@ -202,7 +224,7 @@ def test_compact_data_update(in_memory_store_factory, rows_per_segment, initial_
 
 
 @pytest.mark.parametrize("index", [None, pd.date_range("2026-01-01", periods=50)])
-def test_compact_data_column_slicing(in_memory_store_factory, index):
+def test_compact_data_column_slicing(in_memory_store_factory, clear_query_stats, index):
     rows_per_segment = 10
     lib = in_memory_store_factory(column_group_size=2, segment_row_size=rows_per_segment)
     sym = "test_compact_data_column_slicing"
@@ -214,7 +236,7 @@ def test_compact_data_column_slicing(in_memory_store_factory, index):
 
 
 @pytest.mark.parametrize("names", [None, ["ts", None], [None, "level 2"], ["ts", "level 2"]])
-def test_compact_data_multiindex(in_memory_store_factory, names):
+def test_compact_data_multiindex(in_memory_store_factory, clear_query_stats, names):
     rows_per_segment = 100
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)
     sym = "test_compact_data_multiindex"
@@ -229,7 +251,7 @@ def test_compact_data_multiindex(in_memory_store_factory, names):
 
 
 @pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
-def test_compact_data_many_appends(in_memory_store_factory, rows_per_segment):
+def test_compact_data_many_appends(in_memory_store_factory, clear_query_stats, rows_per_segment):
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)
     sym = "test_compact_data_many_appends"
     df = pd.DataFrame({"col": np.arange(50)})
@@ -239,7 +261,7 @@ def test_compact_data_many_appends(in_memory_store_factory, rows_per_segment):
 
 
 @pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
-def test_compact_data_idempotent(in_memory_store_factory, rows_per_segment):
+def test_compact_data_idempotent(in_memory_store_factory, clear_query_stats, rows_per_segment):
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)
     sym = "test_compact_data_idempotent"
     df = pd.DataFrame({"col": np.arange(30)})
@@ -251,7 +273,7 @@ def test_compact_data_idempotent(in_memory_store_factory, rows_per_segment):
     generic_compact_data_test_noop(lib, sym)
 
 
-def test_compact_data_newest_version_deleted(in_memory_store_factory):
+def test_compact_data_newest_version_deleted(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory()
     sym = "test_compact_data_newest_version_deleted"
     df = pd.DataFrame({"col": np.arange(30)})
@@ -267,7 +289,7 @@ def test_compact_data_newest_version_deleted(in_memory_store_factory):
     assert vit.metadata == metadata
 
 
-def test_compact_data_newest_version_deleted_noop(in_memory_store_factory):
+def test_compact_data_newest_version_deleted_noop(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_compact_data_newest_version_deleted_noop"
     df = pd.DataFrame({"col": np.arange(30)})
@@ -311,7 +333,7 @@ def test_compact_data_date_range_read(in_memory_store_factory, rows_per_segment)
     assert_frame_equal(expected_second_half, lib.read(sym, date_range=(mid, index[-1])).data)
 
 
-def test_compact_data_single_row(in_memory_store_factory):
+def test_compact_data_single_row(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_compact_data_single_row"
     df = pd.DataFrame({"col": [42]})
@@ -319,7 +341,7 @@ def test_compact_data_single_row(in_memory_store_factory):
     generic_compact_data_test_noop(lib, sym)
 
 
-def test_compact_data_empty_dataframe(in_memory_store_factory):
+def test_compact_data_empty_dataframe(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=10)
     sym = "test_compact_data_empty_dataframe"
     df = pd.DataFrame({"col": np.array([], dtype=np.int64)})
@@ -328,7 +350,7 @@ def test_compact_data_empty_dataframe(in_memory_store_factory):
 
 
 @pytest.mark.parametrize("rows_per_segment", [5, 10, 20])
-def test_compact_data_total_rows_equals_rows_per_segment(in_memory_store_factory, rows_per_segment):
+def test_compact_data_total_rows_equals_rows_per_segment(in_memory_store_factory, clear_query_stats, rows_per_segment):
     lib = in_memory_store_factory(segment_row_size=rows_per_segment)
     sym = "test_compact_data_total_rows_equals_rows_per_segment"
     df = pd.DataFrame({"col": np.arange(rows_per_segment)})
@@ -336,7 +358,7 @@ def test_compact_data_total_rows_equals_rows_per_segment(in_memory_store_factory
     generic_compact_data_test_noop(lib, sym)
 
 
-def test_compact_data_column_filtered_read(in_memory_store_factory):
+def test_compact_data_column_filtered_read(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(column_group_size=2, segment_row_size=10)
     sym = "test_compact_data_column_filtered_read"
     num_rows = 20
@@ -356,7 +378,7 @@ def test_compact_data_column_filtered_read(in_memory_store_factory):
     assert_frame_equal(expected_col_bc, lib.read(sym, columns=["col_b", "col_c"]).data)
 
 
-def test_compact_pickled_data(in_memory_store_factory):
+def test_compact_pickled_data(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=1000)
     sym = "test_compact_pickled_data"
     data = 100_000 * [0]
@@ -438,7 +460,9 @@ def test_compact_data_dynamic_schema_changing_column_names(lmdb_version_store_dy
     rows_per_segment=st.integers(1, 100),
     cols_per_segment=st.integers(1, 20),
 )
-def test_compact_data_hypothesis(in_memory_store_factory, num_rows, num_cols, rows_per_segment, cols_per_segment):
+def test_compact_data_hypothesis(
+    in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment
+):
     rng = np.random.default_rng(42)
     lib_sliced = in_memory_store_factory(
         column_group_size=cols_per_segment, segment_row_size=rows_per_segment, name="_unique_"

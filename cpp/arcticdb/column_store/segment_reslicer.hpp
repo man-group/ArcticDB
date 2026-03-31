@@ -29,18 +29,29 @@ namespace arcticdb {
 // Currently only supports dense numeric data and static schema, these limitations will be removed in future PRs.
 class SegmentReslicer {
   public:
-    struct SlicingInfo {
-        SlicingInfo(uint64_t _total_rows, uint64_t max_rows_per_segment) : total_rows(_total_rows) {
-            num_segments = 1;
-            rows_per_segment = total_rows;
-            if (total_rows > max_rows_per_segment) {
-                num_segments = (total_rows / max_rows_per_segment) + (total_rows % max_rows_per_segment == 0 ? 0 : 1);
-                rows_per_segment = (total_rows / num_segments) + (total_rows % num_segments == 0 ? 0 : 1);
-            }
+    class SlicingInfo {
+      public:
+        SlicingInfo(uint64_t _total_rows, uint64_t _rows_per_segment) :
+            total_rows(_total_rows),
+            num_segments((total_rows + _rows_per_segment - 1) / _rows_per_segment),
+            rows_per_segment(total_rows / num_segments),
+            num_remainder_segments(total_rows % num_segments),
+            num_exact_segments(num_segments - num_remainder_segments) {}
+
+        uint64_t rows_in_slice(uint64_t idx) const {
+            return idx < num_exact_segments ? rows_per_segment : rows_per_segment + 1;
         }
-        uint64_t total_rows;
-        uint64_t num_segments;
-        uint64_t rows_per_segment;
+
+        const uint64_t total_rows;
+        const uint64_t num_segments;
+
+      private:
+        // This is how many rows most segments will have
+        const uint64_t rows_per_segment;
+        // This is how many segments will have rows_per_segment+1 rows
+        const uint64_t num_remainder_segments;
+        // This is how many segments will have exactly rows_per_segment rows
+        const uint64_t num_exact_segments;
     };
 
     explicit SegmentReslicer(uint64_t max_rows_per_segment);

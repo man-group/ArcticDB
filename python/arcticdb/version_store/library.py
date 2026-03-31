@@ -3225,7 +3225,8 @@ class Library:
         -------
         VersionedItem
             Structure containing information including the version number of the written symbol in the store. The data
-            and metadata attributes will not be populated.
+            and metadata attributes will not be populated. If no compaction occurs because the data is already
+            compacted, the version field will be that of the latest live version for the symbol.
 
         Raises
         ------

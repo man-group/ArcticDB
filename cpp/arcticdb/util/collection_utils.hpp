@@ -16,12 +16,35 @@ namespace arcticdb {
 
 namespace util {
 
+template<typename T>
+inline std::vector<T> flatten_vectors(std::vector<std::vector<T>>&& vec_of_vecs) {
+    size_t res_size = std::accumulate(
+            vec_of_vecs.cbegin(),
+            vec_of_vecs.cend(),
+            size_t(0),
+            [](size_t acc, const std::vector<T>& vec) { return acc + vec.size(); }
+    );
+    std::vector<T> res;
+    res.reserve(res_size);
+    for (const auto& vec : vec_of_vecs) {
+        res.insert(res.end(), vec.begin(), vec.end());
+    }
+    return res;
+}
+
 // These are one-liners in C++23
 template<typename T>
 std::vector<T> extract_from_pointers(std::vector<std::shared_ptr<T>>&& input) {
     std::vector<T> res;
     res.reserve(input.size());
-    std::ranges::transform(input, std::back_inserter(res), [](std::shared_ptr<T>& value) { return std::move(*value); });
+    std::ranges::transform(input, std::back_inserter(res), [](std::shared_ptr<T>& value) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                value.use_count() == 1,
+                "Shouldn't move from shared_ptr with more than 1 owner"
+        );
+        return std::move(*value);
+    });
     return res;
 }
 

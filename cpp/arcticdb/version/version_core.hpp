@@ -198,7 +198,7 @@ folly::Future<VersionedItem> merge_update_impl(
 );
 
 folly::Future<std::optional<VersionedItem>> compact_data_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const WriteOptions& write_options,
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const WriteOptions& write_options,
         const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
 );
 

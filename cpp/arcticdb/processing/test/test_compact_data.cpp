@@ -48,7 +48,10 @@ std::vector<std::pair<std::set<RowRange>, std::set<RowRange>>> parameters{
         {{{0, 5}, {5, 10}, {10, 15}, {15, 20}, {20, 25}}, {{0, 10}, {10, 25}}},
         // Edge case - first slice is too small so will be combined with next slice even though this is as big as we
         // want them to get. Final slice is also too small so will be combined with the previous slice.
-        {{{0, 5}, {5, 17}, {17, 22}}, {{0, 22}}}
+        {{{0, 5}, {5, 17}, {17, 22}}, {{0, 22}}},
+        // Large delta between segments with much smaller rows per slice
+        {{{0, 1000}, {1000, 1001}, {1001, 2001}, {2001, 3001}, {3001, 3002}, {3002, 3003}, {3003, 3004}, {3004, 3005}},
+         {{0, 1000}, {1000, 2001}, {2001, 3005}}}
 };
 
 INSTANTIATE_TEST_SUITE_P(
