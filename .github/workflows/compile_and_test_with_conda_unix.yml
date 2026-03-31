@@ -1,4 +1,8 @@
 name: Conda Build and Test (Unix)
+
+permissions:
+  contents: read
+
 on:
   workflow_call:
     inputs:

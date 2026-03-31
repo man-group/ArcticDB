@@ -1,4 +1,8 @@
 name: Conda Build and Test (Windows)
+
+permissions:
+  contents: read
+
 on:
   workflow_call:
     inputs:
