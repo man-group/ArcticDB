@@ -54,6 +54,7 @@ from arcticdb.storage_fixtures.mongo import ManagedMongoDBServer, auto_detect_se
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int, unset_config_int
+from arcticdb_ext.cpp_async import reinit_task_scheduler
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer, CustomArrayNormalizer
 from arcticdb.arctic import Arctic
@@ -131,6 +132,23 @@ if platform.system() == "Linux":
         cdll.LoadLibrary("libSegFault.so")
     except:
         pass
+
+
+@pytest.fixture(
+    params=[True, False],
+)
+def check_single_threaded(request):
+    if request.param:
+        set_config_int("VersionStore.NumIOThreads", 1)
+        set_config_int("VersionStore.NumCPUThreads", 1)
+        reinit_task_scheduler()
+
+    yield request.param
+
+    if request.param:
+        unset_config_int("VersionStore.NumIOThreads")
+        unset_config_int("VersionStore.NumCPUThreads")
+        reinit_task_scheduler()
 
 
 @pytest.fixture()
