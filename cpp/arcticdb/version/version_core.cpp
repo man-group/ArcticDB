@@ -2952,11 +2952,12 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         // When there is column slicing, this means we only binary search for the first_row once per
                         // row slice in the original data
                         std::unordered_set<size_t> first_rows_to_keep;
+                        std::unordered_set<size_t> first_rows_to_discard;
                         for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
                             auto first_row = slice_and_key.slice().row_range.first;
                             if (first_rows_to_keep.contains(first_row)) {
                                 slices_and_keys.emplace_back(std::move(slice_and_key));
-                            } else {
+                            } else if (!first_rows_to_discard.contains(first_row)) {
                                 auto begin = new_row_ranges.cbegin();
                                 auto end = new_row_ranges.cend();
                                 auto mid = begin + std::distance(begin, end) / 2;
@@ -2974,6 +2975,8 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                                 if (begin == end) {
                                     slices_and_keys.emplace_back(std::move(slice_and_key));
                                     first_rows_to_keep.emplace(first_row);
+                                } else {
+                                    first_rows_to_discard.emplace(first_row);
                                 }
                             }
                         }
