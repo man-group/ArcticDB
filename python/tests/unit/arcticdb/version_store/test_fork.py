@@ -115,3 +115,32 @@ def test_configs_propagated_to_child_process(lmdb_version_store, start_method):
         p.join()
     finally:
         unset_config_int("TestPropagation")
+
+
+def _check_config_in_child_via_library(args):
+    """Worker function: verify ConfigsMap was propagated via Library pickle."""
+    lib, key, expected = args
+    from arcticdb_ext import get_config_int
+
+    actual = get_config_int(key)
+    assert actual == expected, f"Config {key}: expected {expected}, got {actual}"
+
+
+@pytest.mark.parametrize(
+    "start_method",
+    [
+        "spawn",
+        pytest.param("forkserver", marks=FORK_SUPPORTED),
+    ],
+)
+def test_configs_propagated_to_child_process_via_library(lmdb_library, start_method):
+    """ConfigsMap settings must survive spawn/forkserver process boundaries when pickling a Library."""
+    set_config_int("TestLibPropagation", 67890)
+    try:
+        ctx = multiprocessing.get_context(start_method)
+        p = ctx.Pool(1)
+        p.map(_check_config_in_child_via_library, [(lmdb_library, "TestLibPropagation", 67890)])
+        p.close()
+        p.join()
+    finally:
+        unset_config_int("TestLibPropagation")

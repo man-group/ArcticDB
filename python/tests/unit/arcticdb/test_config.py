@@ -99,3 +99,17 @@ def test_config_preserved_in_pickle_roundtrip(version_store_factory):
         assert get_config_int("PickleTestKey") == 42
     finally:
         unset_config_int("PickleTestKey")
+
+
+def test_config_preserved_in_library_pickle_roundtrip(lmdb_library):
+    """ConfigsMap values survive a pickle dumps/loads cycle via Library."""
+    set_config_int("LibPickleTestKey", 99)
+    try:
+        dumped = dumps(lmdb_library)
+        unset_config_int("LibPickleTestKey")
+        assert get_config_int("LibPickleTestKey") is None
+
+        loaded = loads(dumped)
+        assert get_config_int("LibPickleTestKey") == 99
+    finally:
+        unset_config_int("LibPickleTestKey")
