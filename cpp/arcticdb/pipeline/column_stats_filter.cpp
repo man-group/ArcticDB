@@ -245,12 +245,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             res->invert();
         }
 
-        if (column_stats_data.empty()) {
-            // No column stats, keep all segments
-            ARCTICDB_DEBUG(log::version(), "Empty column stats - keeping all segments");
-            return res;
-        }
-
         auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
         auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
 

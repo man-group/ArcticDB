@@ -1220,8 +1220,25 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
 
     df = pd.DataFrame({"col": pd.Series([], dtype=np.float64)})
     lib.write(sym, df)
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["col"] > 0]
     result = lib.read(sym, query_builder=q).data
     assert len(result) == 0
+
+
+def test_column_stats_empty_stats(in_memory_version_store, column_stats_filtering_enabled):
+    lib = in_memory_version_store
+
+    df = pd.DataFrame({"col": pd.Series([-1, 0, 1, 2, 3], dtype=np.float64)})
+    lib.write(sym, df)
+
+    # This is a no-op at the moment, but this is still a useful regression test in case we ever
+    # start writing empty column stats segments.
+    lib.create_column_stats(sym, {"col": set()})
+
+    q = QueryBuilder()
+    q = q[q["col"] > 0]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 3
