@@ -104,11 +104,7 @@ INSTANTIATE_TEST_SUITE_P(
         MissingStats, UnaryBooleanStatsFromColumnStatsTest,
         ::testing::Values(
                 std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, OperationType::IDENTITY, SC::UNKNOWN),
-                std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, OperationType::NOT, SC::UNKNOWN),
-                std::make_tuple(std::optional{false}, std::optional<bool>{}, OperationType::IDENTITY, SC::UNKNOWN),
-                std::make_tuple(std::optional{false}, std::optional<bool>{}, OperationType::NOT, SC::UNKNOWN),
-                std::make_tuple(std::optional<bool>{}, std::optional{true}, OperationType::IDENTITY, SC::UNKNOWN),
-                std::make_tuple(std::optional<bool>{}, std::optional{true}, OperationType::NOT, SC::UNKNOWN)
+                std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, OperationType::NOT, SC::UNKNOWN)
         )
 );
 
@@ -132,40 +128,25 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
-namespace {
-
-template<typename T>
-SC value_range_comparison(ValueRange<T> range, T value, OperationType op) {
-    switch (op) {
-    case OperationType::LT:
-        return LessThanOperator{}(range, value);
-    case OperationType::LE:
-        return LessThanEqualsOperator{}(range, value);
-    case OperationType::GT:
-        return GreaterThanOperator{}(range, value);
-    case OperationType::GE:
-        return GreaterThanEqualsOperator{}(range, value);
-    case OperationType::EQ:
-        return EqualsOperator{}(range, value);
-    case OperationType::NE:
-        return NotEqualsOperator{}(range, value);
-    default:
-        util::raise_rte("Unsupported op in value_range_comparison");
-    }
-}
-} // namespace
-
 // Parameters: (min, max, query_value, op, expected)
-class ValueRangeComparisonTest
-    : public ::testing::TestWithParam<std::tuple<int64_t, int64_t, int64_t, OperationType, SC>> {};
+class BinaryComparisonTest
+    : public ::testing::TestWithParam<
+              std::tuple<std::optional<int64_t>, std::optional<int64_t>, int64_t, OperationType, SC>> {};
 
-TEST_P(ValueRangeComparisonTest, AllCases) {
+TEST_P(BinaryComparisonTest, AllCases) {
     auto [min, max, value, op, expected] = GetParam();
-    ASSERT_EQ(value_range_comparison(ValueRange<int64_t>{min, max}, value, op), expected);
+    std::optional<Value> min_value = min.has_value() ? std::make_optional(Value(*min, DataType::INT64)) : std::nullopt;
+    std::optional<Value> max_value = max.has_value() ? std::make_optional(Value(*max, DataType::INT64)) : std::nullopt;
+    std::vector<ColumnStatsValues> column_stats_values{{min_value, max_value}};
+    std::shared_ptr<Value> value_ptr = std::make_shared<Value>(Value(value, DataType::INT64));
+    auto result = dispatch_binary_stats(column_stats_values, value_ptr, op);
+    auto visitation_result = std::get<std::vector<StatsComparison>>(result);
+    ASSERT_EQ(visitation_result.size(), 1);
+    ASSERT_EQ(visitation_result.at(0), expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        LessThan, ValueRangeComparisonTest,
+        LessThan, BinaryComparisonTest,
         ::testing::Values(
                 // ALL_MATCH: max < value
                 std::make_tuple(1, 5, 10, OperationType::LT, SC::ALL_MATCH),
@@ -180,12 +161,14 @@ INSTANTIATE_TEST_SUITE_P(
                 // UNKNOWN: min < value <= max
                 std::make_tuple(1, 10, 5, OperationType::LT, SC::UNKNOWN),
                 std::make_tuple(-10, -5, -7, OperationType::LT, SC::UNKNOWN),
-                std::make_tuple(-5, 5, 0, OperationType::LT, SC::UNKNOWN)
+                std::make_tuple(-5, 5, 0, OperationType::LT, SC::UNKNOWN),
+                // UNKNOWN: missing stats
+                std::make_tuple(std::nullopt, std::nullopt, 5, OperationType::LT, SC::UNKNOWN)
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        GreaterThan, ValueRangeComparisonTest,
+        GreaterThan, BinaryComparisonTest,
         ::testing::Values(
                 // ALL_MATCH: min > value
                 std::make_tuple(10, 20, 5, OperationType::GT, SC::ALL_MATCH),
@@ -200,12 +183,14 @@ INSTANTIATE_TEST_SUITE_P(
                 // UNKNOWN: min <= value < max
                 std::make_tuple(1, 10, 5, OperationType::GT, SC::UNKNOWN),
                 std::make_tuple(-10, -5, -7, OperationType::GT, SC::UNKNOWN),
-                std::make_tuple(-5, 5, 0, OperationType::GT, SC::UNKNOWN)
+                std::make_tuple(-5, 5, 0, OperationType::GT, SC::UNKNOWN),
+                // UNKNOWN: missing stats
+                std::make_tuple(std::nullopt, std::nullopt, 5, OperationType::GT, SC::UNKNOWN)
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        LessThanEquals, ValueRangeComparisonTest,
+        LessThanEquals, BinaryComparisonTest,
         ::testing::Values(
                 // ALL_MATCH: max <= value
                 std::make_tuple(1, 5, 5, OperationType::LE, SC::ALL_MATCH),
@@ -218,12 +203,14 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(1, 10, 0, OperationType::LE, SC::NONE_MATCH),
                 // UNKNOWN
                 std::make_tuple(1, 10, 5, OperationType::LE, SC::UNKNOWN),
-                std::make_tuple(-5, 5, 0, OperationType::LE, SC::UNKNOWN)
+                std::make_tuple(-5, 5, 0, OperationType::LE, SC::UNKNOWN),
+                // UNKNOWN: missing stats
+                std::make_tuple(std::nullopt, std::nullopt, 5, OperationType::LE, SC::UNKNOWN)
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        GreaterThanEquals, ValueRangeComparisonTest,
+        GreaterThanEquals, BinaryComparisonTest,
         ::testing::Values(
                 // ALL_MATCH: min >= value
                 std::make_tuple(5, 10, 5, OperationType::GE, SC::ALL_MATCH),
@@ -235,12 +222,14 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(-10, -5, -3, OperationType::GE, SC::NONE_MATCH),
                 // UNKNOWN
                 std::make_tuple(1, 10, 5, OperationType::GE, SC::UNKNOWN),
-                std::make_tuple(-5, 5, 0, OperationType::GE, SC::UNKNOWN)
+                std::make_tuple(-5, 5, 0, OperationType::GE, SC::UNKNOWN),
+                // UNKNOWN: missing stats
+                std::make_tuple(std::nullopt, std::nullopt, 5, OperationType::GE, SC::UNKNOWN)
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        Equals, ValueRangeComparisonTest,
+        Equals, BinaryComparisonTest,
         ::testing::Values(
                 // ALL_MATCH: min == max == value
                 std::make_tuple(5, 5, 5, OperationType::EQ, SC::ALL_MATCH),
@@ -255,12 +244,14 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(1, 10, 5, OperationType::EQ, SC::UNKNOWN),
                 std::make_tuple(1, 5, 1, OperationType::EQ, SC::UNKNOWN),
                 std::make_tuple(1, 5, 5, OperationType::EQ, SC::UNKNOWN),
-                std::make_tuple(-5, 5, 0, OperationType::EQ, SC::UNKNOWN)
+                std::make_tuple(-5, 5, 0, OperationType::EQ, SC::UNKNOWN),
+                // UNKNOWN: missing stats
+                std::make_tuple(std::nullopt, std::nullopt, 5, OperationType::EQ, SC::UNKNOWN)
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        NotEquals, ValueRangeComparisonTest,
+        NotEquals, BinaryComparisonTest,
         ::testing::Values(
                 // ALL_MATCH: value outside [min, max]
                 std::make_tuple(1, 5, 6, OperationType::NE, SC::ALL_MATCH),
@@ -274,7 +265,9 @@ INSTANTIATE_TEST_SUITE_P(
                 // UNKNOWN: value inside [min, max] but min != max
                 std::make_tuple(1, 10, 5, OperationType::NE, SC::UNKNOWN),
                 std::make_tuple(1, 5, 3, OperationType::NE, SC::UNKNOWN),
-                std::make_tuple(-5, 5, 0, OperationType::NE, SC::UNKNOWN)
+                std::make_tuple(-5, 5, 0, OperationType::NE, SC::UNKNOWN),
+                // UNKNOWN: missing stats
+                std::make_tuple(std::nullopt, std::nullopt, 5, OperationType::NE, SC::UNKNOWN)
         )
 );
 
@@ -282,166 +275,36 @@ class StatsComparatorNaNTest : public ::testing::TestWithParam<OperationType> {}
 
 TEST_P(StatsComparatorNaNTest, NaNInMinReturnsUnknown) {
     auto op = GetParam();
-    ColumnStatsValues csv{
-            std::optional<Value>{construct_value(std::numeric_limits<double>::quiet_NaN())},
-            std::optional<Value>{construct_value(10.0)}
+    std::vector<ColumnStatsValues> stats{
+            {construct_value(std::numeric_limits<double>::quiet_NaN()), construct_value(10.0)}
     };
-    Value query = construct_value(5.0);
-
-    SC result;
-    switch (op) {
-    case OperationType::LT:
-        result = stats_comparator(csv, query, LessThanOperator{});
-        break;
-    case OperationType::LE:
-        result = stats_comparator(csv, query, LessThanEqualsOperator{});
-        break;
-    case OperationType::GT:
-        result = stats_comparator(csv, query, GreaterThanOperator{});
-        break;
-    case OperationType::GE:
-        result = stats_comparator(csv, query, GreaterThanEqualsOperator{});
-        break;
-    case OperationType::EQ:
-        result = stats_comparator(csv, query, EqualsOperator{});
-        break;
-    case OperationType::NE:
-        result = stats_comparator(csv, query, NotEqualsOperator{});
-        break;
-    default:
-        FAIL() << "Unexpected op";
-    }
-    ASSERT_EQ(result, SC::UNKNOWN);
+    auto query = std::make_shared<Value>(construct_value(5.0));
+    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result.at(0), SC::UNKNOWN);
 }
 
 TEST_P(StatsComparatorNaNTest, NaNInMaxReturnsUnknown) {
     auto op = GetParam();
-    ColumnStatsValues csv{
-            std::optional<Value>{construct_value(1.0)},
-            std::optional<Value>{construct_value(std::numeric_limits<double>::quiet_NaN())}
+    std::vector<ColumnStatsValues> stats{
+            {construct_value(1.0), construct_value(std::numeric_limits<double>::quiet_NaN())}
     };
-    Value query = construct_value(5.0);
-
-    SC result;
-    switch (op) {
-    case OperationType::LT:
-        result = stats_comparator(csv, query, LessThanOperator{});
-        break;
-    case OperationType::LE:
-        result = stats_comparator(csv, query, LessThanEqualsOperator{});
-        break;
-    case OperationType::GT:
-        result = stats_comparator(csv, query, GreaterThanOperator{});
-        break;
-    case OperationType::GE:
-        result = stats_comparator(csv, query, GreaterThanEqualsOperator{});
-        break;
-    case OperationType::EQ:
-        result = stats_comparator(csv, query, EqualsOperator{});
-        break;
-    case OperationType::NE:
-        result = stats_comparator(csv, query, NotEqualsOperator{});
-        break;
-    default:
-        FAIL() << "Unexpected op";
-    }
-    ASSERT_EQ(result, SC::UNKNOWN);
+    auto query = std::make_shared<Value>(construct_value(5.0));
+    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result.at(0), SC::UNKNOWN);
 }
 
 TEST_P(StatsComparatorNaNTest, BothNaNReturnsUnknown) {
     auto op = GetParam();
-    ColumnStatsValues csv{
-            std::optional<Value>{construct_value(std::numeric_limits<double>::quiet_NaN())},
-            std::optional<Value>{construct_value(std::numeric_limits<double>::quiet_NaN())}
+    std::vector<ColumnStatsValues> stats{
+            {construct_value(std::numeric_limits<double>::quiet_NaN()),
+             construct_value(std::numeric_limits<double>::quiet_NaN())}
     };
-    Value query = construct_value(5.0);
-
-    SC result;
-    switch (op) {
-    case OperationType::LT:
-        result = stats_comparator(csv, query, LessThanOperator{});
-        break;
-    case OperationType::LE:
-        result = stats_comparator(csv, query, LessThanEqualsOperator{});
-        break;
-    case OperationType::GT:
-        result = stats_comparator(csv, query, GreaterThanOperator{});
-        break;
-    case OperationType::GE:
-        result = stats_comparator(csv, query, GreaterThanEqualsOperator{});
-        break;
-    case OperationType::EQ:
-        result = stats_comparator(csv, query, EqualsOperator{});
-        break;
-    case OperationType::NE:
-        result = stats_comparator(csv, query, NotEqualsOperator{});
-        break;
-    default:
-        FAIL() << "Unexpected op";
-    }
-    ASSERT_EQ(result, SC::UNKNOWN);
-}
-
-TEST_P(StatsComparatorNaNTest, MissingMinReturnsUnknown) {
-    auto op = GetParam();
-    ColumnStatsValues csv{std::nullopt, std::optional<Value>{construct_value(10.0)}};
-    Value query = construct_value(5.0);
-
-    SC result;
-    switch (op) {
-    case OperationType::LT:
-        result = stats_comparator(csv, query, LessThanOperator{});
-        break;
-    case OperationType::LE:
-        result = stats_comparator(csv, query, LessThanEqualsOperator{});
-        break;
-    case OperationType::GT:
-        result = stats_comparator(csv, query, GreaterThanOperator{});
-        break;
-    case OperationType::GE:
-        result = stats_comparator(csv, query, GreaterThanEqualsOperator{});
-        break;
-    case OperationType::EQ:
-        result = stats_comparator(csv, query, EqualsOperator{});
-        break;
-    case OperationType::NE:
-        result = stats_comparator(csv, query, NotEqualsOperator{});
-        break;
-    default:
-        FAIL() << "Unexpected op";
-    }
-    ASSERT_EQ(result, SC::UNKNOWN);
-}
-
-TEST_P(StatsComparatorNaNTest, MissingMaxReturnsUnknown) {
-    auto op = GetParam();
-    ColumnStatsValues csv{std::optional<Value>{construct_value(1.0)}, std::nullopt};
-    Value query = construct_value(5.0);
-
-    SC result;
-    switch (op) {
-    case OperationType::LT:
-        result = stats_comparator(csv, query, LessThanOperator{});
-        break;
-    case OperationType::LE:
-        result = stats_comparator(csv, query, LessThanEqualsOperator{});
-        break;
-    case OperationType::GT:
-        result = stats_comparator(csv, query, GreaterThanOperator{});
-        break;
-    case OperationType::GE:
-        result = stats_comparator(csv, query, GreaterThanEqualsOperator{});
-        break;
-    case OperationType::EQ:
-        result = stats_comparator(csv, query, EqualsOperator{});
-        break;
-    case OperationType::NE:
-        result = stats_comparator(csv, query, NotEqualsOperator{});
-        break;
-    default:
-        FAIL() << "Unexpected op";
-    }
-    ASSERT_EQ(result, SC::UNKNOWN);
+    auto query = std::make_shared<Value>(construct_value(5.0));
+    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result.at(0), SC::UNKNOWN);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -453,16 +316,21 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 // Parameters: (min, max, query_value, op, expected)
-class ValueRangeInfinityTest : public ::testing::TestWithParam<std::tuple<double, double, double, OperationType, SC>> {
-};
+class BinaryComparisonInfinityTest
+    : public ::testing::TestWithParam<std::tuple<double, double, double, OperationType, SC>> {};
 
-TEST_P(ValueRangeInfinityTest, AllCases) {
+TEST_P(BinaryComparisonInfinityTest, AllCases) {
     auto [min, max, value, op, expected] = GetParam();
-    ASSERT_EQ(value_range_comparison(ValueRange{min, max}, value, op), expected);
+    std::vector<ColumnStatsValues> column_stats_values{{construct_value(min), construct_value(max)}};
+    std::shared_ptr<Value> value_ptr = std::make_shared<Value>(construct_value(value));
+    auto result = dispatch_binary_stats(column_stats_values, value_ptr, op);
+    auto visitation_result = std::get<std::vector<StatsComparison>>(result);
+    ASSERT_EQ(visitation_result.size(), 1);
+    ASSERT_EQ(visitation_result.at(0), expected);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        NegativeInfMin, ValueRangeInfinityTest,
+        NegativeInfMin, BinaryComparisonInfinityTest,
         ::testing::Values(
                 // [-inf, 10] with various operators and query value 5
                 std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::LT, SC::UNKNOWN),
@@ -479,7 +347,7 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        PositiveInfMax, ValueRangeInfinityTest,
+        PositiveInfMax, BinaryComparisonInfinityTest,
         ::testing::Values(
                 // [10, +inf] with various operators and query value 5
                 std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LT, SC::NONE_MATCH),
@@ -496,7 +364,7 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        BothInfinite, ValueRangeInfinityTest,
+        BothInfinite, BinaryComparisonInfinityTest,
         ::testing::Values(
                 // [-inf, +inf]: every comparison is UNKNOWN
                 std::make_tuple(
@@ -608,7 +476,7 @@ TEST(MixedTypeStatsComparator, Uint64StatsDoubleQuery) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        InfinityQueryValue, ValueRangeInfinityTest,
+        InfinityQueryValue, BinaryComparisonInfinityTest,
         ::testing::Values(
                 // Finite range, query value is +inf
                 // [1, 10] < +inf -> ALL_MATCH (max=10 < inf)

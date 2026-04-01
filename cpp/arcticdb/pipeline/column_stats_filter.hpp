@@ -15,6 +15,7 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace arcticdb {
@@ -33,6 +34,12 @@ struct PairHasher {
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
+
+    ColumnStatsValues() = default;
+
+    ColumnStatsValues(std::optional<Value> min, std::optional<Value> max) : min(std::move(min)), max(std::move(max)) {
+        util::check(min.has_value() == max.has_value(), "min and max should either both be present or both be absent");
+    };
 };
 
 /**
