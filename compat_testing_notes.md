@@ -1,3 +1,10 @@
+### New Stats Types
+
+We want to test what happens to the client from PR #2990 if new column stats types are added.
+
+We want maintenance operations (create_column_stats, drop_column_stats) to fail. When we add stats
+at read time, we will want read to still use the stats it does understand.
+
 This branch adds,
 
 ```
@@ -99,4 +106,76 @@ lib.create_column_stats("sym-2", column_stats_dict)  ## should fail
 
 ```
 
-TODO - also try bumping the stats "major version"
+### Major Version Testing
+
+c08ba7d9d bumps the major version. Older clients should just raise if they see this as they cannot trust any of their
+understanding of what they are seeing.
+
+```
+// Stored in the user defined metadata for KeyType::COLUMN_STATS
+message ColumnStatsHeader {
+    // This version number refers to the format of this header structure.
+    // For example if we ever want to stop using StatColMapping and move to a different encoding,
+    // we would increment the version number. This helps to avoid older clients mis-interpreting
+    // existing fields (like an empty StatColMapping in this example).
+    uint32 version = 1;  # bumped to 2
+    repeated StatColMapping stats = 2;
+    // end of fields in version 1
+}
+```
+
+Using code built from this branch ran,
+
+```
+from arcticdb import Arctic
+import pandas as pd
+
+ac = Arctic("lmdb:///users/is/aseaton/lmdb_tst")
+lib = ac.create_library("compat_test_major_version")
+
+column_stats_dict = {"col_1": {"MINMAX"}}
+df = pd.DataFrame({"col_1": [10, 20]}, index=[pd.Timestamp(0), pd.Timestamp(1)])
+
+lib.write("sym", df)
+lib._nvs.create_column_stats("sym", column_stats_dict)
+```
+
+Using code from PR 2990 - venv `~/venvs/compat_tst`:
+
+```
+from arcticdb import Arctic
+import pandas as pd
+
+ac = Arctic("lmdb:///users/is/aseaton/lmdb_tst")
+lib = ac.get_library("compat_test_major_version")
+
+lib._nvs.get_column_stats_info("sym")
+>>> StorageException: E_KEY_NOT_FOUND Failed to read column stats key: E_UNRECOGNISED_COLUMN_STATS_VERSION This client only understands column stats version 1 but has encountered version=2. Upgrade your ArcticDB installation.
+
+In [2]: lib._nvs.read_column_stats("sym")
+   ...:
+Out[2]:
+                                end_index  v2_MIN(col_1)  v2_MAX(col_1)
+start_index
+1970-01-01  1970-01-01 00:00:00.000000002             10             20
+
+column_stats_dict = {"col_1": {"MINMAX"}}
+In [6]: lib._nvs.drop_column_stats("sym", column_stats_dict)
+---------------------------------------------------------------------------
+CompatibilityException                    Traceback (most recent call last)
+Cell In[6], line 1
+----> 1 lib._nvs.drop_column_stats("sym", column_stats_dict)
+
+File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_store.py:1281, in NativeVersionStore.drop_column_stats(self, symbol, column_stats, as_of)
+   1279 column_stats = self._get_column_stats(column_stats)
+   1280 version_query = self._get_version_query(as_of)
+-> 1281 self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
+
+CompatibilityException: E_UNRECOGNISED_COLUMN_STATS_VERSION This client only understands column stats version 1 but has encountered version=2. Upgrade your ArcticDB installation.
+
+lib._nvs.drop_column_stats("sym")
+>>> succeeds
+
+lib._nvs.create_column_stats("sym", column_stats_dict)
+>>> succeeds! This is a bug, we should fail here
+```
