@@ -72,7 +72,7 @@ VersionedItem delete_range_impl(
         const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
 );
 
-IndexInformation read_index_key(const std::shared_ptr<Store>& store, const AtomKey& key);
+IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key);
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 

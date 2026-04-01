@@ -1906,7 +1906,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
             .thenValue([frame](auto&&) { return frame; });
 }
 
-IndexInformation read_index_key(const std::shared_ptr<Store>& store, const AtomKey& key) {
+IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key) {
     try {
         auto column_stats = std::nullopt;
         return IndexInformation{store->read_sync(key), column_stats};
@@ -1962,7 +1962,7 @@ void create_column_stats_impl(
 
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
-    IndexInformation index_info = read_index_key(store, versioned_item.key_);
+    IndexInformation index_info = read_index_key_without_column_stats(store, versioned_item.key_);
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, std::move(index_info));
 
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
@@ -2219,7 +2219,7 @@ static void read_indexed_keys_for_compaction(
     const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if (append_to_existing) {
         const auto& key = *(update_info.previous_index_key_);
-        IndexInformation index_info = read_index_key(store, key);
+        IndexInformation index_info = read_index_key_without_column_stats(store, key);
         read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, std::move(index_info));
     }
 }
@@ -2516,7 +2516,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
 
     auto read_query = std::make_shared<ReadQuery>();
     const auto& key = *(update_info.previous_index_key_);
-    IndexInformation index_info = read_index_key(store, key);
+    IndexInformation index_info = read_index_key_without_column_stats(store, key);
     read_indexed_keys_to_pipeline(
             pipeline_context, *read_query, defragmentation_read_options_generator(options), std::move(index_info)
     );
@@ -2938,7 +2938,7 @@ folly::Future<VersionedItem> merge_update_impl(
     read_query->clauses_.push_back(std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source)));
     std::optional<IndexInformation> index_info;
     if (std::holds_alternative<VersionedItem>(version_info)) {
-        index_info = read_index_key(store, std::get<VersionedItem>(version_info).key_);
+        index_info = read_index_key_without_column_stats(store, std::get<VersionedItem>(version_info).key_);
     }
     std::shared_ptr<PipelineContext> pipeline_context =
             setup_pipeline_context(store, version_info, *read_query, read_options, std::move(index_info));
@@ -3011,7 +3011,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
 ) {
     std::optional<IndexInformation> index_info;
     if (std::holds_alternative<VersionedItem>(version_info)) {
-        index_info = read_index_key(store, std::get<VersionedItem>(version_info).key_);
+        index_info = read_index_key_without_column_stats(store, std::get<VersionedItem>(version_info).key_);
     }
     auto pipeline_context =
             setup_pipeline_context(store, version_info, *read_query, read_options, std::move(index_info));
