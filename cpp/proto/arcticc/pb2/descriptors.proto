@@ -348,6 +348,8 @@ enum ColumnStatsType {
     // misinterpret the new statistics format.
     COLUMN_STATS_MIN_V1 = 1;
     COLUMN_STATS_MAX_V1 = 2;
+    COLUMN_STATS_MIN_V2 = 3;
+    COLUMN_STATS_MAX_V2 = 4;
 }
 
 message StatColMapping {

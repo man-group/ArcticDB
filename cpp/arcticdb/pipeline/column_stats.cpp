@@ -89,6 +89,8 @@ std::string type_to_operator_string(ColumnStatTypeInternal type) {
     using TypeToOperatorStringMap = semi::static_map<ColumnStatTypeInternal, std::string, Tag>;
     TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MIN_V1) = "v1_MIN";
     TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MAX_V1) = "v1_MAX";
+    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MIN_V2) = "v2_MIN";
+    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MAX_V2) = "v2_MAX";
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             TypeToOperatorStringMap::contains(type), "Unknown column stat type requested"
     );
@@ -149,6 +151,8 @@ ColumnStats::ColumnStats(
         switch (mapping.type()) {
         case COLUMN_STATS_MIN_V1:
         case COLUMN_STATS_MAX_V1:
+        case COLUMN_STATS_MIN_V2:
+        case COLUMN_STATS_MAX_V2:
             external_type = ColumnStatType::MINMAX;
             break;
         case COLUMN_STATS_UNKNOWN:
@@ -196,7 +200,7 @@ std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType t
     struct Tag {};
     using Map = semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
     Map::get(ColumnStatType::MINMAX
-    ) = std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
+    ) = std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V2, ColumnStatTypeInternal::COLUMN_STATS_MAX_V2};
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(Map::contains(type), "Unknown column stat type");
     return Map::get(type);
 }
@@ -276,10 +280,10 @@ std::optional<Clause> ColumnStats::clause() const {
                         ColumnName(name_and_stat_types.mangled_name),
                         offset,
                         ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_MIN_V1
+                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_MIN_V2
                         )),
                         ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1
+                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_MAX_V2
                         ))
                 ));
                 break;
