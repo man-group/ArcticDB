@@ -2666,25 +2666,27 @@ static folly::Future<IndexInformation> fetch_index_and_column_stats(
             .thenValue([vi = versioned_item](auto&& results) -> IndexInformation {
                 auto& [index_try, column_stats_try] = results;
 
-                try {
-                    index_try.throwUnlessValue();
-                } catch (const std::exception& ex) {
-                    ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", vi.key_, ex.what());
+                if (index_try.hasException()) {
+                    ARCTICDB_DEBUG(
+                            log::version(),
+                            "Key not found from versioned item {}: {}",
+                            vi.key_,
+                            index_try.exception().what()
+                    );
                     throw storage::NoDataFoundException(fmt::format(
                             "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
                             vi.version(),
                             vi.symbol(),
                             vi.key_,
-                            ex.what()
+                            index_try.exception().what()
                     ));
                 }
 
-                try {
-                    column_stats_try.throwUnlessValue();
-                } catch (const storage::KeyNotFoundException&) {
+                if (column_stats_try.hasException()) {
                     ARCTICDB_DEBUG(log::version(), "Column stats key not found");
                     return {std::move(index_try).value(), std::nullopt};
                 }
+
                 return {std::move(index_try).value(), std::move(column_stats_try).value()};
             });
 }
