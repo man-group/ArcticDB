@@ -50,13 +50,15 @@ StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right
             return StatsComparison::NONE_MATCH;
         if (either_unknown(left, right))
             return StatsComparison::UNKNOWN;
-        return (is_match(left) && is_match(right)) ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+        // left and right must both be ALL_MATCH
+        return StatsComparison::ALL_MATCH;
     case OperationType::OR:
         if (left == StatsComparison::ALL_MATCH || right == StatsComparison::ALL_MATCH)
             return StatsComparison::ALL_MATCH;
         if (either_unknown(left, right))
             return StatsComparison::UNKNOWN;
-        return (is_match(left) || is_match(right)) ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+        // left and right must both be NONE_MATCH
+        return StatsComparison::NONE_MATCH;
     case OperationType::XOR:
         if (either_unknown(left, right))
             return StatsComparison::UNKNOWN;
