@@ -92,20 +92,15 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             using ValTag = std::remove_reference_t<decltype(val_tag)>;
 
             // bools are disabled in this part of the grammar at the moment, Monday: 11292565671
-            if constexpr (requires {
-                              StatsTag::data_type;
-                              ValTag::data_type;
-                          }) {
-                if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
-                              (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
-                    using StatsRawType = StatsTag::raw_type;
-                    using ValRawType = ValTag::raw_type;
-                    using comp = Comparable<StatsRawType, ValRawType>;
-                    auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
-                    auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
-                    auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
-                    return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
-                }
+            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
+                          (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
+                using StatsRawType = StatsTag::raw_type;
+                using ValRawType = ValTag::raw_type;
+                using comp = Comparable<StatsRawType, ValRawType>;
+                auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
+                auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
+                auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
+                return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
             }
 
             return StatsComparison::UNKNOWN;
