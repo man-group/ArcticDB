@@ -233,4 +233,5 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{inputs.run_commandline}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
+          STORAGE_TYPE: ${{inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage}}
           NODE_OPTIONS: --openssl-legacy-provider
