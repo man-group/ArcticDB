@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>

@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import gc
 from hypothesis import given, settings
 import hypothesis.strategies as st
 import numpy as np
@@ -1285,3 +1286,37 @@ def test_arrow_column_selection_excludes_first_column(lmdb_version_store_arrow):
     received = lib.read("s", columns=["b"]).data
     expected = table.select(["b"])
     assert expected.equals(received)
+
+
+def test_arrow_buffer_released_after_write(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "lifetime_test"
+    released = []
+
+    class BufferOwner:
+        def __init__(self, idx, n=100):
+            self.idx = idx
+            self.data = np.arange(idx * n, (idx + 1) * n, dtype=np.int64)
+
+        def __del__(self):
+            released.append(self.idx)
+
+    def make_table(idx):
+        # Creates a table with a foreign_buffer to a numpy array managed by BufferOwner
+        # The destructor of BufferOwner will get called when the arrow array refcount reaches zero
+        owner = BufferOwner(idx)
+        buf = pa.foreign_buffer(owner.data.ctypes.data, owner.data.nbytes, base=owner)
+        return pa.table({"col": pa.Array.from_buffers(pa.int64(), 100, [None, buf])})
+
+    tables = [make_table(i) for i in range(5)]
+
+    lib.write(sym, tables[0])
+    for t in tables[1:]:
+        lib.append(sym, t)
+
+    assert released == []
+
+    # After arrow tables are deleted and gc-ed in python all their respective buffers should be freed
+    del tables, t
+    gc.collect()
+    assert sorted(released) == [0, 1, 2, 3, 4]
