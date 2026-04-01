@@ -16,6 +16,8 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_traits.hpp>
+#include <arcticdb/log/log.hpp>
+
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -489,10 +491,7 @@ struct EqualsOperator {
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t == u;
-        else
-            return false;
+        return operator()(u, t);
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
@@ -506,6 +505,24 @@ struct EqualsOperator {
 
     template<typename T, typename U>
     StatsComparison operator()(ValueRange<T> range, U value) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            bool is_min_nan = std::isnan(range.min);
+            bool is_max_nan = std::isnan(range.max);
+            if (is_min_nan != is_max_nan) {
+                log::version().warn("Expected NaN at both ends of stats or neither, saw {}", range);
+                return StatsComparison::UNKNOWN;
+            }
+            if (is_min_nan) {
+                return StatsComparison::NONE_MATCH;
+            }
+        }
+        if constexpr (std::is_floating_point_v<U>) {
+            if (std::isnan(value)) {
+                // NaN != anything
+                return StatsComparison::NONE_MATCH;
+            }
+        }
+
         if ((*this)(range.min, value) && (*this)(range.max, value))
             return StatsComparison::ALL_MATCH;
         if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
@@ -528,10 +545,7 @@ struct NotEqualsOperator {
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t != u;
-        else
-            return true;
+        return operator()(u, t);
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
@@ -545,6 +559,24 @@ struct NotEqualsOperator {
 
     template<typename T, typename U>
     StatsComparison operator()(ValueRange<T> range, U value) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            bool is_min_nan = std::isnan(range.min);
+            bool is_max_nan = std::isnan(range.max);
+            if (is_min_nan != is_max_nan) {
+                log::version().warn("Expected NaN at both ends of stats or neither, saw {}", range);
+                return StatsComparison::UNKNOWN;
+            }
+            if (is_min_nan) {
+                return StatsComparison::ALL_MATCH;
+            }
+        }
+        if constexpr (std::is_floating_point_v<U>) {
+            if (std::isnan(value)) {
+                // NaN != anything
+                return StatsComparison::ALL_MATCH;
+            }
+        }
+
         if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
             return StatsComparison::ALL_MATCH;
         if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
@@ -920,6 +952,19 @@ struct formatter<arcticdb::StatsComparison> {
         default:
             return fmt::format_to(ctx.out(), "INVALID");
         }
+    }
+};
+
+template<typename T>
+struct formatter<arcticdb::ValueRange<T>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::ValueRange<T>& range, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "[{}, {}]", range.min, range.max);
     }
 };
 

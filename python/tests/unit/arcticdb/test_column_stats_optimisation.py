@@ -2,18 +2,26 @@ from datetime import datetime
 
 import numpy as np
 import pytest
+from arcticdb_ext.storage import KeyType
+
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
-
-from arcticdb.util.test import config_context, config_context_multi
 
 
 def get_table_data_read_count():
     """Get the number of TABLE_DATA keys read from query stats."""
     stats = qs.get_query_stats()
     return (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get("TABLE_DATA", {}).get("count", 0)
+
+
+def get_column_stats_read_count():
+    """Get the number of COLUMN_STATS keys read from query stats."""
+    stats = qs.get_query_stats()
+    return (
+        (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get("COLUMN_STATS", {}).get("count", 0)
+    )
 
 
 sym = "sym"
@@ -74,9 +82,9 @@ def test_column_stats_query_optimisation_disabled(in_memory_version_store, clear
     q = q[q["col_1"] > 2]
     qs.reset_stats()
     result = lib.read(sym, query_builder=q).data
-    table_data_reads = get_table_data_read_count()
+    assert get_table_data_read_count() == 2
+    assert get_column_stats_read_count() == 0
     assert_frame_equal(df1, result)
-    assert table_data_reads == 2
 
 
 def test_column_stats_query_optimisation_no_stats(
@@ -101,7 +109,9 @@ def test_column_stats_query_optimisation_no_stats(
     assert table_data_reads == 2
 
 
-def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_tiny_segment):
+def test_column_stats_query_optimisation_column_not_in_stats(
+    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
@@ -123,14 +133,17 @@ def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_
     assert_frame_equal(df1, result)
 
 
-def test_column_stats_query_optimisation_empty_segment(in_memory_version_store_tiny_segment):
+def test_column_stats_query_optimisation_empty_segment(
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
+):
     lib = in_memory_version_store_tiny_segment
 
-    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
-    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
-    df2 = pd.DataFrame({"col_1": []})
+    df0 = pd.DataFrame({"col_1": []}, dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df2 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
 
     lib.write(sym, df0)
+    assert lib.has_symbol(sym)  # check the empty write didn't fail silently
     lib.append(sym, df1)
     lib.append(sym, df2)
 
@@ -142,7 +155,7 @@ def test_column_stats_query_optimisation_empty_segment(in_memory_version_store_t
     qs.reset_stats()
     lib.read(sym, query_builder=q)
     table_data_reads = get_table_data_read_count()
-    assert table_data_reads == 2
+    assert table_data_reads == 1
 
 
 @pytest.mark.parametrize(
@@ -182,6 +195,7 @@ def test_column_stats_query_optimisation_multiple_filters(
     expected = full_df[query_expr(full_df)]
     assert_frame_equal(expected, result)
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+    assert get_column_stats_read_count() == 1
 
 
 @pytest.mark.parametrize(
@@ -258,7 +272,7 @@ def test_column_stats_query_optimisation_with_date_range(
     # Only segment 1 should be read
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
-    date_range = (pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-04"))
+    date_range = (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04"))
     qs.reset_stats()
     result = lib.read(sym, query_builder=q, date_range=date_range).data
     table_data_reads = get_table_data_read_count()
@@ -419,20 +433,22 @@ def test_column_stats_projection_before_filter_disables_pruning(
     table_data_reads = get_table_data_read_count()
     expected_reads = 2 if filter_first else 3
     assert table_data_reads == expected_reads, f"Expected {expected_reads} was {table_data_reads}"
+    assert get_column_stats_read_count() == (1 if filter_first else 0)
 
 
+@pytest.mark.parametrize("append_type", (np.int32, np.float64))
 def test_column_stats_dynamic_schema_column_type_varies(
-    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled, append_type
 ):
     """Test pruning when column type varies across segments (dynamic schema)."""
     lib = in_memory_version_store_dynamic_schema
 
     df_int8 = pd.DataFrame({"col_1": np.array([1, 2], dtype=np.int8)}, index=pd.date_range("2000-01-01", periods=2))
-    df_int32 = pd.DataFrame(
-        {"col_1": np.array([100, 200], dtype=np.int32)}, index=pd.date_range("2000-01-03", periods=2)
+    df_different_type = pd.DataFrame(
+        {"col_1": np.array([200, 300], dtype=append_type)}, index=pd.date_range("2000-01-03", periods=2)
     )
     lib.write(sym, df_int8)
-    lib.append(sym, df_int32)
+    lib.append(sym, df_different_type)
 
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
     qs.enable()
@@ -442,7 +458,7 @@ def test_column_stats_dynamic_schema_column_type_varies(
     result = lib.read(sym, query_builder=q).data
     table_data_reads = get_table_data_read_count()
 
-    expected = pd.concat([df_int8, df_int32])
+    expected = pd.concat([df_int8, df_different_type])
     expected = expected[expected["col_1"] > 50]
     assert_frame_equal(result, expected)
 
@@ -605,7 +621,9 @@ def test_column_stats_query_optimisation_index_types(
 
 
 @pytest.mark.parametrize("create_stats", [True, False], ids=["with_stats", "no_stats"])
-def test_column_stats_no_deadlock_single_thread(in_memory_version_store, column_stats_filtering_enabled, create_stats):
+def test_column_stats_no_deadlock_single_thread(
+    in_memory_version_store, column_stats_filtering_enabled, create_stats, tiny_thread_pool
+):
     lib = in_memory_version_store
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
@@ -614,11 +632,10 @@ def test_column_stats_no_deadlock_single_thread(in_memory_version_store, column_
     if create_stats:
         lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
-        q = QueryBuilder()
-        q = q[q["col_1"] > 2]
-        result = lib.read(sym, query_builder=q).data
-        assert_frame_equal(df1, result)
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    assert_frame_equal(df1, result)
 
 
 DATETIME_INDEXES_THREE_SEGMENTS = [
@@ -665,6 +682,14 @@ def test_column_stats_with_column_slicing(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
+    lt = lib.library_tool()
+    data_keys = lt.find_keys_for_symbol(KeyType.TABLE_DATA, sym)
+    # The index is stored in every block for datetime indexes even though the column slicing policy is "1"
+    # The range index is not physically stored. Other indexes (eg string / integer index) are just saved
+    # like normal columns in their own block.
+    expected_data_keys = 9 if isinstance(indexes[0], pd.DatetimeIndex) or isinstance(indexes[0], pd.RangeIndex) else 12
+    assert len(data_keys) == expected_data_keys
+
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
     q = QueryBuilder()
@@ -674,7 +699,7 @@ def test_column_stats_with_column_slicing(
     qs.reset_stats()
     result = lib.read(sym, query_builder=q, columns=["col_1"]).data
     table_data_reads = get_table_data_read_count()
-    # The index is stored in its own block for string and rowcount indexes
+    # Get an extra read for the index if it's stored in its own segment
     expected_reads = 1 if isinstance(indexes[0], pd.DatetimeIndex) or isinstance(indexes[0], pd.RangeIndex) else 2
     assert table_data_reads == expected_reads, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
 
@@ -822,6 +847,33 @@ def test_column_stats_three_chained_filter_clauses(
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
 
 
+def test_column_stats_repeated_expressions(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    """Nonreg test: ConstMap.set_value is called repeatedly with name=Num(2) here. We shouldn't validate against the repetition."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    q = q[q["col_1"] > 2]
+    q = q[(q["col_1"] > 2) & (q["col_1"] > 2)]
+
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(result, df1)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
+
+
 def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
     lib = in_memory_version_store
 
@@ -840,6 +892,36 @@ def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, col
     full_df = pd.concat([df0, df1])
     expected = full_df[full_df["col"] > 2]
     assert_frame_equal(expected, result)
+
+
+def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store
+
+    ts = pd.date_range("2000-01-01", periods=2)
+    df0 = pd.DataFrame({"col": [pd.NaT, pd.NaT]}, index=ts)
+    df1 = pd.DataFrame(
+        {"col": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-06-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    qs.enable()
+    qs.reset_stats()
+
+    q = QueryBuilder()
+    q = q[q["col"] > pd.Timestamp("2024-01-01")]
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[full_df["col"] > pd.Timestamp("2024-01-01")]
+    assert_frame_equal(expected, result)
+
+    assert table_data_reads == 1
 
 
 @pytest.mark.parametrize(
@@ -1225,3 +1307,19 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
     q = q[q["col"] > 0]
     result = lib.read(sym, query_builder=q).data
     assert len(result) == 0
+
+
+def test_column_stats_empty_stats(in_memory_version_store, column_stats_filtering_enabled):
+    lib = in_memory_version_store
+
+    df = pd.DataFrame({"col": pd.Series([-1, 0, 1, 2, 3], dtype=np.float64)})
+    lib.write(sym, df)
+
+    # This is a no-op at the moment, but this is still a useful regression test in case we ever
+    # start writing empty column stats segments.
+    lib.create_column_stats(sym, {"col": set()})
+
+    q = QueryBuilder()
+    q = q[q["col"] > 0]
+    result = lib.read(sym, query_builder=q).data
+    assert len(result) == 3

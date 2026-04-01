@@ -30,19 +30,6 @@ size_t stats_variant_size(const StatsVariantData& v) {
     );
 }
 
-bool value_is_nan(const Value& val) {
-    if (is_floating_point_type(val.data_type())) {
-        return details::visit_type(val.data_type(), [&val]<typename TagType>(TagType) -> bool {
-            using RawType = TagType::raw_type;
-            if constexpr (std::is_floating_point_v<RawType>) {
-                return std::isnan(val.get<RawType>());
-            }
-            return false;
-        });
-    }
-    return false;
-}
-
 StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation) {
     switch (operation) {
     case OperationType::AND:
@@ -50,13 +37,15 @@ StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right
             return StatsComparison::NONE_MATCH;
         if (either_unknown(left, right))
             return StatsComparison::UNKNOWN;
-        return (is_match(left) && is_match(right)) ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+        // left and right must both be ALL_MATCH
+        return StatsComparison::ALL_MATCH;
     case OperationType::OR:
         if (left == StatsComparison::ALL_MATCH || right == StatsComparison::ALL_MATCH)
             return StatsComparison::ALL_MATCH;
         if (either_unknown(left, right))
             return StatsComparison::UNKNOWN;
-        return (is_match(left) || is_match(right)) ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+        // left and right must both be NONE_MATCH
+        return StatsComparison::NONE_MATCH;
     case OperationType::XOR:
         if (either_unknown(left, right))
             return StatsComparison::UNKNOWN;

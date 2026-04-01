@@ -29,7 +29,7 @@ using StatsVariantData = std::variant<
         // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
         std::vector<ColumnStatsValues>>;
 
-using StatsRowVector = std::vector<std::optional<std::reference_wrapper<const ColumnStatsRow>>>;
+using StatsRowVector = std::vector<const ColumnStatsRow*>;
 
 StatsVariantData evaluate_ast_node_against_stats(
         const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows
@@ -46,8 +46,6 @@ StatsVariantData compute_stats(
 namespace column_stats_detail {
 
 size_t stats_variant_size(const StatsVariantData& v);
-
-bool value_is_nan(const Value& val);
 
 template<typename Func>
 struct FlippedComparator;
@@ -83,10 +81,6 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
         return StatsComparison::UNKNOWN;
     }
 
-    if (value_is_nan(*stats_lhs.min) || value_is_nan(*stats_lhs.max)) {
-        return StatsComparison::UNKNOWN;
-    }
-
     return details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
         using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
 
@@ -94,20 +88,15 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
             using ValTag = std::remove_reference_t<decltype(val_tag)>;
 
             // bools are disabled in this part of the grammar at the moment, Monday: 11292565671
-            if constexpr (requires {
-                              StatsTag::data_type;
-                              ValTag::data_type;
-                          }) {
-                if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
-                              (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
-                    using StatsRawType = StatsTag::raw_type;
-                    using ValRawType = ValTag::raw_type;
-                    using comp = Comparable<StatsRawType, ValRawType>;
-                    auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
-                    auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
-                    auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
-                    return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
-                }
+            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
+                          (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
+                using StatsRawType = StatsTag::raw_type;
+                using ValRawType = ValTag::raw_type;
+                using comp = Comparable<StatsRawType, ValRawType>;
+                auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
+                auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
+                auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
+                return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
             }
 
             return StatsComparison::UNKNOWN;

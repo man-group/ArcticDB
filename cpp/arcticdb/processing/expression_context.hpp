@@ -39,6 +39,8 @@ struct ExpressionContext {
       public:
         void set_value(std::string name, std::shared_ptr<T> val) { map_.try_emplace(name, val); }
         std::shared_ptr<T> get_value(std::string name) const { return map_.at(name); }
+        bool contains(std::string name) const { return map_.contains(name); }
+
         void merge_from(const ConstantMap& other) {
             for (const auto& [name, val] : other.map_) {
                 map_.try_emplace(name, val);
@@ -58,6 +60,13 @@ struct ExpressionContext {
 
     void add_regex(const std::string& name, std::shared_ptr<util::RegexGeneric> regex) {
         regex_matches_.set_value(name, std::move(regex));
+    }
+
+    void merge_from(const ExpressionContext& other) {
+        expression_nodes_.merge_from(other.expression_nodes_);
+        values_.merge_from(other.values_);
+        value_sets_.merge_from(other.value_sets_);
+        regex_matches_.merge_from(other.regex_matches_);
     }
 
     ConstantMap<ExpressionNode> expression_nodes_;

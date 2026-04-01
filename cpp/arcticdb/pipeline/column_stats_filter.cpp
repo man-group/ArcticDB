@@ -74,9 +74,7 @@ StatsVariantData evaluate_ast_node_against_stats(
                         result.emplace_back(std::nullopt, std::nullopt);
                         continue;
                     }
-                    auto& column_stats_row = row->get();
-                    auto it = column_stats_row.stats_for_column.find(column_name.value);
-                    if (it != column_stats_row.stats_for_column.end()) {
+                    if (auto it = row->stats_for_column.find(column_name.value); it != row->stats_for_column.end()) {
                         result.push_back(it->second);
                     } else {
                         result.emplace_back(std::nullopt, std::nullopt);
@@ -190,8 +188,10 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
         auto end_index = it->scalar_at<timestamp>(end_index_column_offset);
 
         if (!start_index || !end_index) {
-            log::version().warn("Saw column stats row without start_index or end_index");
-            continue;
+            log::version().warn("Saw column stats row without start_index or end_index, discarding all column stats");
+            rows_.clear();
+            index_to_row_.clear();
+            return;
         }
 
         stats_row.start_index = *start_index;
@@ -214,14 +214,13 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
             }
         }
 
-        index_to_row_[{stats_row.start_index, stats_row.end_index}] = it->row_id_;
+        index_to_row_[{stats_row.start_index, stats_row.end_index}] = rows_.size();
         rows_.push_back(std::move(stats_row));
     }
 }
 
 const ColumnStatsRow* ColumnStatsData::find_stats(timestamp start_index, timestamp end_index) const {
-    auto it = index_to_row_.find({start_index, end_index});
-    if (it != index_to_row_.end()) {
+    if (auto it = index_to_row_.find({start_index, end_index}); it != index_to_row_.end()) {
         return &rows_[it->second];
     }
     return nullptr;
@@ -245,12 +244,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             res->invert();
         }
 
-        if (column_stats_data.empty()) {
-            // No column stats, keep all segments
-            ARCTICDB_DEBUG(log::version(), "Empty column stats - keeping all segments");
-            return res;
-        }
-
         auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
         auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
 
@@ -260,16 +253,16 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         for (size_t row = 0; row < isr.size(); ++row) {
             if (!res->get_bit(row)) {
                 // Don't bother - we already know we don't need to look at the segment
-                stats_rows.emplace_back(std::nullopt);
+                stats_rows.push_back(nullptr);
                 continue;
             }
             total_count++;
             timestamp start_idx = *(start_index_col + row);
             timestamp end_idx = *(end_index_col + row);
             if (const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx)) {
-                stats_rows.emplace_back(std::cref(*stats));
+                stats_rows.push_back(stats);
             } else {
-                stats_rows.emplace_back(std::nullopt);
+                stats_rows.push_back(nullptr);
             }
         }
         util::check(stats_rows.size() == isr.size(), "Expected stats_rows.size() == isr.size()");
@@ -283,7 +276,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         );
 
         // Convert to BitSet
-        [[maybe_unused]] size_t pruned_count = 0; // for debug logging only, unused in release build
+        size_t pruned_count = 0;
         const auto& comparisons = std::get<std::vector<StatsComparison>>(result);
         util::check(comparisons.size() == isr.size(), "Expected comparisons.size() == isr.size()");
         for (size_t row = 0; row < isr.size(); ++row) {
@@ -293,7 +286,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             }
         }
 
-        ARCTICDB_DEBUG(log::version(), "Column stats filter pruned {} of {} segments", pruned_count, total_count);
+        log::version().debug("Column stats filter pruned {} of {} segments", pruned_count, total_count);
         return res;
     };
 }
@@ -301,7 +294,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         SegmentInMemory&& column_stats_segment, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
-    util::check(is_column_stats_enabled(), "Column stats not feature flagged on");
     std::vector<std::shared_ptr<ExpressionContext>> filter_expressions;
 
     for (const auto& clause : clauses) {

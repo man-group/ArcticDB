@@ -1906,7 +1906,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
             .thenValue([frame](auto&&) { return frame; });
 }
 
-IndexInformation read_index_key(const std::shared_ptr<Store>& store, const AtomKey& key) {
+IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key) {
     try {
         auto column_stats = std::nullopt;
         return IndexInformation{store->read_sync(key), column_stats};
@@ -1962,7 +1962,7 @@ void create_column_stats_impl(
 
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
-    IndexInformation index_info = read_index_key(store, versioned_item.key_);
+    IndexInformation index_info = read_index_key_without_column_stats(store, versioned_item.key_);
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, std::move(index_info));
 
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
@@ -2219,7 +2219,7 @@ static void read_indexed_keys_for_compaction(
     const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if (append_to_existing) {
         const auto& key = *(update_info.previous_index_key_);
-        IndexInformation index_info = read_index_key(store, key);
+        IndexInformation index_info = read_index_key_without_column_stats(store, key);
         read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, std::move(index_info));
     }
 }
@@ -2516,7 +2516,7 @@ PredefragmentationInfo get_pre_defragmentation_info(
 
     auto read_query = std::make_shared<ReadQuery>();
     const auto& key = *(update_info.previous_index_key_);
-    IndexInformation index_info = read_index_key(store, key);
+    IndexInformation index_info = read_index_key_without_column_stats(store, key);
     read_indexed_keys_to_pipeline(
             pipeline_context, *read_query, defragmentation_read_options_generator(options), std::move(index_info)
     );
@@ -2644,7 +2644,7 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
-static folly::Future<IndexInformation> fetch_index_and_column_stats(
+static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
 ) {
     auto index_future = store->read(versioned_item.key_);
@@ -2663,29 +2663,33 @@ static folly::Future<IndexInformation> fetch_index_and_column_stats(
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
             .via(&async::io_executor())
-            .thenValue([vi = versioned_item](auto&& results) -> IndexInformation {
+            .thenValue([vi = versioned_item](auto&& results) -> VersionIdentifier {
                 auto& [index_try, column_stats_try] = results;
 
-                try {
-                    index_try.throwUnlessValue();
-                } catch (const std::exception& ex) {
-                    ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", vi.key_, ex.what());
+                if (index_try.hasException()) {
+                    ARCTICDB_DEBUG(
+                            log::version(),
+                            "Key not found from versioned item {}: {}",
+                            vi.key_,
+                            index_try.exception().what()
+                    );
                     throw storage::NoDataFoundException(fmt::format(
                             "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
                             vi.version(),
                             vi.symbol(),
                             vi.key_,
-                            ex.what()
+                            index_try.exception().what()
                     ));
                 }
 
-                try {
-                    column_stats_try.throwUnlessValue();
-                } catch (const storage::KeyNotFoundException&) {
-                    ARCTICDB_DEBUG(log::version(), "Column stats key not found");
-                    return {std::move(index_try).value(), std::nullopt};
+                if (column_stats_try.hasException()) {
+                    log::version().debug("Column stats key not found");
+                    return std::make_shared<IndexInformation>(std::move(index_try).value(), std::nullopt);
                 }
-                return {std::move(index_try).value(), std::move(column_stats_try).value()};
+
+                return std::make_shared<IndexInformation>(
+                        std::move(index_try).value(), std::move(column_stats_try).value()
+                );
             });
 }
 
@@ -2699,8 +2703,8 @@ void set_row_id_if_index_only(
 }
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
-        const ReadOptions& read_options, std::optional<IndexInformation>&& index_information
+        const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
+        const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
@@ -2708,19 +2712,12 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     const bool has_active_version = !std::holds_alternative<StreamId>(version_info);
     util::variant_match(
             version_info,
-            [&](const StreamId& stream_id) {
-                util::check(!index_information, "No need to perform index read when reading incompletes chain");
-                pipeline_context->stream_id_ = stream_id;
-            },
-            [&](const VersionedItem& versioned_item) {
-                util::check(index_information.has_value(), "Should preload index information");
-                pipeline_context->stream_id_ = versioned_item.key_.id();
-                read_indexed_keys_to_pipeline(
-                        pipeline_context, read_query, read_options, std::move(*index_information)
-                );
+            [&](const StreamId& stream_id) { pipeline_context->stream_id_ = stream_id; },
+            [&](const VersionedItem&) {
+                util::raise_rte("setup_pipeline_context should not receive a bare VersionedItem; "
+                                "callers must resolve to IndexInformation first");
             },
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
-                util::check(!index_information, "No need to perform index read when reading with preloaded index");
                 pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
                 // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
                 // dataframe, hence the clone
@@ -2731,6 +2728,10 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
                         missing_stats_seg
                 };
                 read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, std::move(cloned_index));
+            },
+            [&](const std::shared_ptr<IndexInformation>& index_info) {
+                pipeline_context->stream_id_ = to_atom(index_info->index_.first).id();
+                read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, std::move(*index_info));
             }
     );
 
@@ -2784,6 +2785,9 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
             [](const VersionedItem& versioned_item) { return versioned_item; },
             [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
                 return VersionedItem(preloaded_index_query->index_key_);
+            },
+            [](const std::shared_ptr<IndexInformation>& index_info) {
+                return VersionedItem(to_atom(index_info->index_.first));
             }
     );
 }
@@ -2792,15 +2796,17 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
-    auto start_pipeline = [store, version_info, read_query, read_options, &handler_data](
-                                  std::optional<IndexInformation>&& index_information
-                          ) {
-        return async::submit_io_task(SetupPipelineContextTask{
-                                             store, version_info, read_query, read_options, std::move(index_information)
-                                     })
+    auto start_pipeline = [store, read_query, read_options, &handler_data](VersionIdentifier&& resolved_version) {
+        auto res_versioned_item = generate_result_versioned_item(resolved_version);
+        return async::submit_io_task(
+                       SetupPipelineContextTask{store, std::move(resolved_version), read_query, read_options}
+        )
                 .via(&async::cpu_executor())
-                .thenValue([store, read_query, read_options, version_info, &handler_data](auto&& pipeline_context) {
-                    auto res_versioned_item = generate_result_versioned_item(version_info);
+                .thenValue([store,
+                            read_query,
+                            read_options,
+                            res_versioned_item = std::move(res_versioned_item),
+                            &handler_data](auto&& pipeline_context) mutable {
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
                             check_can_perform_processing(pipeline_context, *read_query);
@@ -2851,7 +2857,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         return fetch_index_and_column_stats(store, vi, *read_query).thenValue(std::move(start_pipeline));
     }
 
-    return start_pipeline(std::nullopt);
+    return start_pipeline(VersionIdentifier{version_info});
 }
 
 folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
@@ -2936,12 +2942,12 @@ folly::Future<VersionedItem> merge_update_impl(
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
     read_query->clauses_.push_back(std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source)));
-    std::optional<IndexInformation> index_info;
-    if (std::holds_alternative<VersionedItem>(version_info)) {
-        index_info = read_index_key(store, std::get<VersionedItem>(version_info).key_);
+    VersionIdentifier resolved = version_info;
+    if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
+        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
     }
     std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store, version_info, *read_query, read_options, std::move(index_info));
+            setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
     // TODO: Rely on modify_schema for this https://man312219.monday.com/boards/7852509418/pulses/10997979275
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             columns_match(pipeline_context->descriptor(), source_descriptor),
@@ -3009,13 +3015,12 @@ folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    std::optional<IndexInformation> index_info;
-    if (std::holds_alternative<VersionedItem>(version_info)) {
-        index_info = read_index_key(store, std::get<VersionedItem>(version_info).key_);
+    VersionIdentifier resolved = version_info;
+    if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
+        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
     }
-    auto pipeline_context =
-            setup_pipeline_context(store, version_info, *read_query, read_options, std::move(index_info));
-    auto res_versioned_item = generate_result_versioned_item(version_info);
+    auto res_versioned_item = generate_result_versioned_item(resolved);
+    auto pipeline_context = setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
 
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !pipeline_context->multi_key_, "Multi-symbol joins not supported with recursively normalized data"
