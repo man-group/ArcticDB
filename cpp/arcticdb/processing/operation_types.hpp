@@ -489,10 +489,7 @@ struct EqualsOperator {
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t == u;
-        else
-            return false;
+        return operator()(u, t);
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
@@ -528,10 +525,7 @@ struct NotEqualsOperator {
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t != u;
-        else
-            return true;
+        return operator()(u, t);
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
