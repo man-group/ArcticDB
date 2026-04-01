@@ -475,6 +475,210 @@ TEST(MixedTypeStatsComparator, Uint64StatsDoubleQuery) {
     ASSERT_EQ(typed_stats_comparator(uint64_t{1000}, uint64_t{2000}, 500.5, GreaterThanOperator{}), SC::ALL_MATCH);
 }
 
+// int64_t stats, uint64_t query value — exercises the signed/unsigned comparison overloads
+TEST(MixedTypeStatsComparator, Int64StatsUint64Query_GreaterThan) {
+    constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
+    constexpr auto MSB = uint64_t{1} << 63;
+    constexpr auto U64_MAX = std::numeric_limits<uint64_t>::max();
+    // Query has MSB set: any int64 range is not greater → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, GreaterThanOperator{}), SC::NONE_MATCH);
+    ASSERT_EQ(typed_stats_comparator(int64_t{-1}, int64_t{100}, U64_MAX, GreaterThanOperator{}), SC::NONE_MATCH);
+    // Query = uint64(INT64_MAX): max possible int64 is INT64_MAX, not greater → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), GreaterThanOperator{}), SC::NONE_MATCH);
+    // Query = uint64(INT64_MAX - 1): INT64_MAX > INT64_MAX-1 → ALL_MATCH when min is also INT64_MAX
+    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX - 1), GreaterThanOperator{}), SC::ALL_MATCH);
+    // Range spanning the boundary
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX - 1), GreaterThanOperator{}), SC::UNKNOWN);
+    // Query = 0: positive range is greater
+    ASSERT_EQ(typed_stats_comparator(int64_t{1}, int64_t{10}, uint64_t{0}, GreaterThanOperator{}), SC::ALL_MATCH);
+    // Query = 0: negative range is not greater
+    ASSERT_EQ(typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, GreaterThanOperator{}), SC::NONE_MATCH);
+    // Query = 0: range spanning zero
+    ASSERT_EQ(typed_stats_comparator(int64_t{-5}, int64_t{5}, uint64_t{0}, GreaterThanOperator{}), SC::UNKNOWN);
+}
+
+TEST(MixedTypeStatsComparator, Int64StatsUint64Query_LessThan) {
+    constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Query has MSB set: any int64 is less → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, LessThanOperator{}), SC::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, std::numeric_limits<uint64_t>::max(), LessThanOperator{}),
+            SC::ALL_MATCH
+    );
+    // Query = uint64(INT64_MAX): range entirely below → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX - 1, uint64_t(I64_MAX), LessThanOperator{}), SC::ALL_MATCH);
+    // Query = uint64(INT64_MAX): min = INT64_MAX, not less → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), LessThanOperator{}), SC::NONE_MATCH);
+    // Query = 0: negative range entirely below → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, LessThanOperator{}), SC::ALL_MATCH);
+    // Query = 0: range starting at 0 → min not less → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, LessThanOperator{}), SC::NONE_MATCH);
+}
+
+TEST(MixedTypeStatsComparator, Int64StatsUint64Query_Equals) {
+    constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Query has MSB set: no int64 can equal it → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, EqualsOperator{}), SC::NONE_MATCH);
+    // Exact match at INT64_MAX boundary
+    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), EqualsOperator{}), SC::ALL_MATCH);
+    // Range contains the query value but is not a point → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), EqualsOperator{}), SC::UNKNOWN);
+    // Value outside range → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{11}, EqualsOperator{}), SC::NONE_MATCH);
+}
+
+TEST(MixedTypeStatsComparator, Int64StatsUint64Query_NotEquals) {
+    constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Query has MSB set: every int64 differs → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, NotEqualsOperator{}), SC::ALL_MATCH);
+    // Point range equal to query → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), NotEqualsOperator{}), SC::NONE_MATCH);
+    // Non-point range containing query → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), NotEqualsOperator{}), SC::UNKNOWN);
+}
+
+TEST(MixedTypeStatsComparator, Int64StatsUint64Query_LessThanEquals) {
+    constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Query has MSB set: any int64 ≤ it → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, LessThanEqualsOperator{}), SC::ALL_MATCH);
+    // Query = uint64(INT64_MAX): max = INT64_MAX ≤ INT64_MAX → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), LessThanEqualsOperator{}), SC::ALL_MATCH);
+    // Query = 0: positive range min > 0 → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{1}, int64_t{10}, uint64_t{0}, LessThanEqualsOperator{}), SC::NONE_MATCH);
+    // Query = 0: range starting at 0 → max may exceed → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, LessThanEqualsOperator{}), SC::UNKNOWN);
+}
+
+TEST(MixedTypeStatsComparator, Int64StatsUint64Query_GreaterThanEquals) {
+    constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Query has MSB set: no int64 ≥ it → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, GreaterThanEqualsOperator{}), SC::NONE_MATCH);
+    // Query = uint64(INT64_MAX): only INT64_MAX itself qualifies
+    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), GreaterThanEqualsOperator{}), SC::ALL_MATCH);
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), GreaterThanEqualsOperator{}), SC::UNKNOWN);
+    // Query = 0: range [0, 10], min ≥ 0 → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, GreaterThanEqualsOperator{}), SC::ALL_MATCH);
+    // Query = 0: negative range → NONE_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, GreaterThanEqualsOperator{}), SC::NONE_MATCH
+    );
+}
+
+// uint64_t stats, int64_t query value — exercises the signed/unsigned comparison overloads
+TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_GreaterThan) {
+    constexpr auto I64_MAX = int64_t{std::numeric_limits<int64_t>::max()};
+    constexpr auto I64_MIN = std::numeric_limits<int64_t>::min();
+    constexpr auto MSB = uint64_t{1} << 63;
+    constexpr auto U64_MAX = std::numeric_limits<uint64_t>::max();
+    // Stats min has MSB set: always greater than any int64 → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(MSB, U64_MAX, I64_MAX, GreaterThanOperator{}), SC::ALL_MATCH);
+    ASSERT_EQ(typed_stats_comparator(MSB, MSB, int64_t{0}, GreaterThanOperator{}), SC::ALL_MATCH);
+    // Query negative: any uint64 > negative → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, GreaterThanOperator{}), SC::ALL_MATCH);
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{0}, I64_MIN, GreaterThanOperator{}), SC::ALL_MATCH);
+    // Query = INT64_MAX, stats just below: max = INT64_MAX-1 as uint64, not greater → NONE_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t(I64_MAX - 1), I64_MAX, GreaterThanOperator{}), SC::NONE_MATCH
+    );
+    // Query = INT64_MAX, stats spanning the MSB boundary → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, GreaterThanOperator{}), SC::UNKNOWN);
+    // Query = 0, stats entirely in shared range: [0, 0] > 0 → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{0}, int64_t{0}, GreaterThanOperator{}), SC::NONE_MATCH);
+    // Query = 0: [1, 10] > 0 → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{1}, uint64_t{10}, int64_t{0}, GreaterThanOperator{}), SC::ALL_MATCH);
+}
+
+TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_LessThan) {
+    constexpr auto I64_MAX = int64_t{std::numeric_limits<int64_t>::max()};
+    constexpr auto MSB = uint64_t{1} << 63;
+    constexpr auto U64_MAX = std::numeric_limits<uint64_t>::max();
+    // Stats min has MSB set: uint64 with MSB is never less than any int64 → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(MSB, U64_MAX, I64_MAX, LessThanOperator{}), SC::NONE_MATCH);
+    // Query negative: no uint64 < negative → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, LessThanOperator{}), SC::NONE_MATCH);
+    // Stats entirely below query in shared range: [0, 4] < 5 → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{4}, int64_t{5}, LessThanOperator{}), SC::ALL_MATCH);
+    // Stats spanning the MSB boundary, query = INT64_MAX → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, LessThanOperator{}), SC::UNKNOWN);
+    // Point at INT64_MAX: not less → NONE_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, LessThanOperator{}), SC::NONE_MATCH
+    );
+}
+
+TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_Equals) {
+    constexpr auto I64_MAX = int64_t{std::numeric_limits<int64_t>::max()};
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Stats with MSB set: no int64 can equal → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, EqualsOperator{}), SC::NONE_MATCH);
+    // Query negative: no uint64 equals negative → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, EqualsOperator{}), SC::NONE_MATCH);
+    // Exact match in shared range
+    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, EqualsOperator{}), SC::ALL_MATCH);
+    // Range contains query in shared range → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{50}, EqualsOperator{}), SC::UNKNOWN);
+}
+
+TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_NotEquals) {
+    constexpr auto I64_MAX = int64_t{std::numeric_limits<int64_t>::max()};
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Stats with MSB set: every value differs from any int64 → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, NotEqualsOperator{}), SC::ALL_MATCH);
+    // Query negative: every uint64 differs → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, NotEqualsOperator{}), SC::ALL_MATCH);
+    // Point range equal to query → NONE_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, NotEqualsOperator{}), SC::NONE_MATCH
+    );
+}
+
+TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_LessThanEquals) {
+    constexpr auto I64_MAX = int64_t{std::numeric_limits<int64_t>::max()};
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Stats with MSB set: never ≤ any int64 → NONE_MATCH
+    ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, LessThanEqualsOperator{}), SC::NONE_MATCH);
+    // Query negative: no uint64 ≤ negative → NONE_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, LessThanEqualsOperator{}), SC::NONE_MATCH
+    );
+    // Max in shared range ≤ query → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{10}, I64_MAX, LessThanEqualsOperator{}), SC::ALL_MATCH);
+    // Point at boundary: INT64_MAX ≤ INT64_MAX → ALL_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, LessThanEqualsOperator{}),
+            SC::ALL_MATCH
+    );
+    // Spanning MSB boundary → UNKNOWN
+    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, LessThanEqualsOperator{}), SC::UNKNOWN);
+}
+
+TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_GreaterThanEquals) {
+    constexpr auto I64_MAX = int64_t{std::numeric_limits<int64_t>::max()};
+    constexpr auto I64_MIN = std::numeric_limits<int64_t>::min();
+    constexpr auto MSB = uint64_t{1} << 63;
+    // Stats min has MSB set: always ≥ any int64 → ALL_MATCH
+    ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, GreaterThanEqualsOperator{}), SC::ALL_MATCH);
+    // Query negative: any uint64 ≥ negative → ALL_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{0}, int64_t{-1}, GreaterThanEqualsOperator{}), SC::ALL_MATCH
+    );
+    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{0}, I64_MIN, GreaterThanEqualsOperator{}), SC::ALL_MATCH);
+    // Point at boundary: INT64_MAX ≥ INT64_MAX → ALL_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, GreaterThanEqualsOperator{}),
+            SC::ALL_MATCH
+    );
+    // Max below query in shared range → NONE_MATCH
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{4}, int64_t{5}, GreaterThanEqualsOperator{}), SC::NONE_MATCH
+    );
+}
+
 INSTANTIATE_TEST_SUITE_P(
         InfinityQueryValue, BinaryComparisonInfinityTest,
         ::testing::Values(
