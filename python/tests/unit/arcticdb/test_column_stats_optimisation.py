@@ -14,6 +14,12 @@ def get_table_data_read_count():
     return (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get("TABLE_DATA", {}).get("count", 0)
 
 
+def get_column_stats_read_count():
+    """Get the number of COLUMN_STATS keys read from query stats."""
+    stats = qs.get_query_stats()
+    return (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get("COLUMN_STATS", {}).get("count", 0)
+
+
 sym = "sym"
 
 
@@ -72,9 +78,9 @@ def test_column_stats_query_optimisation_disabled(in_memory_version_store, clear
     q = q[q["col_1"] > 2]
     qs.reset_stats()
     result = lib.read(sym, query_builder=q).data
-    table_data_reads = get_table_data_read_count()
+    assert get_table_data_read_count() == 2
+    assert get_column_stats_read_count() == 0
     assert_frame_equal(df1, result)
-    assert table_data_reads == 2
 
 
 def test_column_stats_query_optimisation_no_stats(
@@ -99,7 +105,7 @@ def test_column_stats_query_optimisation_no_stats(
     assert table_data_reads == 2
 
 
-def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_tiny_segment):
+def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_tiny_segment, column_stats_filtering_enabled):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
@@ -183,6 +189,7 @@ def test_column_stats_query_optimisation_multiple_filters(
     expected = full_df[query_expr(full_df)]
     assert_frame_equal(expected, result)
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+    assert get_column_stats_read_count() == 1
 
 
 @pytest.mark.parametrize(
@@ -420,6 +427,7 @@ def test_column_stats_projection_before_filter_disables_pruning(
     table_data_reads = get_table_data_read_count()
     expected_reads = 2 if filter_first else 3
     assert table_data_reads == expected_reads, f"Expected {expected_reads} was {table_data_reads}"
+    assert get_column_stats_read_count() == (1 if filter_first else 0)
 
 
 def test_column_stats_dynamic_schema_column_type_varies(
