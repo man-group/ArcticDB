@@ -275,7 +275,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         );
 
         // Convert to BitSet
-        [[maybe_unused]] size_t pruned_count = 0; // for debug logging only, unused in release build
+        size_t pruned_count = 0;
         const auto& comparisons = std::get<std::vector<StatsComparison>>(result);
         util::check(comparisons.size() == isr.size(), "Expected comparisons.size() == isr.size()");
         for (size_t row = 0; row < isr.size(); ++row) {
@@ -285,7 +285,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
             }
         }
 
-        ARCTICDB_DEBUG(log::version(), "Column stats filter pruned {} of {} segments", pruned_count, total_count);
+        log::version().debug("Column stats filter pruned {} of {} segments", pruned_count, total_count);
         return res;
     };
 }
