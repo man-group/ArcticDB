@@ -512,7 +512,17 @@ class VersionMapImpl {
         }
         auto old_entry = *entry;
         if (!index_keys.empty()) {
-            entry->keys_.assign(std::begin(index_keys), std::end(index_keys));
+            entry->keys_.clear();
+            entry->tombstones_.clear();
+            entry->tombstone_all_.reset();
+            for (const auto& key : index_keys) {
+                entry->keys_.push_back(key);
+                if (key.type() == KeyType::TOMBSTONE) {
+                    entry->tombstones_.try_emplace(key.version_id(), key);
+                } else if (key.type() == KeyType::TOMBSTONE_ALL) {
+                    entry->try_set_tombstone_all(key);
+                }
+            }
             auto new_version_id = index_keys[0].version_id();
             entry->head_ = write_entry_to_storage(store, stream_id, new_version_id, entry);
             if (validate_)
