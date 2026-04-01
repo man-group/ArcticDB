@@ -22,7 +22,6 @@ import re
 import time
 import requests
 import uuid
-import sys
 import multiprocessing
 from datetime import datetime
 from functools import partial
@@ -54,8 +53,9 @@ from arcticdb.storage_fixtures.mongo import ManagedMongoDBServer, auto_detect_se
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int, unset_config_int
+import arcticdb_ext.cpp_async as adb_async
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer, CustomArrayNormalizer
+from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
@@ -1735,6 +1735,20 @@ def column_stats_filtering_disabled():
 @pytest.fixture(params=["column_stats_filtering_enabled", "column_stats_filtering_disabled"])
 def column_stats_filtering_enabled_and_disabled(request):
     yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def tiny_thread_pool():
+    original_io = adb_async.io_thread_count()
+    original_cpu = adb_async.cpu_thread_count()
+    with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
+        adb_async.reinit_task_scheduler()
+        assert adb_async.io_thread_count() == 1
+        assert adb_async.cpu_thread_count() == 1
+        yield
+    adb_async.reinit_task_scheduler()
+    assert adb_async.io_thread_count() == original_io
+    assert adb_async.cpu_thread_count() == original_cpu
 
 
 # region Pytest special xfail handling

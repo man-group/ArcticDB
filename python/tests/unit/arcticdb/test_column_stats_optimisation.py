@@ -7,8 +7,6 @@ from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
-from arcticdb.util.test import config_context, config_context_multi
-
 
 def get_table_data_read_count():
     """Get the number of TABLE_DATA keys read from query stats."""
@@ -123,14 +121,17 @@ def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_
     assert_frame_equal(df1, result)
 
 
-def test_column_stats_query_optimisation_empty_segment(in_memory_version_store_tiny_segment):
+def test_column_stats_query_optimisation_empty_segment(
+    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
+):
     lib = in_memory_version_store_tiny_segment
 
-    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
-    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
-    df2 = pd.DataFrame({"col_1": []})
+    df0 = pd.DataFrame({"col_1": []}, dtype=np.int64)
+    df1 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df2 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
 
     lib.write(sym, df0)
+    assert lib.has_symbol(sym)  # check the empty write didn't fail silently
     lib.append(sym, df1)
     lib.append(sym, df2)
 
@@ -142,7 +143,7 @@ def test_column_stats_query_optimisation_empty_segment(in_memory_version_store_t
     qs.reset_stats()
     lib.read(sym, query_builder=q)
     table_data_reads = get_table_data_read_count()
-    assert table_data_reads == 2
+    assert table_data_reads == 1
 
 
 @pytest.mark.parametrize(
@@ -605,7 +606,9 @@ def test_column_stats_query_optimisation_index_types(
 
 
 @pytest.mark.parametrize("create_stats", [True, False], ids=["with_stats", "no_stats"])
-def test_column_stats_no_deadlock_single_thread(in_memory_version_store, column_stats_filtering_enabled, create_stats):
+def test_column_stats_no_deadlock_single_thread(
+    in_memory_version_store, column_stats_filtering_enabled, create_stats, tiny_thread_pool
+):
     lib = in_memory_version_store
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
@@ -614,11 +617,10 @@ def test_column_stats_no_deadlock_single_thread(in_memory_version_store, column_
     if create_stats:
         lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
-    with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
-        q = QueryBuilder()
-        q = q[q["col_1"] > 2]
-        result = lib.read(sym, query_builder=q).data
-        assert_frame_equal(df1, result)
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    result = lib.read(sym, query_builder=q).data
+    assert_frame_equal(df1, result)
 
 
 DATETIME_INDEXES_THREE_SEGMENTS = [
