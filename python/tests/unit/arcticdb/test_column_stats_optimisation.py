@@ -258,7 +258,7 @@ def test_column_stats_query_optimisation_with_date_range(
     # Only segment 1 should be read
     q = QueryBuilder()
     q = q[q["col_1"] > 2]
-    date_range = (pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-04"))
+    date_range = (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04"))
     qs.reset_stats()
     result = lib.read(sym, query_builder=q, date_range=date_range).data
     table_data_reads = get_table_data_read_count()
