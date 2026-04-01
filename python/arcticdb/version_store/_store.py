@@ -510,6 +510,8 @@ class NativeVersionStore:
             open_mode=open_mode,
             native_cfg=native_cfg,
         )
+        if state.get("skip_df_consolidation"):
+            self._normalizer.df.set_skip_df_consolidation()
 
     def __getstate__(self):
         return {
@@ -523,6 +525,7 @@ class NativeVersionStore:
                 "string": get_all_config_string(),
                 "double": get_all_config_double(),
             },
+            "skip_df_consolidation": self._normalizer.df._skip_df_consolidation,
         }
 
     def __repr__(self):

@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 from pickle import loads, dumps
 from arcticdb_ext import (
     get_config_int,
@@ -113,3 +114,19 @@ def test_config_preserved_in_library_pickle_roundtrip(lmdb_library):
         assert get_config_int("LibPickleTestKey") == 99
     finally:
         unset_config_int("LibPickleTestKey")
+
+
+def test_pickle_restores_skip_df_consolidation(lmdb_library, version_store_factory):
+    """skip_df_consolidation flag must be preserved through pickle for both Library and NativeVersionStore."""
+    from arcticdb.util._versions import IS_PANDAS_TWO
+
+    # Library sets skip_df_consolidation on its _nvs in __init__
+    assert lmdb_library._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
+    loaded_lib = loads(dumps(lmdb_library))
+    assert loaded_lib._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
+
+    # NativeVersionStore on its own does not set the flag
+    vs = version_store_factory()
+    assert vs._normalizer.df._skip_df_consolidation == (IS_PANDAS_TWO and os.getenv("SKIP_DF_CONSOLIDATION") is not None)
+    loaded_vs = loads(dumps(vs))
+    assert loaded_vs._normalizer.df._skip_df_consolidation == vs._normalizer.df._skip_df_consolidation
