@@ -1943,8 +1943,18 @@ void create_column_stats_impl(
     std::optional<SegmentInMemory> old_segment;
     try {
         old_segment = store->read(column_stats_key).get().second;
+    } catch (...) {
+        // Old segment doesn't exist
+    }
+
+    if (old_segment) {
         arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
-        old_segment->metadata()->UnpackTo(&old_header);
+        bool unpacked = old_segment->metadata()->UnpackTo(&old_header);
+        util::check(
+                unpacked,
+                "Could not unpack metadata of old_header in create_column_stats_impl? key={}",
+                column_stats_key
+        );
         ColumnStats old_column_stats{old_header, maybe_isr->tsd()};
         // No need to redo work for any stats that already exist
         column_stats.drop(old_column_stats, false);
@@ -1952,8 +1962,6 @@ void create_column_stats_impl(
         if (column_stats.empty()) {
             return;
         }
-    } catch (...) {
-        // Old segment doesn't exist
     }
 
     auto clause = column_stats.clause();
