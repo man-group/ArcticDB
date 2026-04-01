@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import random
 import time
 from shutil import copytree, rmtree
@@ -19,7 +20,7 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 from benchmarks.common import *
 from arcticdb.util.logger import get_logger
 
-from benchmarks.environment_setup import Storage, create_libraries_across_storages
+from benchmarks.environment_setup import Storage, create_libraries_across_storages, is_storage_enabled
 
 
 def get_time_at_fraction_of_df(fraction, rows):
@@ -146,7 +147,6 @@ class Deletion:
 
 
 class DeleteOverTimeModificationFunctions:
-
     ARCTIC_DIR = "modification_functions_delete"
     CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}"
 
@@ -191,3 +191,98 @@ class DeleteMultipleVersions:
 
     def time_delete_multiple_versions(self):
         self.lib.delete(self.sym, list(range(99)))
+
+
+class DeleteBatchSymbols:
+    """Benchmark batch deletion of multiple symbols."""
+
+    number = 1
+    warmup_time = 0
+    timeout = 600
+
+    num_symbols_list = [10, 100]
+    storages = [Storage.LMDB, Storage.AMAZON]
+    params = [num_symbols_list, storages]
+    param_names = ["num_symbols", "storage"]
+
+    ARCTIC_DIR = "bench_delete_batch_symbols"
+
+    def setup(self, num_symbols, storage):
+        if not is_storage_enabled(storage):
+            raise SkipNotImplemented
+
+        if storage == Storage.LMDB:
+            self.ac = Arctic(f"lmdb://{self.ARCTIC_DIR}")
+        elif storage == Storage.AMAZON:
+            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
+
+            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)
+            self.ac = factory.create_fixture().create_arctic()
+
+        self.ac.delete_library("test_lib")
+        self.lib = self.ac.create_library("test_lib")
+
+        df = pd.DataFrame({"col": range(1000)})
+        self.syms = [f"sym_{i}" for i in range(num_symbols)]
+        for sym in self.syms:
+            self.lib.write(sym, df)
+
+    def teardown(self, *args):
+        self.ac.delete_library("test_lib")
+        del self.ac
+        if os.path.exists(self.ARCTIC_DIR):
+            rmtree(self.ARCTIC_DIR, ignore_errors=True)
+
+    def time_delete_batch_symbols(self, *args):
+        self.lib.delete_batch(self.syms)
+
+
+class DeleteBatchVersions:
+    """Benchmark batch deletion of specific versions across multiple symbols."""
+
+    number = 1
+    warmup_time = 0
+    timeout = 600
+
+    num_symbols_list = [10, 100]
+    versions_per_symbol = 10
+    storages = [Storage.LMDB, Storage.AMAZON]
+    params = [num_symbols_list, storages]
+    param_names = ["num_symbols", "storage"]
+
+    ARCTIC_DIR = "bench_delete_batch_versions"
+
+    def setup(self, num_symbols, storage):
+        if not is_storage_enabled(storage):
+            raise SkipNotImplemented
+
+        if storage == Storage.LMDB:
+            self.ac = Arctic(f"lmdb://{self.ARCTIC_DIR}")
+        elif storage == Storage.AMAZON:
+            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
+
+            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)
+            self.ac = factory.create_fixture().create_arctic()
+
+        self.ac.delete_library("test_lib")
+        self.lib = self.ac.create_library("test_lib")
+
+        df = pd.DataFrame({"col": range(1000)})
+        self.syms = [f"sym_{i}" for i in range(num_symbols)]
+        for sym in self.syms:
+            for _ in range(self.versions_per_symbol):
+                self.lib.write(sym, df, prune_previous_versions=False)
+
+        from arcticdb.version_store.library import DeleteRequest
+
+        # Prepare delete requests to delete all but the latest version for each symbol
+        self.delete_requests = [DeleteRequest(sym, list(range(self.versions_per_symbol - 2))) for sym in self.syms]
+
+    def teardown(self, *args):
+        self.ac.delete_library("test_lib")
+        del self.ac
+        if os.path.exists(self.ARCTIC_DIR):
+            rmtree(self.ARCTIC_DIR, ignore_errors=True)
+
+    def time_delete_batch_versions(self, *args):
+        self.lib.delete_batch(self.delete_requests)
