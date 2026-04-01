@@ -153,10 +153,11 @@ ColumnStats::ColumnStats(
             break;
         case COLUMN_STATS_UNKNOWN:
         default:
-            log::version().warn(
-                    "Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat."
+            // TODO when we use column stats at read time, just ignore any missing.
+            // For maintenance operations, we should raise.
+            compatibility::raise<ErrorCode::E_UNRECOGNISED_COLUMN_STATS_VERSION>(
+                    "Encountered unknown column stat. Upgrade your ArcticDB installation."
             );
-            continue;
         }
         if (auto it = offset_to_stat_info_.find(mapping.data_col_offset()); it != offset_to_stat_info_.end()) {
             it->second.column_stats.insert(external_type);
