@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import datetime
-import functools
+import contextlib
 import io
 import sys
 
@@ -74,43 +74,23 @@ except ImportError:
 IS_WINDOWS = sys.platform == "win32"
 
 
-_tzdata_download_attempted = False
-
-
-def _retry_with_tzdata_download(fn):
-    """Decorator that retries a PyArrow timezone operation after downloading tzdata on Windows.
-
-    On the first ArrowInvalid mentioning "timezone", attempts to download the IANA timezone
-    database via pyarrow and retries once. The download is attempted at most once per process.
-    """
-
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        global _tzdata_download_attempted
-        try:
-            return fn(*args, **kwargs)
-        except pa.lib.ArrowInvalid as e:
-            if not IS_WINDOWS or "timezone" not in str(e).lower() or _tzdata_download_attempted:
-                raise
-            _tzdata_download_attempted = True
-            log.warn(
-                "Windows timezone database missing (needed by ArcticDB Arrow/Polars output). " "Downloading...",
-            )
-            try:
-                pa.util.download_tzdata_on_windows()
-            except Exception as download_err:
-                raise NormalizationException(
-                    f"{e}\n\n"
-                    "ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which "
-                    "requires a timezone database on Windows.\n"
-                    "Automatic download failed. To install manually, run:\n"
-                    '  python -c "from pyarrow.util import download_tzdata_on_windows; '
-                    'download_tzdata_on_windows()"\n'
-                    "Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows"
-                ) from download_err
-            return fn(*args, **kwargs)
-
-    return wrapper
+@contextlib.contextmanager
+def _tz_error_context():
+    """Wraps PyArrow timezone operations with a helpful error message on Windows."""
+    try:
+        yield
+    except pa.lib.ArrowInvalid as e:
+        if not IS_WINDOWS or "timezone" not in str(e).lower():
+            raise
+        raise NormalizationException(
+            f"{e}\n\n"
+            "ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which "
+            "requires a timezone database on Windows.\n"
+            "To install, run:\n"
+            '  python -c "from pyarrow.util import download_tzdata_on_windows; '
+            'download_tzdata_on_windows()"\n'
+            "Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows"
+        ) from e
 
 
 NPDDataFrame = NamedTuple(
@@ -732,12 +712,6 @@ class ArrowTableNormalizer(Normalizer):
 
         return {"index_columns": index_columns, "column_indexes": [column_index], "columns": pandas_columns}
 
-    @_retry_with_tzdata_download
-    def _apply_tz_to_column(self, col, timezone):
-        # All arcticdb timestamps are stored as UTC for timezone aware timestamps.
-        col = pa.compute.assume_timezone(col, timezone="UTC")
-        return col.cast(pa.timestamp("ns", timezone))
-
     def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
         if (
@@ -758,7 +732,9 @@ class ArrowTableNormalizer(Normalizer):
                 field = field.with_name(op.renames_for_table[i])
             if i in op.timezones:
                 timezone = op.timezones[i]
-                col = self._apply_tz_to_column(col, timezone)
+                with _tz_error_context():
+                    col = pa.compute.assume_timezone(col, timezone="UTC")
+                    col = col.cast(pa.timestamp("ns", timezone))
                 field = field.with_type(pa.timestamp("ns", timezone))
             new_columns.append(col)
             new_fields.append(field)
