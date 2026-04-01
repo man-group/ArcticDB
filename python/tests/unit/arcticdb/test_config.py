@@ -112,6 +112,8 @@ def test_config_preserved_in_library_pickle_roundtrip(lmdb_library):
 
         loaded = loads(dumped)
         assert get_config_int("LibPickleTestKey") == 99
+        # DevTools._nvs must be the same object as Library._nvs after unpickling
+        assert loaded._dev_tools._nvs is loaded._nvs
     finally:
         unset_config_int("LibPickleTestKey")
 
