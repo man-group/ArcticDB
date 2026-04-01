@@ -301,7 +301,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         SegmentInMemory&& column_stats_segment, const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
-    util::check(is_column_stats_enabled(), "Column stats not feature flagged on");
     std::vector<std::shared_ptr<ExpressionContext>> filter_expressions;
 
     for (const auto& clause : clauses) {
