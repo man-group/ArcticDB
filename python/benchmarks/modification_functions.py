@@ -228,8 +228,9 @@ class DeleteBatchSymbols:
             self.lib.write(sym, df)
 
     def teardown(self, *args):
-        self.ac.delete_library("test_lib")
-        del self.ac
+        if hasattr(self, "ac"):
+            self.ac.delete_library("test_lib")
+            del self.ac
         if os.path.exists(self.ARCTIC_DIR):
             rmtree(self.ARCTIC_DIR, ignore_errors=True)
 
@@ -279,8 +280,9 @@ class DeleteBatchVersions:
         self.delete_requests = [DeleteRequest(sym, list(range(self.versions_per_symbol - 2))) for sym in self.syms]
 
     def teardown(self, *args):
-        self.ac.delete_library("test_lib")
-        del self.ac
+        if hasattr(self, "ac"):
+            self.ac.delete_library("test_lib")
+            del self.ac
         if os.path.exists(self.ARCTIC_DIR):
             rmtree(self.ARCTIC_DIR, ignore_errors=True)
 
