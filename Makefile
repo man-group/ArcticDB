@@ -165,8 +165,8 @@ build-and-test-py-debug: build-debug ## Debug build + symlink + run Python tests
 
 # ── wheel ────────────────────────────────────────────────────────────────────
 wheel: ## Build a pip wheel
-	$(_ENV) $(PROXY_CMD) ARCTIC_CMAKE_PRESET=$(RELEASE_PRESET) CMAKE_BUILD_PARALLEL_LEVEL=$(CMAKE_JOBS) \
-		$(_VENV_PIP) wheel . --no-deps -w dist/
+	$(_ENV) ARCTIC_CMAKE_PRESET=$(RELEASE_PRESET) CMAKE_BUILD_PARALLEL_LEVEL=$(CMAKE_JOBS) \
+		$(PROXY_CMD) $(_VENV_PIP) wheel . --no-deps -w dist/
 
 # ── bench-cpp ────────────────────────────────────────────────────────────────
 bench-cpp: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build and run C++ benchmarks (release, FILTER= for benchmark_filter)
