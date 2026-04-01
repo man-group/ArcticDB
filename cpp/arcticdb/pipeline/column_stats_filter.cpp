@@ -74,8 +74,7 @@ StatsVariantData evaluate_ast_node_against_stats(
                         result.emplace_back(std::nullopt, std::nullopt);
                         continue;
                     }
-                    auto it = row->stats_for_column.find(column_name.value);
-                    if (it != row->stats_for_column.end()) {
+                    if (auto it = row->stats_for_column.find(column_name.value); it != row->stats_for_column.end()) {
                         result.push_back(it->second);
                     } else {
                         result.emplace_back(std::nullopt, std::nullopt);
