@@ -7,7 +7,8 @@
 using namespace arcticdb;
 using namespace arcticdb::column_stats_detail;
 
-class BinaryBooleanStatsTest : public ::testing::TestWithParam<std::tuple<StatsComparison, StatsComparison, OperationType, StatsComparison>> {};
+class BinaryBooleanStatsTest
+    : public ::testing::TestWithParam<std::tuple<StatsComparison, StatsComparison, OperationType, StatsComparison>> {};
 
 TEST_P(BinaryBooleanStatsTest, AllCombinations) {
     auto [left, right, op, expected] = GetParam();
@@ -17,50 +18,129 @@ TEST_P(BinaryBooleanStatsTest, AllCombinations) {
 INSTANTIATE_TEST_SUITE_P(
         AND, BinaryBooleanStatsTest,
         ::testing::Values(
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::ALL_MATCH, OperationType::AND, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::NONE_MATCH, OperationType::AND, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::UNKNOWN, OperationType::AND, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH, OperationType::AND, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::NONE_MATCH, OperationType::AND, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::UNKNOWN, OperationType::AND, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::ALL_MATCH, OperationType::AND, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::NONE_MATCH, OperationType::AND, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::UNKNOWN, OperationType::AND, StatsComparison::UNKNOWN)
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::ALL_MATCH, OperationType::AND,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::NONE_MATCH, OperationType::AND,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::UNKNOWN, OperationType::AND,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH, OperationType::AND,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::NONE_MATCH, OperationType::AND,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::UNKNOWN, OperationType::AND,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::ALL_MATCH, OperationType::AND,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::NONE_MATCH, OperationType::AND,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::UNKNOWN, OperationType::AND, StatsComparison::UNKNOWN
+                )
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
         OR, BinaryBooleanStatsTest,
         ::testing::Values(
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::ALL_MATCH, OperationType::OR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::NONE_MATCH, OperationType::OR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::UNKNOWN, OperationType::OR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH, OperationType::OR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::NONE_MATCH, OperationType::OR, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::UNKNOWN, OperationType::OR, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::ALL_MATCH, OperationType::OR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::NONE_MATCH, OperationType::OR, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::UNKNOWN, OperationType::OR, StatsComparison::UNKNOWN)
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::ALL_MATCH, OperationType::OR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::NONE_MATCH, OperationType::OR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::UNKNOWN, OperationType::OR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH, OperationType::OR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::NONE_MATCH, OperationType::OR,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::UNKNOWN, OperationType::OR,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::ALL_MATCH, OperationType::OR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::NONE_MATCH, OperationType::OR,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::UNKNOWN, OperationType::OR, StatsComparison::UNKNOWN
+                )
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
         XOR, BinaryBooleanStatsTest,
         ::testing::Values(
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::ALL_MATCH, OperationType::XOR, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::NONE_MATCH, OperationType::XOR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::ALL_MATCH, StatsComparison::UNKNOWN, OperationType::XOR, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH, OperationType::XOR, StatsComparison::ALL_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::NONE_MATCH, OperationType::XOR, StatsComparison::NONE_MATCH),
-                std::make_tuple(StatsComparison::NONE_MATCH, StatsComparison::UNKNOWN, OperationType::XOR, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::ALL_MATCH, OperationType::XOR, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::NONE_MATCH, OperationType::XOR, StatsComparison::UNKNOWN),
-                std::make_tuple(StatsComparison::UNKNOWN, StatsComparison::UNKNOWN, OperationType::XOR, StatsComparison::UNKNOWN)
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::ALL_MATCH, OperationType::XOR,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::NONE_MATCH, OperationType::XOR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::ALL_MATCH, StatsComparison::UNKNOWN, OperationType::XOR,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH, OperationType::XOR,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::NONE_MATCH, OperationType::XOR,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        StatsComparison::NONE_MATCH, StatsComparison::UNKNOWN, OperationType::XOR,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::ALL_MATCH, OperationType::XOR,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::NONE_MATCH, OperationType::XOR,
+                        StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        StatsComparison::UNKNOWN, StatsComparison::UNKNOWN, OperationType::XOR, StatsComparison::UNKNOWN
+                )
         )
 );
 
 // Tests for unary_boolean_stats(StatsComparison, OperationType)
-class UnaryBooleanStatsFromComparisonTest : public ::testing::TestWithParam<std::tuple<StatsComparison, OperationType, StatsComparison>> {};
+class UnaryBooleanStatsFromComparisonTest
+    : public ::testing::TestWithParam<std::tuple<StatsComparison, OperationType, StatsComparison>> {};
 
 TEST_P(UnaryBooleanStatsFromComparisonTest, AllCombinations) {
     auto [input, op, expected] = GetParam();
@@ -88,7 +168,8 @@ INSTANTIATE_TEST_SUITE_P(
 // Tests for unary_boolean_stats(ColumnStatsValues, OperationType)
 // Parameters: (min: optional<bool>, max: optional<bool>, op, expected)
 class UnaryBooleanStatsFromColumnStatsTest
-    : public ::testing::TestWithParam<std::tuple<std::optional<bool>, std::optional<bool>, OperationType, StatsComparison>> {};
+    : public ::testing::TestWithParam<
+              std::tuple<std::optional<bool>, std::optional<bool>, OperationType, StatsComparison>> {};
 
 TEST_P(UnaryBooleanStatsFromColumnStatsTest, AllCombinations) {
     auto [min_opt, max_opt, op, expected] = GetParam();
@@ -102,17 +183,27 @@ TEST_P(UnaryBooleanStatsFromColumnStatsTest, AllCombinations) {
 INSTANTIATE_TEST_SUITE_P(
         MissingStats, UnaryBooleanStatsFromColumnStatsTest,
         ::testing::Values(
-                std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, OperationType::IDENTITY, StatsComparison::UNKNOWN),
-                std::make_tuple(std::optional<bool>{}, std::optional<bool>{}, OperationType::NOT, StatsComparison::UNKNOWN)
+                std::make_tuple(
+                        std::optional<bool>{}, std::optional<bool>{}, OperationType::IDENTITY, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        std::optional<bool>{}, std::optional<bool>{}, OperationType::NOT, StatsComparison::UNKNOWN
+                )
         )
 );
 
 INSTANTIATE_TEST_SUITE_P(
         IDENTITY, UnaryBooleanStatsFromColumnStatsTest,
         ::testing::Values(
-                std::make_tuple(std::optional{false}, std::optional{true}, OperationType::IDENTITY, StatsComparison::UNKNOWN),
-                std::make_tuple(std::optional{false}, std::optional{false}, OperationType::IDENTITY, StatsComparison::NONE_MATCH),
-                std::make_tuple(std::optional{true}, std::optional{true}, OperationType::IDENTITY, StatsComparison::ALL_MATCH)
+                std::make_tuple(
+                        std::optional{false}, std::optional{true}, OperationType::IDENTITY, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        std::optional{false}, std::optional{false}, OperationType::IDENTITY, StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        std::optional{true}, std::optional{true}, OperationType::IDENTITY, StatsComparison::ALL_MATCH
+                )
                 // min=true, max=false case is impossible
         )
 );
@@ -120,9 +211,15 @@ INSTANTIATE_TEST_SUITE_P(
 INSTANTIATE_TEST_SUITE_P(
         NOT, UnaryBooleanStatsFromColumnStatsTest,
         ::testing::Values(
-                std::make_tuple(std::optional{false}, std::optional{true}, OperationType::NOT, StatsComparison::UNKNOWN),
-                std::make_tuple(std::optional{false}, std::optional{false}, OperationType::NOT, StatsComparison::ALL_MATCH),
-                std::make_tuple(std::optional{true}, std::optional{true}, OperationType::NOT, StatsComparison::NONE_MATCH)
+                std::make_tuple(
+                        std::optional{false}, std::optional{true}, OperationType::NOT, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        std::optional{false}, std::optional{false}, OperationType::NOT, StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        std::optional{true}, std::optional{true}, OperationType::NOT, StatsComparison::NONE_MATCH
+                )
                 // min=true, max=false case is impossible
         )
 );
@@ -332,16 +429,34 @@ INSTANTIATE_TEST_SUITE_P(
         NegativeInfMin, BinaryComparisonInfinityTest,
         ::testing::Values(
                 // [-inf, 10] with various operators and query value 5
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::LT, StatsComparison::UNKNOWN),
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::LE, StatsComparison::UNKNOWN),
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::GT, StatsComparison::UNKNOWN),
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::GE, StatsComparison::UNKNOWN),
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::EQ, StatsComparison::UNKNOWN),
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::LT, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::LE, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::GT, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::GE, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::EQ, StatsComparison::UNKNOWN
+                ),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 5.0, OperationType::NE, StatsComparison::UNKNOWN
+                ),
                 // [-inf, 10] < 20 -> ALL_MATCH (max=10 < 20)
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 20.0, OperationType::LT, StatsComparison::ALL_MATCH),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 20.0, OperationType::LT,
+                        StatsComparison::ALL_MATCH
+                ),
                 // [-inf, 10] > 20 -> NONE_MATCH (max=10 <= 20)
-                std::make_tuple(-std::numeric_limits<double>::infinity(), 10.0, 20.0, OperationType::GT, StatsComparison::NONE_MATCH)
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), 10.0, 20.0, OperationType::GT,
+                        StatsComparison::NONE_MATCH
+                )
         )
 );
 
@@ -349,16 +464,39 @@ INSTANTIATE_TEST_SUITE_P(
         PositiveInfMax, BinaryComparisonInfinityTest,
         ::testing::Values(
                 // [10, +inf] with various operators and query value 5
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LT, StatsComparison::NONE_MATCH),
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LE, StatsComparison::NONE_MATCH),
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::GT, StatsComparison::ALL_MATCH),
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::GE, StatsComparison::ALL_MATCH),
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::EQ, StatsComparison::NONE_MATCH),
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::NE, StatsComparison::ALL_MATCH),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LT,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LE,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::GT,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::GE,
+                        StatsComparison::ALL_MATCH
+                ),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::EQ,
+                        StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::NE,
+                        StatsComparison::ALL_MATCH
+                ),
                 // [10, +inf] < 5 -> NONE_MATCH (min=10 >= 5)
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LT, StatsComparison::NONE_MATCH),
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 5.0, OperationType::LT,
+                        StatsComparison::NONE_MATCH
+                ),
                 // [10, +inf] > 20 -> UNKNOWN (min=10 <= 20 but max=inf > 20)
-                std::make_tuple(10.0, std::numeric_limits<double>::infinity(), 20.0, OperationType::GT, StatsComparison::UNKNOWN)
+                std::make_tuple(
+                        10.0, std::numeric_limits<double>::infinity(), 20.0, OperationType::GT, StatsComparison::UNKNOWN
+                )
         )
 );
 
@@ -409,7 +547,9 @@ TEST(MixedTypeStatsComparator, Int32StatsDoubleQuery) {
     // [1, 10] > 5.5 => UNKNOWN (min=1 <= 5.5 but max=10 > 5.5)
     ASSERT_EQ(typed_stats_comparator(int32_t{1}, int32_t{10}, 5.5, GreaterThanOperator{}), StatsComparison::UNKNOWN);
     // [1, 10] > 10.5 => NONE_MATCH (max=10 <= 10.5)
-    ASSERT_EQ(typed_stats_comparator(int32_t{1}, int32_t{10}, 10.5, GreaterThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int32_t{1}, int32_t{10}, 10.5, GreaterThanOperator{}), StatsComparison::NONE_MATCH
+    );
     // [1, 10] < 0.5 => NONE_MATCH (min=1 >= 0.5)
     ASSERT_EQ(typed_stats_comparator(int32_t{1}, int32_t{10}, 0.5, LessThanOperator{}), StatsComparison::NONE_MATCH);
     // [1, 10] < 10.5 => ALL_MATCH (max=10 < 10.5)
@@ -447,13 +587,25 @@ TEST(MixedTypeStatsComparator, DoubleStatsInt32Query) {
 // uint32_t stats, int64_t query value (signed/unsigned promotion)
 TEST(MixedTypeStatsComparator, Uint32StatsInt64Query) {
     // [100, 200] > 150 => UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{150}, GreaterThanOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{150}, GreaterThanOperator{}),
+            StatsComparison::UNKNOWN
+    );
     // [100, 200] > 50 => ALL_MATCH (min=100 > 50)
-    ASSERT_EQ(typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{50}, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{50}, GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // [100, 200] < 50 => NONE_MATCH (min=100 >= 50)
-    ASSERT_EQ(typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{50}, LessThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{50}, LessThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // [100, 200] > -1 => ALL_MATCH (min=100 > -1, tests signed/unsigned interaction)
-    ASSERT_EQ(typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{-1}, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint32_t{100}, uint32_t{200}, int64_t{-1}, GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
 }
 
 // int8_t stats, double query value (small integer to double)
@@ -469,9 +621,15 @@ TEST(MixedTypeStatsComparator, Int8StatsDoubleQuery) {
 // uint64_t stats, double query value
 TEST(MixedTypeStatsComparator, Uint64StatsDoubleQuery) {
     // [1000, 2000] > 1500.5 => UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(uint64_t{1000}, uint64_t{2000}, 1500.5, GreaterThanOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{1000}, uint64_t{2000}, 1500.5, GreaterThanOperator{}),
+            StatsComparison::UNKNOWN
+    );
     // [1000, 2000] > 500.5 => ALL_MATCH (min=1000 > 500.5)
-    ASSERT_EQ(typed_stats_comparator(uint64_t{1000}, uint64_t{2000}, 500.5, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{1000}, uint64_t{2000}, 500.5, GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
 }
 
 // int64_t stats, uint64_t query value — exercises the signed/unsigned comparison overloads
@@ -481,19 +639,40 @@ TEST(MixedTypeStatsComparator, Int64StatsUint64Query_GreaterThan) {
     constexpr auto U64_MAX = std::numeric_limits<uint64_t>::max();
     // Query has MSB set: any int64 range is not greater → NONE_MATCH
     ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, GreaterThanOperator{}), StatsComparison::NONE_MATCH);
-    ASSERT_EQ(typed_stats_comparator(int64_t{-1}, int64_t{100}, U64_MAX, GreaterThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{-1}, int64_t{100}, U64_MAX, GreaterThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Query = uint64(INT64_MAX): max possible int64 is INT64_MAX, not greater → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), GreaterThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), GreaterThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Query = uint64(INT64_MAX - 1): INT64_MAX > INT64_MAX-1 → ALL_MATCH when min is also INT64_MAX
-    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX - 1), GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX - 1), GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Range spanning the boundary
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX - 1), GreaterThanOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX - 1), GreaterThanOperator{}),
+            StatsComparison::UNKNOWN
+    );
     // Query = 0: positive range is greater
-    ASSERT_EQ(typed_stats_comparator(int64_t{1}, int64_t{10}, uint64_t{0}, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{1}, int64_t{10}, uint64_t{0}, GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Query = 0: negative range is not greater
-    ASSERT_EQ(typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, GreaterThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, GreaterThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Query = 0: range spanning zero
-    ASSERT_EQ(typed_stats_comparator(int64_t{-5}, int64_t{5}, uint64_t{0}, GreaterThanOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{-5}, int64_t{5}, uint64_t{0}, GreaterThanOperator{}),
+            StatsComparison::UNKNOWN
+    );
 }
 
 TEST(MixedTypeStatsComparator, Int64StatsUint64Query_LessThan) {
@@ -506,13 +685,24 @@ TEST(MixedTypeStatsComparator, Int64StatsUint64Query_LessThan) {
             StatsComparison::ALL_MATCH
     );
     // Query = uint64(INT64_MAX): range entirely below → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX - 1, uint64_t(I64_MAX), LessThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX - 1, uint64_t(I64_MAX), LessThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Query = uint64(INT64_MAX): min = INT64_MAX, not less → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), LessThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), LessThanOperator{}), StatsComparison::NONE_MATCH
+    );
     // Query = 0: negative range entirely below → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, LessThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, LessThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Query = 0: range starting at 0 → min not less → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, LessThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, LessThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
 }
 
 TEST(MixedTypeStatsComparator, Int64StatsUint64Query_Equals) {
@@ -521,11 +711,17 @@ TEST(MixedTypeStatsComparator, Int64StatsUint64Query_Equals) {
     // Query has MSB set: no int64 can equal it → NONE_MATCH
     ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, EqualsOperator{}), StatsComparison::NONE_MATCH);
     // Exact match at INT64_MAX boundary
-    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), EqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), EqualsOperator{}), StatsComparison::ALL_MATCH
+    );
     // Range contains the query value but is not a point → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), EqualsOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), EqualsOperator{}), StatsComparison::UNKNOWN
+    );
     // Value outside range → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{11}, EqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{11}, EqualsOperator{}), StatsComparison::NONE_MATCH
+    );
 }
 
 TEST(MixedTypeStatsComparator, Int64StatsUint64Query_NotEquals) {
@@ -534,9 +730,15 @@ TEST(MixedTypeStatsComparator, Int64StatsUint64Query_NotEquals) {
     // Query has MSB set: every int64 differs → ALL_MATCH
     ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, NotEqualsOperator{}), StatsComparison::ALL_MATCH);
     // Point range equal to query → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), NotEqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), NotEqualsOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Non-point range containing query → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), NotEqualsOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), NotEqualsOperator{}),
+            StatsComparison::UNKNOWN
+    );
 }
 
 TEST(MixedTypeStatsComparator, Int64StatsUint64Query_LessThanEquals) {
@@ -545,26 +747,47 @@ TEST(MixedTypeStatsComparator, Int64StatsUint64Query_LessThanEquals) {
     // Query has MSB set: any int64 ≤ it → ALL_MATCH
     ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, LessThanEqualsOperator{}), StatsComparison::ALL_MATCH);
     // Query = uint64(INT64_MAX): max = INT64_MAX ≤ INT64_MAX → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), LessThanEqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), LessThanEqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Query = 0: positive range min > 0 → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{1}, int64_t{10}, uint64_t{0}, LessThanEqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{1}, int64_t{10}, uint64_t{0}, LessThanEqualsOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Query = 0: range starting at 0 → max may exceed → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, LessThanEqualsOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, LessThanEqualsOperator{}),
+            StatsComparison::UNKNOWN
+    );
 }
 
 TEST(MixedTypeStatsComparator, Int64StatsUint64Query_GreaterThanEquals) {
     constexpr auto I64_MAX = std::numeric_limits<int64_t>::max();
     constexpr auto MSB = uint64_t{1} << 63;
     // Query has MSB set: no int64 ≥ it → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, MSB, GreaterThanEqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, MSB, GreaterThanEqualsOperator{}), StatsComparison::NONE_MATCH
+    );
     // Query = uint64(INT64_MAX): only INT64_MAX itself qualifies
-    ASSERT_EQ(typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), GreaterThanEqualsOperator{}), StatsComparison::ALL_MATCH);
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), GreaterThanEqualsOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(I64_MAX, I64_MAX, uint64_t(I64_MAX), GreaterThanEqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, I64_MAX, uint64_t(I64_MAX), GreaterThanEqualsOperator{}),
+            StatsComparison::UNKNOWN
+    );
     // Query = 0: range [0, 10], min ≥ 0 → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, GreaterThanEqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(int64_t{0}, int64_t{10}, uint64_t{0}, GreaterThanEqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Query = 0: negative range → NONE_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, GreaterThanEqualsOperator{}), StatsComparison::NONE_MATCH
+            typed_stats_comparator(int64_t{-10}, int64_t{-1}, uint64_t{0}, GreaterThanEqualsOperator{}),
+            StatsComparison::NONE_MATCH
     );
 }
 
@@ -578,18 +801,32 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_GreaterThan) {
     ASSERT_EQ(typed_stats_comparator(MSB, U64_MAX, I64_MAX, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
     ASSERT_EQ(typed_stats_comparator(MSB, MSB, int64_t{0}, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
     // Query negative: any uint64 > negative → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{0}, I64_MIN, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{0}, I64_MIN, GreaterThanOperator{}), StatsComparison::ALL_MATCH
+    );
     // Query = INT64_MAX, stats just below: max = INT64_MAX-1 as uint64, not greater → NONE_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(uint64_t{0}, uint64_t(I64_MAX - 1), I64_MAX, GreaterThanOperator{}), StatsComparison::NONE_MATCH
+            typed_stats_comparator(uint64_t{0}, uint64_t(I64_MAX - 1), I64_MAX, GreaterThanOperator{}),
+            StatsComparison::NONE_MATCH
     );
     // Query = INT64_MAX, stats spanning the MSB boundary → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, GreaterThanOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, GreaterThanOperator{}), StatsComparison::UNKNOWN
+    );
     // Query = 0, stats entirely in shared range: [0, 0] > 0 → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{0}, int64_t{0}, GreaterThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{0}, int64_t{0}, GreaterThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Query = 0: [1, 10] > 0 → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{1}, uint64_t{10}, int64_t{0}, GreaterThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{1}, uint64_t{10}, int64_t{0}, GreaterThanOperator{}),
+            StatsComparison::ALL_MATCH
+    );
 }
 
 TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_LessThan) {
@@ -599,14 +836,22 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_LessThan) {
     // Stats min has MSB set: uint64 with MSB is never less than any int64 → NONE_MATCH
     ASSERT_EQ(typed_stats_comparator(MSB, U64_MAX, I64_MAX, LessThanOperator{}), StatsComparison::NONE_MATCH);
     // Query negative: no uint64 < negative → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, LessThanOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, LessThanOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Stats entirely below query in shared range: [0, 4] < 5 → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{4}, int64_t{5}, LessThanOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{4}, int64_t{5}, LessThanOperator{}), StatsComparison::ALL_MATCH
+    );
     // Stats spanning the MSB boundary, query = INT64_MAX → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, LessThanOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, LessThanOperator{}), StatsComparison::UNKNOWN
+    );
     // Point at INT64_MAX: not less → NONE_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, LessThanOperator{}), StatsComparison::NONE_MATCH
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, LessThanOperator{}),
+            StatsComparison::NONE_MATCH
     );
 }
 
@@ -616,11 +861,19 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_Equals) {
     // Stats with MSB set: no int64 can equal → NONE_MATCH
     ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, EqualsOperator{}), StatsComparison::NONE_MATCH);
     // Query negative: no uint64 equals negative → NONE_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, EqualsOperator{}), StatsComparison::NONE_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, EqualsOperator{}),
+            StatsComparison::NONE_MATCH
+    );
     // Exact match in shared range
-    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, EqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, EqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Range contains query in shared range → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{50}, EqualsOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{50}, EqualsOperator{}), StatsComparison::UNKNOWN
+    );
 }
 
 TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_NotEquals) {
@@ -629,10 +882,14 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_NotEquals) {
     // Stats with MSB set: every value differs from any int64 → ALL_MATCH
     ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, NotEqualsOperator{}), StatsComparison::ALL_MATCH);
     // Query negative: every uint64 differs → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, NotEqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, NotEqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Point range equal to query → NONE_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, NotEqualsOperator{}), StatsComparison::NONE_MATCH
+            typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, NotEqualsOperator{}),
+            StatsComparison::NONE_MATCH
     );
 }
 
@@ -643,17 +900,24 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_LessThanEquals) {
     ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, LessThanEqualsOperator{}), StatsComparison::NONE_MATCH);
     // Query negative: no uint64 ≤ negative → NONE_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, LessThanEqualsOperator{}), StatsComparison::NONE_MATCH
+            typed_stats_comparator(uint64_t{0}, uint64_t{100}, int64_t{-1}, LessThanEqualsOperator{}),
+            StatsComparison::NONE_MATCH
     );
     // Max in shared range ≤ query → ALL_MATCH
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{10}, I64_MAX, LessThanEqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{10}, I64_MAX, LessThanEqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Point at boundary: INT64_MAX ≤ INT64_MAX → ALL_MATCH
     ASSERT_EQ(
             typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, LessThanEqualsOperator{}),
             StatsComparison::ALL_MATCH
     );
     // Spanning MSB boundary → UNKNOWN
-    ASSERT_EQ(typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, LessThanEqualsOperator{}), StatsComparison::UNKNOWN);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t(I64_MAX - 1), MSB, I64_MAX, LessThanEqualsOperator{}),
+            StatsComparison::UNKNOWN
+    );
 }
 
 TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_GreaterThanEquals) {
@@ -664,9 +928,13 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_GreaterThanEquals) {
     ASSERT_EQ(typed_stats_comparator(MSB, MSB, I64_MAX, GreaterThanEqualsOperator{}), StatsComparison::ALL_MATCH);
     // Query negative: any uint64 ≥ negative → ALL_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(uint64_t{0}, uint64_t{0}, int64_t{-1}, GreaterThanEqualsOperator{}), StatsComparison::ALL_MATCH
+            typed_stats_comparator(uint64_t{0}, uint64_t{0}, int64_t{-1}, GreaterThanEqualsOperator{}),
+            StatsComparison::ALL_MATCH
     );
-    ASSERT_EQ(typed_stats_comparator(uint64_t{0}, uint64_t{0}, I64_MIN, GreaterThanEqualsOperator{}), StatsComparison::ALL_MATCH);
+    ASSERT_EQ(
+            typed_stats_comparator(uint64_t{0}, uint64_t{0}, I64_MIN, GreaterThanEqualsOperator{}),
+            StatsComparison::ALL_MATCH
+    );
     // Point at boundary: INT64_MAX ≥ INT64_MAX → ALL_MATCH
     ASSERT_EQ(
             typed_stats_comparator(uint64_t(I64_MAX), uint64_t(I64_MAX), I64_MAX, GreaterThanEqualsOperator{}),
@@ -674,7 +942,8 @@ TEST(MixedTypeStatsComparator, Uint64StatsInt64Query_GreaterThanEquals) {
     );
     // Max below query in shared range → NONE_MATCH
     ASSERT_EQ(
-            typed_stats_comparator(uint64_t{0}, uint64_t{4}, int64_t{5}, GreaterThanEqualsOperator{}), StatsComparison::NONE_MATCH
+            typed_stats_comparator(uint64_t{0}, uint64_t{4}, int64_t{5}, GreaterThanEqualsOperator{}),
+            StatsComparison::NONE_MATCH
     );
 }
 
@@ -683,21 +952,45 @@ INSTANTIATE_TEST_SUITE_P(
         ::testing::Values(
                 // Finite range, query value is +inf
                 // [1, 10] < +inf -> ALL_MATCH (max=10 < inf)
-                std::make_tuple(1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::LT, StatsComparison::ALL_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::LT,
+                        StatsComparison::ALL_MATCH
+                ),
                 // [1, 10] > +inf -> NONE_MATCH (max=10 <= inf)
-                std::make_tuple(1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::GT, StatsComparison::NONE_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::GT,
+                        StatsComparison::NONE_MATCH
+                ),
                 // [1, 10] == +inf -> NONE_MATCH (max=10 < inf)
-                std::make_tuple(1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::EQ, StatsComparison::NONE_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::EQ,
+                        StatsComparison::NONE_MATCH
+                ),
                 // [1, 10] != +inf -> ALL_MATCH (max=10 < inf)
-                std::make_tuple(1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::NE, StatsComparison::ALL_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, std::numeric_limits<double>::infinity(), OperationType::NE,
+                        StatsComparison::ALL_MATCH
+                ),
                 // Finite range, query value is -inf
                 // [1, 10] > -inf -> ALL_MATCH (min=1 > -inf)
-                std::make_tuple(1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::GT, StatsComparison::ALL_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::GT,
+                        StatsComparison::ALL_MATCH
+                ),
                 // [1, 10] < -inf -> NONE_MATCH (min=1 >= -inf)
-                std::make_tuple(1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::LT, StatsComparison::NONE_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::LT,
+                        StatsComparison::NONE_MATCH
+                ),
                 // [1, 10] == -inf -> NONE_MATCH (min=1 > -inf)
-                std::make_tuple(1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::EQ, StatsComparison::NONE_MATCH),
+                std::make_tuple(
+                        1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::EQ,
+                        StatsComparison::NONE_MATCH
+                ),
                 // [1, 10] != -inf -> ALL_MATCH (min=1 > -inf)
-                std::make_tuple(1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::NE, StatsComparison::ALL_MATCH)
+                std::make_tuple(
+                        1.0, 10.0, -std::numeric_limits<double>::infinity(), OperationType::NE,
+                        StatsComparison::ALL_MATCH
+                )
         )
 );
