@@ -311,7 +311,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{inputs.run_commandline}}
-          CI_MONGO_HOST: ${{inputs.install_mongodb && 'mongodb' || ''}}
+          CI_MONGO_HOST: ${{inputs.install_mongodb && 'localhost' || ''}}
           HYPOTHESIS_PROFILE: ${{inputs.hypothesis_profile || 'dev'}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.run_custom_pytest_command}}
           STORAGE_TYPE: ${{inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage}}
