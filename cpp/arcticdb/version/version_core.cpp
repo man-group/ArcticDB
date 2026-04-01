@@ -2683,7 +2683,7 @@ static folly::Future<IndexInformation> fetch_index_and_column_stats(
                 }
 
                 if (column_stats_try.hasException()) {
-                    ARCTICDB_DEBUG(log::version(), "Column stats key not found");
+                    log::version().debug("Column stats key not found");
                     return {std::move(index_try).value(), std::nullopt};
                 }
 
