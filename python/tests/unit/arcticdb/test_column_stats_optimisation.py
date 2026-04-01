@@ -17,7 +17,9 @@ def get_table_data_read_count():
 def get_column_stats_read_count():
     """Get the number of COLUMN_STATS keys read from query stats."""
     stats = qs.get_query_stats()
-    return (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get("COLUMN_STATS", {}).get("count", 0)
+    return (
+        (stats or {}).get("storage_operations", {}).get("Memory_GetObject", {}).get("COLUMN_STATS", {}).get("count", 0)
+    )
 
 
 sym = "sym"
@@ -105,7 +107,9 @@ def test_column_stats_query_optimisation_no_stats(
     assert table_data_reads == 2
 
 
-def test_column_stats_query_optimisation_column_not_in_stats(lmdb_version_store_tiny_segment, column_stats_filtering_enabled):
+def test_column_stats_query_optimisation_column_not_in_stats(
+    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
