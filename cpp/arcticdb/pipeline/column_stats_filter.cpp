@@ -74,9 +74,8 @@ StatsVariantData evaluate_ast_node_against_stats(
                         result.emplace_back(std::nullopt, std::nullopt);
                         continue;
                     }
-                    auto& column_stats_row = row->get();
-                    auto it = column_stats_row.stats_for_column.find(column_name.value);
-                    if (it != column_stats_row.stats_for_column.end()) {
+                    auto it = row->stats_for_column.find(column_name.value);
+                    if (it != row->stats_for_column.end()) {
                         result.push_back(it->second);
                     } else {
                         result.emplace_back(std::nullopt, std::nullopt);
@@ -220,8 +219,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
 }
 
 const ColumnStatsRow* ColumnStatsData::find_stats(timestamp start_index, timestamp end_index) const {
-    auto it = index_to_row_.find({start_index, end_index});
-    if (it != index_to_row_.end()) {
+    if (auto it = index_to_row_.find({start_index, end_index}); it != index_to_row_.end()) {
         return &rows_[it->second];
     }
     return nullptr;
@@ -254,16 +252,16 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         for (size_t row = 0; row < isr.size(); ++row) {
             if (!res->get_bit(row)) {
                 // Don't bother - we already know we don't need to look at the segment
-                stats_rows.emplace_back(std::nullopt);
+                stats_rows.push_back(nullptr);
                 continue;
             }
             total_count++;
             timestamp start_idx = *(start_index_col + row);
             timestamp end_idx = *(end_index_col + row);
             if (const ColumnStatsRow* stats = column_stats_data.find_stats(start_idx, end_idx)) {
-                stats_rows.emplace_back(std::cref(*stats));
+                stats_rows.push_back(stats);
             } else {
-                stats_rows.emplace_back(std::nullopt);
+                stats_rows.push_back(nullptr);
             }
         }
         util::check(stats_rows.size() == isr.size(), "Expected stats_rows.size() == isr.size()");

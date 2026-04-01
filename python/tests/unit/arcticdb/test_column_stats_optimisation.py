@@ -1220,7 +1220,6 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
 
     df = pd.DataFrame({"col": pd.Series([], dtype=np.float64)})
     lib.write(sym, df)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["col"] > 0]

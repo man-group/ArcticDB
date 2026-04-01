@@ -29,7 +29,7 @@ using StatsVariantData = std::variant<
         // Stats associated with a column, like q["a"] -> ColumnStatsValues for that column
         std::vector<ColumnStatsValues>>;
 
-using StatsRowVector = std::vector<std::optional<std::reference_wrapper<const ColumnStatsRow>>>;
+using StatsRowVector = std::vector<const ColumnStatsRow*>;
 
 StatsVariantData evaluate_ast_node_against_stats(
         const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows
