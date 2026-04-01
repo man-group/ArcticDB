@@ -47,8 +47,6 @@ namespace column_stats_detail {
 
 size_t stats_variant_size(const StatsVariantData& v);
 
-bool value_is_nan(const Value& val);
-
 template<typename Func>
 struct FlippedComparator;
 
@@ -83,7 +81,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
         return StatsComparison::UNKNOWN;
     }
 
-    if (value_is_nan(*stats_lhs.min) || value_is_nan(*stats_lhs.max)) {
+    if (stats_lhs.min->is_nan() || stats_lhs.max->is_nan()) {
         return StatsComparison::UNKNOWN;
     }
 

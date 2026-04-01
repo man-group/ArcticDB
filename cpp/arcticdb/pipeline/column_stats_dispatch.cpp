@@ -30,19 +30,6 @@ size_t stats_variant_size(const StatsVariantData& v) {
     );
 }
 
-bool value_is_nan(const Value& val) {
-    if (is_floating_point_type(val.data_type())) {
-        return details::visit_type(val.data_type(), [&val]<typename TagType>(TagType) -> bool {
-            using RawType = TagType::raw_type;
-            if constexpr (std::is_floating_point_v<RawType>) {
-                return std::isnan(val.get<RawType>());
-            }
-            return false;
-        });
-    }
-    return false;
-}
-
 StatsComparison binary_boolean_stats(StatsComparison left, StatsComparison right, OperationType operation) {
     switch (operation) {
     case OperationType::AND:

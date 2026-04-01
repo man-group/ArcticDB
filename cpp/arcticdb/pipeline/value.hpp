@@ -106,6 +106,19 @@ struct Value {
         }
     }
 
+    [[nodiscard]] bool is_nan() const {
+        if (is_floating_point_type(data_type_)) {
+            return details::visit_type(data_type_, [this]<typename TagType>(TagType) -> bool {
+                using RawType = TagType::raw_type;
+                if constexpr (std::is_floating_point_v<RawType>) {
+                    return std::isnan(get<RawType>());
+                }
+                return false;
+            });
+        }
+        return false;
+    }
+
     [[nodiscard]] bool has_sequence_type() const { return is_sequence_type(data_type_); }
 
     [[nodiscard]] TypeDescriptor descriptor() const { return make_scalar_type(data_type_); }
