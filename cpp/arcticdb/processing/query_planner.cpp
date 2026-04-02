@@ -49,8 +49,13 @@ ExpressionContext and_filter_expression_contexts(
             continue;
         }
 
-        auto intermediate_name = fmt::format("combined-{}", idx);
         auto and_node = ExpressionNode{*overall_root_name, root_name, OperationType::AND};
+        auto intermediate_name = fmt::format("combined-{}", idx);
+        util::check(
+                !res.expression_nodes_.contains(intermediate_name),
+                "Expression nodes already contains {}",
+                intermediate_name
+        );
         res.add_expression_node(intermediate_name, std::make_shared<ExpressionNode>(and_node));
         overall_root_name = ExpressionName{intermediate_name};
     }

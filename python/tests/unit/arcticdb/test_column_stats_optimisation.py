@@ -836,6 +836,33 @@ def test_column_stats_three_chained_filter_clauses(
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
 
 
+def test_column_stats_repeated_expressions(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+    """Nonreg test: ConstMap.set_value is called repeatedly with name=Num(2) here. We shouldn't validate against the repetition."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    qs.enable()
+
+    q = QueryBuilder()
+    q = q[q["col_1"] > 2]
+    q = q[q["col_1"] > 2]
+    q = q[(q["col_1"] > 2) & (q["col_1"] > 2)]
+
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    assert_frame_equal(result, df1)
+    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
+
+
 def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
     lib = in_memory_version_store
 

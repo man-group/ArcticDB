@@ -37,23 +37,13 @@ struct ExpressionContext {
         std::unordered_map<std::string, std::shared_ptr<T>> map_;
 
       public:
-        void set_value(std::string name, std::shared_ptr<T> val) {
-            auto [_, inserted] = map_.try_emplace(name, val);
-            util::check(
-                    inserted,
-                    "ConstantMap.set_value called on name={} but a key was already present with that name",
-                    name
-            );
-        }
+        void set_value(std::string name, std::shared_ptr<T> val) { map_.try_emplace(name, val); }
         std::shared_ptr<T> get_value(std::string name) const { return map_.at(name); }
+        bool contains(std::string name) const { return map_.contains(name); }
+
         void merge_from(const ConstantMap& other) {
             for (const auto& [name, val] : other.map_) {
-                auto [_, inserted] = map_.try_emplace(name, val);
-                util::check(
-                        inserted,
-                        "ConstantMap.merge_from called on name={} but a key was already present with that name",
-                        name
-                );
+                map_.try_emplace(name, val);
             }
         }
     };
