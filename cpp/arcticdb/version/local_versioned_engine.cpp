@@ -1480,7 +1480,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
     std::shared_ptr<std::any> handler_data_ptr(std::shared_ptr<std::any>{}, &handler_data);
     return folly::collect(symbol_processing_result_futs)
             .via(&async::io_executor())
-            .thenValueInline([this, &handler_data_ptr, clauses_ptr, component_manager, read_options](
+            .thenValueInline([this, handler_data_ptr, clauses_ptr, component_manager, read_options](
                                      std::vector<SymbolProcessingResult>&& symbol_processing_results
                              ) mutable {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
