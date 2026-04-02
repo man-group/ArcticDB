@@ -367,35 +367,18 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
-class StatsComparatorNaNTest : public ::testing::TestWithParam<OperationType> {};
+enum class NaNPosition { Min, Max, Both };
 
-TEST_P(StatsComparatorNaNTest, NaNInMinReturnsUnknown) {
-    auto op = GetParam();
-    std::vector<ColumnStatsValues> stats{
-            {construct_value(std::numeric_limits<double>::quiet_NaN()), construct_value(10.0)}
-    };
-    auto query = std::make_shared<Value>(construct_value(5.0));
-    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.at(0), StatsComparison::UNKNOWN);
-}
+class StatsComparatorNaNTest : public ::testing::TestWithParam<std::tuple<OperationType, NaNPosition>> {};
 
-TEST_P(StatsComparatorNaNTest, NaNInMaxReturnsUnknown) {
-    auto op = GetParam();
+TEST_P(StatsComparatorNaNTest, NaNReturnsUnknown) {
+    auto [op, nan_pos] = GetParam();
+    double min_val = (nan_pos == NaNPosition::Min || nan_pos == NaNPosition::Both)
+        ? std::numeric_limits<double>::quiet_NaN() : 1.0;
+    double max_val = (nan_pos == NaNPosition::Max || nan_pos == NaNPosition::Both)
+        ? std::numeric_limits<double>::quiet_NaN() : 10.0;
     std::vector<ColumnStatsValues> stats{
-            {construct_value(1.0), construct_value(std::numeric_limits<double>::quiet_NaN())}
-    };
-    auto query = std::make_shared<Value>(construct_value(5.0));
-    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.at(0), StatsComparison::UNKNOWN);
-}
-
-TEST_P(StatsComparatorNaNTest, BothNaNReturnsUnknown) {
-    auto op = GetParam();
-    std::vector<ColumnStatsValues> stats{
-            {construct_value(std::numeric_limits<double>::quiet_NaN()),
-             construct_value(std::numeric_limits<double>::quiet_NaN())}
+            {construct_value(min_val), construct_value(max_val)}
     };
     auto query = std::make_shared<Value>(construct_value(5.0));
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
@@ -405,9 +388,12 @@ TEST_P(StatsComparatorNaNTest, BothNaNReturnsUnknown) {
 
 INSTANTIATE_TEST_SUITE_P(
         AllComparisonOps, StatsComparatorNaNTest,
-        ::testing::Values(
-                OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
-                OperationType::NE
+        ::testing::Combine(
+                ::testing::Values(
+                        OperationType::LT, OperationType::LE, OperationType::GT,
+                        OperationType::GE, OperationType::EQ, OperationType::NE
+                ),
+                ::testing::Values(NaNPosition::Min, NaNPosition::Max, NaNPosition::Both)
         )
 );
 
