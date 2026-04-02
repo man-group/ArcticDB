@@ -36,7 +36,15 @@ class SegmentReslicer {
             num_segments((total_rows + _rows_per_segment - 1) / _rows_per_segment),
             rows_per_segment(total_rows / num_segments),
             num_remainder_segments(total_rows % num_segments),
-            num_exact_segments(num_segments - num_remainder_segments) {}
+            num_exact_segments(num_segments - num_remainder_segments) {
+            auto output_rows = num_exact_segments * rows_per_segment + num_remainder_segments * (rows_per_segment + 1);
+            util::check(
+                    output_rows == total_rows,
+                    "SlicingInfo input rows does not match constructed output rows {} != {}",
+                    total_rows,
+                    output_rows
+            );
+        }
 
         uint64_t rows_in_slice(uint64_t idx) const {
             return idx < num_exact_segments ? rows_per_segment : rows_per_segment + 1;

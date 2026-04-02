@@ -24,13 +24,10 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
     res.reserve(slicing_info.num_segments);
     const auto& type = columns.front().value()->type();
     const auto type_size = get_type_size(type.data_type());
-    auto remaining_rows{slicing_info.total_rows};
     for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
-        auto rows_to_consume = std::min(slicing_info.rows_in_slice(idx), remaining_rows);
-        res.emplace_back(
-                std::make_optional<Column>(type, rows_to_consume, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED)
-        );
-        remaining_rows -= rows_to_consume;
+        res.emplace_back(std::make_optional<Column>(
+                type, slicing_info.rows_in_slice(idx), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
+        ));
     }
     auto output_col = res.begin();
     auto dest_ptr = output_col->value().buffer().data();

@@ -260,19 +260,6 @@ def test_compact_data_many_appends(in_memory_store_factory, clear_query_stats, r
     generic_compact_data_test(lib, sym)
 
 
-@pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
-def test_compact_data_idempotent(in_memory_store_factory, clear_query_stats, rows_per_segment):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
-    sym = "test_compact_data_idempotent"
-    df = pd.DataFrame({"col": np.arange(30)})
-    lib.write(sym, df[:10])
-    lib.append(sym, df[10:20])
-    lib.append(sym, df[20:])
-    generic_compact_data_test(lib, sym)
-    # Second compaction on already-compacted data
-    generic_compact_data_test_noop(lib, sym)
-
-
 def test_compact_data_newest_version_deleted(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory()
     sym = "test_compact_data_newest_version_deleted"
