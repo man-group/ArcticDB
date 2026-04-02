@@ -69,11 +69,11 @@ class SegmentReslicer {
     // Main entry point. The other methods are public for testing purposes only
     std::vector<SegmentInMemory> reslice_segments(std::vector<SegmentInMemory>&& segments);
     std::vector<std::optional<Column>> reslice_columns(
-            std::vector<std::optional<std::shared_ptr<Column>>>&& columns, const SlicingInfo& slicing_info,
+            std::vector<std::shared_ptr<Column>>&& columns, const SlicingInfo& slicing_info,
             std::vector<StringPool>& string_pools
     );
     std::vector<std::optional<Column>> reslice_dense_numeric_static_schema_columns(
-            std::vector<std::optional<std::shared_ptr<Column>>>&& columns, const SlicingInfo& slicing_info
+            std::vector<std::shared_ptr<Column>>&& columns, const SlicingInfo& slicing_info
     );
 
   private:

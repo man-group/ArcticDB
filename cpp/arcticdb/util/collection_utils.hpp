@@ -27,7 +27,7 @@ inline std::vector<T> flatten_vectors(std::vector<std::vector<T>>&& vec_of_vecs)
     std::vector<T> res;
     res.reserve(res_size);
     for (const auto& vec : vec_of_vecs) {
-        res.insert(res.end(), vec.begin(), vec.end());
+        res.insert(res.end(), std::make_move_iterator(vec.begin()), std::make_move_iterator(vec.end()));
     }
     return res;
 }

@@ -22,7 +22,7 @@ TYPED_TEST_SUITE(SegmentReslicerDenseNumericStaticSchemaFixture, test_types);
 TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineIntoOne) {
     using RawType = TypeParam;
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
-    std::vector<std::optional<std::shared_ptr<Column>>> input_columns;
+    std::vector<std::shared_ptr<Column>> input_columns;
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{{0, 0, 1, 1}, {1, 0, 1}, {1, 0, 0, 0, 1}};
         for (const auto& data : input_data) {
@@ -81,7 +81,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
         std::vector<RawType> input_data{11, 12, 13, 14, 15, 16, 17};
         memcpy(input_col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
     }
-    std::vector<std::optional<std::shared_ptr<Column>>> input_columns;
+    std::vector<std::shared_ptr<Column>> input_columns;
     input_columns.emplace_back(std::make_shared<Column>(std::move(input_col)));
     uint64_t max_rows_per_slice{4};
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
@@ -126,7 +126,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
     uint64_t total_rows{30};
 
-    std::vector<std::optional<std::shared_ptr<Column>>> input_columns;
+    std::vector<std::shared_ptr<Column>> input_columns;
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{
                 {true, false, true, false, true, false, true, false, true, false},
@@ -196,22 +196,22 @@ TEST(SegmentReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     uint64_t total_rows{3000};
     input_data.resize(total_rows);
     std::iota(input_data.begin(), input_data.end(), 42);
-    std::vector<std::optional<std::shared_ptr<Column>>> input_columns;
+    std::vector<std::shared_ptr<Column>> input_columns;
     input_columns.emplace_back(std::make_shared<Column>(type_descriptor, Sparsity::NOT_PERMITTED));
     input_columns.emplace_back(std::make_shared<Column>(type_descriptor, Sparsity::NOT_PERMITTED));
     input_columns.emplace_back(std::make_shared<Column>(type_descriptor, Sparsity::NOT_PERMITTED));
     // 3968 bytes == 496 int64s per block, so 3 blocks per input column here
     for (size_t idx = 0; idx < input_data.size() / 3; ++idx) {
-        input_columns.at(0).value()->push_back<int64_t>(input_data.at(idx));
-        input_columns.at(1).value()->push_back<int64_t>(input_data.at(idx + total_rows / 3));
-        input_columns.at(2).value()->push_back<int64_t>(input_data.at(idx + 2 * total_rows / 3));
+        input_columns.at(0)->push_back<int64_t>(input_data.at(idx));
+        input_columns.at(1)->push_back<int64_t>(input_data.at(idx + total_rows / 3));
+        input_columns.at(2)->push_back<int64_t>(input_data.at(idx + 2 * total_rows / 3));
     }
-    ASSERT_TRUE(input_columns.at(0).value()->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(0).value()->num_blocks(), 3);
-    ASSERT_TRUE(input_columns.at(1).value()->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(1).value()->num_blocks(), 3);
-    ASSERT_TRUE(input_columns.at(2).value()->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(2).value()->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(0)->buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(0)->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(1)->buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(1)->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(2)->buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(2)->num_blocks(), 3);
 
     SegmentReslicer reslicer{total_rows};
     uint64_t max_rows_per_slice{total_rows / 2};

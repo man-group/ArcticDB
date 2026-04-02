@@ -54,8 +54,8 @@ def generic_compact_data_test(lib, sym, method_arg=None):
 
     post_compaction_data_keys = len(index)
     new_data_keys = len(index[index["version_id"] > vit_before_compaction.version])
-    expected_get_count = pre_compaction_data_keys - (post_compaction_data_keys - new_data_keys)
-    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == expected_get_count
+    compacted_data_keys = pre_compaction_data_keys - (post_compaction_data_keys - new_data_keys)
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == compacted_data_keys
     assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == new_data_keys
     # Second compaction should always be a no-op
     generic_compact_data_test_noop(lib, sym, rows_per_segment)
@@ -65,6 +65,7 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     pickled = lib.is_symbol_pickled(sym)
     vit_before_compaction = lib.read(sym)
     expected = vit_before_compaction.data
+    pre_compaction_index = lib.read_index(sym)
     pre_compaction_data_keys = len(lib.read_index(sym))
     with qs.query_stats():
         compacted_version = lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment).version
@@ -76,9 +77,9 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
         assert received == expected
     else:
         assert_frame_equal(expected, received)
-    index = lib.read_index(sym)
-    assert len(index) == pre_compaction_data_keys
-    new_data_keys = len(index[index["version_id"] > vit_before_compaction.version])
+    post_compaction_index = lib.read_index(sym)
+    assert_frame_equal(post_compaction_index, pre_compaction_index)
+    new_data_keys = len(post_compaction_index[post_compaction_index["version_id"] > vit_before_compaction.version])
     assert new_data_keys == 0
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
     # No objects should be written at all in this case
@@ -447,7 +448,7 @@ def test_compact_data_dynamic_schema_changing_column_names(lmdb_version_store_dy
     rows_per_segment=st.integers(1, 100),
     cols_per_segment=st.integers(1, 20),
 )
-def test_compact_data_hypothesis(
+def test_compact_data_hypothesis_general(
     in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment
 ):
     rng = np.random.default_rng(42)
@@ -455,7 +456,7 @@ def test_compact_data_hypothesis(
         column_group_size=cols_per_segment, segment_row_size=rows_per_segment, name="_unique_"
     )
     lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, name="_unique_")
-    sym = "test_compact_data_hypothesis"
+    sym = "test_compact_data_hypothesis_general"
     supported_types = [
         np.uint8,
         np.uint16,
@@ -499,3 +500,36 @@ def test_compact_data_hypothesis(
         df = df[rows_to_take:]
         remaining_rows -= rows_to_take
     generic_compact_data_test(lib_unsliced, sym, rows_per_segment)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    small_num_rows_0=st.integers(1, 10),
+    small_num_rows_1=st.integers(1, 10),
+    small_num_rows_2=st.integers(1, 10),
+    large_num_rows_0=st.integers(150, 200),
+    large_num_rows_1=st.integers(150, 200),
+    large_num_rows_2=st.integers(150, 200),
+)
+def test_compact_data_hypothesis_small_and_large_segments(
+    in_memory_store_factory,
+    clear_query_stats,
+    small_num_rows_0,
+    small_num_rows_1,
+    small_num_rows_2,
+    large_num_rows_0,
+    large_num_rows_1,
+    large_num_rows_2,
+):
+    rng = np.random.default_rng(42)
+    lib = in_memory_store_factory(segment_row_size=100, name="_unique_")
+    sym = "test_compact_data_hypothesis_small_and_large_segments"
+    # We will create small and large segments in the following order: S S L L S L
+    lib.write(sym, pd.DataFrame({"col": rng.random(small_num_rows_0)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_1)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_0)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_1)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_2)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_2)}))
+    generic_compact_data_test(lib, sym)

@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <folly/hash/Hash.h>
+
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -347,14 +349,14 @@ namespace std {
 template<>
 struct hash<arcticdb::pipelines::RowRange> {
     inline arcticdb::HashedValue operator()(const arcticdb::pipelines::RowRange& row_range) const noexcept {
-        return folly::hash::hash_combine(row_range.first, row_range.second);
+        return std::hash<std::pair<size_t, size_t>>{}(*reinterpret_cast<const std::pair<size_t, size_t>*>(&row_range));
     }
 };
 
 template<>
 struct hash<arcticdb::pipelines::ColRange> {
     inline arcticdb::HashedValue operator()(const arcticdb::pipelines::ColRange& col_range) const noexcept {
-        return folly::hash::hash_combine(col_range.first, col_range.second);
+        return std::hash<std::pair<size_t, size_t>>{}(*reinterpret_cast<const std::pair<size_t, size_t>*>(&col_range));
     }
 };
 } // namespace std

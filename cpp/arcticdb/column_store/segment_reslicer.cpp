@@ -18,11 +18,11 @@ SegmentReslicer::SegmentReslicer(uint64_t max_rows_per_segment) : max_rows_per_s
 }
 
 std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static_schema_columns(
-        std::vector<std::optional<std::shared_ptr<Column>>>&& columns, const SlicingInfo& slicing_info
+        std::vector<std::shared_ptr<Column>>&& columns, const SlicingInfo& slicing_info
 ) {
     std::vector<std::optional<Column>> res;
     res.reserve(slicing_info.num_segments);
-    const auto& type = columns.front().value()->type();
+    const auto& type = columns.front()->type();
     const auto type_size = get_type_size(type.data_type());
     for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
         res.emplace_back(std::make_optional<Column>(
@@ -33,7 +33,7 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
     auto dest_ptr = output_col->value().buffer().data();
     uint64_t output_col_capacity = type_size * output_col->value().row_count();
     for (auto& input_col : columns) {
-        const auto& input_blocks = input_col.value()->buffer().blocks();
+        const auto& input_blocks = input_col->buffer().blocks();
         for (const auto& block : input_blocks) {
             auto src_ptr = block->data();
             uint64_t remaining_bytes = block->physical_bytes();
@@ -55,33 +55,31 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
         }
         ARCTICDB_DEBUG_CHECK(
                 ErrorCode::E_ASSERTION_FAILURE,
-                input_col->use_count() == 1,
+                input_col.use_count() == 1,
                 "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
-                input_col->use_count()
+                input_col.use_count()
         );
-        input_col->reset();
+        input_col.reset();
     }
     return res;
 }
 
 std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
-        std::vector<std::optional<std::shared_ptr<Column>>>&& columns, const SlicingInfo& slicing_info,
+        std::vector<std::shared_ptr<Column>>&& columns, const SlicingInfo& slicing_info,
         ARCTICDB_UNUSED std::vector<StringPool>& string_pools
 ) {
     std::optional<TypeDescriptor> type;
     for (const auto& col : columns) {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                col.has_value(), "compact_data not yet supported with dynamic schema"
-        );
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(col, "compact_data not yet supported with dynamic schema");
         schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                !col.value()->is_sparse(), "compact_data not yet supported with sparse data"
+                !col->is_sparse(), "compact_data not yet supported with sparse data"
         );
         if (type.has_value()) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    col.value()->type() == *type, "compact_data not yet supported with dynamic schema"
+                    col->type() == *type, "compact_data not yet supported with dynamic schema"
             );
         } else {
-            type = col.value()->type();
+            type = col->type();
         }
     }
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
@@ -96,12 +94,9 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     }
     // Use string over string_view for the keys in this map, as we are going to free the segments soon, which would
     // then invalidate the pointers in those string views
-    ankerl::unordered_dense::map<
-            std::string,
-            std::vector<std::optional<std::shared_ptr<Column>>>,
-            util::TransparentStringHash,
-            std::equal_to<>>
-            column_map;
+    ankerl::unordered_dense::
+            map<std::string, std::vector<std::shared_ptr<Column>>, util::TransparentStringHash, std::equal_to<>>
+                    column_map;
     // Build up the set of all columns in all segments
     // Also track the order they were added in
     std::vector<std::string> col_names_in_order;
@@ -126,14 +121,14 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
                 desc.segment_desc_, std::make_shared<FieldCollection>(), desc.stream_id_
         ));
     }
-    // For each segment, append the column to the corresponding vector in columns if it is present, or a nullopt if it
+    // For each segment, append the column to the corresponding vector in columns if it is present, or a nullptr if it
     // is missing from this segment (dynamic schema)
     for (const auto& segment : segments) {
         for (const auto& col_name : col_names_in_order) {
             if (auto col_idx = segment.column_index(col_name); col_idx.has_value()) {
                 column_map.at(col_name).emplace_back(segment.column_ptr(*col_idx));
             } else {
-                column_map.at(col_name).emplace_back(std::nullopt);
+                column_map.at(col_name).emplace_back(std::shared_ptr<Column>());
             }
         }
     }

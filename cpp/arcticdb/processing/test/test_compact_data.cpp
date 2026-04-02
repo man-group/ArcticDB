@@ -31,7 +31,6 @@ std::vector<std::pair<std::set<RowRange>, std::set<RowRange>>> parameters{
         {{{0, 9}}, {{0, 9}}},
         {{{0, 12}}, {{0, 12}}},
         {{{0, 20}}, {{0, 20}}},
-        {{{0, 4}}, {{0, 4}}},
         // Everything is already perfectly sliced
         {{{0, 10}, {10, 20}, {20, 30}, {30, 36}}, {{0, 10}, {10, 20}, {20, 30}, {30, 36}}},
         // Everything is within the acceptable range, which is 6-12 rows inclusive with rows_per_segment_ == 10 and

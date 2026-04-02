@@ -2300,7 +2300,13 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
     max_rows_per_segment_ = std::max((4 * rows_per_segment_) / 3, rows_per_segment_ + 1);
 }
 
-// Given the set of row ranges in the input data, a superset of the set of row ranges to pass to process
+// Given the set of row ranges in the input data:
+// {[0, x1), [x1, x2), ..., [xn-1, xn), [xn, total_rows)}
+// produces a covering set of output row ranges
+// {[0, y1), [y1, y2), ..., [ym-1, ym), [ym, total_rows)}
+// The output ranges will then either:
+// - Discarded from the set of segments to process if they are in the input ranges, as they do not need to change
+// - Passed to process to be combined/split as appropriate
 std::set<RowRange> CompactDataClause::structure_row_ranges(const std::set<RowRange>& row_ranges) const {
     if (row_ranges.empty()) {
         return {};
@@ -2360,7 +2366,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     }
     // The greedy algorithm in structure_row_ranges can reslice data where all segments have an acceptable number of
     // rows, which is not desirable, so short-circuit out if this is the case
-    if (std::all_of(row_ranges.begin(), row_ranges.end(), [this](const RowRange& row_range) {
+    if (std::ranges::all_of(row_ranges, [this](const RowRange& row_range) {
             return min_rows_per_segment_ <= row_range.diff() && row_range.diff() <= max_rows_per_segment_;
         })) {
         log::version().info("No work to do in CompactDataClause, data is already compacted");
