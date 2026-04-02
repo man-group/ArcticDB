@@ -176,19 +176,15 @@ def test_sparse_arrow_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, u
 
 @pytest.mark.parametrize("column_group_size", [1, 2, 3])
 @pytest.mark.parametrize("use_row_range", [False, True])
+@pytest.mark.parametrize("index_column", [None, "ts"])
 @pytest.mark.parametrize(
     "columns",
     [
         ["a", "c"],
-        pytest.param(
-            ["b"],
-            marks=pytest.mark.xfail(
-                reason="Column selection for Arrow-written data always includes the first column even when not requested (monday: 11432991054)"
-            ),
-        ),
+        ["b"],
     ],
 )
-def test_sparse_column_selection(version_store_factory, column_group_size, use_row_range, columns):
+def test_sparse_column_selection(version_store_factory, column_group_size, use_row_range, index_column, columns):
     lib = version_store_factory(column_group_size=column_group_size)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
@@ -200,14 +196,21 @@ def test_sparse_column_selection(version_store_factory, column_group_size, use_r
             "c": pa.array([True, None, False, None, True], pa.bool_()),
         }
     )
-    lib.write(sym, table)
+    if index_column is not None:
+        ts = pa.Array.from_pandas(pd.date_range("2025-01-01", periods=5), type=pa.timestamp("ns"))
+        table = table.append_column(index_column, ts)
+    lib.write(sym, table, index_column=index_column)
     row_range = (1, 4) if use_row_range else None
-    expected_table = table.select(columns)
+    # The index column should always be included in the result
+    expected_columns = ([index_column] if index_column is not None else []) + columns
+    expected_table = table.select(expected_columns)
     if use_row_range:
         expected_table = expected_table.slice(offset=1, length=3)
     received = lib.read(sym, columns=columns, row_range=row_range).data
     assert expected_table.equals(received)
     received_pandas = lib.read(sym, columns=columns, row_range=row_range, output_format="PANDAS").data
+    if index_column is not None:
+        received_pandas = received_pandas.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected_table, received_pandas)
 
 
