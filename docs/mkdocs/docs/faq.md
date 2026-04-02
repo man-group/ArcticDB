@@ -176,6 +176,23 @@ ArcticDB currently offers extremely limited support for categorical data. Series
 However, `append` and `update` are not yet supported with categorical data, and will raise an exception if attempted.
 Analytics such as filtering using the `LazyDataFrame` or `QueryBuilder` classes is also not supported with categorical data, and will either raise an exception, or give incorrect results, depending on the exact operations requested.
 
+### *Why do I get a `NormalizationException` about timezone database on Windows?*
+
+When reading timezone-aware data with output set to Arrow or Polars, ArcticDB uses PyArrow for timezone conversion. On Windows, PyArrow requires a separately installed IANA timezone database. If the database is missing, you will see an error like:
+
+```
+arcticdb.exceptions.NormalizationException: Cannot locate timezone 'UTC':
+Unable to get Timezone database version from C:\Users\<user>\Downloads\tzdata
+
+ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which
+requires a timezone database on Windows.
+To install, run:
+  python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
+Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows
+```
+
+Running the one-liner above will download the database and resolve the issue. This is only needed once per environment and only affects Windows.
+
 ### How does ArcticDB handle `NaN`?
 
 The handling of `NaN` in ArcticDB depends on the type of the column under consideration:
