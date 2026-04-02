@@ -839,6 +839,30 @@ AtomKey SymbolList::replace_symbol_list_state(const std::shared_ptr<Store>& stor
     return std::get<AtomKey>(write_symbols(store, entries, compaction_id, data_.type_holder_));
 }
 
+std::unordered_set<StreamId> SymbolList::load_compacted(const std::shared_ptr<Store>& store) {
+    std::optional<AtomKey> latest_compaction_key;
+    store->iterate_type(
+            KeyType::SYMBOL_LIST,
+            [&latest_compaction_key](const VariantKey& key) {
+                auto atom_key = to_atom(key);
+                if (!latest_compaction_key || atom_key.creation_ts() > latest_compaction_key->creation_ts()) {
+                    latest_compaction_key = atom_key;
+                }
+            },
+            std::get<std::string>(compaction_id));
+
+    if (!latest_compaction_key) {
+        return {};
+    }
+
+    std::unordered_set<StreamId> result;
+    for (auto&& entry : read_from_storage(store, *latest_compaction_key)) {
+        if (entry.action_ == ActionType::ADD) {
+            result.insert(std::move(entry.stream_id_));
+        }
+    }
+    return result;
+}
 
 void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
     if (has_recent_compaction(store, load_result.maybe_previous_compaction)) {

@@ -204,6 +204,10 @@ class SymbolList {
     /// Replaces the entire symbol list state with the given entries.
     AtomKey replace_symbol_list_state(const std::shared_ptr<Store>& store, const CollectionType& entries);
 
+    /// Reads only the latest compacted symbol list key and returns the set of alive symbols.
+    /// Prefixed LIST for __symbols__ keys + single GET. No lock, no journal merging.
+    static std::unordered_set<StreamId> load_compacted(const std::shared_ptr<Store>& store);
+
     static void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, entity::VersionId reference_id);
 
     static void remove_symbol(
