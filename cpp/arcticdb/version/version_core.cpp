@@ -635,7 +635,7 @@ VersionedItem update_impl(
 
 folly::Future<ReadVersionOutput> read_multi_key(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
-        std::any& handler_data, AtomKey&& key
+        std::shared_ptr<std::any> handler_data, AtomKey&& key
 ) {
     std::vector<AtomKey> keys;
     keys.reserve(index_key_seg.row_count());
@@ -1789,13 +1789,13 @@ struct CopyToBufferTask : async::BaseTask {
     FrameSlice frame_slice_;
     uint32_t required_fields_count_;
     DecodePathData shared_data_;
-    std::any& handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     const ReadOptions read_options_;
     std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment, SegmentInMemory target_segment, FrameSlice frame_slice,
-            uint32_t required_fields_count, DecodePathData shared_data, std::any& handler_data,
+            uint32_t required_fields_count, DecodePathData shared_data, std::shared_ptr<std::any> handler_data,
             const ReadOptions& read_options, std::shared_ptr<PipelineContext> pipeline_context
     ) :
         source_segment_(std::move(source_segment)),
@@ -1825,7 +1825,7 @@ struct CopyToBufferTask : async::BaseTask {
                         idx,
                         frame_slice_.row_range,
                         shared_data_,
-                        handler_data_,
+                        *handler_data_,
                         read_options_,
                         {}
                 );
@@ -1851,7 +1851,7 @@ struct CopyToBufferTask : async::BaseTask {
                         idx,
                         frame_slice_.row_range,
                         shared_data_,
-                        handler_data_,
+                        *handler_data_,
                         read_options_,
                         default_value
                 );
@@ -1863,7 +1863,7 @@ struct CopyToBufferTask : async::BaseTask {
 
 folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        SegmentInMemory frame, std::any& handler_data, const ReadOptions& read_options
+        SegmentInMemory frame, std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
 ) {
     const auto required_fields_count =
             pipelines::index::required_fields_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
@@ -1888,7 +1888,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
 
 folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
@@ -2073,14 +2073,14 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
 folly::Future<SegmentInMemory> do_direct_read_or_process(
         const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const DecodePathData& shared_data, std::any& handler_data
+        const DecodePathData& shared_data, std::shared_ptr<std::any> handler_data
 ) {
     const bool direct_read = read_query->clauses_.empty();
     if (!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
-                .thenValue([store, pipeline_context, read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
+                .thenValue([store, pipeline_context, read_options, handler_data](std::vector<SliceAndKey>&& segs) {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
                 });
     } else {
@@ -2795,9 +2795,10 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
 ) {
-    auto start_pipeline = [store, read_query, read_options, &handler_data](VersionIdentifier&& resolved_version) {
+    auto start_pipeline = [store, read_query, read_options, handler_data](VersionIdentifier&& resolved_version) {
         auto res_versioned_item = generate_result_versioned_item(resolved_version);
         return async::submit_io_task(
                        SetupPipelineContextTask{store, std::move(resolved_version), read_query, read_options}
@@ -2828,7 +2829,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                             .thenValue([res_versioned_item = std::move(res_versioned_item),
                                         pipeline_context,
                                         read_options,
-                                        &handler_data,
+                                        handler_data,
                                         read_query,
                                         shared_data](auto&& frame) mutable {
                                 ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
