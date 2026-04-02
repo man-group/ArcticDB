@@ -9,9 +9,7 @@ import arcticdb_ext.cpp_async as adb_async
 @pytest.fixture
 def missing_tdata_lib(s3_store_factory, sym):
     try:
-        with config_context_multi(
-            {"VersionStore.NumIOThreads": 100, "VersionStore.NumCPUThreads": 100}
-        ):
+        with config_context_multi({"VersionStore.NumIOThreads": 100, "VersionStore.NumCPUThreads": 100}):
             adb_async.reinit_task_scheduler()
             assert adb_async.io_thread_count() == 100
             assert adb_async.cpu_thread_count() == 100

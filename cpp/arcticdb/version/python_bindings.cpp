@@ -233,7 +233,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             "read_dataframe_from_file",
             [](StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
             ) {
-                auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format()));
+                auto handler_data = std::make_shared<std::any>(
+                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                );
                 return adapt_read_df(
                         read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
                 );
@@ -792,8 +794,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const VersionQuery& version_query,
                         const std::shared_ptr<ReadQuery>& read_query,
                         const ReadOptions& read_options) {
-                        auto handler_data =
-                                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format()));
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                        );
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
                                 handler_data.get()
@@ -938,8 +941,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const std::vector<VersionQuery>& version_queries,
                         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                         const BatchReadOptions& batch_read_options) {
-                        auto handler_data =
-                                std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format()));
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
+                        );
                         return python_util::adapt_read_dfs(
                                 v.batch_read(
                                         stream_ids, version_queries, read_queries, batch_read_options, handler_data

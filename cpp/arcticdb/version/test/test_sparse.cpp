@@ -83,7 +83,8 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -173,7 +174,8 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -225,7 +227,8 @@ TEST_F(SparseTestStore, DenseToSparse) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -276,7 +279,8 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_options.set_incompletes(true);
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -334,7 +338,8 @@ TEST_F(SparseTestStore, Multiblock) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -391,7 +396,8 @@ TEST_F(SparseTestStore, Segment) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -459,7 +465,8 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -528,7 +535,8 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     read_query->columns = {"time", "first"};
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -592,7 +600,8 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = IndexRange(timestamp{3000}, timestamp{6999});
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -652,7 +661,8 @@ TEST_F(SparseTestStore, Compact) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(
             stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data
     );
@@ -715,7 +725,8 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS));
     auto read_result =
             test_store_->read_dataframe_version(stream_id, VersionQuery{}, read_query, read_options, handler_data);
     apply_global_refcounts(*handler_data, OutputFormat::PANDAS);

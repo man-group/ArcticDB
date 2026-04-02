@@ -261,7 +261,8 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
@@ -348,7 +349,8 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
@@ -430,7 +432,8 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
@@ -525,7 +528,9 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     BatchReadOptions batch_read_options(true);
     batch_read_options.set_output_format(OutputFormat::NATIVE);
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format()));
+    auto handler_data = std::make_shared<std::any>(
+            TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
+    );
     auto latest_versions = test_store_->batch_read(
             symbols, std::vector<VersionQuery>(10), read_queries, batch_read_options, handler_data
     );
@@ -720,7 +725,8 @@ TEST(VersionStore, UpdateWithin) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -764,7 +770,8 @@ TEST(VersionStore, UpdateBefore) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -808,7 +815,8 @@ TEST(VersionStore, UpdateAfter) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -852,7 +860,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -896,7 +905,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -950,7 +960,8 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
@@ -1014,7 +1025,8 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );

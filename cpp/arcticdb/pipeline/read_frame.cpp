@@ -957,8 +957,8 @@ struct ReduceColumnTask : async::BaseTask {
 
     ReduceColumnTask(
             SegmentInMemory frame, size_t c, std::shared_ptr<FrameSliceMap> slice_map,
-            std::shared_ptr<PipelineContext>& context, DecodePathData shared_data, std::shared_ptr<std::any> handler_data,
-            const ReadOptions& read_options
+            std::shared_ptr<PipelineContext>& context, DecodePathData shared_data,
+            std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
     ) :
         frame_(std::move(frame)),
         column_index_(c),

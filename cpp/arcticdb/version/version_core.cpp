@@ -2728,7 +2728,8 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
 ) {
     return async::submit_io_task(SetupPipelineContextTask{store, version_info, read_query, read_options})
             .via(&async::cpu_executor())

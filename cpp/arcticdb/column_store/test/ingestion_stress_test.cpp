@@ -130,7 +130,8 @@ TEST_F(IngestionStressStore, ScalarIntAppend) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ro, handler_data);
 }
 
@@ -222,7 +223,8 @@ TEST_F(IngestionStressStore, ScalarIntDynamicSchema) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = test_store_->read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
@@ -283,7 +285,8 @@ TEST_F(IngestionStressStore, DynamicSchemaWithStrings) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, read_options, handler_data);
 }
