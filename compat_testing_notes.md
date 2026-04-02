@@ -55,37 +55,33 @@ lib = ac["compat_test"]
 
 column_stats_dict = {"col_1": {"MINMAX"}}
 
-lib._nvs.read_column_stats("sym")
-
-"""
 In [3]: lib._nvs.read_column_stats("sym")
 Out[3]:
                                 end_index  v2_MIN(col_1)  v2_MAX(col_1)
 start_index
 1970-01-01  1970-01-01 00:00:00.000000002             10             20
-"""
 
-"""
 In [4]: lib._nvs.get_column_stats_info("sym")
-20260401 14:29:26.923621 3026238 W arcticdb | Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat.
-20260401 14:29:26.923640 3026238 W arcticdb | Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat.
-Out[4]: {}
+StorageException: E_KEY_NOT_FOUND Failed to read column stats key: E_UNRECOGNISED_COLUMN_STATS_VERSION Encountered unknown column stat. Upgrade your ArcticDB installation.
 
-"""
+In [6]: lib._nvs.drop_column_stats("sym-2", column_stats_dict)
+---------------------------------------------------------------------------
+CompatibilityException                    Traceback (most recent call last)
+Cell In[6], line 1
+----> 1 lib._nvs.drop_column_stats("sym-2", column_stats_dict)
 
-A no-op behaviour here would be better...
+File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_store.py:1281, in NativeVersionStore.drop_column_stats(self, symbol, column_stats, as_of)
+   1279 column_stats = self._get_column_stats(column_stats)
+   1280 version_query = self._get_version_query(as_of)
+-> 1281 self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
-"""
-In [5]: lib._nvs.drop_column_stats("sym", column_stats_dict)
-20260401 14:30:06.324658 3026238 W arcticdb | Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat.
-20260401 14:30:06.324675 3026238 W arcticdb | Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat.
-20260401 14:30:06.324684 3026238 W arcticdb | Requested column stats drop but column 'col_1' does not have any column stats
+CompatibilityException: E_UNRECOGNISED_COLUMN_STATS_VERSION Encountered unknown column stat. Upgrade your ArcticDB installation.
 
-In [6]: lib._nvs.get_column_stats_info("sym")
+In [7]: lib._nvs.get_column_stats_info("sym-2")
 ---------------------------------------------------------------------------
 StorageException                          Traceback (most recent call last)
-Cell In[6], line 1
-----> 1 lib._nvs.get_column_stats_info("sym")
+Cell In[7], line 1
+----> 1 lib._nvs.get_column_stats_info("sym-2")
 
 File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_store.py:1323, in NativeVersionStore.get_column_stats_info(self, symbol, as_of, **kwargs)
    1306 """
@@ -97,13 +93,40 @@ File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_sto
    1322 version_query = self._get_version_query(as_of, **kwargs)
 -> 1323 return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
-StorageException: E_KEY_NOT_FOUND Failed to read column stats key: Not found: [S:sym:0:0x465eac98ba9b3485@1775035396990262322[0,0]]
-"""
+StorageException: E_KEY_NOT_FOUND Failed to read column stats key: E_UNRECOGNISED_COLUMN_STATS_VERSION Encountered unknown column stat. Upgrade your ArcticDB installation.
 
-lib.drop_column_stats("sym") ## should succeed
+In [8]: lib._nvs.drop_column_stats("sym-2")
 
-lib.create_column_stats("sym-2", column_stats_dict)  ## should fail
+In [9]: lib._nvs.get_column_stats_info("sym-2")
+---------------------------------------------------------------------------
+StorageException                          Traceback (most recent call last)
+Cell In[9], line 1
+----> 1 lib._nvs.get_column_stats_info("sym-2")
 
+File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_store.py:1323, in NativeVersionStore.get_column_stats_info(self, symbol, as_of, **kwargs)
+   1306 """
+   1307 Read the column statistics dictionary for the given symbol.
+   1308
+   (...)
+   1320     In the same format as the `column_stats` argument provided to `create_column_stats` and `drop_column_stats`.
+   1321 """
+   1322 version_query = self._get_version_query(as_of, **kwargs)
+-> 1323 return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
+
+StorageException: E_KEY_NOT_FOUND Failed to read column stats key: Not found: [S:sym-2:0:0xd15903ba9fe51a78@1775035396998183416[0,0]]
+
+In [13]: lib._nvs.create_column_stats("sym", column_stats_dict)
+---------------------------------------------------------------------------
+CompatibilityException                    Traceback (most recent call last)
+Cell In[13], line 1
+----> 1 lib._nvs.create_column_stats("sym", column_stats_dict)
+
+File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_store.py:1257, in NativeVersionStore.create_column_stats(self, symbol, column_stats, as_of)
+   1255 column_stats = self._get_column_stats(column_stats)
+   1256 version_query = self._get_version_query(as_of)
+-> 1257 self.version_store.create_column_stats_version(symbol, column_stats, version_query)
+
+CompatibilityException: E_UNRECOGNISED_COLUMN_STATS_VERSION Encountered unknown column stat. Upgrade your ArcticDB installation.
 ```
 
 ### Major Version Testing
@@ -177,5 +200,16 @@ lib._nvs.drop_column_stats("sym")
 >>> succeeds
 
 lib._nvs.create_column_stats("sym", column_stats_dict)
->>> succeeds! This is a bug, we should fail here
+In [11]: lib._nvs.create_column_stats("sym", column_stats_dict)
+---------------------------------------------------------------------------
+CompatibilityException                    Traceback (most recent call last)
+Cell In[11], line 1
+----> 1 lib._nvs.create_column_stats("sym", column_stats_dict)
+
+File ~/venvs/compat_tst/lib/python3.10/site-packages/arcticdb/version_store/_store.py:1257, in NativeVersionStore.create_column_stats(self, symbol, column_stats, as_of)
+   1255 column_stats = self._get_column_stats(column_stats)
+   1256 version_query = self._get_version_query(as_of)
+-> 1257 self.version_store.create_column_stats_version(symbol, column_stats, version_query)
+
+CompatibilityException: E_UNRECOGNISED_COLUMN_STATS_VERSION This client only understands column stats version 1 but has encountered version=2. Upgrade your ArcticDB installation.
 ```
