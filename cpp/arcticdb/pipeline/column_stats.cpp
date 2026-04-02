@@ -58,7 +58,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     }
 
     arcticc::pb2::descriptors_pb2::ColumnStatsHeader merged_header;
-    merged_header.set_version(2); // see descriptors.proto for explanation of the versioning scheme
+    merged_header.set_version(1); // see descriptors.proto for explanation of the versioning scheme
     auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
     size_t stat_idx = 0;
     for (const auto& [idx, type_descriptor] : folly::enumerate(type_descriptors)) {
