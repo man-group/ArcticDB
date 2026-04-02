@@ -434,18 +434,19 @@ def test_column_stats_projection_before_filter_disables_pruning(
     assert get_column_stats_read_count() == (1 if filter_first else 0)
 
 
+@pytest.mark.parametrize("append_type", (np.int32, np.float64))
 def test_column_stats_dynamic_schema_column_type_varies(
-    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled, append_type
 ):
     """Test pruning when column type varies across segments (dynamic schema)."""
     lib = in_memory_version_store_dynamic_schema
 
     df_int8 = pd.DataFrame({"col_1": np.array([1, 2], dtype=np.int8)}, index=pd.date_range("2000-01-01", periods=2))
-    df_int32 = pd.DataFrame(
-        {"col_1": np.array([100, 200], dtype=np.int32)}, index=pd.date_range("2000-01-03", periods=2)
+    df_different_type = pd.DataFrame(
+        {"col_1": np.array([200, 300], dtype=append_type)}, index=pd.date_range("2000-01-03", periods=2)
     )
     lib.write(sym, df_int8)
-    lib.append(sym, df_int32)
+    lib.append(sym, df_different_type)
 
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
     qs.enable()
@@ -455,7 +456,7 @@ def test_column_stats_dynamic_schema_column_type_varies(
     result = lib.read(sym, query_builder=q).data
     table_data_reads = get_table_data_read_count()
 
-    expected = pd.concat([df_int8, df_int32])
+    expected = pd.concat([df_int8, df_different_type])
     expected = expected[expected["col_1"] > 50]
     assert_frame_equal(result, expected)
 
