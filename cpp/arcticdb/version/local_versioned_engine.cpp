@@ -430,7 +430,7 @@ VersionIdentifier get_version_identifier(
 
 ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
     const auto identifier = util::variant_match(
@@ -1312,7 +1312,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
 std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedEngine::batch_read_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
     if (stream_ids.empty()) {
@@ -1336,7 +1336,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
-                                    &handler_data](auto&& opt_index_key) {
+                                    handler_data](auto&& opt_index_key) {
                             auto version_info = get_version_identifier(
                                     stream_ids[idx],
                                     version_queries[idx],
@@ -1351,7 +1351,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
-                                    &handler_data](ReadVersionOutput&& result) {
+                                    handler_data](ReadVersionOutput&& result) {
                             auto& keys = result.frame_and_descriptor_.keys_;
                             if (keys.empty()) {
                                 return folly::makeFuture(ReadVersionWithNodesOutput{std::move(result), {}});
@@ -1477,9 +1477,10 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
         clause->set_component_manager(component_manager);
     }
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
+    std::shared_ptr<std::any> handler_data_ptr(std::shared_ptr<std::any>{}, &handler_data);
     return folly::collect(symbol_processing_result_futs)
             .via(&async::io_executor())
-            .thenValueInline([this, &handler_data, clauses_ptr, component_manager, read_options](
+            .thenValueInline([this, &handler_data_ptr, clauses_ptr, component_manager, read_options](
                                      std::vector<SymbolProcessingResult>&& symbol_processing_results
                              ) mutable {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
@@ -1493,14 +1494,14 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                     std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
                             return collect_segments(std::move(proc));
                         })
-                        .thenValueInline([store = store(), &handler_data, pipeline_context, read_options](
+                        .thenValueInline([store = store(), handler_data_ptr, pipeline_context, read_options](
                                                  std::vector<SliceAndKey>&& slice_and_keys
                                          ) mutable {
                             return prepare_output_frame(
-                                    std::move(slice_and_keys), pipeline_context, store, read_options, handler_data
+                                    std::move(slice_and_keys), pipeline_context, store, read_options, handler_data_ptr
                             );
                         })
-                        .thenValueInline([&handler_data,
+                        .thenValueInline([&handler_data_ptr,
                                           pipeline_context,
                                           res_versioned_items,
                                           res_metadatas,
@@ -1510,7 +1511,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                             ReadOptions read_options_with_dynamic_schema = read_options.clone();
                             read_options_with_dynamic_schema.set_dynamic_schema(true);
                             return reduce_and_fix_columns(
-                                           pipeline_context, frame, read_options_with_dynamic_schema, handler_data
+                                           pipeline_context, frame, read_options_with_dynamic_schema, handler_data_ptr
                             )
                                     .thenValueInline([pipeline_context,
                                                       frame,

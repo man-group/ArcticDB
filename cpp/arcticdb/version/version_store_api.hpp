@@ -121,7 +121,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     ReadResult read_dataframe_version(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-            const ReadOptions& read_options, std::any& handler_data
+            const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
     );
 
     VersionedItem read_modify_write(
@@ -231,7 +231,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     std::vector<std::variant<ReadResult, DataError>> batch_read(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
-            std::any& handler_data
+            std::shared_ptr<std::any> handler_data
     );
 
     std::vector<VersionedItemOrError> batch_update(
@@ -308,7 +308,7 @@ void write_dataframe_to_file(
 
 ReadResult read_dataframe_from_file(
         const StreamId& stream_id, const std::string& path, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 );
 
 struct ManualClockVersionStore : PythonVersionStore {

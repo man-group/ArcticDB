@@ -135,7 +135,8 @@ inline ReadResult read_result_from_single_frame(
     pipeline_context->begin()->set_string_pool(frame_and_desc.frame_.string_pool_ptr());
     auto descriptor = std::make_shared<StreamDescriptor>(frame_and_desc.frame_.descriptor());
     pipeline_context->begin()->set_descriptor(std::move(descriptor));
-    reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data).get();
+    std::shared_ptr<std::any> handler_data_ptr(std::shared_ptr<std::any>{}, &handler_data);
+    reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data_ptr).get();
     apply_type_handlers(frame_and_desc.frame_, handler_data, output_format);
     return create_python_read_result(VersionedItem{key}, output_format, std::move(frame_and_desc));
 }
