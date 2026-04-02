@@ -201,6 +201,9 @@ class SymbolList {
 
     size_t compact(const std::shared_ptr<Store>& store);
 
+    /// Replaces the entire symbol list state with the given entries.
+    AtomKey replace_symbol_list_state(const std::shared_ptr<Store>& store, const CollectionType& entries);
+
     static void add_symbol(const std::shared_ptr<Store>& store, const StreamId& symbol, entity::VersionId reference_id);
 
     static void remove_symbol(

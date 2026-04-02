@@ -831,6 +831,15 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
     return num_symbol_list_keys;
 }
 
+AtomKey SymbolList::replace_symbol_list_state(const std::shared_ptr<Store>& store, const CollectionType& entries) {
+    // Write new compacted key from the supplied entries.
+    // Old compacted/journal keys become orphans but are harmless: `last_compaction()` finds
+    // the newest compaction key by creation_ts, so stale keys are never read.
+    // They get cleaned up on the next full compaction cycle (e.g. list_symbols).
+    return std::get<AtomKey>(write_symbols(store, entries, compaction_id, data_.type_holder_));
+}
+
+
 void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
     if (has_recent_compaction(store, load_result.maybe_previous_compaction)) {
         // legacy arcticc symbol list entries don't get correctly listed when doing `iterate_type`, so can mess

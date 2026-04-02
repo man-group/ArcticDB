@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_pool_allocator.hpp>
 #include <aws/core/utils/logging/DefaultLogSystem.h>
 #include <aws/core/utils/logging/AWSLogging.h>
 #include <arcticdb/util/configs_map.hpp>
@@ -20,6 +21,21 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level) : log_leve
     // Use correct URI encoding rather than legacy compat one in AWS SDK. PURE S3 needs this to handle symbol names
     // that have special characters (eg ':').
     options_.httpOptions.compliantRfc3986Encoding = true;
+
+    // Install pooled memory allocator for AWS SDK allocations (Aws::Malloc/Free).
+    // This reduces allocation overhead for the millions of small objects (strings, headers,
+    // cJSON nodes) created per S3 operation by reusing freed blocks via thread-local freelists.
+    bool use_pool_allocator = ConfigsMap::instance()->get_int("S3.PoolAllocatorEnabled", 0) == 1;
+    if (use_pool_allocator) {
+        static PooledAwsMemorySystem pooled_memory_system;
+        options_.memoryManagementOptions.memoryManager = &pooled_memory_system;
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "AWS SDK pool allocator enabled");
+        static bool atexit_registered = false;
+        if (!atexit_registered) {
+            std::atexit([]() { log_pool_alloc_stats("PoolAllocStats-Exit"); });
+            atexit_registered = true;
+        }
+    }
 
     if (log_level_ > Aws::Utils::Logging::LogLevel::Off) {
         Aws::Utils::Logging::InitializeAWSLogging(
