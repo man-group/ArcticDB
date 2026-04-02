@@ -401,6 +401,8 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     // is 0.
     ssize_t index_till;
     if (norm_info.has_experimental_arrow()) {
+        // Data written as arrow can optionally specify a single index column. If a `has_index==true` the index is
+        // physically stored.
         index_till = norm_info.experimental_arrow().has_index() ? 1 : 0;
     } else {
         const auto& common = norm_info.has_df() ? norm_info.df().common() : norm_info.series().common();
