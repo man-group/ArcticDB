@@ -196,7 +196,9 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
         }
     }
 
-    // Read all index keys in parallel
+    // Read all top-level index keys in parallel. Note: for MULTI_KEY entries, recurse_segment
+    // calls recurse_index_key → store->read_sync() sequentially for each nested key. This limits
+    // parallelism for snapshot-deletion workloads with deep multi-key chains.
     std::vector<folly::Future<std::pair<entity::VariantKey, SegmentInMemory>>> read_futures;
     std::vector<IndexTypeKey> read_keys;
     read_futures.reserve(keys.size());
@@ -212,6 +214,10 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
         }
     }
 
+    // This .get() blocks the calling thread. When reached from delete_unreferenced_pruned_indexes
+    // (via cpu_executor), it blocks a CPU pool thread while awaiting IO futures. This is safe because
+    // IO tasks run on the separate IO executor, so they are not starved by the blocked CPU thread.
+    // Verified by test_batch_write_with_pruning and test_batch_delete_symbols with single-threaded config.
     auto read_results = folly::collectAll(read_futures).get();
 
     // Process results sequentially

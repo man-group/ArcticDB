@@ -1079,6 +1079,11 @@ folly::Future<folly::Unit> delete_trees_responsibly(
                         async::submit_io_task(CheckReloadTask{store, version_map, min.first, load_strategy})
                 );
             }
+            // Safe to block here: this code path is only reached when load_type != NOT_LOADED,
+            // which excludes the delete_unreferenced_pruned_indexes path (all checks=false, so
+            // calc_load_type() == NOT_LOADED). All other callers of delete_trees_responsibly
+            // invoke it from a Python thread, not from within a thread pool callback.
+            // Verified by test_batch_delete_versions_* with single-threaded config.
             auto results = folly::collectAll(reload_futures).get();
             for (size_t i = 0; i < results.size(); ++i) {
                 entry_map.try_emplace(std::move(stream_ids[i]), std::move(results[i]).value());
@@ -1170,13 +1175,25 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
         ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
 
+        // Parallel deletion of column-stats, index, and data keys. The previous sequential order
+        // (stats → index → data) provided a narrower window for dangling references on partial failure,
+        // but since all reads already set ignores_missing_key_ = true, a reader encountering a dangling
+        // index→data reference will simply skip the missing data key. The parallelism is a worthwhile
+        // trade-off for the performance gain on batch deletes.
         remove_keys_fut = folly::collectAll(
                                   store->remove_keys(std::move(vks_column_stats), remove_opts),
                                   store->remove_keys(std::move(vks_to_delete), remove_opts),
                                   store->remove_keys(std::move(vks_data_to_delete), remove_opts)
         )
                                   .via(&async::io_executor())
-                                  .thenValue([](auto&&) { return folly::Unit(); });
+                                  .thenValue([](auto&& results) {
+                                      // Re-throw first error, if any, to preserve the error propagation
+                                      // behaviour of the previous sequential chain.
+                                      std::get<0>(results).throwUnlessValue();
+                                      std::get<1>(results).throwUnlessValue();
+                                      std::get<2>(results).throwUnlessValue();
+                                      return folly::Unit();
+                                  });
     }
     return remove_keys_fut;
 }

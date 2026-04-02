@@ -137,18 +137,20 @@ if platform.system() == "Linux":
 @pytest.fixture(
     params=[True, False],
 )
-def check_single_threaded(request):
+def single_threaded_config(request):
+    """Parametrized fixture that runs the test twice: once with a single IO/CPU thread and once with defaults."""
     if request.param:
         set_config_int("VersionStore.NumIOThreads", 1)
         set_config_int("VersionStore.NumCPUThreads", 1)
         reinit_task_scheduler()
 
-    yield request.param
-
-    if request.param:
-        unset_config_int("VersionStore.NumIOThreads")
-        unset_config_int("VersionStore.NumCPUThreads")
-        reinit_task_scheduler()
+    try:
+        yield request.param
+    finally:
+        if request.param:
+            unset_config_int("VersionStore.NumIOThreads")
+            unset_config_int("VersionStore.NumCPUThreads")
+            reinit_task_scheduler()
 
 
 @pytest.fixture()

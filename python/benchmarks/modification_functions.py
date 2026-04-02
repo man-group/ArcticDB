@@ -277,7 +277,7 @@ class DeleteBatchVersions:
         from arcticdb.version_store.library import DeleteRequest
 
         # Prepare delete requests to delete all but the latest version for each symbol
-        self.delete_requests = [DeleteRequest(sym, list(range(self.versions_per_symbol - 2))) for sym in self.syms]
+        self.delete_requests = [DeleteRequest(sym, list(range(self.versions_per_symbol - 1))) for sym in self.syms]
 
     def teardown(self, *args):
         if hasattr(self, "ac"):
