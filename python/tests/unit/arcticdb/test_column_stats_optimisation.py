@@ -2,6 +2,8 @@ from datetime import datetime
 
 import numpy as np
 import pytest
+from arcticdb_ext.storage import KeyType
+
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
@@ -680,6 +682,14 @@ def test_column_stats_with_column_slicing(
     lib.append(sym, df1)
     lib.append(sym, df2)
 
+    lt = lib.library_tool()
+    data_keys = lt.find_keys_for_symbol(KeyType.TABLE_DATA, sym)
+    # The index is stored in every block for datetime indexes even though the column slicing policy is "1"
+    # The range index is not physically stored. Other indexes (eg string / integer index) are just saved
+    # like normal columns in their own block.
+    expected_data_keys = 9 if isinstance(indexes[0], pd.DatetimeIndex) or isinstance(indexes[0], pd.RangeIndex) else 12
+    assert len(data_keys) == expected_data_keys
+
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
 
     q = QueryBuilder()
@@ -689,7 +699,7 @@ def test_column_stats_with_column_slicing(
     qs.reset_stats()
     result = lib.read(sym, query_builder=q, columns=["col_1"]).data
     table_data_reads = get_table_data_read_count()
-    # The index is stored in its own block for string and rowcount indexes
+    # Get an extra read for the index if it's stored in its own segment
     expected_reads = 1 if isinstance(indexes[0], pd.DatetimeIndex) or isinstance(indexes[0], pd.RangeIndex) else 2
     assert table_data_reads == expected_reads, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
 
