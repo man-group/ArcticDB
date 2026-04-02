@@ -351,12 +351,14 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
     if method.startswith("batch"):
         arg_1 = [df_1]
     elif method == "compact_data_experimental":
+        # Prune previous on this call so that we start with 1 index key for the method under test
+        lib.append(sym, df_1, prune_previous_version=True)
         arg_1 = 100_000  # rows_per_segment
     else:
         arg_1 = df_1
     getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
 
 
 @pytest.mark.parametrize("append", (True, False))
