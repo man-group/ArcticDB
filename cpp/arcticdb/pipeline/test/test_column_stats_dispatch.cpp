@@ -1,11 +1,14 @@
 #include <gtest/gtest.h>
 #include <arcticdb/pipeline/column_stats_dispatch.hpp>
+#include <arcticdb/util/constants.hpp>
 
 #include <cmath>
 #include <limits>
 
 using namespace arcticdb;
 using namespace arcticdb::column_stats_detail;
+
+const Value nan_value = construct_value(std::numeric_limits<double>::quiet_NaN());
 
 class BinaryBooleanStatsTest
     : public ::testing::TestWithParam<std::tuple<StatsComparison, StatsComparison, OperationType, StatsComparison>> {};
@@ -367,33 +370,102 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
-enum class NaNPosition { Min, Max, Both };
+class StatsComparatorNaTTest : public ::testing::TestWithParam<std::tuple<Value, Value, OperationType>> {};
 
-class StatsComparatorNaNTest : public ::testing::TestWithParam<std::tuple<OperationType, NaNPosition>> {};
+TEST_P(StatsComparatorNaTTest, NaTValueReturnsUnknown) {
+    auto [max_val, query_val, op] = GetParam();
 
-TEST_P(StatsComparatorNaNTest, NaNReturnsUnknown) {
-    auto [op, nan_pos] = GetParam();
-    double min_val = (nan_pos == NaNPosition::Min || nan_pos == NaNPosition::Both)
-        ? std::numeric_limits<double>::quiet_NaN() : 1.0;
-    double max_val = (nan_pos == NaNPosition::Max || nan_pos == NaNPosition::Both)
-        ? std::numeric_limits<double>::quiet_NaN() : 10.0;
-    std::vector<ColumnStatsValues> stats{
-            {construct_value(min_val), construct_value(max_val)}
-    };
-    auto query = std::make_shared<Value>(construct_value(5.0));
+    Value min_val = Value(NaT, DataType::NANOSECONDS_UTC64);
+    std::vector<ColumnStatsValues> stats{{min_val, max_val}};
+    auto query = std::make_shared<Value>(query_val);
     auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result.at(0), StatsComparison::UNKNOWN);
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        AllComparisonOps, StatsComparatorNaNTest,
+        AllComparisonOps, StatsComparatorNaTTest,
         ::testing::Combine(
                 ::testing::Values(
-                        OperationType::LT, OperationType::LE, OperationType::GT,
-                        OperationType::GE, OperationType::EQ, OperationType::NE
+                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64)
                 ),
-                ::testing::Values(NaNPosition::Min, NaNPosition::Max, NaNPosition::Both)
+                ::testing::Values(
+                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
+                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
+                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64)
+                ),
+                ::testing::Values(
+                        OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                        OperationType::NE
+                )
+        )
+);
+
+enum class ComparisonValueType { NA, REAL };
+
+class StatsComparatorBothNaNTest : public ::testing::TestWithParam<std::tuple<OperationType, ComparisonValueType>> {};
+
+TEST_P(StatsComparatorBothNaNTest, BothNaN) {
+    auto [op, value_type] = GetParam();
+    std::vector<ColumnStatsValues> stats{{nan_value, nan_value}};
+
+    Value query;
+    if (value_type == ComparisonValueType::NA) {
+        query = nan_value;
+    } else {
+        query = construct_value(5.0);
+    }
+    auto result =
+            std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, std::make_shared<Value>(query), op));
+    ASSERT_EQ(result.size(), 1);
+
+    StatsComparison expected;
+    if (op == OperationType::NE) {
+        expected = StatsComparison::ALL_MATCH; // NaN != (NaN|5) is true
+    } else {
+        expected = StatsComparison::NONE_MATCH; // NaN (<|==|>) (NaN|5) is always false
+    }
+    ASSERT_EQ(result.at(0), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        AllComparisonOps, StatsComparatorBothNaNTest,
+        ::testing::Combine(
+                ::testing::Values(
+                        OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                        OperationType::NE
+                ),
+                ::testing::Values(ComparisonValueType::NA, ComparisonValueType::REAL)
+        )
+);
+
+class StatsComparatorNaNValueTest : public ::testing::TestWithParam<std::tuple<OperationType>> {};
+
+TEST_P(StatsComparatorNaNValueTest, NaNInQuery) {
+    auto [op] = GetParam();
+    Value min_val = construct_value(1.0);
+    Value max_val = construct_value(5.0);
+    std::vector<ColumnStatsValues> stats{{std::move(min_val), std::move(max_val)}};
+
+    auto result =
+            std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, std::make_shared<Value>(nan_value), op)
+            );
+    ASSERT_EQ(result.size(), 1);
+
+    StatsComparison expected;
+    if (op == OperationType::NE) {
+        expected = StatsComparison::ALL_MATCH; // NaN != (NaN|5) is true
+    } else {
+        expected = StatsComparison::NONE_MATCH; // NaN (<|==|>) (NaN|5) is always false
+    }
+    ASSERT_EQ(result.at(0), expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        AllComparisonOps, StatsComparatorNaNValueTest,
+        ::testing::Values(
+                OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                OperationType::NE
         )
 );
 
@@ -489,7 +561,16 @@ INSTANTIATE_TEST_SUITE_P(
 INSTANTIATE_TEST_SUITE_P(
         BothInfinite, BinaryComparisonInfinityTest,
         ::testing::Values(
-                // [-inf, +inf]: every comparison is UNKNOWN
+                // [-inf, +inf]: can only give meaningful results if value is NaN
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
+                        std::numeric_limits<double>::quiet_NaN(), OperationType::EQ, StatsComparison::NONE_MATCH
+                ),
+                std::make_tuple(
+                        -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(),
+                        std::numeric_limits<double>::quiet_NaN(), OperationType::NE, StatsComparison::ALL_MATCH
+                ),
+                // [-inf, +inf]: every other comparison is UNKNOWN
                 std::make_tuple(
                         -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity(), 5.0,
                         OperationType::LT, StatsComparison::UNKNOWN

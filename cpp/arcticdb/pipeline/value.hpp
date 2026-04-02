@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
@@ -106,12 +107,12 @@ struct Value {
         }
     }
 
-    [[nodiscard]] bool is_nan() const {
-        if (is_floating_point_type(data_type_)) {
+    [[nodiscard]] bool is_nat() const {
+        if (is_time_type(data_type_)) {
             return details::visit_type(data_type_, [this]<typename TagType>(TagType) -> bool {
                 using RawType = TagType::raw_type;
-                if constexpr (std::is_floating_point_v<RawType>) {
-                    return std::isnan(get<RawType>());
+                if constexpr (std::is_same_v<std::remove_cvref_t<RawType>, timestamp>) {
+                    return get<timestamp>() == arcticdb::NaT;
                 }
                 return false;
             });

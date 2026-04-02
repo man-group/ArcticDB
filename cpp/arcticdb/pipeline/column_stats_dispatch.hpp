@@ -81,7 +81,9 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
         return StatsComparison::UNKNOWN;
     }
 
-    if (stats_lhs.min->is_nan() || stats_lhs.max->is_nan()) {
+    // We are conservative with NaT so that we don't prune away blocks in an int64 column by interpreting
+    // a min(int64) a NaT. There is special handling for NaN in the operators themselves.
+    if (stats_lhs.min->is_nat() || stats_lhs.max->is_nat()) {
         return StatsComparison::UNKNOWN;
     }
 

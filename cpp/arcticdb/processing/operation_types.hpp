@@ -503,6 +503,14 @@ struct EqualsOperator {
 
     template<typename T, typename U>
     StatsComparison operator()(ValueRange<T> range, U value) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (std::isnan(range.min) || std::isnan(range.max))
+                return StatsComparison::NONE_MATCH;
+        }
+        if constexpr (std::is_floating_point_v<U>) {
+            if (std::isnan(value))
+                return StatsComparison::NONE_MATCH;
+        }
         if ((*this)(range.min, value) && (*this)(range.max, value))
             return StatsComparison::ALL_MATCH;
         if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
@@ -539,6 +547,14 @@ struct NotEqualsOperator {
 
     template<typename T, typename U>
     StatsComparison operator()(ValueRange<T> range, U value) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (std::isnan(range.min) || std::isnan(range.max))
+                return StatsComparison::ALL_MATCH;
+        }
+        if constexpr (std::is_floating_point_v<U>) {
+            if (std::isnan(value))
+                return StatsComparison::ALL_MATCH;
+        }
         if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
             return StatsComparison::ALL_MATCH;
         if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
