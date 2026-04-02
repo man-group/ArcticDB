@@ -1501,7 +1501,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                     std::move(slice_and_keys), pipeline_context, store, read_options, handler_data_ptr
                             );
                         })
-                        .thenValueInline([&handler_data_ptr,
+                        .thenValueInline([handler_data_ptr,
                                           pipeline_context,
                                           res_versioned_items,
                                           res_metadatas,
