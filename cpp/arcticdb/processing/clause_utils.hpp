@@ -227,6 +227,11 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& i
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
+proto::descriptors::NormalizationMetadata common_norm_metadata(
+        const proto::descriptors::NormalizationMetadata& first, const proto::descriptors::NormalizationMetadata& other,
+        std::unordered_set<size_t>& fake_field_pos_acc
+);
+
 proto::descriptors::NormalizationMetadata generate_norm_meta(
         const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
 );
