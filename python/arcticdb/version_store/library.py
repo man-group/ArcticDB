@@ -3185,6 +3185,74 @@ class Library:
         """
         return self._nvs.compact_symbol_list()
 
+    def compact_data_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+        prune_previous_versions: bool = False,
+    ) -> VersionedItem:
+        """
+        Compact the data keys associated with the latest version of a symbol such that the number of rows in each
+        segment is close to rows_per_segment. After compaction, all segments will have a row count within 33% of
+        rows_per_segment.
+
+        This operation creates a new version, unless the data is already compacted.
+
+        The metadata from the version being compacted is maintained with the newly created version.
+
+        !!! warning
+            This API is under development and is subject to change. The API is not subject to semver and can change in
+            minor or patch releases.
+
+            String columns are not yet supported.
+
+            Dynamic schema is not yet supported.
+
+            Sparse data is not yet supported.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_versions : bool, default=False
+            If True, removes previous versions from the version list.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated. If no compaction occurs because the data is already
+            compacted, the version field will be that of the latest live version for the symbol.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
+            schema enabled, or the data is sparse
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> lib_tool = lib._dev_tools.library_tool()
+        >>> len(lib_tool.read_index("sym"))
+        100
+        >>> lib.compact_data_experimental("sym")
+        >>> len(lib_tool.read_index("sym"))
+        1
+        """
+        return self._nvs.compact_data_experimental(symbol, rows_per_segment, prune_previous_versions)
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the

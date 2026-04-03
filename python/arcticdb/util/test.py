@@ -1506,3 +1506,7 @@ def merge(
         return merge_update(target, source, on)
     # TODO: Implement other merge strategies
     raise Exception(f"Merge strategy {strategy} not implemented")
+
+
+def query_stats_operation_count(stats, operation, key_type):
+    return stats.get("storage_operations", {}).get(operation, {}).get(key_type, {}).get("count", 0)

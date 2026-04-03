@@ -35,6 +35,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <iterator>
 #include <aws/core/utils/stream/ResponseStream.h>
@@ -844,7 +845,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
                             return folly::collect(work_futures).via(&async::io_executor());
                         });
     }
-    return std::move(entity_ids_vec_fut).thenValueInline(flatten_entities);
+    return std::move(entity_ids_vec_fut).thenValueInline(util::flatten_vectors<EntityId>);
 }
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
@@ -2923,6 +2924,90 @@ folly::Future<VersionedItem> merge_update_impl(
                         store
                 );
             });
+}
+
+folly::Future<std::optional<VersionedItem>> compact_data_impl(
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
+) {
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
+    std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, versioned_item, *read_query, {});
+    return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
+            .thenValue(
+                    [pipeline_context = std::move(pipeline_context),
+                     store,
+                     write_options,
+                     target_partial_index_key,
+                     read_query](std::vector<SliceAndKey>&& slices_and_keys
+                    ) -> folly::Future<std::optional<VersionedItem>> {
+                        if (slices_and_keys.empty()) {
+                            return folly::makeFuture(std::optional<VersionedItem>());
+                        }
+                        // Use an ordered set so we can binary search afterwards
+                        std::set<RowRange> new_row_ranges_set;
+                        for (const auto& slice_and_key : slices_and_keys) {
+                            new_row_ranges_set.insert(slice_and_key.slice().row_range);
+                        }
+                        std::vector<RowRange> new_row_ranges(
+                                std::make_move_iterator(new_row_ranges_set.begin()),
+                                std::make_move_iterator(new_row_ranges_set.end())
+                        );
+                        // When there is column slicing, this means we only binary search for the first_row once per
+                        // row slice in the original data
+                        std::unordered_set<size_t> first_rows_to_keep;
+                        std::unordered_set<size_t> first_rows_to_discard;
+                        for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
+                            auto first_row = slice_and_key.slice().row_range.first;
+                            if (first_rows_to_keep.contains(first_row)) {
+                                slices_and_keys.emplace_back(std::move(slice_and_key));
+                            } else if (!first_rows_to_discard.contains(first_row)) {
+                                auto begin = new_row_ranges.cbegin();
+                                auto end = new_row_ranges.cend();
+                                auto mid = begin + std::distance(begin, end) / 2;
+                                while (begin != end) {
+                                    if (mid->contains(first_row)) {
+                                        break;
+                                    } else if (first_row < mid->first) {
+                                        end = mid;
+                                        mid = begin + std::distance(begin, end) / 2;
+                                    } else { // first_row >= mid->second
+                                        begin = std::next(mid);
+                                        mid = begin + std::distance(begin, end) / 2;
+                                    }
+                                }
+                                if (begin == end) {
+                                    slices_and_keys.emplace_back(std::move(slice_and_key));
+                                    first_rows_to_keep.emplace(first_row);
+                                } else {
+                                    first_rows_to_discard.emplace(first_row);
+                                }
+                            }
+                        }
+                        ranges::sort(slices_and_keys);
+                        pipeline_context->slice_and_keys_.clear();
+                        const size_t row_count = slices_and_keys.back().slice().row_range.second -
+                                                 slices_and_keys.front().slice().row_range.first;
+                        const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                                row_count,
+                                pipeline_context->descriptor(),
+                                std::move(*pipeline_context->norm_meta_),
+                                pipeline_context->user_meta_
+                                        ? std::make_optional(std::move(*pipeline_context->user_meta_))
+                                        : std::nullopt,
+                                std::nullopt,
+                                std::nullopt,
+                                write_options.bucketize_dynamic
+                        );
+                        return index::write_index(
+                                index_type_from_descriptor(pipeline_context->descriptor()),
+                                tsd,
+                                std::move(slices_and_keys),
+                                target_partial_index_key,
+                                store
+                        );
+                    }
+            );
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(
