@@ -15,6 +15,12 @@ on:
       from_branch:
         required: true
         type: string
+      exit_with_error_if_no_prs:
+        required: false
+        default: true
+        type: boolean
+        description: "Whether to exit with error if no PRs found between branches"
+        
     outputs:
       version:
         description: "Calculated next version"
@@ -50,10 +56,22 @@ jobs:
           MAJOR_LABEL: "major"
           MINOR_LABEL: "minor"
           PATCH_LABEL: "patch"
+          EXIT_WITH_ERROR: ${{ inputs.exit_with_error_if_no_prs }}
+
         run: |
           if [ -z "$PULL_REQUESTS" ] || [ ! -f "$PULL_REQUESTS" ]; then
-            echo "Error: No PRs found between branches" && exit 1
+            if [ "$EXIT_WITH_ERROR" = "true" ]; then
+              echo "Error: No PRs found between branches"
+              exit 1
+            fi
+            
+            echo "Warning: No PRs found between branches. Defaulting to patch."
+            echo "increment_type=patch" >> $GITHUB_OUTPUT
+            TAG=${{ steps.latest_tag.outputs.tag }}
+            echo "tag=${TAG%${{ vars.RC_SUFFIX }}*}" >> $GITHUB_OUTPUT
+            exit 0
           fi
+
           labels=$(jq -r '.[] | select(.pull_request.merged_at) | .labels[].name' "$PULL_REQUESTS")
           echo Labels: $labels
           increment_type="patch"
@@ -63,6 +81,7 @@ jobs:
             *"${{ env.PATCH_LABEL }}"*) echo "Patch changes found! Should increase patch version." ;;
             *) echo "No PRs labeled patch, minor or major found! Defaulting to 'patch'." ;;
           esac
+
           echo "increment_type=$increment_type" >> $GITHUB_OUTPUT
           TAG=${{ steps.latest_tag.outputs.tag }}
           echo "tag=${TAG%${{ vars.RC_SUFFIX }}*}" >> $GITHUB_OUTPUT
