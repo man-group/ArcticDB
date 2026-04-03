@@ -10,7 +10,6 @@ import pytest
 import pandas as pd
 import numpy as np
 from arcticdb.exceptions import NoDataFoundException, InternalException, UserInputException
-from arcticdb.version_store.library import WritePayload
 
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
@@ -265,7 +264,7 @@ def test_batch_delete_symbols(basic_store, single_threaded_config):
     for sym in symbols:
         lib.write(sym, df)
 
-    lib.delete_batch(symbols)
+    lib.batch_delete_symbols(symbols)
 
     assert lib.list_symbols() == []
 
@@ -288,8 +287,7 @@ def test_batch_write_with_pruning(basic_store, single_threaded_config):
     for sym in symbols:
         lib.write(sym, df1)
 
-    payloads = [WritePayload(sym, df2) for sym in symbols]
-    results = lib.write_batch(payloads, prune_previous_versions=True)
+    results = lib.batch_write(symbols, [df2] * len(symbols), prune_previous_version=True)
 
     assert len(results) == len(symbols)
     for sym in symbols:
