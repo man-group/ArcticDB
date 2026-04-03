@@ -14,9 +14,10 @@ import pytest
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.pandas import columns, data_frames
 
-from arcticdb.options import OutputFormat
+from arcticdb import concat
+from arcticdb.options import LibraryOptions, OutputFormat
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-from arcticdb.util.test import assert_frame_equal_with_arrow_for_sparse
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
 
 # In all tests in this file we test all string formats as part of a single table.
@@ -677,3 +678,317 @@ def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, a
     assert expected.equals(received)
     received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
+
+
+def _to_pandas_with_index(data, index_col):
+    df = data.to_pandas() if isinstance(data, pa.Table) else data.copy()
+    if index_col in df.columns:
+        df = df.set_index(index_col)
+    return df.sort_index()
+
+
+class TestSparseArrowGroupBy:
+    sym = "test_sparse_groupby"
+
+    @pytest.fixture(autouse=True)
+    def setup(self, version_store_factory):
+        self.lib = version_store_factory(segment_row_size=3)
+        self.lib.set_output_format("pyarrow")
+        self.lib._set_allow_arrow_input()
+        self.table = pa.table(
+            {
+                "group_str": pa.array(["a", "a", "b", "b", "b", "a"], pa.large_string()),
+                "group_int": pa.array([1, 1, 2, 2, 2, 1], pa.int64()),
+                "int_col": pa.array([10, None, 30, None, 50, None], pa.int64()),
+                "float_col": pa.array([None, 2.0, None, 4.0, None, 6.0], pa.float64()),
+                "bool_col": pa.array([True, None, False, None, True, None], pa.bool_()),
+            }
+        )
+        self.lib.write(self.sym, self.table)
+        self.pdf = self.table.to_pandas()
+
+    @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "count"])
+    @pytest.mark.parametrize("group_col", ["group_str", "group_int"])
+    @pytest.mark.parametrize("agg_col", ["int_col", "float_col", "bool_col"])
+    def test_single_agg(self, agg_op, group_col, agg_col):
+        q = QueryBuilder().groupby(group_col).agg({agg_col: agg_op})
+        received = _to_pandas_with_index(self.lib.read(self.sym, query_builder=q).data, group_col)
+        expected = self.pdf.groupby(group_col).agg({agg_col: agg_op}).sort_index()
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    @pytest.mark.parametrize("group_col", ["group_str", "group_int"])
+    def test_named_aggs(self, group_col):
+        agg_dict = {
+            "int_sum": ("int_col", "sum"),
+            "int_max": ("int_col", "max"),
+            "float_mean": ("float_col", "mean"),
+            "float_count": ("float_col", "count"),
+        }
+        q = QueryBuilder().groupby(group_col).agg(agg_dict)
+        received = _to_pandas_with_index(self.lib.read(self.sym, query_builder=q).data, group_col)
+        received = received.reindex(columns=sorted(received.columns))
+        expected = self.pdf.groupby(group_col).agg(**agg_dict).sort_index()
+        expected = expected.reindex(columns=sorted(expected.columns))
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    def test_all_null_values_in_group(self):
+        table = pa.table(
+            {
+                "grp": pa.array(["a", "a", "b", "b"], pa.large_string()),
+                "val": pa.array([None, None, 10, None], pa.int64()),
+            }
+        )
+        self.lib.write("all_null_grp", table)
+        q = QueryBuilder().groupby("grp").agg({"val": "sum"})
+        received = _to_pandas_with_index(self.lib.read("all_null_grp", query_builder=q).data, "grp")
+        expected = table.to_pandas().groupby("grp").agg({"val": "sum"}).sort_index()
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "count"])
+    def test_pandas_output(self, agg_op):
+        q = QueryBuilder().groupby("group_str").agg({"int_col": agg_op})
+        received = self.lib.read(self.sym, query_builder=q, output_format="PANDAS").data.sort_index()
+        expected = self.pdf.groupby("group_str").agg({"int_col": agg_op}).sort_index()
+        assert_frame_equal(expected, received, check_dtype=False)
+
+
+@pytest.mark.xfail(
+    reason="Resample rejects sparse columns: sorted_aggregation.cpp 'Cannot aggregate column as it is sparse'",
+    raises=Exception,
+)
+class TestSparseArrowResample:
+    sym = "test_sparse_resample"
+
+    @pytest.fixture(autouse=True)
+    def setup(self, version_store_factory):
+        self.lib = version_store_factory(segment_row_size=4)
+        self.lib.set_output_format("pyarrow")
+        self.lib._set_allow_arrow_input()
+        dates = pd.date_range("2025-01-01", periods=12, freq="h")
+        self.table = pa.table(
+            {
+                "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
+                "int_col": pa.array([1, None, 3, None, 5, None, 7, None, 9, None, 11, None], pa.int64()),
+                "float_col": pa.array(
+                    [None, 2.0, None, 4.0, None, 6.0, None, 8.0, None, 10.0, None, 12.0], pa.float64()
+                ),
+            }
+        )
+        self.lib.write(self.sym, self.table, index_column="ts")
+        self.pdf = self.table.to_pandas().set_index("ts")
+
+    def _expected_resample(self, rule, agg_dict):
+        freq_td = pd.Timedelta(pd.tseries.frequencies.to_offset(rule))
+
+        def round_ts(t):
+            return pd.Timestamp((t.value // freq_td.value) * freq_td.value)
+
+        is_named = any(isinstance(v, tuple) for v in agg_dict.values())
+        if is_named:
+            result = self.pdf.groupby(round_ts).agg(None, **agg_dict)
+        else:
+            result = self.pdf.groupby(round_ts).agg(agg_dict)
+        result.index.name = "ts"
+        return result.sort_index()
+
+    @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "first", "last", "count"])
+    @pytest.mark.parametrize("agg_col", ["int_col", "float_col"])
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_single_agg(self, agg_op, agg_col, rule):
+        q = QueryBuilder().resample(rule).agg({agg_col: agg_op})
+        received = _to_pandas_with_index(self.lib.read(self.sym, query_builder=q).data, "ts")
+        expected = self._expected_resample(rule, {agg_col: agg_op})
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_named_aggs(self, rule):
+        agg_dict = {
+            "int_sum": ("int_col", "sum"),
+            "float_max": ("float_col", "max"),
+            "int_count": ("int_col", "count"),
+            "float_first": ("float_col", "first"),
+        }
+        q = QueryBuilder().resample(rule).agg(agg_dict)
+        received = _to_pandas_with_index(self.lib.read(self.sym, query_builder=q).data, "ts")
+        received = received.reindex(columns=sorted(received.columns))
+        expected = self._expected_resample(rule, agg_dict)
+        expected = expected.reindex(columns=sorted(expected.columns))
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    @pytest.mark.parametrize("closed", ["left", "right"])
+    @pytest.mark.parametrize("label", ["left", "right"])
+    def test_closed_label(self, closed, label):
+        q = QueryBuilder().resample("3h", closed=closed, label=label).agg({"int_col": "sum"})
+        received = _to_pandas_with_index(self.lib.read(self.sym, query_builder=q).data, "ts")
+        expected = self.pdf.resample("3h", closed=closed, label=label).agg({"int_col": "sum"})
+        expected = expected.loc[expected["int_col"].notna()]
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    def test_with_date_range(self):
+        date_range = (pd.Timestamp("2025-01-01 03:00"), pd.Timestamp("2025-01-01 08:00"))
+        q = QueryBuilder().resample("3h").agg({"int_col": "sum"})
+        received = _to_pandas_with_index(self.lib.read(self.sym, date_range=date_range, query_builder=q).data, "ts")
+        sliced = self.pdf.loc[date_range[0] : date_range[1]]
+        freq_td = pd.Timedelta("3h")
+
+        def round_ts(t):
+            return pd.Timestamp((t.value // freq_td.value) * freq_td.value)
+
+        expected = sliced.groupby(round_ts).agg({"int_col": "sum"})
+        expected.index.name = "ts"
+        assert_frame_equal(expected.sort_index(), received, check_dtype=False)
+
+    @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "first", "last", "count"])
+    def test_pandas_output(self, agg_op):
+        q = QueryBuilder().resample("3h").agg({"int_col": agg_op})
+        received = self.lib.read(self.sym, query_builder=q, output_format="PANDAS").data.sort_index()
+        expected = self._expected_resample("3h", {"int_col": agg_op})
+        assert_frame_equal(expected, received, check_dtype=False)
+
+
+@pytest.mark.xfail(
+    reason="Concat rejects arrow-written data: 'Multi-symbol joins only supported with Series and DataFrames'",
+    raises=Exception,
+)
+class TestSparseArrowConcat:
+    @pytest.fixture(autouse=True)
+    def setup(self, lmdb_library_factory):
+        self.lib = lmdb_library_factory(LibraryOptions())
+        self.lib._nvs.set_output_format("pyarrow")
+        self.lib._nvs._set_allow_arrow_input()
+
+    def test_basic_concat(self):
+        t1 = pa.table(
+            {
+                "int_col": pa.array([1, None, 3], pa.int64()),
+                "float_col": pa.array([None, 2.0, None], pa.float64()),
+            }
+        )
+        t2 = pa.table(
+            {
+                "int_col": pa.array([None, 5, None], pa.int64()),
+                "float_col": pa.array([4.0, None, 6.0], pa.float64()),
+            }
+        )
+        self.lib.write("sym1", t1)
+        self.lib.write("sym2", t2)
+        result = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect()
+        expected = pa.concat_tables([t1, t2])
+        received = result.data
+        if isinstance(received, pa.Table):
+            assert expected.equals(received)
+        else:
+            expected_pdf = expected.to_pandas()
+            expected_pdf.index = pd.RangeIndex(len(expected_pdf))
+            assert_frame_equal(expected_pdf, received, check_dtype=False)
+
+    @pytest.mark.parametrize("join", ["inner", "outer"])
+    def test_different_columns(self, join):
+        t1 = pa.table(
+            {
+                "a": pa.array([1, None], pa.int64()),
+                "b": pa.array([None, 2.0], pa.float64()),
+            }
+        )
+        t2 = pa.table(
+            {
+                "b": pa.array([3.0, None], pa.float64()),
+                "c": pa.array([None, 4], pa.int64()),
+            }
+        )
+        self.lib.write("s1", t1)
+        self.lib.write("s2", t2)
+        result = concat(self.lib.read_batch(["s1", "s2"], lazy=True), join).collect()
+        pdf1, pdf2 = t1.to_pandas(), t2.to_pandas()
+        expected = pd.concat([pdf1, pdf2], join=join)
+        expected.index = pd.RangeIndex(len(expected))
+        received = result.data
+        if isinstance(received, pa.Table):
+            received = received.to_pandas()
+        received = received.reindex(columns=sorted(received.columns))
+        expected = expected.reindex(columns=sorted(expected.columns))
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    def test_concat_with_resample(self):
+        dates1 = pd.date_range("2025-01-01", periods=6, freq="h")
+        dates2 = pd.date_range("2025-01-01T06:00:00", periods=6, freq="h")
+        t1 = pa.table(
+            {
+                "ts": pa.Array.from_pandas(dates1, type=pa.timestamp("ns")),
+                "val": pa.array([1, None, 3, None, 5, None], pa.int64()),
+            }
+        )
+        t2 = pa.table(
+            {
+                "ts": pa.Array.from_pandas(dates2, type=pa.timestamp("ns")),
+                "val": pa.array([None, 8, None, 10, None, 12], pa.int64()),
+            }
+        )
+        self.lib.write("r1", t1, index_column="ts")
+        self.lib.write("r2", t2, index_column="ts")
+        lazy = self.lib.read_batch(["r1", "r2"], lazy=True)
+        result = concat(lazy).resample("3h").agg({"val": "sum"}).collect()
+        combined = pd.concat([t1.to_pandas().set_index("ts"), t2.to_pandas().set_index("ts")])
+        freq_td = pd.Timedelta("3h")
+
+        def round_ts(t):
+            return pd.Timestamp((t.value // freq_td.value) * freq_td.value)
+
+        expected = combined.groupby(round_ts).agg({"val": "sum"}).rename_axis("ts")
+        received = result.data
+        if isinstance(received, pa.Table):
+            received = received.to_pandas()
+        if "ts" in received.columns:
+            received = received.set_index("ts")
+        received = received.sort_index()
+        assert_frame_equal(expected, received, check_dtype=False)
+
+    def test_concat_all_sparse(self):
+        t1 = pa.table(
+            {
+                "a": pa.array([None, None, None], pa.int64()),
+                "b": pa.array([1.0, None, 3.0], pa.float64()),
+            }
+        )
+        t2 = pa.table(
+            {
+                "a": pa.array([4, None, 6], pa.int64()),
+                "b": pa.array([None, None, None], pa.float64()),
+            }
+        )
+        self.lib.write("s1", t1)
+        self.lib.write("s2", t2)
+        result = concat(self.lib.read_batch(["s1", "s2"], lazy=True)).collect()
+        expected = pa.concat_tables([t1, t2])
+        received = result.data
+        if isinstance(received, pa.Table):
+            assert expected.equals(received)
+        else:
+            expected_pdf = expected.to_pandas()
+            expected_pdf.index = pd.RangeIndex(len(expected_pdf))
+            assert_frame_equal(expected_pdf, received, check_dtype=False)
+
+    def test_concat_bool_and_string(self):
+        t1 = pa.table(
+            {
+                "bool_col": pa.array([True, None, False], pa.bool_()),
+                "str_col": pa.array([None, "b", None], pa.large_string()),
+            }
+        )
+        t2 = pa.table(
+            {
+                "bool_col": pa.array([None, True, None], pa.bool_()),
+                "str_col": pa.array(["d", None, "f"], pa.large_string()),
+            }
+        )
+        self.lib.write("s1", t1)
+        self.lib.write("s2", t2)
+        result = concat(self.lib.read_batch(["s1", "s2"], lazy=True)).collect()
+        expected = pa.concat_tables([t1, t2])
+        received = result.data
+        if isinstance(received, pa.Table):
+            assert expected.equals(received)
+        else:
+            expected_pdf = expected.to_pandas()
+            expected_pdf.index = pd.RangeIndex(len(expected_pdf))
+            assert_frame_equal(expected_pdf, received, check_dtype=False)
