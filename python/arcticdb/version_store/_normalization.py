@@ -1803,6 +1803,47 @@ def normalize_dataframe(df, **kwargs):
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
 
+def _filter_pyarrow_table_to_date_range(data: "pa.Table", index_column: str, start, end) -> "pa.Table":
+    """Slice a sorted PyArrow table to rows where ``start <= index <= end``.
+
+    Uses Python binary search over the index column. This is suboptimal for two reasons:
+     - Python loops are slow.
+     - Random access into a heavily fragmented ChunkedArray is O(log num_chunks) per element.
+    The ideal solution is a C++ binary search over chunks then within the target chunk.
+    A hybrid approach (Python bisect to find the chunk, numpy.searchsorted within it) was
+    attempted but is slower beyond ~100 chunks because PyArrow doesn't expose its internal
+    ChunkResolver with precomputed offsets, making efficient chunk-level slicing impossible.
+    """
+    col = data.column(index_column)
+    check(
+        pa.types.is_timestamp(col.type) and col.type.unit == "ns",
+        f"Expected timestamp[ns] index column, got {col.type}",
+    )
+    n = len(col)
+
+    # bisect_left for start
+    lo, hi = 0, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if col[mid].as_py() < start:
+            lo = mid + 1
+        else:
+            hi = mid
+    left = lo
+
+    # bisect_right for end
+    lo, hi = left, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if col[mid].as_py() <= end:
+            lo = mid + 1
+        else:
+            hi = mid
+    right = lo
+
+    return data.slice(left, right - left)
+
+
 def restrict_data_to_date_range_only(
     data: T, *, start: Timestamp, end: Timestamp, index_column: Optional[str] = None
 ) -> T:
@@ -1831,12 +1872,15 @@ def restrict_data_to_date_range_only(
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
     elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
         check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
-        col = data.column(index_column)
-        start, end = _strip_tz(start, end)
-        check(
-            start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None),
-            "update with date_range and pyarrow Table not yet supported with date_range overlapping the data",
-        )
+        if not data.column(index_column).type.tz:
+            # Matches pandas behavior to strip the timezone if index column is timezone naive.
+            # TODO: This is potentially surprising and we should consider raising when comparing
+            # naive vs timezone aware timestamps. (monday ref: 11669271306)
+            start, end = _strip_tz(start, end)
+        # Assumes index column is sorted.
+        # TODO: Decide on a consistent way to deal with unsorted index column. E.g. a flag `validate_index`
+        # which will enable the index sortedness check. (monday ref: 11668250872)
+        data = _filter_pyarrow_table_to_date_range(data, index_column, start, end)
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
