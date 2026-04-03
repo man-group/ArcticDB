@@ -51,34 +51,20 @@ jobs:
         with:
           environment-file: environment-dev.yml
           environment-name: arcticdb
-          init-shell: bash cmd.exe
+          init-shell: bash
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Build ArcticDB with conda
-        shell: cmd /C call {0}
-
-        # Clear CMAKE_GENERATOR_PLATFORM and CMAKE_GENERATOR_TOOLSET to prevent them from overriding the CMake preset configuration.
-        # GitHub runner images or Conda activation scripts may set these, which can conflict
-        # with the generator, architecture, and toolset already defined in the preset.
         run: |
-          set CMAKE_GENERATOR_PLATFORM=
-          set CMAKE_GENERATOR_TOOLSET=
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: ${{inputs.preset}}
 
       - name: Show sccache stats
-        shell: cmd /C call {0}
-        run: |
-          if defined SCCACHE_PATH (
-            %SCCACHE_PATH% --show-stats
-          ) else (
-            sccache --show-stats
-          )
+        run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
 
       - name: Archive build artifacts
         uses: actions/upload-artifact@v4
@@ -140,22 +126,17 @@ jobs:
         with:
           environment-file: environment-dev.yml
           environment-name: arcticdb
-          init-shell: bash cmd.exe
+          init-shell: bash 
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
       - name: Install ArcticDB from artifacts
-        shell: cmd /C call {0}
         run: |
-          set ARCTIC_CMAKE_PRESET=
-          if exist "cpp\out\${{inputs.preset}}-build" (
-            dir /b python\arcticdb_ext*.pyd >nul 2>&1
-            if not errorlevel 1 (
-              echo Build artifacts found, skipping CMake build
-              set ARCTIC_CMAKE_PRESET=skip
-            )
-          )
+          if [ -d "cpp/out/${{inputs.preset}}-build" ] && (ls python/arcticdb_ext*.pyd 2>/dev/null | head -1 | grep -q .); then
+            echo "Build artifacts found, skipping CMake build"
+            export ARCTIC_CMAKE_PRESET=skip
+          fi
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
