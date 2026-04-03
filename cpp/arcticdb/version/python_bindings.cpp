@@ -143,11 +143,11 @@ void declare_resample_clause(py::module& version) {
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
 
-void register_bindings(py::module& version, py::exception<arcticdb::ArcticException>& base_exception) {
+void register_bindings(py::module& version, py::exception<ArcticException>& base_exception) {
 
     py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
-    entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
+    entity::apy::register_common_entity_bindings(version, BindingScope::GLOBAL);
 
     py::class_<Value, std::shared_ptr<Value>>(version, "ValueType").def(py::init());
 
@@ -240,7 +240,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }
     );
 
-    using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
+    using PandasOutputFrame = pipelines::PandasOutputFrame;
     register_version_store_common_bindings(version, BindingScope::GLOBAL);
 
     py::class_<RecordBatchData, std::shared_ptr<RecordBatchData>>(version, "RecordBatchData")

@@ -10,7 +10,6 @@
 
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/util/clock.hpp>
@@ -24,7 +23,7 @@
 
 namespace arcticdb::toolbox::apy {
 
-using namespace arcticdb::entity;
+using namespace entity;
 
 LibraryTool::LibraryTool(std::shared_ptr<storage::Library> lib) : engine_(lib, util::SysClock()) {}
 

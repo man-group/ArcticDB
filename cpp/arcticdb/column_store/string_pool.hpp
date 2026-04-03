@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/regex_filter.hpp>

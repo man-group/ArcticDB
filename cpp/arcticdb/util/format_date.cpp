@@ -3,6 +3,7 @@
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/date_time/posix_time/conversion.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <fmt/format.h>
 
 namespace arcticdb::util {
 

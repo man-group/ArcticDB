@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/index_range.hpp>
@@ -168,7 +167,7 @@ class EmptyIndex : public BaseIndex<EmptyIndex> {
     [[nodiscard]] static IndexValue end_value_for_keys_segment(const SegmentInMemory& segment);
 };
 
-using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex, stream::EmptyIndex>;
+using Index = std::variant<TimeseriesIndex, RowCountIndex, TableIndex, EmptyIndex>;
 
 std::string mangled_name(std::string_view name);
 std::optional<std::string_view> demangled_name(std::string_view name);

@@ -67,13 +67,13 @@ TEST(VersionMap, Basic) {
     auto [key, seg] = std::move(ref_fut).get();
 
     ASSERT_EQ(seg.row_count(), 2);
-    auto key_row_1 = read_key_row(seg, 0);
+    auto key_row_1 = stream::read_key_row(seg, 0);
     ASSERT_EQ(key_row_1, key1);
-    auto key_row_2 = read_key_row(seg, 1);
+    auto key_row_2 = stream::read_key_row(seg, 1);
     auto version_fut = store->read(key_row_2, storage::ReadKeyOpts{});
     auto [ver_key, ver_seg] = std::move(version_fut).get();
     ASSERT_EQ(ver_seg.row_count(), 1);
-    auto ver_key_row_1 = read_key_row(ver_seg, 0);
+    auto ver_key_row_1 = stream::read_key_row(ver_seg, 0);
     ASSERT_EQ(ver_key_row_1, key1);
 }
 
@@ -354,8 +354,8 @@ TEST(VersionMap, TombstoneAllTwice) {
     // Don't need a check condition, checking validation
 }
 
-void write_old_style_journal_entry(const AtomKey& key, std::shared_ptr<StreamSink> store) {
-    IndexAggregator<RowCountIndex> journal_agg(key.id(), [&](auto&& segment) {
+void write_old_style_journal_entry(const AtomKey& key, std::shared_ptr<stream::StreamSink> store) {
+    stream::IndexAggregator<stream::RowCountIndex> journal_agg(key.id(), [&](auto&& segment) {
         store->write(KeyType::VERSION_JOURNAL,
                      key.version_id(),
                      key.id(),

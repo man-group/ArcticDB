@@ -63,11 +63,13 @@ struct SinkWrapperImpl {
     AggregatorType aggregator_;
 };
 
-using TestAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TestAggregator = stream::Aggregator<stream::TimeseriesIndex, stream::FixedSchema, stream::NeverSegmentPolicy>;
 using SinkWrapper = SinkWrapperImpl<TestAggregator>;
-using TestRowCountAggregator = Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TestRowCountAggregator =
+        stream::Aggregator<stream::RowCountIndex, stream::FixedSchema, stream::NeverSegmentPolicy>;
 using RowCountSinkWrapper = SinkWrapperImpl<TestRowCountAggregator>;
-using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
+using TestSparseAggregator = stream::Aggregator<
+        stream::TimeseriesIndex, stream::FixedSchema, stream::NeverSegmentPolicy, stream::SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 
 // Generates an int64_t Column where the value in each row is equal to the row index
@@ -503,7 +505,8 @@ struct SegmentSinkWrapperImpl {
     AggregatorType aggregator_;
 };
 
-using TestSegmentAggregatorNoSegment = SegmentAggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TestSegmentAggregatorNoSegment =
+        stream::SegmentAggregator<stream::TimeseriesIndex, stream::FixedSchema, stream::NeverSegmentPolicy>;
 using SegmentSinkWrapper = SegmentSinkWrapperImpl<TestSegmentAggregatorNoSegment>;
 
 inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(

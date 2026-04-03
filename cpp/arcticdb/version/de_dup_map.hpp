@@ -15,8 +15,6 @@
 
 namespace arcticdb {
 
-using namespace arcticdb::entity;
-
 class DeDupMap {
   public:
     DeDupMap() = default;

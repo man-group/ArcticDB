@@ -209,10 +209,10 @@ TEST(MemSegment, StdFindIf) {
     auto frame_wrapper = get_test_timeseries_frame("modify", num_rows, 0);
     auto& segment = frame_wrapper.segment_;
     const auto it = std::find_if(std::begin(segment), std::end(segment), [](SegmentInMemory::Row& row) {
-        return row.template index<TimeseriesIndex>() == 50;
+        return row.template index<stream::TimeseriesIndex>() == 50;
     });
     auto val_it = it->begin();
-    ASSERT_EQ(it->index<TimeseriesIndex>(), 50);
+    ASSERT_EQ(it->index<stream::TimeseriesIndex>(), 50);
     std::advance(val_it, 1);
     ASSERT_EQ(val_it->value<uint8_t>(), get_integral_value_for_offset<uint8_t>(0, 50));
 }
@@ -226,15 +226,15 @@ TEST(MemSegment, LowerBound) {
             std::begin(segment),
             std::end(segment),
             std::back_inserter(odds_segment),
-            [](SegmentInMemory::Row& row) { return row.template index<TimeseriesIndex>() & 1; }
+            [](SegmentInMemory::Row& row) { return row.template index<stream::TimeseriesIndex>() & 1; }
     );
     auto lb = std::lower_bound(
             std::begin(odds_segment),
             std::end(odds_segment),
             timestamp(50),
-            [](SegmentInMemory::Row& row, timestamp t) { return row.template index<TimeseriesIndex>() < t; }
+            [](SegmentInMemory::Row& row, timestamp t) { return row.template index<stream::TimeseriesIndex>() < t; }
     );
-    ASSERT_EQ(lb->index<TimeseriesIndex>(), 51);
+    ASSERT_EQ(lb->index<stream::TimeseriesIndex>(), 51);
 }
 
 TEST(MemSegment, CloneAndCompare) {
@@ -431,7 +431,7 @@ TEST(MemSegment, ShuffleAndSortSparse) {
 TEST(MemSegment, Append) {
     StreamDescriptor descriptor{stream_descriptor(
             StreamId("test"),
-            TimeseriesIndex::default_index(),
+            stream::TimeseriesIndex::default_index(),
             {scalar_field(DataType::UINT8, "thing2"), scalar_field(DataType::UINT32, "thing3")}
     )};
     SegmentInMemory s1(descriptor);

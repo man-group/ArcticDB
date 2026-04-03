@@ -7,7 +7,6 @@
  */
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 

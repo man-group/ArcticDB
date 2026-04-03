@@ -17,7 +17,7 @@
 
 namespace arcticdb {
 
-using namespace arcticdb::proto::config;
+using namespace proto::config;
 
 class ConfigsMap {
   public:

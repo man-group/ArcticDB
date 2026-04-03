@@ -144,7 +144,7 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key, bool allow_sparse
 ) {
-    using namespace arcticdb::stream;
+    using namespace stream;
     util::check(
             frame->has_tensors(),
             "incomplete_segment_from_tensor_frame should not be called with InputFrame backed by SegmentInMemory"
@@ -259,7 +259,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         mutable_seg.sort(sort_columns);
 }
 
-[[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
+[[nodiscard]] folly::Future<std::vector<entity::AtomKey>> write_incomplete_frame_with_sorting(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {
@@ -271,7 +271,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
             "Should call write_incomplete_frame when sorting not required"
     );
 
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
 
     auto index_range = frame->index_range;
     const auto index = std::move(frame->index);
@@ -347,7 +347,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     return folly::collect(res).via(&async::io_executor());
 }
 
-[[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
+[[nodiscard]] folly::Future<std::vector<entity::AtomKey>> write_incomplete_frame(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {
@@ -359,7 +359,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
             "Should call write_incomplete_frame_with_sorting when sorting required"
     );
 
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
             !options.validate_index || options.sort_columns || options.sort_on_index ||
@@ -496,7 +496,7 @@ std::vector<SliceAndKey> get_incomplete(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const pipelines::FilterRange& range,
         uint64_t last_row, bool via_iteration, bool load_data
 ) {
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
 
     auto entries = get_incomplete_append_slices_for_stream_id(store, stream_id, via_iteration, load_data);
 
@@ -547,7 +547,7 @@ std::vector<AppendMapEntry> load_via_list(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, bool load_data,
         const std::optional<AtomKey>& load_up_to
 ) {
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
 
     ARCTICDB_DEBUG(log::version(), "Getting incomplete segments for stream {}", stream_id);
     ARCTICDB_SAMPLE_DEFAULT(GetIncomplete)
@@ -600,8 +600,8 @@ void append_incomplete(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         bool validate_index
 ) {
-    using namespace arcticdb::proto::descriptors;
-    using namespace arcticdb::stream;
+    using namespace proto::descriptors;
+    using namespace stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
     ARCTICDB_DEBUG(log::version(), "Writing incomplete frame for stream {}", stream_id);
 
@@ -638,8 +638,8 @@ void append_incomplete(
 }
 
 void append_incomplete_segment(const std::shared_ptr<Store>& store, const StreamId& stream_id, SegmentInMemory&& seg) {
-    using namespace arcticdb::proto::descriptors;
-    using namespace arcticdb::stream;
+    using namespace proto::descriptors;
+    using namespace stream;
     ARCTICDB_SAMPLE_DEFAULT(AppendIncomplete)
     ARCTICDB_DEBUG(log::version(), "Writing incomplete segment for stream {}", stream_id);
 
@@ -653,9 +653,7 @@ void append_incomplete_segment(const std::shared_ptr<Store>& store, const Stream
     auto tsd = pack_timeseries_descriptor(desc, seg_row_count, std::move(next_key), {});
     seg.set_timeseries_descriptor(tsd);
 
-    auto new_key =
-            store->write(arcticdb::stream::KeyType::APPEND_DATA, 0, stream_id, start_index, end_index, std::move(seg))
-                    .get();
+    auto new_key = store->write(KeyType::APPEND_DATA, 0, stream_id, start_index, end_index, std::move(seg)).get();
 
     total_rows += seg_row_count;
     ARCTICDB_DEBUG(
@@ -671,7 +669,7 @@ void append_incomplete_segment(const std::shared_ptr<Store>& store, const Stream
 std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, bool via_iteration, bool load_data
 ) {
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
     std::vector<AppendMapEntry> entries;
 
     if (via_iteration) {

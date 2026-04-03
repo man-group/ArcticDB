@@ -9,9 +9,9 @@
 #pragma once
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <util/cursored_buffer.hpp>
-#include <util/buffer.hpp>
-#include <entity/types.hpp>
+#include <arcticdb/util/cursored_buffer.hpp>
+#include <arcticdb/util/buffer.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 
 namespace arcticdb {
@@ -32,7 +32,7 @@ class FieldCollection {
   public:
     ARCTICDB_MOVE_ONLY_DEFAULT(FieldCollection)
 
-    static TypeDescriptor type() { return type_; }
+    static constexpr TypeDescriptor type() { return type_; }
 
     template<class ValueType>
     class FieldCollectionIterator

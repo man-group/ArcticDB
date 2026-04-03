@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/key.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/util/hash.hpp>
 #include <variant>
@@ -279,14 +278,16 @@ struct ankerl::unordered_dense::hash<arcticdb::entity::AtomKeyPacked> {
 namespace fmt {
 
 template<class FormatTag>
-struct formatter<FormattableRef<AtomKey, FormatTag>> {
+struct formatter<arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag>> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx) {
         return ctx.begin();
     }
 
     template<typename FormatContext>
-    auto format(const FormattableRef<arcticdb::entity::AtomKey, FormatTag>& f, FormatContext& ctx) const {
+    auto format(const arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey, FormatTag>& f, FormatContext& ctx)
+            const {
+        using namespace arcticdb::entity;
         const auto& key = f.ref;
         return format_to(
                 ctx.out(),
@@ -296,14 +297,14 @@ struct formatter<FormattableRef<AtomKey, FormatTag>> {
                 key.version_id(),
                 key.content_hash(),
                 key.creation_ts(),
-                tokenized_index(key.start_index()),
-                tokenized_index(key.end_index())
+                arcticdb::entity::tokenized_index(key.start_index()),
+                arcticdb::entity::tokenized_index(key.end_index())
         );
     }
 };
 
 template<>
-struct formatter<AtomKey> {
+struct formatter<arcticdb::entity::AtomKey> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx) {
         return ctx.begin();
@@ -311,8 +312,8 @@ struct formatter<AtomKey> {
 
     template<typename FormatContext>
     auto format(const arcticdb::entity::AtomKey& key, FormatContext& ctx) const {
-        formatter<FormattableRef<arcticdb::entity::AtomKey, DefaultAtomKeyFormat>> f;
-        auto formattable = FormattableRef<arcticdb::entity::AtomKey, DefaultAtomKeyFormat>{key};
+        formatter<arcticdb::entity::FormattableRef<arcticdb::entity::AtomKey>> f;
+        auto formattable = arcticdb::entity::FormattableRef{key};
         return f.format(formattable, ctx);
     }
 };

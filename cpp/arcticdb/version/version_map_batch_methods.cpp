@@ -291,7 +291,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
                                                          snap_segment, std::holds_alternative<RefKey>(snap_key), sid
                                                  );
 
-                                                 return opt_id ? std::make_optional<AtomKey>(read_key_row(
+                                                 return opt_id ? std::make_optional<AtomKey>(stream::read_key_row(
                                                                          snap_segment, static_cast<ssize_t>(*opt_id)
                                                                  ))
                                                                : std::nullopt;

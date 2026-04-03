@@ -8,7 +8,6 @@
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
 #include <stream/test/stream_test_common.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/segment_generation_utils.hpp>
 #include <arcticdb/util/test/input_frame_utils.hpp>
 
@@ -29,11 +28,11 @@ constexpr static std::array non_string_fields = {
 };
 
 StreamDescriptor non_string_fields_ts_index_descriptor() {
-    return TimeseriesIndex::default_index().create_stream_descriptor("Source", non_string_fields);
+    return stream::TimeseriesIndex::default_index().create_stream_descriptor("Source", non_string_fields);
 }
 
 StreamDescriptor non_string_fields_rowcount_index_descriptor() {
-    return RowCountIndex::default_index().create_stream_descriptor("Source", non_string_fields);
+    return stream::RowCountIndex::default_index().create_stream_descriptor("Source", non_string_fields);
 }
 
 template<typename T>
@@ -203,7 +202,7 @@ struct MergeUpdateClauseUpdateStrategyMatchAllSegTest : MergeUpdateClauseUpdateS
         MergeUpdateClauseUpdateStrategyTestBase(
                 non_string_fields_ts_index_descriptor(),
                 MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING},
-                slice_data_into_segments<TimeseriesIndex>(
+                slice_data_into_segments<stream::TimeseriesIndex>(
                         non_string_fields_ts_index_descriptor(), rows_per_segment(), cols_per_segment(),
                         iota_view(timestamp{0}, timestamp{num_rows_}),
                         iota_view(static_cast<int8_t>(0), static_cast<int8_t>(num_rows_)),
@@ -229,9 +228,10 @@ struct MergeUpdateClauseUpdateStrategyMatchAllSegTest : MergeUpdateClauseUpdateS
         return RowRange{start_row, end_row};
     }
     [[nodiscard]] static ColRange col_range_for_col_slice(const size_t col_slice_inside_row_slice) {
-        const size_t start_col = TimeseriesIndex::field_count() + col_slice_inside_row_slice * cols_per_segment();
+        const size_t start_col =
+                stream::TimeseriesIndex::field_count() + col_slice_inside_row_slice * cols_per_segment();
         const size_t end_col =
-                std::min(start_col + cols_per_segment(), TimeseriesIndex::field_count() + size_t(num_cols_));
+                std::min(start_col + cols_per_segment(), stream::TimeseriesIndex::field_count() + size_t(num_cols_));
         return ColRange{start_col, end_col};
     }
 
@@ -362,7 +362,7 @@ struct MergeUpdateClauseUpdateStrategyMatchSubsetTest : MergeUpdateClauseUpdateS
     MergeUpdateClauseUpdateStrategyMatchSubsetTest() :
         MergeUpdateClauseUpdateStrategyTestBase(
                 non_string_fields_ts_index_descriptor(), update_only_strategy,
-                slice_data_into_segments<TimeseriesIndex>(
+                slice_data_into_segments<stream::TimeseriesIndex>(
                         non_string_fields_ts_index_descriptor(), rows_per_segment_, cols_per_segment_,
                         iota_view(timestamp{0}, timestamp{num_rows_}),
                         iota_view(static_cast<int8_t>(0), static_cast<int8_t>(num_rows_)),
@@ -384,7 +384,7 @@ struct MergeUpdateClauseUpdateStrategyMatchSubsetTest : MergeUpdateClauseUpdateS
 };
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, NoMatch) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 4>{-10, -9, 20, 25},
             std::array<int8_t, 4>{-1, -2, 10, 20},
@@ -400,7 +400,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, NoMatch) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 1>{3},
             std::array<int8_t, 1>{-2},
@@ -424,17 +424,18 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result_entities
     );
-    auto [expected_segments, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
-            descriptor_,
-            rows_per_segment_,
-            cols_per_segment_,
-            iota_view<timestamp, timestamp>(0, 10),
-            std::array<int8_t, 5>{0, 1, 2, -2, 4},
-            std::array<unsigned, 5>{0, 1, 2, 20, 4},
-            std::array<bool, 5>{0, 1, 0, 0, 0},
-            std::array<float, 5>{0.f, 1, 2, -11.f, 4},
-            std::array<timestamp, 5>{0, 1, 2, -12, 4}
-    );
+    auto [expected_segments, expected_col_ranges, expected_row_ranges] =
+            slice_data_into_segments<stream::TimeseriesIndex>(
+                    descriptor_,
+                    rows_per_segment_,
+                    cols_per_segment_,
+                    iota_view<timestamp, timestamp>(0, 10),
+                    std::array<int8_t, 5>{0, 1, 2, -2, 4},
+                    std::array<unsigned, 5>{0, 1, 2, 20, 4},
+                    std::array<bool, 5>{0, 1, 0, 0, 0},
+                    std::array<float, 5>{0.f, 1, 2, -11.f, 4},
+                    std::array<timestamp, 5>{0, 1, 2, -12, 4}
+            );
     ASSERT_EQ(*(*proc.segments_)[0], expected_segments[0]);
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(0, 5));
@@ -444,7 +445,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 1>{6},
             std::array<int8_t, 1>{-2},
@@ -468,17 +469,18 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result_entities
     );
-    auto [expected_segments, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
-            descriptor_,
-            rows_per_segment_,
-            cols_per_segment_,
-            iota_view<timestamp, timestamp>(5, 10),
-            std::array<int8_t, 5>{5, -2, 7, 8, 9},
-            std::array<unsigned, 5>{5, 20, 7, 8, 9},
-            std::array<bool, 5>{1, 1, 1, 0, 1},
-            std::array<float, 5>{5, -11.f, 7, 8, 9},
-            std::array<timestamp, 5>{5, -12, 7, 8, 9}
-    );
+    auto [expected_segments, expected_col_ranges, expected_row_ranges] =
+            slice_data_into_segments<stream::TimeseriesIndex>(
+                    descriptor_,
+                    rows_per_segment_,
+                    cols_per_segment_,
+                    iota_view<timestamp, timestamp>(5, 10),
+                    std::array<int8_t, 5>{5, -2, 7, 8, 9},
+                    std::array<unsigned, 5>{5, 20, 7, 8, 9},
+                    std::array<bool, 5>{1, 1, 1, 0, 1},
+                    std::array<float, 5>{5, -11.f, 7, 8, 9},
+                    std::array<timestamp, 5>{5, -12, 7, 8, 9}
+            );
     ASSERT_EQ(*(*proc.segments_)[0], expected_segments[0]);
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(5, 10));
@@ -488,7 +490,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 1>{10},
             std::array<int8_t, 1>{-2},
@@ -513,17 +515,18 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result_entities
     );
-    auto [expected_segments, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
-            descriptor_,
-            rows_per_segment_,
-            cols_per_segment_,
-            iota_view<timestamp, timestamp>(10, 14),
-            std::array<int8_t, 4>{-2, 11, 12, 13},
-            std::array<unsigned, 4>{20, 11, 12, 13},
-            std::array<bool, 4>{1, 1, 0, 1},
-            std::array<float, 4>{-11.f, 11, 12, 13},
-            std::array<timestamp, 5>{-12, 11, 12, 13}
-    );
+    auto [expected_segments, expected_col_ranges, expected_row_ranges] =
+            slice_data_into_segments<stream::TimeseriesIndex>(
+                    descriptor_,
+                    rows_per_segment_,
+                    cols_per_segment_,
+                    iota_view<timestamp, timestamp>(10, 14),
+                    std::array<int8_t, 4>{-2, 11, 12, 13},
+                    std::array<unsigned, 4>{20, 11, 12, 13},
+                    std::array<bool, 4>{1, 1, 0, 1},
+                    std::array<float, 4>{-11.f, 11, 12, 13},
+                    std::array<timestamp, 5>{-12, 11, 12, 13}
+            );
     ASSERT_EQ(*(*proc.segments_)[0], expected_segments[0]);
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(10, 14));
@@ -533,7 +536,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 2>{4, 10},
             std::array<int8_t, 2>{-2, -3},
@@ -564,7 +567,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
                     *component_manager_, result_entities_0
             );
     auto [expected_segments_0, expected_col_ranges_0, expected_row_ranges_0] =
-            slice_data_into_segments<TimeseriesIndex>(
+            slice_data_into_segments<stream::TimeseriesIndex>(
                     descriptor_,
                     rows_per_segment_,
                     cols_per_segment_,
@@ -588,7 +591,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
                     *component_manager_, result_entities_1
             );
     auto [expected_segments_1, expected_col_ranges_1, expected_row_ranges_1] =
-            slice_data_into_segments<TimeseriesIndex>(
+            slice_data_into_segments<stream::TimeseriesIndex>(
                     descriptor_,
                     rows_per_segment_,
                     cols_per_segment_,
@@ -608,7 +611,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 2>{0, 5},
             std::array<int8_t, 2>{-2, -3},
@@ -639,7 +642,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
                     *component_manager_, result_entities_0
             );
     auto [expected_segments_0, expected_col_ranges_0, expected_row_ranges_0] =
-            slice_data_into_segments<TimeseriesIndex>(
+            slice_data_into_segments<stream::TimeseriesIndex>(
                     descriptor_,
                     rows_per_segment_,
                     cols_per_segment_,
@@ -663,7 +666,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
                     *component_manager_, result_entities_1
             );
     auto [expected_segments_1, expected_col_ranges_1, expected_row_ranges_1] =
-            slice_data_into_segments<TimeseriesIndex>(
+            slice_data_into_segments<stream::TimeseriesIndex>(
                     descriptor_,
                     rows_per_segment_,
                     cols_per_segment_,
@@ -683,7 +686,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
-    auto [input_frame, input_frame_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 2>{7, 12},
             std::array<int8_t, 2>{-2, -3},
@@ -714,7 +717,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
                     *component_manager_, result_entities_0
             );
     auto [expected_segments_0, expected_col_ranges_0, expected_row_ranges_0] =
-            slice_data_into_segments<TimeseriesIndex>(
+            slice_data_into_segments<stream::TimeseriesIndex>(
                     descriptor_,
                     rows_per_segment_,
                     cols_per_segment_,
@@ -738,7 +741,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
                     *component_manager_, result_entities_1
             );
     auto [expected_segments_1, expected_col_ranges_1, expected_row_ranges_1] =
-            slice_data_into_segments<TimeseriesIndex>(
+            slice_data_into_segments<stream::TimeseriesIndex>(
                     descriptor_,
                     rows_per_segment_,
                     cols_per_segment_,
@@ -770,7 +773,7 @@ struct MergeUpdateClauseOnParameterTest : MergeUpdateClauseUpdateStrategyTestBas
     MergeUpdateClauseOnParameterTest() :
         MergeUpdateClauseUpdateStrategyTestBase(
                 non_string_fields_ts_index_descriptor(), update_only_strategy,
-                slice_data_into_segments<TimeseriesIndex>(
+                slice_data_into_segments<stream::TimeseriesIndex>(
                         non_string_fields_ts_index_descriptor(), rows_per_segment_, cols_per_segment_,
                         std::array<timestamp, num_rows_>{0, 1, 1, 1, 3, 3, 3, 3, 4, 5},
                         iota_view(static_cast<int8_t>(0), static_cast<int8_t>(num_rows_)),
@@ -796,7 +799,7 @@ struct MergeUpdateClauseOnParameterTest : MergeUpdateClauseUpdateStrategyTestBas
 
 /// The source index matches ts=3 in the first segment, but "int8"=99 != target int8=3.
 TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_IndexMatchesButColumnDiffers) {
-    auto [input_frame, source_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array{timestamp{1}},
             std::array<int8_t, 1>{99},
@@ -826,7 +829,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_IndexMatchesButColumnDiffer
 /// Both the index and the single on_ column ("int8") match at ts=3.
 /// "uint32", "bool8", "float32", "timestamp" (not in on_) are overwritten from source;
 TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_BothIndexAndColumnMatch) {
-    auto [input_frame, source_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 1>{0},
             std::array<int8_t, 1>{0}, // int8=3 matches target int8=3 at ts=3
@@ -851,7 +854,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_BothIndexAndColumnMatch) {
             *component_manager_, result
     );
 
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::TimeseriesIndex>(
             descriptor_,
             rows_per_segment_,
             cols_per_segment_,
@@ -876,7 +879,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_BothIndexAndColumnMatch) {
 /// ts=1 is repeated 3 times. Both columns match on the third repetition but differ on the previous. Only the one where
 /// all columns are matching is updated
 TEST_F(MergeUpdateClauseOnParameterTest, TwoOnColumns_BothMatch) {
-    auto [input_frame, source_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 3>{1, 1, 1},
             std::array<int8_t, 3>{1, 100, 3},
@@ -900,7 +903,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, TwoOnColumns_BothMatch) {
             *component_manager_, result
     );
 
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::TimeseriesIndex>(
             descriptor_,
             rows_per_segment_,
             cols_per_segment_,
@@ -925,7 +928,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, TwoOnColumns_BothMatch) {
 /// Source has two rows whose timestamps and "int8" values match entries in different row segments: ts=3 in [0,5) and
 /// ts=7 in [5,10). Both segments are selected by structure_for_processing and each is independently updated by process.
 TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_SourceSpansBothRowSegments) {
-    auto [input_frame, source_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor_,
             std::array<timestamp, 3>{3, 3, 3},
             std::array<int8_t, 3>{4, 100, 6},
@@ -953,7 +956,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_SourceSpansBothRowSegments)
     std::vector<EntityId> entities = push_entities();
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
 
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::TimeseriesIndex>(
             non_string_fields_ts_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
@@ -1003,7 +1006,7 @@ struct MergeUpdateClauseUpdateStrategyRowRange : MergeUpdateClauseUpdateStrategy
     MergeUpdateClauseUpdateStrategyRowRange() :
         MergeUpdateClauseUpdateStrategyTestBase(
                 non_string_fields_rowcount_index_descriptor(), update_only_strategy,
-                slice_data_into_segments<RowCountIndex>(
+                slice_data_into_segments<stream::RowCountIndex>(
                         non_string_fields_rowcount_index_descriptor(), rows_per_segment_, cols_per_segment_,
                         std::array<int8_t, num_rows_>{9, 2, 12, 33, 33, 33, 33, 33, 33, 33, 33, 6, -9, 0},
                         iota_view(static_cast<unsigned>(0), static_cast<unsigned>(num_rows_)),
@@ -1045,7 +1048,7 @@ struct MergeUpdateClauseUpdateStrategyRowRange : MergeUpdateClauseUpdateStrategy
 };
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, RequireNonEmptyOn) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 1>{99},
             std::array{0u},
@@ -1065,7 +1068,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, RequireNonEmptyOn) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, NonExistingOnThrows) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 2>{12, 9},
             std::array{100u, 101U},
@@ -1086,7 +1089,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, NonExistingOnThrows) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 2>{12, 9},
             std::array{100u, 101U},
@@ -1104,7 +1107,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1) {
 
     const std::vector<EntityId> entities = push_entities();
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
@@ -1157,7 +1160,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_ValueInSourceMatchesMultipleRowsAcrossSegments) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 1>{33},
             std::array{100u},
@@ -1175,7 +1178,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_ValueInSourceMatc
 
     const std::vector<EntityId> entities = push_entities();
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
@@ -1248,7 +1251,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_ValueInSourceMatc
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1_Segment3) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 2>{-9, 12},
             std::array{100u, 101U},
@@ -1266,7 +1269,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1_Segment3
 
     const std::vector<EntityId> entities = push_entities();
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
@@ -1316,7 +1319,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1_Segment3
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 1>{100},
             std::array{200u},
@@ -1334,7 +1337,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
 
     const std::vector<EntityId> entities = push_entities();
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
@@ -1372,7 +1375,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
 }
 
 TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MergeOnTwoColumns_Segment1_Segment2) {
-    auto [input_frame, source_data] = input_frame_from_tensors<RowCountIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::RowCountIndex>(
             descriptor_,
             std::array<int8_t, 2>{33, 33},
             std::array{3u, 7u},
@@ -1390,7 +1393,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MergeOnTwoColumns_Segment1_Segme
 
     const std::vector<EntityId> entities = push_entities();
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
-    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
+    auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<stream::RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
@@ -1441,11 +1444,12 @@ TEST(IndexValueSpansMultipleSegments, SegmetStartsWithTheSameValueAsAnotherEnds)
     constexpr static std::array fields{
             FieldRef({DataType::INT32, Dimension::Dim0}, "a"), FieldRef({DataType::INT32, Dimension::Dim0}, "b")
     };
-    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    const StreamDescriptor desc =
+            stream::TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
     constexpr static MergeStrategy strategy = update_only_strategy;
     constexpr static size_t rows_per_segment = 3;
     constexpr static size_t cols_per_segment = 1;
-    auto [target_segments, target_column_ranges, target_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+    auto [target_segments, target_column_ranges, target_row_ranges] = slice_data_into_segments<stream::TimeseriesIndex>(
             desc,
             rows_per_segment,
             cols_per_segment,
@@ -1458,7 +1462,7 @@ TEST(IndexValueSpansMultipleSegments, SegmetStartsWithTheSameValueAsAnotherEnds)
     std::vector<RangesAndKey> ranges_and_keys =
             generate_ranges_and_keys(desc, target_segments, target_column_ranges, target_row_ranges);
     auto component_manager = std::make_shared<ComponentManager>();
-    auto [input_frame, source_data] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, source_data] = input_frame_from_tensors<stream::TimeseriesIndex>(
             desc, std::array<timestamp, 3>{1, 2, 3}, std::array{100, 200, 300}, std::array{100, 200, 300}
     );
     MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame));
@@ -1472,14 +1476,15 @@ TEST(IndexValueSpansMultipleSegments, SegmetStartsWithTheSameValueAsAnotherEnds)
             std::move(target_row_ranges)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
-    auto [expected_segments, expected_col_slices, expected_row_slices] = slice_data_into_segments<TimeseriesIndex>(
-            desc,
-            rows_per_segment,
-            cols_per_segment,
-            std::array<timestamp, 6>{1, 2, 2, 2, 2, 3},
-            std::array{100, 200, 200, 200, 200, 300},
-            std::array{100, 200, 200, 200, 200, 300}
-    );
+    auto [expected_segments, expected_col_slices, expected_row_slices] =
+            slice_data_into_segments<stream::TimeseriesIndex>(
+                    desc,
+                    rows_per_segment,
+                    cols_per_segment,
+                    std::array<timestamp, 6>{1, 2, 2, 2, 2, 3},
+                    std::array{100, 200, 200, 200, 200, 300},
+                    std::array{100, 200, 200, 200, 200, 300}
+            );
     sort_by_rowslice(expected_row_slices, expected_col_slices, expected_segments);
     for (size_t row_slice = 0; row_slice < structured_entities.size(); ++row_slice) {
         const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[row_slice]));
@@ -1505,15 +1510,17 @@ TEST(IndexValueSpansMultipleSegments, MultipleSegmentsConsistedOfTheSameValue) {
                 FieldRef({DataType::INT32, Dimension::Dim0}, "a"), FieldRef({DataType::INT32, Dimension::Dim0}, "b")
         };
         constexpr static MergeStrategy strategy = update_only_strategy;
-        const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
-        auto [target_segments, target_column_ranges, target_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
-                desc, 2, 1, std::array<timestamp, 6>{2, 2, 2, 2, 2, 2}, iota_view{0, 6}, iota_view{0, 6}
-        );
+        const StreamDescriptor desc =
+                stream::TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+        auto [target_segments, target_column_ranges, target_row_ranges] =
+                slice_data_into_segments<stream::TimeseriesIndex>(
+                        desc, 2, 1, std::array<timestamp, 6>{2, 2, 2, 2, 2, 2}, iota_view{0, 6}, iota_view{0, 6}
+                );
         sort_by_rowslice(target_row_ranges, target_column_ranges, target_segments);
         std::vector<RangesAndKey> ranges_and_keys =
                 generate_ranges_and_keys(desc, target_segments, target_column_ranges, target_row_ranges);
         auto component_manager = std::make_shared<ComponentManager>();
-        auto [input_frame, _] = input_frame_from_tensors<TimeseriesIndex>(
+        auto [input_frame, _] = input_frame_from_tensors<stream::TimeseriesIndex>(
                 desc, std::array{source_index}, std::array{100}, std::array{200}
         );
         MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame));
@@ -1532,7 +1539,7 @@ TEST(IndexValueSpansMultipleSegments, MultipleSegmentsConsistedOfTheSameValue) {
             std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
             ASSERT_EQ(structured_entities.size(), 3);
             auto [expected_segments, expected_col_slices, expected_row_slices] =
-                    slice_data_into_segments<TimeseriesIndex>(
+                    slice_data_into_segments<stream::TimeseriesIndex>(
                             desc,
                             2,
                             1,
@@ -1570,7 +1577,7 @@ TEST(MergeClauseDateRange, SourceMatchesAllIndexRangesButDoesNotMatchAnyRow) {
     constexpr static size_t cols_per_segment = 3;
     constexpr static int num_rows = 6;
     const StreamDescriptor& descriptor = non_string_fields_ts_index_descriptor();
-    auto [segments, cols, rows] = slice_data_into_segments<TimeseriesIndex>(
+    auto [segments, cols, rows] = slice_data_into_segments<stream::TimeseriesIndex>(
             non_string_fields_ts_index_descriptor(),
             rows_per_segment,
             cols_per_segment,
@@ -1584,7 +1591,7 @@ TEST(MergeClauseDateRange, SourceMatchesAllIndexRangesButDoesNotMatchAnyRow) {
     sort_by_rowslice(rows, cols, segments);
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(descriptor, segments, cols, rows);
 
-    auto [input_frame, input_frame_data_owner] = input_frame_from_tensors<TimeseriesIndex>(
+    auto [input_frame, input_frame_data_owner] = input_frame_from_tensors<stream::TimeseriesIndex>(
             descriptor,
             std::array<timestamp, 3>{5, 12, 27},
             std::array<int8_t, 3>{100, 101, 102},

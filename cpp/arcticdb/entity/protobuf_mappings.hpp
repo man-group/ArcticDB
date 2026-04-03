@@ -9,35 +9,47 @@
 #pragma once
 
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
+
+// Forward-declare generated protobuf namespace and message classes so the alias below compiles
+namespace arcticc {
+namespace pb2 {
+namespace descriptors_pb2 {
+class AtomKey;
+class StreamDescriptor;
+class TimeSeriesDescriptor;
+class IndexDescriptor;
+class NormalizationMetadata;
+} // namespace descriptors_pb2
+} // namespace pb2
+} // namespace arcticc
 
 namespace arcticdb {
-
+namespace proto {
+namespace descriptors = arcticc::pb2::descriptors_pb2;
+}
 namespace entity {
 struct StreamDescriptor;
+struct IndexDescriptorImpl;
 } // namespace entity
 
 struct TimeseriesDescriptor;
 
-arcticdb::proto::descriptors::AtomKey key_to_proto(const entity::AtomKey& key);
+proto::descriptors::AtomKey key_to_proto(const entity::AtomKey& key);
 
-entity::AtomKey key_from_proto(const arcticdb::proto::descriptors::AtomKey& input);
+entity::AtomKey key_from_proto(const proto::descriptors::AtomKey& input);
 
-void copy_stream_descriptor_to_proto(
-        const entity::StreamDescriptor& desc, arcticdb::proto::descriptors::StreamDescriptor& proto
-);
+void copy_stream_descriptor_to_proto(const entity::StreamDescriptor& desc, proto::descriptors::StreamDescriptor& proto);
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd
-);
+proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd);
 
-inline void set_id(arcticdb::proto::descriptors::StreamDescriptor& pb_desc, StreamId id);
+inline void set_id(proto::descriptors::StreamDescriptor& pb_desc, StreamId id);
 
-[[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(
+[[nodiscard]] proto::descriptors::IndexDescriptor index_descriptor_to_proto(
         const entity::IndexDescriptorImpl& index_descriptor
 );
 
 [[nodiscard]] entity::IndexDescriptorImpl index_descriptor_from_proto(
-        const arcticdb::proto::descriptors::IndexDescriptor& index_descriptor
+        const proto::descriptors::IndexDescriptor& index_descriptor
 );
 
 template<typename SourceType, typename DestType>

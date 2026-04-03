@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
@@ -20,13 +19,12 @@ using ShapesBlockTDT = entity::TypeDescriptorTag<
         entity::DataTypeTag<entity::DataType::INT64>, entity::DimensionTag<entity::Dimension::Dim0>>;
 
 Segment encode_dispatch(
-        SegmentInMemory&& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        EncodingVersion encoding_version
+        SegmentInMemory&& in_mem_seg, const proto::encoding::VariantCodec& codec_opts, EncodingVersion encoding_version
 );
 
-Segment encode_v2(SegmentInMemory&& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts);
+Segment encode_v2(SegmentInMemory&& in_mem_seg, const proto::encoding::VariantCodec& codec_opts);
 
-Segment encode_v1(SegmentInMemory&& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts);
+Segment encode_v1(SegmentInMemory&& in_mem_seg, const proto::encoding::VariantCodec& codec_opts);
 
 void decode_v1(
         const Segment& segment, const SegmentHeader& hdr, SegmentInMemory& res, const StreamDescriptor& desc,
@@ -36,7 +34,7 @@ void decode_v1(
 void decode_v2(const Segment& segment, const SegmentHeader& hdr, SegmentInMemory& res, const StreamDescriptor& desc);
 
 SizeResult max_compressed_size_dispatch(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts,
         EncodingVersion encoding_version
 );
 
@@ -53,7 +51,7 @@ void decode_into_memory_segment(
 template<class DataSink>
 std::size_t decode_field(
         const entity::TypeDescriptor& td, const EncodedFieldImpl& field, const uint8_t* input, DataSink& data_sink,
-        std::optional<util::BitMagic>& bv, arcticdb::EncodingVersion encoding_version
+        std::optional<util::BitMagic>& bv, EncodingVersion encoding_version
 );
 
 std::optional<google::protobuf::Any> decode_metadata_from_segment(const Segment& segment);

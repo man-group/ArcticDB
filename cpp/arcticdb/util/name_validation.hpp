@@ -8,8 +8,9 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <string>
+#include <arcticdb/util/error_code.hpp>
+#include <arcticdb/entity/typedefs.hpp>
 
 namespace arcticdb {
 

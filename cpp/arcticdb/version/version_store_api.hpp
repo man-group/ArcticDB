@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/data_error.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
@@ -21,8 +20,7 @@
 
 namespace arcticdb::version_store {
 
-using namespace arcticdb::entity;
-namespace as = arcticdb::stream;
+namespace as = stream;
 
 /**
  * The purpose of this class is to perform python-specific translations into either native C++ or protobuf objects

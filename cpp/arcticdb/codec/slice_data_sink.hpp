@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
-
 namespace arcticdb {
 
 struct SliceDataSink {

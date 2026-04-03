@@ -38,7 +38,7 @@ TEST(SegmentAggregator, Basic) {
 
     SegmentSinkWrapper seg_wrapper(
             symbol,
-            TimeseriesIndex::default_index(),
+            stream::TimeseriesIndex::default_index(),
             fields_from_range(std::vector<FieldRef>{
                     scalar_field(DataType::UINT64, "numbers"), scalar_field(DataType::ASCII_DYNAMIC64, "strings")
             })

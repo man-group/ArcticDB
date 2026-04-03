@@ -9,17 +9,11 @@
 #pragma once
 
 #include <arcticdb/codec/encoded_field.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/hash.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/dump_bytes.hpp>
-
-#include <type_traits>
 
 namespace arcticdb::detail {
-using namespace arcticdb::entity;
 
 struct BlockDataHelper {
     std::size_t count_;

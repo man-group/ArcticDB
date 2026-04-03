@@ -15,7 +15,6 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 
-#include <arcticdb/entity/types.hpp>
 #include <gtest/gtest.h>
 #include <arcticdb/util/test/rapidcheck.hpp>
 #include <arcticdb/version/test/version_map_model.hpp>

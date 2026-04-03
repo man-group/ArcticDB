@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>

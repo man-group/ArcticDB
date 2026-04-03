@@ -26,7 +26,7 @@ namespace arcticdb::util {
 
 template<typename RawType>
 void densify_buffer_using_bitmap(
-        const util::BitSet& block_bitset, arcticdb::ChunkedBuffer& dense_buffer, const uint8_t* sparse_ptr
+        const util::BitSet& block_bitset, ChunkedBuffer& dense_buffer, const uint8_t* sparse_ptr
 ) {
     auto en = block_bitset.first();
     auto en_end = block_bitset.end();

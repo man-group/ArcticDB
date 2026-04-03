@@ -15,7 +15,7 @@
 #endif
 
 #include <ankerl/unordered_dense.h>
-#include <arcticdb/entity/types.hpp> // for entity::position_t
+#include <arcticdb/entity/typedefs.hpp>
 #include <arcticdb/util/constants.hpp>
 
 namespace arcticdb {

@@ -265,19 +265,17 @@ inline std::shared_ptr<Storages> create_storages(
                 native_storage_config.variant(),
                 [&storage_config, &storages, &library_path, mode](const s3::S3Settings& settings) {
                     util::check(
-                            storage_config.config().Is<arcticdb::proto::s3_storage::Config>(),
-                            "Only support S3 native settings"
+                            storage_config.config().Is<proto::s3_storage::Config>(), "Only support S3 native settings"
                     );
-                    arcticdb::proto::s3_storage::Config s3_storage;
+                    proto::s3_storage::Config s3_storage;
                     storage_config.config().UnpackTo(&s3_storage);
                     storages.push_back(create_storage(library_path, mode, s3::S3Settings(settings).update(s3_storage)));
                 },
                 [&storage_config, &storages, &library_path, mode](const s3::GCPXMLSettings& settings) {
                     util::check(
-                            storage_config.config().Is<arcticdb::proto::gcp_storage::Config>(),
-                            "Only support GCP native settings"
+                            storage_config.config().Is<proto::gcp_storage::Config>(), "Only support GCP native settings"
                     );
-                    arcticdb::proto::gcp_storage::Config gcp_storage;
+                    proto::gcp_storage::Config gcp_storage;
                     storage_config.config().UnpackTo(&gcp_storage);
                     storages.push_back(
                             create_storage(library_path, mode, s3::GCPXMLSettings(settings).update(gcp_storage))
@@ -293,7 +291,7 @@ inline std::shared_ptr<Storages> create_storages(
 
 inline std::shared_ptr<Storages> create_storages(
         const LibraryPath& library_path, OpenMode mode,
-        const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs
+        const std::vector<proto::storage::VariantStorage>& storage_configs
 ) {
     Storages::StorageVector storages;
     for (const auto& storage_config : storage_configs) {

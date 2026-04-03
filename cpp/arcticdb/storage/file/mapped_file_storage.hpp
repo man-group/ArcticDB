@@ -21,7 +21,7 @@ namespace arcticdb::storage::file {
 
 class MappedFileStorage final : public SingleFileStorage {
   public:
-    using Config = arcticdb::proto::mapped_file_storage::Config;
+    using Config = proto::mapped_file_storage::Config;
 
     MappedFileStorage(const LibraryPath& lib, OpenMode mode, Config conf);
 
@@ -87,13 +87,13 @@ class MappedFileStorage final : public SingleFileStorage {
     storage::MultiSegmentHeader multi_segment_header_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(
+inline proto::storage::VariantStorage pack_config(
         const std::string& path, size_t file_size, size_t items_count, const StreamId& id,
         const IndexDescriptorImpl& index_desc, EncodingVersion encoding_version,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts
+        const proto::encoding::VariantCodec& codec_opts
 ) {
-    arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::mapped_file_storage::Config cfg;
+    proto::storage::VariantStorage output;
+    proto::mapped_file_storage::Config cfg;
     cfg.set_path(path);
     cfg.set_bytes(file_size);
     cfg.set_items_count(items_count);
@@ -107,11 +107,11 @@ inline arcticdb::proto::storage::VariantStorage pack_config(
     return output;
 }
 
-inline arcticdb::proto::storage::VariantStorage pack_config(
-        const std::string& path, const arcticdb::proto::encoding::VariantCodec& codec_opts
+inline proto::storage::VariantStorage pack_config(
+        const std::string& path, const proto::encoding::VariantCodec& codec_opts
 ) {
-    arcticdb::proto::storage::VariantStorage output;
-    arcticdb::proto::mapped_file_storage::Config cfg;
+    proto::storage::VariantStorage output;
+    proto::mapped_file_storage::Config cfg;
     cfg.set_path(path);
     cfg.mutable_codec_opts()->CopyFrom(codec_opts);
     util::pack_to_any(cfg, *output.mutable_config());

@@ -36,14 +36,14 @@ void check_value(const T& t, const U& u) {
     ASSERT_EQ(t, u);
 }
 
-using MockAgg = Aggregator<TimeseriesIndex, FixedSchema, NeverSegmentPolicy>;
+using MockAgg = stream::Aggregator<stream::TimeseriesIndex, stream::FixedSchema, stream::NeverSegmentPolicy>;
 
 template<class SegmentFiller>
-arcticdb::SegmentInMemory fill_test_data_segment(const StreamDescriptor& tsd, SegmentFiller&& filler) {
+SegmentInMemory fill_test_data_segment(const StreamDescriptor& tsd, SegmentFiller&& filler) {
     SegmentInMemory seg;
-    auto index = index_type_from_descriptor(tsd);
+    auto index = stream::index_type_from_descriptor(tsd);
 
-    MockAgg agg{FixedSchema{tsd, index}, [&](auto&& s) { seg = std::move(s); }};
+    MockAgg agg{stream::FixedSchema{tsd, index}, [&](auto&& s) { seg = std::move(s); }};
 
     filler(agg);
     agg.commit();
@@ -53,7 +53,7 @@ arcticdb::SegmentInMemory fill_test_data_segment(const StreamDescriptor& tsd, Se
 template<class TsIndexKeyGen>
 SegmentInMemory fill_test_index_segment(const StreamId& tsid, TsIndexKeyGen&& ts_key_gen) {
     SegmentInMemory seg;
-    IndexAggregator<TimeseriesIndex> idx_agg{tsid, [&](auto&& s) { seg = std::move(s); }};
+    stream::IndexAggregator<stream::TimeseriesIndex> idx_agg{tsid, [&](auto&& s) { seg = std::move(s); }};
 
     ts_key_gen.foreach ([&](auto& key) { idx_agg.add_key(key); });
     idx_agg.commit();
@@ -61,7 +61,9 @@ SegmentInMemory fill_test_index_segment(const StreamId& tsid, TsIndexKeyGen&& ts
 }
 
 inline auto get_simple_data_descriptor(const StreamId& id) {
-    return TimeseriesIndex::default_index().create_stream_descriptor(id, {scalar_field(DataType::UINT64, "val")});
+    return stream::TimeseriesIndex::default_index().create_stream_descriptor(
+            id, {scalar_field(DataType::UINT64, "val")}
+    );
 }
 
 template<class DataType>
@@ -185,7 +187,7 @@ struct TestTensorFrame {
     TestTensorFrame(StreamDescriptor desc, size_t num_rows) : segment_(std::move(desc), num_rows) {}
 
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::pipelines::InputFrame> frame_ = std::make_shared<arcticdb::pipelines::InputFrame>();
+    std::shared_ptr<InputFrame> frame_ = std::make_shared<InputFrame>();
 };
 
 template<class ContainerType, typename DTT>
@@ -207,15 +209,14 @@ NativeTensor fill_test_column(
 }
 
 inline void fill_test_frame(
-        SegmentInMemory& segment, arcticdb::pipelines::InputFrame& frame, size_t num_rows, size_t start_val,
-        size_t opt_row_offset
+        SegmentInMemory& segment, InputFrame& frame, size_t num_rows, size_t start_val, size_t opt_row_offset
 ) {
     util::check(!segment.descriptor().empty(), "Can't construct test frame with empty descriptor");
 
     auto field = segment.descriptor().begin();
     auto desc = frame.desc().clone();
-    std::vector<entity::NativeTensor> field_tensors;
-    std::optional<entity::NativeTensor> index_tensor;
+    std::vector<NativeTensor> field_tensors;
+    std::optional<NativeTensor> index_tensor;
 
     if (frame.has_index()) {
         visit_field(*field, [&](auto type_desc_tag) {
@@ -255,7 +256,7 @@ TestTensorFrame get_test_frame(
     TestTensorFrame output(get_test_descriptor<IndexType>(id, fields), num_rows);
 
     output.frame_->desc() = get_test_descriptor<IndexType>(id, fields);
-    output.frame_->index = index_type_from_descriptor(output.frame_->desc());
+    output.frame_->index = stream::index_type_from_descriptor(output.frame_->desc());
     output.frame_->num_rows = num_rows;
     output.frame_->desc().set_sorted(SortedValue::ASCENDING);
 
@@ -278,16 +279,15 @@ inline auto get_test_simple_frame(const StreamId& id, size_t num_rows, size_t st
     return get_test_frame<stream::RowCountIndex>(id, get_test_simple_fields(), num_rows, start_val);
 }
 
-inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> test_config(const std::string& lib_name
-) {
+inline std::pair<storage::LibraryPath, proto::storage::LibraryConfig> test_config(const std::string& lib_name) {
     auto unique_lib_name = fmt::format("{}_{}", lib_name, util::SysClock::nanos_since_epoch());
-    arcticdb::proto::storage::LibraryConfig config;
+    proto::storage::LibraryConfig config;
 
     config.mutable_lib_desc()->set_name(unique_lib_name);
     auto temp_path = std::filesystem::temp_directory_path();
     // on windows, path is only implicitly converted to wstring, not string
-    arcticdb::proto::storage::VariantStorage lmdb_config;
-    arcticdb::proto::lmdb_storage::Config cfg;
+    proto::storage::VariantStorage lmdb_config;
+    proto::lmdb_storage::Config cfg;
     cfg.set_path(temp_path.string());
     // 128 MiB - needs to be reasonably small else Windows build runs out of disk
     cfg.set_map_size(128ULL * (1ULL << 20));
@@ -305,7 +305,7 @@ inline std::pair<storage::LibraryPath, arcticdb::proto::storage::LibraryConfig> 
 }
 
 inline std::shared_ptr<storage::Library> test_library_from_config(
-        const storage::LibraryPath& lib_path, const arcticdb::proto::storage::LibraryConfig& lib_cfg
+        const storage::LibraryPath& lib_path, const proto::storage::LibraryConfig& lib_cfg
 ) {
     auto storage_cfg = lib_cfg.storage_by_id();
     auto vs_cfg = lib_cfg.lib_desc().has_version()

@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 namespace arcticdb {
 class SegmentInMemory;

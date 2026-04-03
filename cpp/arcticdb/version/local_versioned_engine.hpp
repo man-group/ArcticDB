@@ -53,7 +53,7 @@ struct KeySizesInfo {
 
 folly::Future<folly::Unit> delete_trees_responsibly(
         std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
-        const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
+        const std::vector<IndexTypeKey>& orig_keys_to_delete, const MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
         const PreDeleteChecks& check = default_pre_delete_checks, const bool dry_run = false
 );
@@ -67,7 +67,7 @@ struct ListStreamsVersionStoreObjects {
     std::shared_ptr<VersionMap>& version_map_;
 };
 
-template<StreamIdSet R>
+template<stream::StreamIdSet R>
 R list_streams_internal_implementation(
         std::optional<SnapshotId> snap_name, const std::optional<std::string>& regex,
         const std::optional<std::string>& prefix, const std::optional<bool>& use_symbol_list,
@@ -91,9 +91,9 @@ R list_streams_internal_implementation(
     }
 
     if (regex) {
-        return filter_by_regex(res, regex);
+        return stream::filter_by_regex(res, regex);
     } else if (prefix) {
-        return filter_by_regex(res, std::optional("^" + *prefix));
+        return stream::filter_by_regex(res, std::optional("^" + *prefix));
     } else {
         return res;
     }
@@ -398,7 +398,7 @@ class LocalVersionedEngine : public VersionedEngine {
         return LocalVersionedEngine(store, clock);
     }
 
-    const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
+    const proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 
     VersionedItem merge_internal(
             const StreamId& stream_id, std::shared_ptr<InputFrame> source, bool prune_previous_versions,
@@ -410,8 +410,7 @@ class LocalVersionedEngine : public VersionedEngine {
     explicit LocalVersionedEngine(const std::shared_ptr<Store>& store, const ClockType& = ClockType{});
 
     std::variant<VersionedItem, CompactionError> compact_incomplete_dynamic(
-            const StreamId& stream_id,
-            const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+            const StreamId& stream_id, const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,
             const CompactIncompleteParameters& parameters
     ) override;
 
@@ -451,7 +450,7 @@ class LocalVersionedEngine : public VersionedEngine {
     );
 
     std::shared_ptr<Store> store_;
-    arcticdb::proto::storage::VersionStoreConfig cfg_;
+    proto::storage::VersionStoreConfig cfg_;
     std::shared_ptr<VersionMap> version_map_ = std::make_shared<VersionMap>();
     std::shared_ptr<SymbolList> symbol_list_;
     std::optional<std::string> license_key_;

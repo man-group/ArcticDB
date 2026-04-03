@@ -8,7 +8,6 @@
 
 #include <arcticdb/util/name_validation.hpp>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
 

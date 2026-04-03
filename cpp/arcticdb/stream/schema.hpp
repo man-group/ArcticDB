@@ -8,14 +8,10 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/stream/index.hpp>
 
 namespace arcticdb::stream {
-
-using namespace arcticdb::entity;
 
 class FixedSchema {
   public:

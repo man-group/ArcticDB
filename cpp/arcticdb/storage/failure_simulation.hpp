@@ -184,8 +184,8 @@ class StorageFailureSimulator {
 
     StorageFailureSimulator() : configured_(false) {}
 
-    void configure(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
-        using enum arcticdb::FailureType;
+    void configure(const proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
+        using enum FailureType;
         log::storage().info("Initializing storage failure simulator from proto config");
 
         if (cfg.read_failure_prob() > 0) {

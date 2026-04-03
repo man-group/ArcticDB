@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/rapidcheck.hpp>
 
 #include <arcticdb/stream/test/stream_test_common.hpp>
@@ -166,14 +165,14 @@ folly::Future<arcticdb::entity::VariantKey> write_frame_data(const TestDataFrame
 inline folly::Future<arcticdb::entity::VariantKey> write_test_frame(
         ac::StreamId stream_id,
 
-        const TestDataFrame& data_frame, std::shared_ptr<ac::StreamSink> store
+        const TestDataFrame& data_frame, std::shared_ptr<ac::stream::StreamSink> store
 ) {
     auto schema = schema_from_test_frame(data_frame, std::move(stream_id));
     auto start_end = test_frame_range(data_frame);
     auto gen_id = arcticdb::VersionId(0);
 
-    ac::StreamWriter<ac::TimeseriesIndex, ac::FixedSchema> writer{
-            std::move(schema), std::move(store), gen_id, start_end, ac::RowCountSegmentPolicy{4}
+    ac::stream::StreamWriter<ac::stream::TimeseriesIndex, ac::stream::FixedSchema> writer{
+            std::move(schema), std::move(store), gen_id, start_end, ac::stream::RowCountSegmentPolicy{4}
     };
 
     return write_frame_data(data_frame, writer);
@@ -220,10 +219,10 @@ bool check_read_frame(const TestDataFrame& data_frame, ReaderType& reader, std::
 }
 
 inline bool check_test_frame(
-        const TestDataFrame& data_frame, const arcticdb::entity::AtomKey& key, std::shared_ptr<ac::StreamSource> store,
-        std::vector<std::string>& errors
+        const TestDataFrame& data_frame, const arcticdb::entity::AtomKey& key,
+        std::shared_ptr<ac::stream::StreamSource> store, std::vector<std::string>& errors
 ) {
-    ac::StreamReader<
+    ac::stream::StreamReader<
             arcticdb::entity::AtomKey,
             folly::Function<std::vector<arcticdb::entity::AtomKey>()>,
             arcticdb::SegmentInMemory::Row>

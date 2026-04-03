@@ -11,16 +11,14 @@
 #include <string>
 #include <fmt/format.h>
 
-#include <arcticdb/entity/types.hpp>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
+#include <arcticdb/entity/types.hpp>
 
 namespace py = pybind11;
 
 namespace arcticdb {
-
-using namespace arcticdb::entity;
-
+using namespace entity;
 template<typename T>
 void print_iterable(std::string_view key, const T& vals) {
     fmt::print("{}=[{}]\n", key, vals);

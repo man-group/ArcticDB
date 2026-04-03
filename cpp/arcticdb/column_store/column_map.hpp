@@ -10,7 +10,6 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/offset_string.hpp>
 
 #include <folly/container/Enumerate.h>

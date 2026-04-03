@@ -7,12 +7,11 @@
  */
 
 #pragma once
-
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 
-using namespace arcticdb::entity;
+using namespace entity;
 
 struct Value {
     Value() = default;
@@ -167,14 +166,14 @@ VALUE_CONSTRUCT(double, FLOAT64)
 inline Value construct_string_value(const std::string& str) { return Value{str, DataType::UTF_DYNAMIC64}; }
 
 inline std::optional<std::string> ascii_to_padded_utf32(std::string_view str, size_t width) {
-    if (str.size() * arcticdb::entity::UNICODE_WIDTH > width)
+    if (str.size() * UNICODE_WIDTH > width)
         return std::nullopt;
     std::string rv(width, '\0');
     auto input = str.data();
     auto output = rv.data();
     for ([[maybe_unused]] const auto& c : str) {
         *output = *input++;
-        output += arcticdb::entity::UNICODE_WIDTH;
+        output += UNICODE_WIDTH;
     }
     return rv;
 }

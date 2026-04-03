@@ -12,7 +12,6 @@
 
 #include <arcticdb/util/test/test_utils.hpp>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 TEST(Column, Empty) {

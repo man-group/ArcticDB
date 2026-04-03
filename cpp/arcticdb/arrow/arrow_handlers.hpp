@@ -7,7 +7,6 @@
  */
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_handler.hpp>
 
 namespace arcticdb {

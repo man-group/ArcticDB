@@ -21,7 +21,7 @@ namespace arcticdb {
 constexpr TypeDescriptor metadata_type_desc() { return TypeDescriptor{DataType::UINT8, Dimension::Dim1}; }
 
 SizeResult max_compressed_size_dispatch(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts,
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts,
         EncodingVersion encoding_version
 ) {
     if (encoding_version == EncodingVersion::V2) {
@@ -32,8 +32,7 @@ SizeResult max_compressed_size_dispatch(
 }
 
 Segment encode_dispatch(
-        SegmentInMemory&& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        EncodingVersion encoding_version
+        SegmentInMemory&& in_mem_seg, const proto::encoding::VariantCodec& codec_opts, EncodingVersion encoding_version
 ) {
     if (encoding_version == EncodingVersion::V2) {
         return encode_v2(std::move(in_mem_seg), codec_opts);

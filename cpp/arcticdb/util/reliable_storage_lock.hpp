@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/configs_map.hpp>
 

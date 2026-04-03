@@ -9,7 +9,6 @@
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
 #include <cmath>

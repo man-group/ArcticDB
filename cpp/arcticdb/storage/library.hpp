@@ -41,8 +41,8 @@ class Library {
         ARCTICDB_DEBUG(log::storage(), fmt::format("Opened library {}", library_path()));
         util::variant_match(
                 config_,
-                [that = this](const arcticdb::proto::storage::VersionStoreConfig& version_config) {
-                    that->storage_fallthrough_ = version_config.storage_fallthrough();
+                [this](const proto::storage::VersionStoreConfig& version_config) {
+                    storage_fallthrough_ = version_config.storage_fallthrough();
                 },
                 [](std::monostate) {}
         );
@@ -131,7 +131,7 @@ class Library {
     }
 
     void remove(std::span<VariantKey> variant_keys, storage::RemoveOpts opts) {
-        if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
+        if (open_mode() < OpenMode::DELETE) {
             throw LibraryPermissionException(library_path_, open_mode(), "delete");
         }
 
@@ -139,8 +139,8 @@ class Library {
         storages_->remove(variant_keys, opts);
     }
 
-    void remove(VariantKey&& variant_key, storage::RemoveOpts opts) {
-        if (open_mode() < arcticdb::storage::OpenMode::DELETE) {
+    void remove(VariantKey&& variant_key, RemoveOpts opts) {
+        if (open_mode() < OpenMode::DELETE) {
             throw LibraryPermissionException(library_path_, open_mode(), "delete");
         }
 
@@ -177,7 +177,7 @@ class Library {
 
     [[nodiscard]] const auto& config() const { return config_; }
 
-    static void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
+    static void set_failure_sim(const proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
         StorageFailureSimulator::instance()->configure(cfg);
     }
 
@@ -196,7 +196,7 @@ class Library {
 // for testing only
 inline std::shared_ptr<Library> create_library(
         const LibraryPath& library_path, OpenMode mode,
-        const std::vector<arcticdb::proto::storage::VariantStorage>& storage_configs
+        const std::vector<proto::storage::VariantStorage>& storage_configs
 ) {
     return std::make_shared<Library>(library_path, create_storages(library_path, mode, storage_configs));
 }

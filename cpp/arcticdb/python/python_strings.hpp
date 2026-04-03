@@ -8,7 +8,6 @@
 
 #include <any>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handler_data.hpp>

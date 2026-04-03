@@ -111,7 +111,7 @@ class InMemoryStore : public Store {
         return update(key, std::move(segment), opts).get();
     }
 
-    folly::Future<VariantKey> write(PartialKey pk, SegmentInMemory&& segment) override {
+    folly::Future<VariantKey> write(stream::PartialKey pk, SegmentInMemory&& segment) override {
         return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }
 
@@ -122,7 +122,7 @@ class InMemoryStore : public Store {
         return write(key_type, version_id, stream_id, start_index, end_index, std::move(segment)).get();
     }
 
-    entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) override {
+    entity::VariantKey write_sync(stream::PartialKey pk, SegmentInMemory&& segment) override {
         return write(pk, std::move(segment)).get();
     }
 
@@ -150,7 +150,7 @@ class InMemoryStore : public Store {
     }
 
     folly::Future<VariantKey> write_maybe_blocking(
-            PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
+            stream::PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
     ) override {
         semaphore->wait();
         return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment))
@@ -364,7 +364,7 @@ class InMemoryStore : public Store {
     }
 
     folly::Future<pipelines::SliceAndKey>
-    async_write(folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut, const std::shared_ptr<DeDupMap>&)
+    async_write(folly::Future<std::tuple<stream::PartialKey, SegmentInMemory, FrameSlice>>&& input_fut, const std::shared_ptr<DeDupMap>&)
             override {
         return std::move(input_fut).thenValue([this](auto&& input) {
             auto [pk, seg, slice] = std::move(input);
@@ -375,7 +375,7 @@ class InMemoryStore : public Store {
     }
 
     folly::Future<pipelines::SliceAndKey>
-    compress_and_schedule_async_write(std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
+    compress_and_schedule_async_write(std::tuple<stream::PartialKey, SegmentInMemory, FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
             override {
         auto [pk, seg, slice] = std::move(input);
         auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
@@ -383,7 +383,7 @@ class InMemoryStore : public Store {
         return SliceAndKey{std::move(slice), std::move(key)};
     }
 
-    std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
+    std::vector<folly::Future<bool>> batch_key_exists(const std::vector<VariantKey>& keys) override {
         auto failure_sim = StorageFailureSimulator::instance();
         failure_sim->go(FailureType::READ);
         std::vector<folly::Future<bool>> output;
@@ -402,7 +402,7 @@ class InMemoryStore : public Store {
     }
 
     folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
+            const std::vector<VariantKey>& keys, storage::RemoveOpts opts
     ) override {
         std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {
@@ -413,7 +413,7 @@ class InMemoryStore : public Store {
     }
 
     folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts
+            std::vector<VariantKey>&& keys, storage::RemoveOpts opts
     ) override {
         std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {
@@ -423,9 +423,8 @@ class InMemoryStore : public Store {
         return output;
     }
 
-    std::vector<RemoveKeyResultType> remove_keys_sync(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
+    std::vector<RemoveKeyResultType> remove_keys_sync(const std::vector<VariantKey>& keys, storage::RemoveOpts opts)
+            override {
         std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {
             output.emplace_back(remove_key_sync(key, opts));
@@ -434,7 +433,7 @@ class InMemoryStore : public Store {
         return output;
     }
 
-    std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts)
+    std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<VariantKey>&& keys, storage::RemoveOpts opts)
             override {
         std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {

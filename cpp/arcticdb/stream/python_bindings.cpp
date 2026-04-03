@@ -12,7 +12,6 @@
 #include <arcticdb/python/reader.hpp>
 
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/entity/types_proto.hpp>
@@ -20,7 +19,7 @@
 namespace py = pybind11;
 
 namespace arcticdb {
-using namespace arcticdb::python_util;
+using namespace python_util;
 
 std::vector<FieldWrapper> field_collection_to_ref_vector(const FieldCollection& fields) {
     auto result = std::vector<FieldWrapper>{};

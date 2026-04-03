@@ -10,6 +10,7 @@
 
 #include <arcticdb/util/cursor.hpp>
 #include <arcticdb/util/constructors.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 

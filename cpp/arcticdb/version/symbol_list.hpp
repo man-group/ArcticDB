@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/open_mode.hpp>
@@ -145,7 +144,7 @@ class SymbolList {
     ) :
         data_(std::move(version_map), std::move(type_indicator), seed) {}
 
-    template<StreamIdSet R>
+    template<stream::StreamIdSet R>
     R load(const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, bool no_compaction) {
         const WillAttemptCompaction will_attempt_compaction = [&]() {
             if (no_compaction)

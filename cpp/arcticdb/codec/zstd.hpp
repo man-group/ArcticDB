@@ -22,7 +22,7 @@ namespace arcticdb::detail {
 
 struct ZstdBlockEncoder {
 
-    using Opts = arcticdb::proto::encoding::VariantCodec::Zstd;
+    using Opts = proto::encoding::VariantCodec::Zstd;
     static constexpr std::uint32_t VERSION = 1;
 
     static std::size_t max_compressed_size(std::size_t size) { return ZSTD_compressBound(size); }

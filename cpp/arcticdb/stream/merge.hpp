@@ -15,7 +15,6 @@
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/storage/memory_layout.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/error_code.hpp>
 #include <ankerl/unordered_dense.h>

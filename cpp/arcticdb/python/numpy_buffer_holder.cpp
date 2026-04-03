@@ -19,7 +19,7 @@ NumpyBufferHolder::NumpyBufferHolder(
     row_count_(row_count),
     allocated_bytes_(allocated_bytes) {}
 
-NumpyBufferHolder::NumpyBufferHolder(NumpyBufferHolder&& other) :
+NumpyBufferHolder::NumpyBufferHolder(NumpyBufferHolder&& other) noexcept :
     type_(other.type_),
     ptr_(other.ptr_),
     row_count_(other.row_count_),

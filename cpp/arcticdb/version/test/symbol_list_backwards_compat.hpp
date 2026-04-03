@@ -1,4 +1,3 @@
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/version/symbol_list.hpp>
 
 /*
@@ -11,7 +10,7 @@ namespace arcticdb {
 using BackwardsCompatCollectionType = std::set<StreamId>;
 
 void backwards_compat_read_list_from_storage(
-        const std::shared_ptr<StreamSource>& store, const AtomKey& key, BackwardsCompatCollectionType& symbols
+        const std::shared_ptr<stream::StreamSource>& store, const AtomKey& key, BackwardsCompatCollectionType& symbols
 ) {
     ARCTICDB_DEBUG(log::version(), "Reading list from storage with key {}", key);
     auto key_seg = store->read(key).get().second;
@@ -42,7 +41,7 @@ void backwards_compat_read_list_from_storage(
     }
 }
 
-std::vector<AtomKey> backwards_compat_get_all_symbol_list_keys(const std::shared_ptr<StreamSource>& store) {
+std::vector<AtomKey> backwards_compat_get_all_symbol_list_keys(const std::shared_ptr<stream::StreamSource>& store) {
     std::vector<AtomKey> output;
     uint64_t uncompacted_keys_found = 0;
     store->iterate_type(KeyType::SYMBOL_LIST, [&](auto&& key) -> void {
@@ -61,7 +60,7 @@ std::vector<AtomKey> backwards_compat_get_all_symbol_list_keys(const std::shared
 }
 
 BackwardsCompatCollectionType backwards_compat_load(
-        const std::shared_ptr<StreamSource>& store, const std::vector<AtomKey>& keys
+        const std::shared_ptr<stream::StreamSource>& store, const std::vector<AtomKey>& keys
 ) {
     BackwardsCompatCollectionType symbols{};
     for (const auto& key : keys) {
@@ -91,7 +90,7 @@ inline StreamDescriptor backwards_compat_symbol_stream_descriptor(
         const StreamId& stream_id, const StreamId& type_holder
 ) {
     auto data_type = std::holds_alternative<StringId>(type_holder) ? DataType::ASCII_DYNAMIC64 : DataType::UINT64;
-    return StreamDescriptor{stream_descriptor(stream_id, RowCountIndex(), {scalar_field(data_type, "symbol")})};
+    return StreamDescriptor{stream_descriptor(stream_id, stream::RowCountIndex(), {scalar_field(data_type, "symbol")})};
 }
 
 inline StreamDescriptor backward_compat_journal_stream_descriptor(const StreamId& action, const StreamId& id) {
@@ -99,13 +98,13 @@ inline StreamDescriptor backward_compat_journal_stream_descriptor(const StreamId
             id,
             [&action](const NumericId&) {
                 return StreamDescriptor{
-                        stream_descriptor(action, RowCountIndex(), {scalar_field(DataType::UINT64, "symbol")})
+                        stream_descriptor(action, stream::RowCountIndex(), {scalar_field(DataType::UINT64, "symbol")})
                 };
             },
             [&action](const StringId&) {
-                return StreamDescriptor{
-                        stream_descriptor(action, RowCountIndex(), {scalar_field(DataType::UTF_DYNAMIC64, "symbol")})
-                };
+                return StreamDescriptor{stream_descriptor(
+                        action, stream::RowCountIndex(), {scalar_field(DataType::UTF_DYNAMIC64, "symbol")}
+                )};
             }
     );
 }

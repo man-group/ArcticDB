@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/key.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/library_manager.hpp>
 #include <arcticdb/async/async_store.hpp>

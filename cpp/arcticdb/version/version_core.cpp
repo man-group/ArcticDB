@@ -198,8 +198,8 @@ bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.s
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
 
-void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
-    if (std::holds_alternative<TimeseriesIndex>(index))
+void check_index_match(const stream::Index& index, const IndexDescriptorImpl& desc) {
+    if (std::holds_alternative<stream::TimeseriesIndex>(index))
         util::check(
                 desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
                 "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
@@ -252,14 +252,16 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_before) {
                                return rollback_slices_on_quota_exceeded(
-                                       std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
+                                       std::move(maybe_intersect_before),
+                                       std::static_pointer_cast<stream::StreamSink>(store)
                                );
                            }),
                    collectAll(maybe_intersect_after_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_after) {
                                return rollback_slices_on_quota_exceeded(
-                                       std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
+                                       std::move(maybe_intersect_after),
+                                       std::static_pointer_cast<stream::StreamSink>(store)
                                );
                            })
     )
@@ -337,9 +339,9 @@ VersionedItem delete_range_impl(
     auto index_segment_reader = index::get_index_reader(update_info.previous_index_key_.value(), store);
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot delete date range of pickled data");
 
-    auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
+    auto index = stream::index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     util::check(
-            std::holds_alternative<TimeseriesIndex>(index),
+            std::holds_alternative<stream::TimeseriesIndex>(index),
             "Delete in range will not work as expected with a non-timeseries index"
     );
 
@@ -431,7 +433,7 @@ static UpdateRanges compute_update_ranges(
             row_filter,
             [&](std::monostate) -> UpdateRanges {
                 util::check(
-                        std::holds_alternative<TimeseriesIndex>(update_frame.index),
+                        std::holds_alternative<stream::TimeseriesIndex>(update_frame.index),
                         "Update with row count index is not permitted"
                 );
                 if (update_slice_and_keys.empty()) {
@@ -597,7 +599,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 row_count, dynamic_schema, index_segment_reader.tsd(), frame
                                         );
                                         return index::write_index(
-                                                index_type_from_descriptor(tsd.as_stream_descriptor()),
+                                                stream::index_type_from_descriptor(tsd.as_stream_descriptor()),
                                                 std::move(tsd),
                                                 std::move(flattened_slice_and_keys),
                                                 IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
@@ -638,7 +640,7 @@ folly::Future<ReadVersionOutput> read_multi_key(
     std::vector<AtomKey> keys;
     keys.reserve(index_key_seg.row_count());
     for (size_t idx = 0; idx < index_key_seg.row_count(); idx++) {
-        keys.emplace_back(read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
+        keys.emplace_back(stream::read_key_row(index_key_seg, static_cast<ssize_t>(idx)));
     }
 
     AtomKey dup{keys[0]};
@@ -2298,7 +2300,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 
                 read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{
                         timeseries_index,
-                        SparseColumnPolicy{},
+                        stream::SparseColumnPolicy{},
                         stream_id,
                         pipeline_context->descriptor(),
                         write_options.dynamic_schema
@@ -2314,8 +2316,9 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                                         .get();
                 if (compaction_parameters.append_ && update_info.previous_index_key_ && !segments.empty()) {
                     const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
-                    const timestamp incomplete_start =
-                            std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
+                    const timestamp incomplete_start = std::get<timestamp>(
+                            stream::TimeseriesIndex::start_value_for_segment(segments[0].segment(store))
+                    );
                     sorting::check<ErrorCode::E_UNSORTED_DATA>(
                             last_index_on_disc <= incomplete_start,
                             "Cannot append staged segments to existing data as incomplete segment contains index value "
@@ -2326,15 +2329,21 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                 }
                 pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
 
-                auto index = index_type_from_descriptor(pipeline_context->descriptor());
-                stream::SegmentAggregator<TimeseriesIndex, DynamicSchema, RowCountSegmentPolicy, SparseColumnPolicy>
+                auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
+                stream::SegmentAggregator<
+                        stream::TimeseriesIndex,
+                        stream::DynamicSchema,
+                        stream::RowCountSegmentPolicy,
+                        stream::SparseColumnPolicy>
                         aggregator{
                                 [&slices](FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
-                                DynamicSchema{*pipeline_context->staged_descriptor_, index},
+                                stream::DynamicSchema{*pipeline_context->staged_descriptor_, index},
                                 [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory&& segment) {
-                                    const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
-                                    const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
-                                    const PartialKey pk{
+                                    const auto local_index_start =
+                                            stream::TimeseriesIndex::start_value_for_segment(segment);
+                                    const auto local_index_end =
+                                            stream::TimeseriesIndex::end_value_for_segment(segment);
+                                    const stream::PartialKey pk{
                                             KeyType::TABLE_DATA,
                                             pipeline_context->version_id_,
                                             pipeline_context->stream_id_,
@@ -2344,7 +2353,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                                     fut_vec.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore)
                                     );
                                 },
-                                RowCountSegmentPolicy(write_options.segment_row_size)
+                                stream::RowCountSegmentPolicy(write_options.segment_row_size)
                         };
 
                 [[maybe_unused]] size_t count = 0;
@@ -2439,13 +2448,13 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
 
     std::vector<FrameSlice> slices;
     bool dynamic_schema = write_options.dynamic_schema;
-    const auto index = index_type_from_descriptor(first_seg.descriptor());
+    const auto index = stream::index_type_from_descriptor(first_seg.descriptor());
     auto policies = std::make_tuple(
             index,
-            dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
-                           : VariantSchema{FixedSchema::default_schema(index, stream_id)},
-            compaction_parameters.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}}
-                                            : VariantColumnPolicy{DenseColumnPolicy{}}
+            dynamic_schema ? stream::VariantSchema{stream::DynamicSchema::default_schema(index, stream_id)}
+                           : stream::VariantSchema{stream::FixedSchema::default_schema(index, stream_id)},
+            compaction_parameters.sparsify_ ? stream::VariantColumnPolicy{stream::SparseColumnPolicy{}}
+                                            : stream::VariantColumnPolicy{stream::DenseColumnPolicy{}}
     );
 
     CompactionResult result =
@@ -2460,7 +2469,7 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
                         .perform_schema_checks = true
                 };
                 CompactionResult compaction_result =
-                        do_compact<IndexType, SchemaType, RowCountSegmentPolicy, ColumnPolicyType>(
+                        do_compact<IndexType, SchemaType, stream::RowCountSegmentPolicy, ColumnPolicyType>(
                                 pipeline_context->incompletes_begin(),
                                 pipeline_context->end(),
                                 pipeline_context,
@@ -2469,7 +2478,7 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
                                 write_options.segment_row_size,
                                 compaction_options
                         );
-                if constexpr (std::is_same_v<IndexType, TimeseriesIndex>) {
+                if constexpr (std::is_same_v<IndexType, stream::TimeseriesIndex>) {
                     pipeline_context->desc_->set_sorted(compute_sorted_status(initial_index_sorted_status));
                 }
                 return compaction_result;
@@ -2577,11 +2586,11 @@ VersionedItem defragment_symbol_data_impl(
 
     // in the new index segment, we will start appending after this value
     std::vector<FrameSlice> slices;
-    const auto index = index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
+    const auto index = stream::index_type_from_descriptor(pre_defragmentation_info.pipeline_context->descriptor());
     auto policies = std::make_tuple(
             index,
-            options.dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)}
-                                   : VariantSchema{FixedSchema::default_schema(index, stream_id)}
+            options.dynamic_schema ? stream::VariantSchema{stream::DynamicSchema::default_schema(index, stream_id)}
+                                   : stream::VariantSchema{stream::FixedSchema::default_schema(index, stream_id)}
     );
 
     CompactionResult result = util::variant_match(
@@ -2605,7 +2614,7 @@ VersionedItem defragment_symbol_data_impl(
                         .convert_int_to_float = false, .validate_index = false, .perform_schema_checks = false
                 };
 
-                return do_compact<IndexType, SchemaType, RowCountSegmentPolicy, DenseColumnPolicy>(
+                return do_compact<IndexType, SchemaType, stream::RowCountSegmentPolicy, stream::DenseColumnPolicy>(
                         segments.begin(),
                         segments.end(),
                         pre_defragmentation_info.pipeline_context,
@@ -2844,7 +2853,7 @@ folly::Future<VersionedItem> read_modify_write_impl(
                         write_options.bucketize_dynamic
                 );
                 return index::write_index(
-                        index_type_from_descriptor(pipeline_context->descriptor()),
+                        stream::index_type_from_descriptor(pipeline_context->descriptor()),
                         tsd,
                         std::move(data_keys_and_slices),
                         target_partial_index_key,
@@ -2916,7 +2925,7 @@ folly::Future<VersionedItem> merge_update_impl(
                         write_options.bucketize_dynamic
                 );
                 return index::write_index(
-                        index_type_from_descriptor(pipeline_context->descriptor()),
+                        stream::index_type_from_descriptor(pipeline_context->descriptor()),
                         tsd,
                         std::move(merged_ranges_and_keys),
                         target_partial_index_key,

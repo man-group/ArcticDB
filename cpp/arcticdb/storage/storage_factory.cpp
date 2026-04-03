@@ -31,8 +31,7 @@ std::shared_ptr<Storage> create_storage(
 }
 
 std::shared_ptr<Storage> create_storage(
-        const LibraryPath& library_path, OpenMode mode,
-        const arcticdb::proto::storage::VariantStorage& storage_descriptor
+        const LibraryPath& library_path, OpenMode mode, const proto::storage::VariantStorage& storage_descriptor
 ) {
 
     std::shared_ptr<Storage> storage;

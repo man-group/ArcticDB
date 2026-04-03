@@ -9,33 +9,33 @@
 #pragma once
 
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/typedefs.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 namespace arcticdb {
-using namespace arcticdb::entity;
 class OpLog {
   public:
     OpLog() = delete;
-    OpLog(AtomKey&& key);
-    OpLog(StringId id, VersionId version_id, const std::string& action, timestamp creation_ts);
+    OpLog(entity::AtomKey&& key);
+    OpLog(StringId id, entity::VersionId version_id, const std::string& action, entity::timestamp creation_ts);
 
     ARCTICDB_MOVE_COPY_DEFAULT(OpLog)
 
     const StringId& id() const;
-    VersionId version_id() const;
+    entity::VersionId version_id() const;
     const std::string& action() const;
-    timestamp creation_ts() const;
+    entity::timestamp creation_ts() const;
 
-    AtomKey extract_key();
+    entity::AtomKey extract_key();
 
   private:
     // Represents the symbol or snapshot name
     StringId id_;
     // Unused for snapshot creation/deletion op logs
-    VersionId version_id_;
+    entity::VersionId version_id_;
     std::string action_;
-    timestamp creation_ts_;
-    std::optional<ContentHash> content_hash_;
+    entity::timestamp creation_ts_;
+    std::optional<entity::ContentHash> content_hash_;
 };
 } // namespace arcticdb
 

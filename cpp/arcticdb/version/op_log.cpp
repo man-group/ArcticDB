@@ -7,16 +7,17 @@
  */
 
 #include <arcticdb/version/op_log.hpp>
+#include <arcticdb/entity/atom_key.hpp>
 
 namespace arcticdb {
-OpLog::OpLog(AtomKey&& key) :
-    id_(std::get<StringIndex>(key.start_index())),
+OpLog::OpLog(entity::AtomKey&& key) :
+    id_(std::get<entity::StringIndex>(key.start_index())),
     version_id_(key.version_id()),
     action_(std::get<StringId>(key.id())),
     creation_ts_(key.creation_ts()),
     content_hash_(key.content_hash()) {}
 
-OpLog::OpLog(StringId id, VersionId version_id, const std::string& action, timestamp creation_ts) :
+OpLog::OpLog(StringId id, entity::VersionId version_id, const std::string& action, entity::timestamp creation_ts) :
     id_(id),
     version_id_(version_id),
     action_(action),
@@ -24,21 +25,21 @@ OpLog::OpLog(StringId id, VersionId version_id, const std::string& action, times
 
 const StringId& OpLog::id() const { return id_; }
 
-VersionId OpLog::version_id() const { return version_id_; }
+entity::VersionId OpLog::version_id() const { return version_id_; }
 
 const std::string& OpLog::action() const { return action_; }
 
-timestamp OpLog::creation_ts() const { return creation_ts_; }
+entity::timestamp OpLog::creation_ts() const { return creation_ts_; }
 
-AtomKey OpLog::extract_key() {
+entity::AtomKey OpLog::extract_key() {
     util::check(content_hash_.has_value(), "Cannot extract Atomkey from OpLog without content hash");
     // Contents need to be compatible with version_log.hpp#log_event
-    return AtomKeyBuilder()
+    return entity::AtomKeyBuilder()
             .version_id(version_id_)
             .creation_ts(creation_ts_)
             .content_hash(content_hash_.value())
             .start_index(id_)
             .end_index(id_)
-            .build<KeyType::LOG>(std::move(action_));
+            .build<entity::KeyType::LOG>(std::move(action_));
 }
 } // namespace arcticdb

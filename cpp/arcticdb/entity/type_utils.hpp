@@ -9,9 +9,13 @@
 #pragma once
 #include <optional>
 #include <fmt/format.h>
-#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb {
+
+namespace entity {
+struct TypeDescriptor;
+}
 
 /// Defines which static casts from int to float are permitted in is_valid_type_promotion_to_target
 enum class IntToFloatConversion {
@@ -41,10 +45,7 @@ enum class IntToFloatConversion {
         const entity::TypeDescriptor& left, const entity::TypeDescriptor& right
 );
 
-inline std::string get_user_friendly_type_string(const entity::TypeDescriptor& type) {
-    return is_sequence_type(type.data_type()) ? fmt::format("TD<type=STRING, dim={}>", type.dimension_)
-                                              : fmt::format("{}", type);
-}
+[[nodiscard]] std::string get_user_friendly_type_string(const entity::TypeDescriptor& type);
 
 } // namespace arcticdb
 

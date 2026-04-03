@@ -12,7 +12,6 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/operation_dispatch.hpp>

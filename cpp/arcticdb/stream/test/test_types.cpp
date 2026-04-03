@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 
 #include <gtest/gtest.h>

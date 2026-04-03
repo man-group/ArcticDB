@@ -26,9 +26,9 @@
 
 namespace arcticdb::version_store {
 
-using namespace arcticdb::entity;
-namespace as = arcticdb::stream;
-using namespace arcticdb::storage;
+using namespace entity;
+namespace as = stream;
+using namespace storage;
 
 template PythonVersionStore::PythonVersionStore(
         const std::shared_ptr<storage::Library>& library, const util::SysClock& ct
@@ -138,7 +138,7 @@ VersionResultVector list_versions_for_snapshot_without_snapshot_list(
     VersionResultVector res;
     std::vector<SnapshotId> empty_snapshots;
     for (size_t idx = 0; idx < seg.row_count(); idx++) {
-        auto stream_index = read_key_row(seg, static_cast<ssize_t>(idx));
+        auto stream_index = stream::read_key_row(seg, static_cast<ssize_t>(idx));
         if (stream_id && stream_index.id() != *stream_id) {
             continue;
         }
@@ -682,7 +682,7 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
     }
 
     folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
-    IndexAggregator<RowCountIndex> multi_index_agg(
+    stream::IndexAggregator<stream::RowCountIndex> multi_index_agg(
             stream_id,
             [&stream_id, version_id, &multi_key_fut, store = store()](auto&& segment) {
                 multi_key_fut = store->write(KeyType::PARTITION,
@@ -813,11 +813,6 @@ void PythonVersionStore::append_incomplete(
         const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
         bool validate_index
 ) const {
-
-    using namespace arcticdb::entity;
-    using namespace arcticdb::stream;
-    using namespace arcticdb::pipelines;
-
     // Turn the input into a standardised frame object
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types());
     append_incomplete_frame(stream_id, frame, validate_index);
@@ -1091,7 +1086,7 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones(
                     auto before ARCTICDB_UNUSED = candidates.size();
 
                     for (size_t idx = 0; idx < snap_seg.row_count(); idx++) {
-                        auto key = read_key_row(snap_seg, static_cast<ssize_t>(idx));
+                        auto key = stream::read_key_row(snap_seg, static_cast<ssize_t>(idx));
                         if (candidates.count(key) ==
                             0) { // Snapshots often hold the same keys, so worthwhile optimisation
                             indexes.emplace_back(std::move(key));

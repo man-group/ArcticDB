@@ -9,8 +9,10 @@
 #pragma once
 
 #include <memory>
-
-#include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/constructors.hpp>
+#include <arcticdb/entity/typedefs.hpp>
+#include <vector>
+#include <optional>
 
 namespace arcticdb {
 class SegmentInMemory;
@@ -72,10 +74,6 @@ class KeySegment {
     std::shared_ptr<Column> start_indexes_;
     std::shared_ptr<Column> end_indexes_;
     std::shared_ptr<Column> key_types_;
-
-    using uint8_TDT = entity::ScalarTagType<entity::DataTypeTag<entity::DataType::UINT8>>;
-    using uint64_TDT = entity::ScalarTagType<entity::DataTypeTag<entity::DataType::UINT64>>;
-    using int64_TDT = entity::ScalarTagType<entity::DataTypeTag<entity::DataType::INT64>>;
 
     SymbolStructure symbol_structure_{SymbolStructure::UNKNOWN};
     // If all the keys in this segment have the same symbol, stored here. std::nullopt otherwise

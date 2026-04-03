@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/util/buffer.hpp>

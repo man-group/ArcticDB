@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 #include <pybind11/numpy.h>
@@ -17,10 +16,8 @@ namespace py = pybind11;
 
 namespace arcticdb::util {
 
-using namespace arcticdb::entity;
-
 template<class T, template<class> class Tensor>
-inline bool has_funky_strides(Tensor<T>& a) {
+bool has_funky_strides(Tensor<T>& a) {
     for (ssize_t i = 0; i < a.ndim(); ++i) {
         if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
             return true;
@@ -29,7 +26,7 @@ inline bool has_funky_strides(Tensor<T>& a) {
 }
 
 template<class T>
-inline bool has_funky_strides(py::array_t<T>& a) {
+bool has_funky_strides(py::array_t<T>& a) {
     for (ssize_t i = 0; i < a.ndim(); ++i) {
         if (a.strides(i) < 0 || a.strides(i) % a.itemsize() != 0)
             return true;
@@ -38,7 +35,7 @@ inline bool has_funky_strides(py::array_t<T>& a) {
 }
 
 template<typename RawType, typename TensorType>
-inline bool is_cstyle_array(const TensorType& tensor) {
+bool is_cstyle_array(const TensorType& tensor) {
     return tensor.size() == 0 || tensor.strides(tensor.ndim() - 1) == sizeof(RawType);
 }
 

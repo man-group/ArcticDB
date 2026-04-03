@@ -14,7 +14,6 @@
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/flatten_utils.hpp>
@@ -42,7 +41,7 @@ namespace arcticdb {
 template<class T>
 using py_array_t = py::array_t<T>;
 
-using namespace arcticdb::entity;
+using namespace entity;
 
 struct JiveTable {
     explicit JiveTable(size_t num_rows) : orig_pos_(num_rows), sorted_pos_(num_rows) {}

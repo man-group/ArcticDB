@@ -8,8 +8,8 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/entity/typedefs.hpp>
 #include <algorithm>
 #include <variant>
 #include <array>
@@ -42,8 +42,6 @@ template<class T, class FormattingTag = DefaultAtomKeyFormat>
 auto formattable(const T& ref) {
     return FormattableRef<T, FormattingTag>(ref);
 }
-
-using ContentHash = std::uint64_t;
 
 enum class KeyClass : int {
     /*

@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/python/python_strings.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>

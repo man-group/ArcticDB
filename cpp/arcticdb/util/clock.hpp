@@ -8,12 +8,11 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
-
-#include <cstdint>
-#if defined(_WIN32)
+#include <arcticdb/entity/typedefs.hpp>
 #include <chrono>
-#elif defined(__linux__)
+#include <atomic>
+
+#if defined(__linux__)
 #include <time.h>
 #elif defined(__APPLE__)
 #include <mach/mach_time.h>
@@ -58,8 +57,8 @@ struct LinearClock {
 struct ManualClock {
     inline static std::atomic<entity::timestamp> time_{0};
 
-    static entity::timestamp nanos_since_epoch() { return time_.load(); }
-    static entity::timestamp coarse_nanos_since_epoch() { return time_.load(); }
+    static entity::timestamp nanos_since_epoch() { return ManualClock::time_.load(); }
+    static entity::timestamp coarse_nanos_since_epoch() { return ManualClock::time_.load(); }
 };
 
 } // namespace arcticdb::util

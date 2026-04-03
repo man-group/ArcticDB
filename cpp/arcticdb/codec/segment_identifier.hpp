@@ -8,7 +8,6 @@
 #pragma once
 
 #include "arcticdb/storage/memory_layout.hpp"
-#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <arcticdb/util/type_traits.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>

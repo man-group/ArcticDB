@@ -21,26 +21,24 @@
 
 namespace arcticdb::pipelines {
 
-using namespace arcticdb::stream;
-
 struct WriteToSegmentTask : public async::BaseTask {
   public:
     std::shared_ptr<InputFrame> frame_;
     const FrameSlice slice_;
     const SlicingPolicy slicing_;
-    folly::Function<PartialKey(const FrameSlice&)> partial_key_gen_;
+    folly::Function<stream::PartialKey(const FrameSlice&)> partial_key_gen_;
     size_t slice_num_for_column_;
-    Index index_;
+    stream::Index index_;
     bool sparsify_floats_;
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
             std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
-            bool sparsify_floats
+            folly::Function<stream::PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
+            stream::Index index, bool sparsify_floats
     );
 
-    std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();
+    std::tuple<stream::PartialKey, SegmentInMemory, FrameSlice> operator()();
 
   private:
     SegmentInMemory slice_tensors() const;
@@ -102,7 +100,7 @@ template<typename T>
 requires std::is_same_v<T, SliceAndKey> || std::is_same_v<T, std::vector<SliceAndKey>>
 folly::SemiFuture<std::vector<T>> rollback_on_quota_exceeded(
         std::vector<folly::Try<T>>&& try_slices,
-        folly::Function<folly::Future<StreamSink::RemoveKeyResultType>(std::vector<T>&&)>&& remove_future
+        folly::Function<folly::Future<stream::StreamSink::RemoveKeyResultType>(std::vector<T>&&)>&& remove_future
 ) {
     std::vector<T> succeeded;
     std::optional<folly::exception_wrapper> exception;
@@ -145,8 +143,8 @@ folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quo
         const std::shared_ptr<stream::StreamSink>& sink
 );
 
-folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
-        std::vector<SliceAndKey>&& slices, StreamSink& sink
+folly::Future<stream::StreamSink::RemoveKeyResultType> remove_slice_and_keys(
+        std::vector<SliceAndKey>&& slices, stream::StreamSink& sink
 );
 
 } // namespace arcticdb::pipelines

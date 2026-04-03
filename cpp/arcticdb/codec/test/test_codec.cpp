@@ -8,7 +8,6 @@
 
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/codec/codec.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/util/random.h>
@@ -403,7 +402,7 @@ TEST(Segment, KeepAlive) {
 
 TEST(Segment, RoundtripTimeseriesDescriptorV1) {
     const auto stream_desc =
-            stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+            stream_descriptor(StreamId{"thing"}, stream::RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -421,7 +420,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorV1) {
 
 TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
     const auto stream_desc =
-            stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+            stream_descriptor(StreamId{"thing"}, stream::RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -443,8 +442,9 @@ TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV1) {
 }
 
 TEST(Segment, RoundtripStringsWriteToBufferV1) {
-    const auto stream_desc =
-            stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "ints")});
+    const auto stream_desc = stream_descriptor(
+            StreamId{"thing"}, stream::RowCountIndex{}, {scalar_field(DataType::UTF_DYNAMIC64, "ints")}
+    );
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_string(0, "kismet");
     in_mem_seg.end_row();
@@ -463,7 +463,7 @@ TEST(Segment, RoundtripStringsWriteToBufferV1) {
 
 TEST(Segment, RoundtripTimeseriesDescriptorV2) {
     const auto stream_desc =
-            stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+            stream_descriptor(StreamId{"thing"}, stream::RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -481,7 +481,7 @@ TEST(Segment, RoundtripTimeseriesDescriptorV2) {
 
 TEST(Segment, RoundtripTimeseriesDescriptorWriteToBufferV2) {
     const auto stream_desc =
-            stream_descriptor(StreamId{"thing"}, RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
+            stream_descriptor(StreamId{"thing"}, stream::RowCountIndex{}, {scalar_field(DataType::UINT8, "ints")});
     SegmentInMemory in_mem_seg{stream_desc.clone()};
     in_mem_seg.set_scalar<uint8_t>(0, 23);
     in_mem_seg.end_row();
@@ -507,7 +507,7 @@ TEST(Segment, RoundtripStatisticsV1) {
     ScopedConfig reload_interval("Statistics.GenerateOnWrite", 1);
     const auto stream_desc = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "int8"), scalar_field(DataType::FLOAT64, "doubles")}
     );
 
@@ -548,7 +548,7 @@ TEST(Segment, RoundtripStatisticsV2) {
     ScopedConfig reload_interval("Statistics.GenerateOnWrite", 1);
     const auto stream_desc = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "int8"), scalar_field(DataType::FLOAT64, "doubles")}
     );
 
@@ -588,7 +588,7 @@ TEST(Segment, RoundtripStatisticsV2) {
 TEST(Segment, ColumnNamesProduceDifferentHashes) {
     const auto stream_desc_1 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints1"),
              scalar_field(DataType::UINT8, "ints2"),
              scalar_field(DataType::UINT8, "ints3"),
@@ -607,7 +607,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
 
     const auto stream_desc_2 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints6"),
              scalar_field(DataType::UINT8, "ints7"),
              scalar_field(DataType::UINT8, "ints8"),
@@ -636,7 +636,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashes) {
 TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
     const auto stream_desc_1 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints1"),
              scalar_field(DataType::UINT8, "ints2"),
              scalar_field(DataType::UINT8, "ints3"),
@@ -648,7 +648,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
 
     const auto stream_desc_2 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints6"),
              scalar_field(DataType::UINT8, "ints7"),
              scalar_field(DataType::UINT8, "ints8"),
@@ -670,7 +670,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmpty) {
 TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
     const auto stream_desc_1 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints1"),
              scalar_field(DataType::UINT8, "ints2"),
              scalar_field(DataType::UINT8, "ints3"),
@@ -689,7 +689,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
 
     const auto stream_desc_2 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints6"),
              scalar_field(DataType::UINT8, "ints7"),
              scalar_field(DataType::UINT8, "ints8"),
@@ -718,7 +718,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesV2) {
 TEST(Segment, ColumnNamesProduceDifferentHashesEmptyV2) {
     const auto stream_desc_1 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints1"),
              scalar_field(DataType::UINT8, "ints2"),
              scalar_field(DataType::UINT8, "ints3"),
@@ -730,7 +730,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmptyV2) {
 
     const auto stream_desc_2 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "ints6"),
              scalar_field(DataType::UINT8, "ints7"),
              scalar_field(DataType::UINT8, "ints8"),
@@ -752,7 +752,7 @@ TEST(Segment, ColumnNamesProduceDifferentHashesEmptyV2) {
 TEST(Segment, TestIdenticalProduceSameHashes) {
     const auto stream_desc_1 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "a"),
              scalar_field(DataType::UINT8, "b"),
              scalar_field(DataType::UINT8, "c"),
@@ -790,7 +790,7 @@ TEST(Segment, TestIdenticalProduceSameHashes) {
 TEST(Segment, TestIdenticalProduceSameHashesV2) {
     const auto stream_desc_1 = stream_descriptor(
             StreamId{"thing"},
-            RowCountIndex{},
+            stream::RowCountIndex{},
             {scalar_field(DataType::UINT8, "a"),
              scalar_field(DataType::UINT8, "b"),
              scalar_field(DataType::UINT8, "c"),

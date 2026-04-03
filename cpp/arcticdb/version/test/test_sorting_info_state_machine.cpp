@@ -8,7 +8,6 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/version/version_utils.hpp>
 
 using namespace arcticdb;
