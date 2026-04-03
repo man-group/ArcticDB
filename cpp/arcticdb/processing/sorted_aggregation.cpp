@@ -206,7 +206,8 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                                             !agg_column.column_->is_sparse() &&
                                                     agg_column.column_->row_count() == input_index_column->row_count(),
-                                            "Resample: Cannot aggregate column '{}' as it is sparse",
+                                            "Not implemented yet: Cannot aggregate sparse column '{}' during "
+                                            "resampling.",
                                             get_input_column_name().value
                                     );
                                     auto index_data = input_index_column->data();
