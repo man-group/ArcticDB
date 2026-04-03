@@ -1024,7 +1024,6 @@ folly::Future<folly::Unit> delete_trees_responsibly(
 ) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
-
     util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
@@ -1066,13 +1065,28 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
         {
             auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
+            std::vector<StreamId> stream_ids;
+            std::vector<folly::Future<std::shared_ptr<VersionMapEntry>>> reload_futures;
+            stream_ids.reserve(min_versions.size());
+            reload_futures.reserve(min_versions.size());
             for (const auto& min : min_versions) {
                 auto load_strategy =
                         load_type == LoadType::DOWNTO
                                 ? LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(min.second)}
                                 : LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY};
-                const auto entry = version_map->check_reload(store, min.first, load_strategy, __FUNCTION__);
-                entry_map.try_emplace(std::move(min.first), entry);
+                stream_ids.push_back(min.first);
+                reload_futures.push_back(
+                        async::submit_io_task(CheckReloadTask{store, version_map, min.first, load_strategy})
+                );
+            }
+            // Safe to block here: this code path is only reached when load_type != NOT_LOADED,
+            // which excludes the delete_unreferenced_pruned_indexes path (all checks=false, so
+            // calc_load_type() == NOT_LOADED). All other callers of delete_trees_responsibly
+            // invoke it from a Python thread, not from within a thread pool callback.
+            // Verified by test_batch_delete_versions_* with single-threaded config.
+            auto results = folly::collectAll(reload_futures).get();
+            for (size_t i = 0; i < results.size(); ++i) {
+                entry_map.try_emplace(std::move(stream_ids[i]), std::move(results[i]).value());
             }
         }
 
@@ -1161,22 +1175,23 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
         ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
 
-        // Delete any associated column stats keys first
-        remove_keys_fut = store->remove_keys(std::move(vks_column_stats), remove_opts)
-                                  .thenValue([store = store,
-                                              vks_to_delete = std::move(vks_to_delete),
-                                              remove_opts](auto&&) mutable {
-                                      log::version().debug("Column Stats keys deleted.");
-                                      return store->remove_keys(std::move(vks_to_delete), remove_opts);
-                                  })
-                                  .thenValue([store = store,
-                                              vks_data_to_delete = std::move(vks_data_to_delete),
-                                              remove_opts](auto&&) mutable {
-                                      log::version().debug("Index keys deleted.");
-                                      return store->remove_keys(std::move(vks_data_to_delete), remove_opts);
-                                  })
-                                  .thenValue([](auto&&) {
-                                      log::version().debug("Data keys deleted.");
+        // Parallel deletion of column-stats, index, and data keys. The previous sequential order
+        // (stats → index → data) provided a narrower window for dangling references on partial failure,
+        // but since all reads already set ignores_missing_key_ = true, a reader encountering a dangling
+        // index→data reference will simply skip the missing data key. The parallelism is a worthwhile
+        // trade-off for the performance gain on batch deletes.
+        remove_keys_fut = folly::collectAll(
+                                  store->remove_keys(std::move(vks_column_stats), remove_opts),
+                                  store->remove_keys(std::move(vks_to_delete), remove_opts),
+                                  store->remove_keys(std::move(vks_data_to_delete), remove_opts)
+        )
+                                  .via(&async::io_executor())
+                                  .thenValue([](auto&& results) {
+                                      // Re-throw first error, if any, to preserve the error propagation
+                                      // behaviour of the previous sequential chain.
+                                      std::get<0>(results).throwUnlessValue();
+                                      std::get<1>(results).throwUnlessValue();
+                                      std::get<2>(results).throwUnlessValue();
                                       return folly::Unit();
                                   });
     }
@@ -1556,6 +1571,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
                                 store(), version_map, index_key, std::move(stream_update_info.previous_index_key_)
                         }
                 )
+                        .via(&async::cpu_executor())
                         .thenValue([this, index_key](auto&& atom_key_vec) {
                             return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
                         });
