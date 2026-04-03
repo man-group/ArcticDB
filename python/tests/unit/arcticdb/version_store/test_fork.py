@@ -104,7 +104,7 @@ def _check_config_in_child(args):
         pytest.param("forkserver", marks=FORK_SUPPORTED),
     ],
 )
-@pytest.mark.parametrize("store_fixture", ["lmdb_version_store", "lmdb_library"])
+@pytest.mark.parametrize("store_fixture", ["lmdb_version_store_v1", "lmdb_library"])
 def test_configs_propagated_to_child_process(request, store_fixture, start_method):
     """ConfigsMap settings must survive spawn/forkserver process boundaries via pickle."""
     store = request.getfixturevalue(store_fixture)
@@ -117,7 +117,7 @@ def test_configs_propagated_to_child_process(request, store_fixture, start_metho
         unset_config_int("TestPropagation")
 
 
-def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store, monkeypatch):
+def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store_v1, monkeypatch):
     """When a config key has both an env var (ARCTICDB_<KEY>_INT) and a
     set_config_int override, the child sees the set_config_int value.
 
@@ -131,6 +131,6 @@ def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store, monkey
         with ctx.Pool(1) as p:
             # Child import sets SPAWNOVERRIDE=42 from env var,
             # then __setstate__ overwrites it to 99 from the pickle payload.
-            p.map(_check_config_in_child, [(lmdb_version_store, "SPAWNOVERRIDE", 99)])
+            p.map(_check_config_in_child, [(lmdb_version_store_v1, "SPAWNOVERRIDE", 99)])
     finally:
         unset_config_int("SPAWNOVERRIDE")
