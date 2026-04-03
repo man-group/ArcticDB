@@ -468,9 +468,6 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
         pytest.param(
             (pd.Timestamp("2025-01-03 12:00:00"), pd.Timestamp("2025-01-04")),
             id="narrower",
-            marks=pytest.mark.xfail(
-                reason="update with date_range narrower than update table fails (monday: 18053263894)"
-            ),
         ),
     ],
 )

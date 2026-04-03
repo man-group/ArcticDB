@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
-from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
+from arcticdb.exceptions import SchemaException, StreamDescriptorMismatch, UserInputException
 from arcticdb.options import ArrowOutputStringFormat
 from arcticdb.util.arrow import cast_string_columns
 from arcticdb.util.test import (
@@ -645,32 +645,42 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
 @pytest.mark.parametrize(
     "date_range",
     [
-        (pd.Timestamp("2025-01-03 12:00:00"), pd.Timestamp("2025-01-04 12:00:00")),
-        (pd.Timestamp("2025-01-03 00:00:00.00000001"), pd.Timestamp("2025-01-04")),
-        (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-03 23:59:59.999999999")),
+        pytest.param((pd.Timestamp("2025-01-01 12:00:00"), pd.Timestamp("2025-01-02 12:00:00")), id="single_value"),
+        pytest.param((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-01 23:59:59.999999999")), id="single_day"),
+        pytest.param((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02 23:00:00")), id="exact_boundaries"),
+        pytest.param((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-01 12:00:00")), id="exact_left_boundary"),
+        pytest.param(
+            (pd.Timestamp("2025-01-01 12:00:00"), pd.Timestamp("2025-01-02 23:00:00")), id="exact_right_boundary"
+        ),
+        pytest.param((pd.Timestamp("2025-01-01 06:00:00"), pd.Timestamp("2025-01-01 18:00:00")), id="intraday"),
+        pytest.param((pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-01")), id="start_gt_end"),
     ],
 )
 def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, date_range):
     lib = lmdb_version_store_arrow
     sym = "test_update_with_date_range_narrower_than_data"
+    reference_sym = "test_update_with_date_range_narrower_than_data_reference"
     write_table = pa.table(
         {
-            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=6), type=pa.timestamp("ns")),
-            "col0": pa.array([0, 1, 2, 3, 4, 5], pa.int64()),
-            "col1": pa.array(["zero", "one", "two", "three", "four", "five"], pa.string()),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=48, freq="h"), type=pa.timestamp("ns")),
+            "col0": pa.array(list(range(48)), pa.int64()),
+            "col1": pa.array([f"v{i}" for i in range(48)], pa.string()),
         }
     )
+    lib.write(reference_sym, write_table.to_pandas().set_index("ts"))
     lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
-            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
-            "col0": pa.array([6, 7], pa.int64()),
-            "col1": pa.array(["six", "seven"], pa.string()),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=48, freq="h"), type=pa.timestamp("ns")),
+            "col0": pa.array(list(range(100, 148)), pa.int64()),
+            "col1": pa.array([f"u{i}" for i in range(48)], pa.string()),
         }
     )
-    # TODO: Fold these parametrizations into above test when working
-    with pytest.raises(ArcticException):
-        lib.update(sym, update_table, date_range=date_range, index_column="ts")
+    lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
+    lib.update(sym, update_table, date_range=date_range, index_column="ts")
+    expected = lib.read(reference_sym, output_format="pandas").data
+    received = lib.read(sym).data.to_pandas().set_index("ts")
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("method", ["write_parallel", "write_incomplete", "append", "stage"])
