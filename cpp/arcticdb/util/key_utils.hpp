@@ -188,9 +188,8 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     // struct as rehashing when the set grows is expensive for AtomKeys. In case the keys are for different symbols
     // (e.g. when deleting a snapshot) AtomKey must be used as we need the symbol_id per key.
     const StreamId& first_stream_id = keys.begin()->id();
-    bool same_stream_id = std::all_of(keys.begin(), keys.end(), [&](const auto& k) {
-        return k.id() == first_stream_id;
-    });
+    bool same_stream_id =
+            std::all_of(keys.begin(), keys.end(), [&](const auto& k) { return k.id() == first_stream_id; });
 
     struct PerKeyResult {
         ankerl::unordered_dense::set<AtomKey> atom_keys;
@@ -218,21 +217,19 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
                                 } else {
                                     KeySegment key_segment(std::move(segment), SymbolStructure::SAME);
                                     auto data_keys = key_segment.materialise();
-                                    util::variant_match(
-                                            data_keys, [&]<typename KT>(std::vector<KT>& atom_keys) {
-                                                for (KT& key : atom_keys) {
-                                                    if constexpr (std::is_same_v<KT, AtomKey>) {
-                                                        result.atom_keys.emplace(std::move(key));
-                                                    } else if constexpr (std::is_same_v<KT, AtomKeyPacked>) {
-                                                        if (same_stream_id) {
-                                                            result.packed_keys.emplace(std::move(key));
-                                                        } else {
-                                                            result.atom_keys.emplace(key.to_atom_key(index_key.id()));
-                                                        }
-                                                    }
+                                    util::variant_match(data_keys, [&]<typename KT>(std::vector<KT>& atom_keys) {
+                                        for (KT& key : atom_keys) {
+                                            if constexpr (std::is_same_v<KT, AtomKey>) {
+                                                result.atom_keys.emplace(std::move(key));
+                                            } else if constexpr (std::is_same_v<KT, AtomKeyPacked>) {
+                                                if (same_stream_id) {
+                                                    result.packed_keys.emplace(std::move(key));
+                                                } else {
+                                                    result.atom_keys.emplace(key.to_atom_key(index_key.id()));
                                                 }
                                             }
-                                    );
+                                        }
+                                    });
                                 }
                                 return result;
                             })
