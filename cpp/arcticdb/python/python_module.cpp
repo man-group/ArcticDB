@@ -153,6 +153,19 @@ void register_configs_map_api(py::module& m) {
             [](const std::string& label) { ConfigsMap::instance()->unset_##LABEL(label); },                            \
             "Unset configured value.",                                                                                 \
             py::arg("label")                                                                                           \
+    );                                                                                                                 \
+    m.def(                                                                                                             \
+            "get_all_config_" #LABEL,                                                                                  \
+            []() { return ConfigsMap::instance()->get_all_##LABEL(); },                                                \
+            "Get all configured values of this type as a dict."                                                        \
+    );                                                                                                                 \
+    m.def(                                                                                                             \
+            "set_all_config_" #LABEL,                                                                                  \
+            [](const std::unordered_map<std::string, TYPE>& entries) {                                                 \
+                ConfigsMap::instance()->set_all_##LABEL(entries);                                                      \
+            },                                                                                                         \
+            "Bulk-set configured values from a dict.",                                                                 \
+            py::arg("entries")                                                                                         \
     );
 
     EXPOSE_TYPE(int, int64_t)

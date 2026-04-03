@@ -39,7 +39,15 @@ from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb_ext import get_config_int
+from arcticdb_ext import (
+    get_config_int,
+    get_all_config_int,
+    set_all_config_int,
+    get_all_config_string,
+    set_all_config_string,
+    get_all_config_double,
+    set_all_config_double,
+)
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -476,6 +484,19 @@ class NativeVersionStore:
             return cfgs, None
 
     def __setstate__(self, state):
+        # Restore ConfigsMap before any library creation so that
+        # settings like AWS.LogLevel are available when S3ApiInstance initializes.
+        # Note: this merges into the process-wide ConfigsMap singleton rather than
+        # replacing it. In spawn/forkserver children the singleton already has
+        # values from env vars (set_config_from_env_vars runs on import), so the
+        # merge adds back any values that were set via set_config_* in the parent.
+        # Values from the pickle payload take precedence over existing entries.
+        configs = state.get("configs_map")
+        if configs:
+            set_all_config_int(configs.get("int", {}))
+            set_all_config_string(configs.get("string", {}))
+            set_all_config_double(configs.get("double", {}))
+
         lib_cfg = LibraryConfig()
         lib_cfg.ParseFromString(state["lib_cfg"])
         custom_norm = CompositeCustomNormalizer([], False)
@@ -491,6 +512,8 @@ class NativeVersionStore:
             open_mode=open_mode,
             native_cfg=native_cfg,
         )
+        if state.get("skip_df_consolidation"):
+            self._normalizer.df.set_skip_df_consolidation()
 
     def __getstate__(self):
         return {
@@ -499,6 +522,12 @@ class NativeVersionStore:
             "custom_norm": self._custom_normalizer.__getstate__() if self._custom_normalizer is not None else "",
             "open_mode": self._open_mode,
             "native_cfg": self._native_cfg,
+            "configs_map": {
+                "int": get_all_config_int(),
+                "string": get_all_config_string(),
+                "double": get_all_config_double(),
+            },
+            "skip_df_consolidation": self._normalizer.df._skip_df_consolidation,
         }
 
     def __repr__(self):
