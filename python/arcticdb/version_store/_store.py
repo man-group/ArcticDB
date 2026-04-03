@@ -486,9 +486,10 @@ class NativeVersionStore:
         # Restore ConfigsMap before any library creation so that
         # settings like AWS.LogLevel are available when S3ApiInstance initializes.
         # Note: this merges into the process-wide ConfigsMap singleton rather than
-        # replacing it, which is the desired behaviour for spawn/forkserver (where the
-        # child starts with an empty map). In the same process a loads() call will
-        # overwrite any keys present in the snapshot.
+        # replacing it. In spawn/forkserver children the singleton already has
+        # values from env vars (set_config_from_env_vars runs on import), so the
+        # merge adds back any values that were set via set_config_* in the parent.
+        # Values from the pickle payload take precedence over existing entries.
         configs = state.get("configs_map")
         if configs:
             set_all_config_int(configs.get("int", {}))

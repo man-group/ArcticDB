@@ -90,7 +90,7 @@ def test_parallel_reads_arctic(storage_name, request, lib_name):
 
 def _check_config_in_child(args):
     """Worker function: verify ConfigsMap was propagated via pickle."""
-    _store, key, expected = args
+    _obj, key, expected = args
     from arcticdb_ext import get_config_int
 
     actual = get_config_int(key)
@@ -104,39 +104,33 @@ def _check_config_in_child(args):
         pytest.param("forkserver", marks=FORK_SUPPORTED),
     ],
 )
-def test_configs_propagated_to_child_process(lmdb_version_store, start_method):
+@pytest.mark.parametrize("store_fixture", ["lmdb_version_store", "lmdb_library"])
+def test_configs_propagated_to_child_process(request, store_fixture, start_method):
     """ConfigsMap settings must survive spawn/forkserver process boundaries via pickle."""
+    store = request.getfixturevalue(store_fixture)
     set_config_int("TestPropagation", 12345)
     try:
         ctx = multiprocessing.get_context(start_method)
         with ctx.Pool(1) as p:
-            p.map(_check_config_in_child, [(lmdb_version_store, "TestPropagation", 12345)])
+            p.map(_check_config_in_child, [(store, "TestPropagation", 12345)])
     finally:
         unset_config_int("TestPropagation")
 
 
-def _check_config_in_child_via_library(args):
-    """Worker function: verify ConfigsMap was propagated via Library pickle."""
-    _lib, key, expected = args
-    from arcticdb_ext import get_config_int
+def test_set_config_int_overrides_env_var_after_spawn(lmdb_version_store, monkeypatch):
+    """When a config key has both an env var (ARCTICDB_<KEY>_INT) and a
+    set_config_int override, the child sees the set_config_int value.
 
-    actual = get_config_int(key)
-    assert actual == expected, f"Config {key}: expected {expected}, got {actual}"
-
-
-@pytest.mark.parametrize(
-    "start_method",
-    [
-        "spawn",
-        pytest.param("forkserver", marks=FORK_SUPPORTED),
-    ],
-)
-def test_configs_propagated_to_child_process_via_library(lmdb_library, start_method):
-    """ConfigsMap settings must survive spawn/forkserver process boundaries when pickling a Library."""
-    set_config_int("TestLibPropagation", 67890)
+    Env vars survive spawn naturally because the child re-runs
+    set_config_from_env_vars on import. The pickle payload is then merged
+    on top via __setstate__, so the explicit value takes precedence."""
+    monkeypatch.setenv("ARCTICDB_SPAWNOVERRIDE_INT", "42")
+    set_config_int("SPAWNOVERRIDE", 99)
     try:
-        ctx = multiprocessing.get_context(start_method)
+        ctx = multiprocessing.get_context("spawn")
         with ctx.Pool(1) as p:
-            p.map(_check_config_in_child_via_library, [(lmdb_library, "TestLibPropagation", 67890)])
+            # Child import sets SPAWNOVERRIDE=42 from env var,
+            # then __setstate__ overwrites it to 99 from the pickle payload.
+            p.map(_check_config_in_child, [(lmdb_version_store, "SPAWNOVERRIDE", 99)])
     finally:
-        unset_config_int("TestLibPropagation")
+        unset_config_int("SPAWNOVERRIDE")
