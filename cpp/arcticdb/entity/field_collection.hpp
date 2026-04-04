@@ -150,6 +150,15 @@ class FieldCollection {
         return *(buffer_.buffer().ptr_cast<Field>(get_offset(pos), sizeof(shape_t)));
     }
 
+    [[nodiscard]] std::optional<std::size_t> find_field(std::string_view view) const {
+        auto it = std::find_if(begin(), end(), [&](const auto& field) { return field.name() == view; });
+
+        if (it == end())
+            return std::nullopt;
+
+        return std::distance(begin(), it);
+    }
+
     [[nodiscard]] size_t size() const { return (offsets_.bytes() / sizeof(shape_t)); }
 
     [[nodiscard]] ColumnData column_data() const { return {&buffer_.buffer(), &shapes_.buffer(), type_, nullptr}; }

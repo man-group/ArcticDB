@@ -253,6 +253,7 @@ set(arcticdb_srcs
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
+        pipeline/column_name_resolution.hpp
         pipeline/column_stats.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
@@ -474,6 +475,7 @@ set(arcticdb_srcs
         entity/types_proto.cpp
         log/log.cpp
         pipeline/column_mapping.cpp
+        pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
