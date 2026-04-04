@@ -19,6 +19,21 @@
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
+
+// We need a Kleene three-valued logic for filtering with column stats. Consider the filter,
+// ~(q["a"] < 5)
+// If a block has [min, max] = [4, 6] then we need to include it for both (q["a"] < 5) and
+// ~(q["a"] < 5). So we evaluate q["a"] < 5 to UNKNOWN.
+enum class StatsComparison : uint8_t { ALL_MATCH, NONE_MATCH, UNKNOWN };
+
+constexpr bool is_match(StatsComparison c) { return c == StatsComparison::ALL_MATCH; }
+
+template<typename T>
+struct ValueRange {
+    T min;
+    T max;
+};
+
 // If reordering this enum, is_binary_operation may also need to be changed
 enum class OperationType : uint8_t {
     // Unary
@@ -356,66 +371,6 @@ struct DivideOperator {
     }
 };
 
-struct EqualsOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t == u;
-    }
-    template<typename T>
-    bool operator()(T t, std::optional<T> u) const {
-        if (u.has_value())
-            return t == *u;
-        else
-            return false;
-    }
-    template<typename T>
-    bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t == u;
-        else
-            return false;
-    }
-    template<typename T>
-    bool operator()(std::optional<T> t, std::optional<T> u) const {
-        if (t.has_value() && u.has_value())
-            return *t == *u;
-        else
-            return false;
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::equals(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::equals(t, u); }
-};
-
-struct NotEqualsOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t != u;
-    }
-    template<typename T>
-    bool operator()(T t, std::optional<T> u) const {
-        if (u.has_value())
-            return t != *u;
-        else
-            return true;
-    }
-    template<typename T>
-    bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t != u;
-        else
-            return true;
-    }
-    template<typename T>
-    bool operator()(std::optional<T> t, std::optional<T> u) const {
-        if (t.has_value() && u.has_value())
-            return *t != *u;
-        else
-            return true;
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::not_equals(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::not_equals(t, u); }
-};
-
 struct LessThanOperator {
     template<typename T, typename U>
     bool operator()(T t, U u) const {
@@ -431,6 +386,15 @@ struct LessThanOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::less_than(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::less_than(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct LessThanEqualsOperator {
@@ -448,6 +412,15 @@ struct LessThanEqualsOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::less_than_equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::less_than_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct GreaterThanOperator {
@@ -465,6 +438,15 @@ struct GreaterThanOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct GreaterThanEqualsOperator {
@@ -482,6 +464,103 @@ struct GreaterThanEqualsOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than_equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct EqualsOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t == u;
+    }
+    template<typename T>
+    bool operator()(T t, std::optional<T> u) const {
+        if (u.has_value())
+            return t == *u;
+        else
+            return false;
+    }
+    template<typename T>
+    bool operator()(std::optional<T> t, T u) const {
+        return operator()(u, t);
+    }
+    template<typename T>
+    bool operator()(std::optional<T> t, std::optional<T> u) const {
+        if (t.has_value() && u.has_value())
+            return *t == *u;
+        else
+            return false;
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::equals(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (std::isnan(range.min) || std::isnan(range.max))
+                return StatsComparison::NONE_MATCH;
+        }
+        if constexpr (std::is_floating_point_v<U>) {
+            if (std::isnan(value))
+                return StatsComparison::NONE_MATCH;
+        }
+        if ((*this)(range.min, value) && (*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct NotEqualsOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t != u;
+    }
+    template<typename T>
+    bool operator()(T t, std::optional<T> u) const {
+        if (u.has_value())
+            return t != *u;
+        else
+            return true;
+    }
+    template<typename T>
+    bool operator()(std::optional<T> t, T u) const {
+        return operator()(u, t);
+    }
+    template<typename T>
+    bool operator()(std::optional<T> t, std::optional<T> u) const {
+        if (t.has_value() && u.has_value())
+            return *t != *u;
+        else
+            return true;
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::not_equals(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::not_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if constexpr (std::is_floating_point_v<T>) {
+            if (std::isnan(range.min) || std::isnan(range.max))
+                return StatsComparison::ALL_MATCH;
+        }
+        if constexpr (std::is_floating_point_v<U>) {
+            if (std::isnan(value))
+                return StatsComparison::ALL_MATCH;
+        }
+        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct RegexMatchOperator {
@@ -829,6 +908,28 @@ struct formatter<arcticdb::RegexMatchOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::RegexMatchOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "REGEX MATCH");
+    }
+};
+
+template<>
+struct formatter<arcticdb::StatsComparison> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::StatsComparison c, FormatContext& ctx) const {
+        switch (c) {
+        case arcticdb::StatsComparison::ALL_MATCH:
+            return fmt::format_to(ctx.out(), "ALL_MATCH");
+        case arcticdb::StatsComparison::NONE_MATCH:
+            return fmt::format_to(ctx.out(), "NONE_MATCH");
+        case arcticdb::StatsComparison::UNKNOWN:
+            return fmt::format_to(ctx.out(), "UNKNOWN");
+        default:
+            return fmt::format_to(ctx.out(), "INVALID");
+        }
     }
 };
 

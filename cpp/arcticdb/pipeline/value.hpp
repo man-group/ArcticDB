@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
@@ -104,6 +105,19 @@ struct Value {
         } else {
             return fmt::format("{}", get<RawType>());
         }
+    }
+
+    [[nodiscard]] bool is_nat() const {
+        if (is_time_type(data_type_)) {
+            return details::visit_type(data_type_, [this]<typename TagType>(TagType) -> bool {
+                using RawType = TagType::raw_type;
+                if constexpr (std::is_same_v<std::remove_cvref_t<RawType>, timestamp>) {
+                    return get<timestamp>() == arcticdb::NaT;
+                }
+                return false;
+            });
+        }
+        return false;
     }
 
     [[nodiscard]] bool has_sequence_type() const { return is_sequence_type(data_type_); }
