@@ -472,6 +472,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("SUB", OperationType::SUB)
             .value("MUL", OperationType::MUL)
             .value("DIV", OperationType::DIV)
+            .value("MOD", OperationType::MOD)
             .value("EQ", OperationType::EQ)
             .value("NE", OperationType::NE)
             .value("LT", OperationType::LT)
