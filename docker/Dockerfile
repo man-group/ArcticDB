@@ -4,7 +4,7 @@ RUN dnf update -y
 RUN dnf remove -y 'gcc-toolset-*'
 RUN dnf install -y zip flex bison gcc-toolset-11 gcc-toolset-11-gdb gcc-toolset-11-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
 unzip tar epel-release jq wget libcurl-devel git-lfs cmake3 \
-python3.11-devel python3.11-pip perl-IPC-Cmd
+python3.11-devel python3.11-pip perl-IPC-Cmd perl-Time-Piece
 
 RUN dnf groupinstall -y 'Development Tools'
 RUN dnf install -y mono-complete

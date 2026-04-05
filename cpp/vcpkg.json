@@ -70,11 +70,7 @@
       "features": [ "winhttp" ],
       "platform": "windows"
     },
-    {
-      "name": "curl",
-      "version>=": "8.18.0",
-      "$version reason": "Issues with libcurl==8.17.0 which need investigation"
-    },
+    "curl",
     {
       "name": "azure-core-cpp",
       "default-features": false,
@@ -87,7 +83,6 @@
     "arcticdb-sparrow"
   ],
   "overrides": [
-    { "name": "openssl", "version-string": "3.3.0" },
     { "name": "arcticdb-sparrow", "version": "2.3.0" },
     { "name": "arrow", "version": "21.0.0#2" },
     { "name": "aws-sdk-cpp", "version": "1.11.474", "$note": "Update overlay json to upgrade; Upgrade to >=1.11.486 blocked by default integrity change" },
