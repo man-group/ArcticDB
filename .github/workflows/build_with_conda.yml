@@ -598,6 +598,9 @@ jobs:
           max_attempts: 3
           command: npm install -g azurite
 
+      - name: Install zs3 (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
+
       - name: Check no arcticdb file depend on tests package
         run: |
           build_tooling/checks.sh
@@ -732,6 +735,9 @@ jobs:
           timeout_minutes: 10
           max_attempts: 3
           command: npm install -g azurite
+
+      - name: Install zs3 (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         run: |
@@ -876,6 +882,9 @@ jobs:
           timeout_minutes: 10
           max_attempts: 3
           command: npm install -g azurite
+
+      - name: Install zs3 (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         run: |
@@ -1188,6 +1197,10 @@ jobs:
           # Verify azurite is accessible
           echo "PATH includes: $npm_bin_dir"
           which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
+
+      - name: Install zs3 (S3 mock server)
+        shell: bash -elo pipefail {0}
+        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         shell: bash -elo pipefail {0}

@@ -512,7 +512,9 @@ jobs:
       !cancelled()
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
-    permissions: {contents: write}
+    permissions:
+      contents: write
+      pull-requests: write
     with:
       environment: ${{needs.common_config.outputs.publish_env}}
 

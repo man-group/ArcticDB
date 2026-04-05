@@ -1058,3 +1058,111 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         out = GcpS3Bucket(self, bucket)
         self._live_buckets.append(out)
         return out
+
+
+import shutil
+
+ZS3_BINARY = os.environ.get("ZS3_BINARY", shutil.which("zs3") or os.path.expanduser("~/bin/zs3"))
+
+
+class Zs3StorageFixtureFactory(BaseS3StorageFixtureFactory):
+    """Lightweight S3 fixture factory backed by zs3 (https://github.com/Lulzx/zs3).
+
+    Compared to the moto-based MotoS3StorageFixtureFactory, zs3 is much faster (27-537x
+    depending on operation) but does not support SSL, IAM, bucket versioning, or rate
+    limiting. Use this for tests that only need basic S3 PUT/GET/DELETE/LIST operations.
+    """
+
+    default_key = Key(id="minioadmin", secret="minioadmin", user_name="dummy")
+    host = "localhost"
+    region = "us-east-1"
+    port: int
+    endpoint: str
+    _p: Any  # subprocess.Popen
+    _s3_admin: Any
+    _bucket_id = 0
+    _live_buckets: List[S3Bucket] = []
+
+    def __init__(
+        self,
+        default_prefix: str = None,
+        use_raw_prefix: bool = False,
+        native_config: Optional[NativeVariantStorage] = None,
+    ):
+        super().__init__(native_config)
+        self.http_protocol = "http"
+        self.default_prefix = default_prefix
+        self.use_raw_prefix = use_raw_prefix
+        self.use_mock_storage_for_testing = False
+        self._test_only_is_nfs_layout = False
+        self.unique_id = str(int(time.time()))
+
+    def bucket_name(self, bucket_type="zs3"):
+        self._bucket_id += 1
+        return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
+
+    def _boto(self, service: str, key: Key, api="client"):
+        ctor = getattr(boto3, api)
+        return ctor(
+            service_name=service,
+            endpoint_url=self.endpoint,
+            region_name=self.region,
+            aws_access_key_id=key.id,
+            aws_secret_access_key=key.secret,
+            verify=False,
+        )
+
+    def _start_server(self, seed=30):
+        port = self.port = get_ephemeral_port(seed)
+        self.endpoint = f"http://{self.host}:{port}"
+        self.working_dir = mkdtemp(suffix="Zs3StorageFixtureFactory")
+
+        self.ssl = False
+        self.client_cert_file = None
+        self.client_cert_dir = self.working_dir
+
+        self._p = GracefulProcessUtils.start(
+            [ZS3_BINARY, f"--port={port}"],
+            cwd=self.working_dir,
+            stdout=sys.stderr,
+            stderr=sys.stderr,
+        )
+        wait_for_server_to_come_up(self.endpoint, "zs3", self._p, timeout=60)
+
+    def _safe_enter(self):
+        for i in range(5):
+            try:
+                logger.info(f"Attempt to start zs3 server - {i}")
+                self._start_server(30 + i)
+                self._s3_admin = self._boto(service="s3", key=self.default_key)
+                logger.info(f"zs3 STARTED on port {self.port}")
+                break
+            except AssertionError as e:
+                sys.stderr.write(repr(e))
+                GracefulProcessUtils.terminate(self._p)
+            except Exception as e:
+                logger.error(f"Error during startup of zs3. Trying again. Error: {e}")
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        GracefulProcessUtils.terminate(self._p)
+        safer_rmtree(self, self.working_dir)
+
+    def create_fixture(self) -> S3Bucket:
+        bucket = self.bucket_name()
+        create_bucket(self._s3_admin, bucket)
+        out = S3Bucket(self, bucket, self.native_config)
+        self._live_buckets.append(out)
+        return out
+
+    def cleanup_bucket(self, b: S3Bucket):
+        self._live_buckets.remove(b)
+        try:
+            paginator = self._s3_admin.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=b.bucket):
+                for obj in page.get("Contents", []):
+                    self._s3_admin.delete_object(Bucket=b.bucket, Key=obj["Key"])
+            self._s3_admin.delete_bucket(Bucket=b.bucket)
+        except botocore.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] != "NoSuchBucket":
+                raise e
