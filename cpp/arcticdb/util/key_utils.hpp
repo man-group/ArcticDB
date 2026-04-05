@@ -108,11 +108,11 @@ inline void delete_all(const std::shared_ptr<Store>& store, bool continue_on_err
 
 template<
         typename KeyContainer, typename = std::enable_if<std::is_base_of_v<AtomKey, typename KeyContainer::value_type>>>
-inline std::vector<AtomKey> get_data_keys(
+std::vector<AtomKey> get_data_keys(
         const std::shared_ptr<stream::StreamSource>& store, const KeyContainer& keys, storage::ReadKeyOpts opts
 ) {
     using KeySupplier = folly::Function<KeyContainer()>;
-    using StreamReader = arcticdb::stream::StreamReader<AtomKey, KeySupplier, SegmentInMemory::Row>;
+    using StreamReader = stream::StreamReader<AtomKey, KeySupplier, SegmentInMemory::Row>;
     auto gen = [&keys]() { return keys; };
     StreamReader stream_reader(std::move(gen), store, opts);
     return stream_reader.generate_data_keys() | folly::gen::as<std::vector>();

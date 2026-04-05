@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
-
 namespace arcticdb {
 
 // Deprecated - use SegmentInMemoryImp::Row

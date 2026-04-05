@@ -11,7 +11,6 @@
 #include <arcticdb/util/test/rapidcheck.hpp>
 
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 

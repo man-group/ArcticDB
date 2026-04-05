@@ -10,7 +10,6 @@
 
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
@@ -26,7 +25,7 @@
 
 namespace arcticdb::stream {
 
-namespace pb = arcticdb::proto::descriptors;
+namespace pb = proto::descriptors;
 
 template<class Verifier, class IndexType>
 folly::Future<VariantKey> collect_and_commit(

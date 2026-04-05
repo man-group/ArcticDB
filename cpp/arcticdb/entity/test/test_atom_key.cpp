@@ -15,12 +15,8 @@
 #include <arcticdb/entity/protobuf_mappings.hpp>
 
 using namespace arcticdb;
-using namespace arcticdb::entity;
 
 TEST(Key, Basic) {
-    using namespace arcticdb;
-    using namespace arcticdb::entity;
-    using namespace arcticdb::storage;
 
     NumericId numeric_id(127);
     VersionId version_id(384);
@@ -82,7 +78,7 @@ TEST(Key, Basic) {
 }
 
 TEST(Key, StringViewable) {
-    using namespace arcticdb::storage;
+    using namespace storage;
 
     DefaultStringViewable sv{"toto"};
     DefaultStringViewable sv2{"toto"};
@@ -92,7 +88,7 @@ TEST(Key, StringViewable) {
 }
 
 TEST(Key, Library) {
-    using namespace arcticdb::storage;
+    using namespace storage;
 
     LibraryPath lib{"a", "b"};
     std::vector<std::string> parts{"a", "b"};
@@ -118,7 +114,7 @@ struct AlternativeFormat {
 TEST(Key, Formatting) {
 
     AtomKey k{
-            arcticdb::StreamId{NumericId{999}},
+            StreamId{NumericId{999}},
             VersionId(123),
             timestamp(123000000LL),
             0x789456321ULL,
@@ -162,7 +158,7 @@ TEST(AtomKey, ProtobufRoundtrip) {
             StreamId{"Natbag"}, KeyType::TABLE_INDEX
     );
 
-    auto pb_key = arcticdb::key_to_proto(key);
-    auto decoded_key = arcticdb::key_from_proto(pb_key);
+    auto pb_key = key_to_proto(key);
+    auto decoded_key = key_from_proto(pb_key);
     ASSERT_EQ(key, decoded_key);
 }

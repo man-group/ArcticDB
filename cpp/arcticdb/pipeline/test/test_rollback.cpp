@@ -84,7 +84,7 @@ auto get_keys(version_store::PythonVersionStore& store) {
 TestTensorFrame update_with_three_segments(version_store::PythonVersionStore& store, const StreamId& stream_id) {
     constexpr RowRange update_range{5, 28};
     constexpr size_t update_val{1};
-    auto update_frame = get_test_frame<TimeseriesIndex>(
+    auto update_frame = get_test_frame<stream::TimeseriesIndex>(
             stream_id, get_test_timeseries_fields(), update_range.diff(), update_range.first, update_val
     );
     store.update_internal(stream_id, UpdateQuery{}, update_frame.frame_, false, false, false);
@@ -94,8 +94,9 @@ TestTensorFrame update_with_three_segments(version_store::PythonVersionStore& st
 TestTensorFrame append_with_three_segments(version_store::PythonVersionStore& store, const StreamId& stream_id) {
     static size_t start_index = 40;
     constexpr size_t update_val{1};
-    auto append_frame =
-            get_test_frame<TimeseriesIndex>(stream_id, get_test_timeseries_fields(), 30, start_index, update_val);
+    auto append_frame = get_test_frame<stream::TimeseriesIndex>(
+            stream_id, get_test_timeseries_fields(), 30, start_index, update_val
+    );
     store.append_internal(stream_id, append_frame.frame_, false, false, false);
     start_index += 30; // To avoid sameappends
     return append_frame;

@@ -9,7 +9,7 @@
 #pragma once
 
 #include <ankerl/unordered_dense.h>
-#include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/typedefs.hpp>
 
 namespace arcticdb {
 

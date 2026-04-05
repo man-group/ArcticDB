@@ -160,17 +160,4 @@ struct formatter<arcticdb::entity::TypeDescriptor> {
         return fmt::format_to(ctx.out(), "TD<type={}, dim={}>", td.data_type_, td.dimension_);
     }
 };
-
-template<>
-struct formatter<arcticdb::StreamId> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    constexpr auto format(const arcticdb::StreamId& tsid, FormatContext& ctx) const {
-        return std::visit([&ctx](auto&& val) { return fmt::format_to(ctx.out(), "{}", val); }, tsid);
-    }
-};
 } // namespace fmt

@@ -19,8 +19,6 @@
 
 namespace arcticdb::pipelines {
 
-using namespace arcticdb::entity;
-
 template<typename IndexT>
 concept ValidIndex = util::any_of<
         std::remove_cvref_t<std::remove_pointer_t<std::decay_t<IndexT>>>, stream::TimeseriesIndex,

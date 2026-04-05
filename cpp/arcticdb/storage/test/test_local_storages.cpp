@@ -15,7 +15,6 @@
 #include <filesystem>
 #include <stdexcept>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/util/random.h>
 #include <arcticdb/stream/row_builder.hpp>

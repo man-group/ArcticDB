@@ -11,6 +11,7 @@
 #include <folly/ThreadCachedInt.h>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/constants.hpp>
+#include <arcticdb/util/constructors.hpp>
 #include <atomic>
 #include <string>
 #include <chrono>

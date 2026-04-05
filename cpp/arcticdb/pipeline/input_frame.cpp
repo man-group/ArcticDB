@@ -9,7 +9,6 @@
 #include <sparrow/record_batch.hpp>
 
 #include <arcticdb/pipeline/input_frame.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 
 namespace arcticdb::pipelines {

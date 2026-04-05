@@ -8,6 +8,7 @@
 
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 

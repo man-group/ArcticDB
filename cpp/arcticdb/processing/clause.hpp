@@ -13,7 +13,6 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>

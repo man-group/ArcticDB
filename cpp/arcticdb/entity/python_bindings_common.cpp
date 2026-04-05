@@ -9,7 +9,6 @@
 #include <arcticdb/entity/python_bindings_common.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/ref_key.hpp>
 
 #include <pybind11/pybind11.h>

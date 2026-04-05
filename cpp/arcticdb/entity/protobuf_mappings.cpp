@@ -13,33 +13,32 @@
 
 namespace arcticdb {
 
-using namespace arcticdb::entity;
+using namespace entity;
 
-inline arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
+inline proto::descriptors::SortedValue sorted_value_to_proto(SortedValue sorted) {
     switch (sorted) {
     case SortedValue::UNSORTED:
-        return arcticdb::proto::descriptors::SortedValue::UNSORTED;
+        return proto::descriptors::SortedValue::UNSORTED;
     case SortedValue::DESCENDING:
-        return arcticdb::proto::descriptors::SortedValue::DESCENDING;
+        return proto::descriptors::SortedValue::DESCENDING;
     case SortedValue::ASCENDING:
-        return arcticdb::proto::descriptors::SortedValue::ASCENDING;
+        return proto::descriptors::SortedValue::ASCENDING;
     default:
-        return arcticdb::proto::descriptors::SortedValue::UNKNOWN;
+        return proto::descriptors::SortedValue::UNKNOWN;
     }
 }
 
 // The type enum needs to be kept in sync with the protobuf one, which should not be changed
-[[nodiscard]] arcticdb::proto::descriptors::IndexDescriptor index_descriptor_to_proto(
-        const IndexDescriptorImpl& index_descriptor
+[[nodiscard]] proto::descriptors::IndexDescriptor index_descriptor_to_proto(const IndexDescriptorImpl& index_descriptor
 ) {
-    arcticdb::proto::descriptors::IndexDescriptor proto;
-    proto.set_kind(static_cast<arcticdb::proto::descriptors::IndexDescriptor_Type>(index_descriptor.type_));
+    proto::descriptors::IndexDescriptor proto;
+    proto.set_kind(static_cast<proto::descriptors::IndexDescriptor_Type>(index_descriptor.type_));
     proto.set_field_count(index_descriptor.field_count_);
     return proto;
 }
 
 [[nodiscard]] IndexDescriptorImpl index_descriptor_from_proto(
-        const arcticdb::proto::descriptors::IndexDescriptor& index_descriptor
+        const proto::descriptors::IndexDescriptor& index_descriptor
 ) {
     IndexDescriptorImpl output;
     output.set_type(static_cast<IndexDescriptor::Type>(index_descriptor.kind()));
@@ -47,8 +46,8 @@ inline arcticdb::proto::descriptors::SortedValue sorted_value_to_proto(SortedVal
     return output;
 }
 
-arcticdb::proto::descriptors::AtomKey key_to_proto(const AtomKey& key) {
-    arcticdb::proto::descriptors::AtomKey output;
+proto::descriptors::AtomKey key_to_proto(const AtomKey& key) {
+    proto::descriptors::AtomKey output;
     util::variant_match(
             key.id(),
             [&](const StringId& id) { output.set_string_id(id); },
@@ -76,11 +75,11 @@ arcticdb::proto::descriptors::AtomKey key_to_proto(const AtomKey& key) {
             [&](const NumericId& id) { output.set_numeric_end(id); }
     );
 
-    output.set_key_type(arcticdb::proto::descriptors::KeyType(int(key.type())));
+    output.set_key_type(proto::descriptors::KeyType(int(key.type())));
     return output;
 }
 
-AtomKey key_from_proto(const arcticdb::proto::descriptors::AtomKey& input) {
+AtomKey key_from_proto(const proto::descriptors::AtomKey& input) {
     StreamId stream_id =
             input.id_case() == input.kNumericId ? StreamId(input.numeric_id()) : StreamId(input.string_id());
     IndexValue index_start = input.index_start_case() == input.kNumericStart ? IndexValue(input.numeric_start())
@@ -97,9 +96,7 @@ AtomKey key_from_proto(const arcticdb::proto::descriptors::AtomKey& input) {
             .build(stream_id, KeyType(input.key_type()));
 }
 
-void copy_stream_descriptor_to_proto(
-        const StreamDescriptor& desc, arcticdb::proto::descriptors::StreamDescriptor& proto
-) {
+void copy_stream_descriptor_to_proto(const StreamDescriptor& desc, proto::descriptors::StreamDescriptor& proto) {
     proto.set_in_bytes(desc.uncompressed_bytes());
     proto.set_out_bytes(desc.compressed_bytes());
     proto.set_sorted(sorted_value_to_proto(desc.sorted()));
@@ -120,9 +117,8 @@ void copy_stream_descriptor_to_proto(
     }
 }
 
-arcticdb::proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd
-) {
-    arcticdb::proto::descriptors::TimeSeriesDescriptor output;
+proto::descriptors::TimeSeriesDescriptor copy_time_series_descriptor_to_proto(const TimeseriesDescriptor& tsd) {
+    proto::descriptors::TimeSeriesDescriptor output;
 
     output.set_total_rows(tsd.total_rows());
     if (tsd.column_groups())

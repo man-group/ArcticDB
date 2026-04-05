@@ -369,7 +369,7 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_from_snapshot(
     // atom keys.
     auto segment = opt_snapshot->second;
     for (size_t idx = 0; idx < segment.row_count(); idx++) {
-        auto stream_index = read_key_row(segment, static_cast<ssize_t>(idx));
+        auto stream_index = stream::read_key_row(segment, static_cast<ssize_t>(idx));
         if (stream_index.id() == stream_id) {
             return VersionedItem{std::move(stream_index)};
         }
@@ -647,7 +647,7 @@ VersionedItem LocalVersionedEngine::sort_index(
 
     auto total_rows = adjust_slice_rowcounts(slice_and_keys);
 
-    auto index = index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
+    auto index = stream::index_type_from_descriptor(index_segment_reader.tsd().as_stream_descriptor());
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto& tsd = index_segment_reader.mutable_tsd();
     auto time_series = make_timeseries_descriptor(

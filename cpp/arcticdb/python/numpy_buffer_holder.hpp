@@ -7,7 +7,6 @@
  */
 
 #pragma once
-
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
@@ -19,7 +18,7 @@ struct NumpyBufferHolder {
     size_t allocated_bytes_{0};
 
     NumpyBufferHolder(entity::TypeDescriptor type, uint8_t* ptr, size_t row_count, size_t allocated_bytes);
-    explicit NumpyBufferHolder(NumpyBufferHolder&& other);
+    explicit NumpyBufferHolder(NumpyBufferHolder&& other) noexcept;
     ~NumpyBufferHolder();
 };
 

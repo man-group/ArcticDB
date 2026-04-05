@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
@@ -56,7 +55,7 @@ class NoSlicing {};
 
 using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
 
-SlicingPolicy get_slicing_policy(const WriteOptions& options, const arcticdb::pipelines::InputFrame& frame);
+SlicingPolicy get_slicing_policy(const WriteOptions& options, const pipelines::InputFrame& frame);
 
 std::vector<FrameSlice> slice(InputFrame& frame, const SlicingPolicy& slicer);
 

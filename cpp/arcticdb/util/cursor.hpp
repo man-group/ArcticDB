@@ -8,16 +8,11 @@
 
 #pragma once
 
-#include <cstdlib>
-#include <cstdint>
-#include <memory>
-
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/entity/types.hpp>
-
+#include <arcticdb/entity/typedefs.hpp>
 namespace arcticdb {
-using namespace arcticdb::entity;
+using namespace entity;
 class Cursor {
   public:
     Cursor() : cursor_(0) {}

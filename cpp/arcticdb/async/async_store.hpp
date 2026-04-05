@@ -489,7 +489,7 @@ class AsyncStore : public Store {
         );
     }
 
-    void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) override {
+    void set_failure_sim(const proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) override {
         library_->set_failure_sim(cfg);
     }
 
@@ -498,9 +498,9 @@ class AsyncStore : public Store {
     storage::OpenMode open_mode() const override { return library_->open_mode(); }
 
   private:
-    friend class arcticdb::toolbox::apy::LibraryTool;
+    friend class toolbox::apy::LibraryTool;
     std::shared_ptr<storage::Library> library_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
+    std::shared_ptr<proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;
 };
 

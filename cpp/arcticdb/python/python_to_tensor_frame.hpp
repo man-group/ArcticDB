@@ -17,7 +17,6 @@
 namespace arcticdb::convert {
 
 namespace py = pybind11;
-using namespace arcticdb::entity;
 
 // py::tuple for Pandas data, record batches for Arrow data
 using InputItem = std::variant<py::tuple, std::vector<std::shared_ptr<RecordBatchData>>>;

@@ -29,17 +29,19 @@ void decode_block(const BlockType& block, const std::uint8_t* input, T* output) 
     std::size_t decoded_size = block.in_bytes();
 
     if (!block.has_codec()) {
-        arcticdb::detail::PassthroughDecoder::decode_block<T>(input, size_to_decode, output, decoded_size);
+        ::arcticdb::detail::PassthroughDecoder::decode_block<T>(input, size_to_decode, output, decoded_size);
     } else {
         std::uint32_t encoder_version = block.encoder_version();
         switch (block.codec().codec_type()) {
-        case arcticdb::Codec::ZSTD:
-            arcticdb::detail::ZstdDecoder::decode_block<T>(
+        case Codec::ZSTD:
+            ::arcticdb::detail::ZstdDecoder::decode_block<T>(
                     encoder_version, input, size_to_decode, output, decoded_size
             );
             break;
-        case arcticdb::Codec::LZ4:
-            arcticdb::detail::Lz4Decoder::decode_block<T>(encoder_version, input, size_to_decode, output, decoded_size);
+        case Codec::LZ4:
+            ::arcticdb::detail::Lz4Decoder::decode_block<T>(
+                    encoder_version, input, size_to_decode, output, decoded_size
+            );
             break;
         default:
             util::raise_rte("Unsupported block codec {}", codec_type_to_string(block.codec().codec_type()));
@@ -48,7 +50,7 @@ void decode_block(const BlockType& block, const std::uint8_t* input, T* output) 
 }
 
 template<typename FieldType, class DataSink>
-inline void read_shapes(
+void read_shapes(
         FieldType& encoded_field, DataSink& data_sink, uint8_t const*& data_in, int shapes_block, shape_t*& shapes_out
 ) {
     const auto& shape = encoded_field.shapes(shapes_block);

@@ -11,7 +11,6 @@
 #pragma once
 
 #include <arcticdb/codec/segment.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
@@ -50,7 +49,7 @@ struct BytesEncoder {
 
     template<typename EncodedFieldType>
     static void encode(
-            const ChunkedBuffer& data, const arcticdb::proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer,
+            const ChunkedBuffer& data, const proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer,
             std::ptrdiff_t& pos, EncodedFieldType& encoded_field
     ) {
         if constexpr (EncodingPolicyType::version == EncodingVersion::V1) {
@@ -81,7 +80,7 @@ struct BytesEncoder {
         }
     }
 
-    static size_t max_compressed_size(const arcticdb::proto::encoding::VariantCodec& codec_opts, shape_t data_size) {
+    static size_t max_compressed_size(const proto::encoding::VariantCodec& codec_opts, shape_t data_size) {
         const shape_t shapes_bytes = sizeof(shape_t);
         const auto values_block = BytesBlock(data_size, &data_size);
         if constexpr (EncodingPolicyType::version == EncodingVersion::V1) {
@@ -108,7 +107,7 @@ struct SizeResult {
 
 template<typename EncodingPolicyType>
 void calc_metadata_size(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts, SizeResult& result
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts, SizeResult& result
 ) {
     if (in_mem_seg.metadata()) {
         const auto metadata_bytes = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
@@ -121,7 +120,7 @@ void calc_metadata_size(
 
 template<typename EncodingPolicyType>
 void calc_columns_size(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts, SizeResult& result
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts, SizeResult& result
 ) {
     for (std::size_t c = 0; c < in_mem_seg.num_columns(); ++c) {
         auto column_data = in_mem_seg.column_data(c);
@@ -141,7 +140,7 @@ void calc_columns_size(
 
 template<typename EncodingPolicyType>
 void calc_string_pool_size(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts, SizeResult& result
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts, SizeResult& result
 ) {
     if (in_mem_seg.has_string_pool()) {
         auto string_col = in_mem_seg.string_pool_data();
@@ -161,7 +160,7 @@ void calc_string_pool_size(
 template<typename EncodingPolicyType>
 void encode_metadata(
         const SegmentInMemory& in_mem_seg, SegmentHeader& segment_header,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer, std::ptrdiff_t& pos
+        const proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer, std::ptrdiff_t& pos
 ) {
     if (in_mem_seg.metadata()) {
         const auto bytes_count = static_cast<shape_t>(in_mem_seg.metadata()->ByteSizeLong());
@@ -194,7 +193,7 @@ void encode_metadata(
 template<typename EncodingPolicyType>
 void encode_string_pool(
         const SegmentInMemory& in_mem_seg, SegmentHeader& segment_header,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer, std::ptrdiff_t& pos
+        const proto::encoding::VariantCodec& codec_opts, Buffer& out_buffer, std::ptrdiff_t& pos
 ) {
     if (in_mem_seg.has_string_pool()) {
         ARCTICDB_TRACE(log::codec(), "Encoding string pool to position {}", pos);
@@ -206,11 +205,11 @@ void encode_string_pool(
 }
 
 [[nodiscard]] SizeResult max_compressed_size_v1(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts
 );
 
 [[nodiscard]] SizeResult max_compressed_size_v2(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts
 );
 
 } // namespace arcticdb

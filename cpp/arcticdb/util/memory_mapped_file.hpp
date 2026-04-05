@@ -190,7 +190,7 @@ class MemoryMappedFile {
             close(fd_);
             util::raise_rte("Error memory mapping the file");
         }
-        auto header = reinterpret_cast<arcticdb::util::MagicNum<'A', 'r', 'c', 't'>*>(base_);
+        auto header = reinterpret_cast<util::MagicNum<'A', 'r', 'c', 't'>*>(base_);
         header->check();
         length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
         data_ = base_ + header_size;
@@ -215,7 +215,7 @@ class MemoryMappedFile {
             close(fd_);
             util::raise_rte("Error memory mapping the file");
         }
-        new (base_) arcticdb::util::MagicNum<'A', 'r', 'c', 't'>();
+        new (base_) util::MagicNum<'A', 'r', 'c', 't'>();
         *reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t)) = size;
         data_ = base_ + header_size;
         length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));

@@ -14,7 +14,6 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_traits.hpp>
 #include <ankerl/unordered_dense.h>
 
@@ -489,7 +488,7 @@ struct RegexMatchOperator {
     bool operator()(T, U) const {
         util::raise_rte("RegexMatchOperator does not support {} and {}", typeid(T).name(), typeid(U).name());
     }
-    bool operator()(entity::position_t offset, const ankerl::unordered_dense::set<position_t>& offset_set) const {
+    bool operator()(position_t offset, const ankerl::unordered_dense::set<position_t>& offset_set) const {
         return offset_set.contains(offset);
     }
 };

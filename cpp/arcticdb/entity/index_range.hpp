@@ -8,12 +8,11 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/preconditions.hpp>
 
 #include <fmt/format.h>
-#include <string_view>
 #include <limits>
 
 namespace arcticdb::entity {

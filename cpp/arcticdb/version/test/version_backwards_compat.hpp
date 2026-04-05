@@ -10,7 +10,9 @@
 
 namespace arcticdb {
 
-inline std::optional<RefKey> get_symbol_ref_key(const std::shared_ptr<StreamSource>& store, const StreamId& stream_id) {
+inline std::optional<RefKey> get_symbol_ref_key(
+        const std::shared_ptr<stream::StreamSource>& store, const StreamId& stream_id
+) {
     auto ref_key = RefKey{stream_id, KeyType::VERSION_REF};
     if (store->key_exists_sync(ref_key))
         return std::make_optional(std::move(ref_key));

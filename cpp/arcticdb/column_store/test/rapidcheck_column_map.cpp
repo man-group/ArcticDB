@@ -14,7 +14,6 @@
 #include <arcticdb/util/random.h>
 #include <arcticdb/util/test/rapidcheck.hpp>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
-#include <arcticdb/entity/types.hpp>
 
 using namespace arcticdb;
 namespace {

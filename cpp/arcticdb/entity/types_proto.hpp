@@ -8,7 +8,7 @@
 #pragma once
 
 #include <descriptors.pb.h>
-#include "arcticdb/storage/memory_layout.hpp"
+#include <arcticdb/storage/memory_layout.hpp>
 #include <arcticdb/entity/types.hpp>
 
 namespace arcticdb::proto {
@@ -17,38 +17,31 @@ namespace descriptors = arcticc::pb2::descriptors_pb2;
 
 namespace arcticdb::entity {
 
-using FieldProto = arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor;
+using FieldProto = proto::descriptors::StreamDescriptor_FieldDescriptor;
 
 bool operator==(const FieldProto& left, const FieldProto& right);
 bool operator<(const FieldProto& left, const FieldProto& right);
 
-void set_data_type(DataType data_type, arcticdb::proto::descriptors::TypeDescriptor& type_desc);
+void set_data_type(DataType data_type, proto::descriptors::TypeDescriptor& type_desc);
 
-DataType get_data_type(const arcticdb::proto::descriptors::TypeDescriptor& type_desc);
+DataType get_data_type(const proto::descriptors::TypeDescriptor& type_desc);
 
-TypeDescriptor type_desc_from_proto(const arcticdb::proto::descriptors::TypeDescriptor& type_desc);
+TypeDescriptor type_desc_from_proto(const proto::descriptors::TypeDescriptor& type_desc);
 
-[[nodiscard]] arcticdb::proto::descriptors::TypeDescriptor type_descriptor_to_proto(const TypeDescriptor& desc);
+[[nodiscard]] proto::descriptors::TypeDescriptor type_descriptor_to_proto(const TypeDescriptor& desc);
 
-inline arcticdb::proto::descriptors::TypeDescriptor::SizeBits size_bits_proto_from_data_type(DataType data_type) {
-    return static_cast<arcticdb::proto::descriptors::TypeDescriptor::SizeBits>(
-            static_cast<std::uint8_t>(slice_bit_size(data_type))
-    );
+inline proto::descriptors::TypeDescriptor::SizeBits size_bits_proto_from_data_type(DataType data_type) {
+    return static_cast<proto::descriptors::TypeDescriptor::SizeBits>(static_cast<std::uint8_t>(slice_bit_size(data_type)
+    ));
 }
 
-inline arcticdb::proto::descriptors::TypeDescriptor::ValueType value_proto_from_data_type(DataType data_type) {
-    return static_cast<arcticdb::proto::descriptors::TypeDescriptor::ValueType>(
+inline proto::descriptors::TypeDescriptor::ValueType value_proto_from_data_type(DataType data_type) {
+    return static_cast<proto::descriptors::TypeDescriptor::ValueType>(
             static_cast<std::uint8_t>(slice_value_type(data_type))
     );
 }
 
-arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(
-        DataType dt, Dimension dim, std::string_view name
-);
-
-arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(
-        DataType dt, Dimension dim, std::string_view name
-);
+proto::descriptors::StreamDescriptor_FieldDescriptor field_proto(DataType dt, Dimension dim, std::string_view name);
 
 const char* index_type_to_str(IndexDescriptor::Type type);
 

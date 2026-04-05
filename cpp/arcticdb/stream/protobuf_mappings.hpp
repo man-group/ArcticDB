@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 
 namespace arcticdb {

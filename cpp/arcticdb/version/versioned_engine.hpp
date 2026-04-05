@@ -152,7 +152,7 @@ class VersionedEngine {
     [[nodiscard]] virtual WriteOptions get_write_options() const = 0;
 
     virtual std::shared_ptr<Store>& store() = 0;
-    [[nodiscard]] virtual const arcticdb::proto::storage::VersionStoreConfig& cfg() const = 0;
+    [[nodiscard]] virtual const proto::storage::VersionStoreConfig& cfg() const = 0;
     virtual std::shared_ptr<VersionMap>& version_map() = 0;
     virtual SymbolList& symbol_list() = 0;
     virtual void set_store(std::shared_ptr<Store> store) = 0;

@@ -7,7 +7,6 @@
  */
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/storage/coalesced/multi_segment_header.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
@@ -27,8 +26,8 @@
 namespace arcticdb {
 
 size_t max_data_size(
-        const std::vector<std::tuple<PartialKey, SegmentInMemory, FrameSlice>>& items,
-        const arcticdb::proto::encoding::VariantCodec& codec_opts, EncodingVersion encoding_version
+        const std::vector<std::tuple<stream::PartialKey, SegmentInMemory, FrameSlice>>& items,
+        const proto::encoding::VariantCodec& codec_opts, EncodingVersion encoding_version
 ) {
     auto max_file_size = 0UL;
     for (const auto& item : items) {
@@ -54,9 +53,8 @@ struct FileFooter {
 };
 
 void write_dataframe_to_file_internal(
-        const StreamId& stream_id, const std::shared_ptr<pipelines::InputFrame>& frame, const std::string& path,
-        const WriteOptions& options, const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        EncodingVersion encoding_version
+        const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, const std::string& path,
+        const WriteOptions& options, const proto::encoding::VariantCodec& codec_opts, EncodingVersion encoding_version
 ) {
     ARCTICDB_SAMPLE(WriteDataFrameToFile, 0)
     py::gil_scoped_release release_gil;
@@ -133,8 +131,7 @@ void write_dataframe_to_file_internal(
 
 version_store::ReadVersionOutput read_dataframe_from_file_internal(
         const StreamId& stream_id, const std::string& path, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, const arcticdb::proto::encoding::VariantCodec& codec_opts,
-        std::any& handler_data
+        const ReadOptions& read_options, const proto::encoding::VariantCodec& codec_opts, std::any& handler_data
 ) {
     auto config = storage::file::pack_config(path, codec_opts);
     storage::LibraryPath lib_path{std::string{"file"}, fmt::format("{}", stream_id)};
@@ -144,7 +141,7 @@ version_store::ReadVersionOutput read_dataframe_from_file_internal(
 
     auto single_file_storage = library->get_single_file_storage().value();
 
-    using namespace arcticdb::storage;
+    using namespace storage;
     const auto data_end = single_file_storage->get_bytes() - sizeof(KeyData);
     auto key_data = *reinterpret_cast<KeyData*>(single_file_storage->read_raw(data_end, sizeof(KeyData)));
     const auto key_offset = key_data.key_offset_;

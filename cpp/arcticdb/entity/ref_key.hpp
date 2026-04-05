@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <fmt/format.h>
 #include <arcticdb/entity/key.hpp>
 
@@ -68,14 +67,14 @@ class RefKey {
 
 namespace fmt {
 template<>
-struct formatter<RefKey> {
+struct formatter<arcticdb::entity::RefKey> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx) {
         return ctx.begin();
     }
 
     template<typename FormatContext>
-    auto format(const RefKey& k, FormatContext& ctx) const {
+    auto format(const arcticdb::entity::RefKey& k, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "{}:{}", k.type(), k.id());
     }
 };

@@ -29,7 +29,7 @@ struct UpdateMetadataTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const version_store::UpdateInfo update_info_;
     const AtomKey index_key_;
-    arcticdb::proto::descriptors::UserDefinedMetadata user_meta_;
+    proto::descriptors::UserDefinedMetadata user_meta_;
     VersionId version_id_ = 0;
 
     UpdateMetadataTask(
@@ -84,7 +84,7 @@ struct AsyncRestoreVersionTask : async::BaseTask {
         maybe_prev_(std::move(maybe_prev)) {}
 
     folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>> operator()() {
-        using namespace arcticdb::pipelines;
+        using namespace pipelines;
         auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store_, index_key_);
 
         if (maybe_prev_ && !maybe_prev_->deleted && maybe_prev_->key.version_id() == index_key_.version_id()) {
@@ -115,7 +115,7 @@ struct AsyncRestoreVersionTask : async::BaseTask {
                 .thenValue([store = store_, version_map = version_map_, tsd = tsd, stream_id = stream_id_, version_id](
                                    auto&& new_slice_and_keys
                            ) {
-                    auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
+                    auto index = stream::index_type_from_descriptor(tsd->as_stream_descriptor());
                     return index::index_and_version(index, store, *tsd, new_slice_and_keys, stream_id, version_id);
                 })
                 .thenValue([store = store_, version_map = version_map_, tsd = tsd](auto versioned_item) {

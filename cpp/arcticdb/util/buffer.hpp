@@ -11,6 +11,7 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <memory>
 #include <variant>
 #include <optional>

@@ -14,7 +14,6 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -28,21 +27,17 @@
 
 namespace arcticdb::async {
 
-using KeyType = entity::KeyType;
-using AtomKey = entity::AtomKey;
-using IndexValue = entity::IndexValue;
-
 struct EncodeAtomTask : BaseTask {
     using PartialKey = stream::PartialKey;
     PartialKey partial_key_;
     timestamp creation_ts_;
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    std::shared_ptr<proto::encoding::VariantCodec> codec_meta_;
     EncodingVersion encoding_version_;
 
     EncodeAtomTask(
             PartialKey&& pk, timestamp creation_ts, SegmentInMemory&& segment,
-            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+            std::shared_ptr<proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
     ) :
         partial_key_(std::move(pk)),
         creation_ts_(creation_ts),
@@ -52,7 +47,7 @@ struct EncodeAtomTask : BaseTask {
 
     EncodeAtomTask(
             std::pair<PartialKey, SegmentInMemory>&& pk_seg, timestamp creation_ts,
-            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+            std::shared_ptr<proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
     ) :
         partial_key_(std::move(pk_seg.first)),
         creation_ts_(creation_ts),
@@ -63,7 +58,7 @@ struct EncodeAtomTask : BaseTask {
     EncodeAtomTask(
             KeyType key_type, GenerationId gen_id, StreamId stream_id, IndexValue start_index, IndexValue end_index,
             timestamp creation_ts, SegmentInMemory&& segment,
-            const std::shared_ptr<arcticdb::proto::encoding::VariantCodec>& codec_meta, EncodingVersion encoding_version
+            const std::shared_ptr<proto::encoding::VariantCodec>& codec_meta, EncodingVersion encoding_version
     ) :
         EncodeAtomTask(
                 PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index), std::move(end_index)},
@@ -91,12 +86,12 @@ struct EncodeAtomTask : BaseTask {
 struct EncodeSegmentTask : BaseTask {
     VariantKey key_;
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    std::shared_ptr<proto::encoding::VariantCodec> codec_meta_;
     EncodingVersion encoding_version_;
 
     EncodeSegmentTask(
-            entity::VariantKey key, SegmentInMemory&& segment,
-            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+            VariantKey key, SegmentInMemory&& segment, std::shared_ptr<proto::encoding::VariantCodec> codec_meta,
+            EncodingVersion encoding_version
     ) :
         key_(std::move(key)),
         segment_(std::move(segment)),
@@ -106,7 +101,7 @@ struct EncodeSegmentTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
     storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         return {std::move(key_), std::move(enc_seg)};
     }
 
@@ -121,12 +116,12 @@ struct EncodeRefTask : BaseTask {
     KeyType key_type_;
     StreamId id_;
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    std::shared_ptr<proto::encoding::VariantCodec> codec_meta_;
     EncodingVersion encoding_version_;
 
     EncodeRefTask(
             KeyType key_type, StreamId stream_id, SegmentInMemory&& segment,
-            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+            std::shared_ptr<proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
     ) :
         key_type_(key_type),
         id_(std::move(stream_id)),
@@ -137,7 +132,7 @@ struct EncodeRefTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
     [[nodiscard]] storage::KeySegmentPair encode() {
-        auto enc_seg = ::arcticdb::encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
+        auto enc_seg = encode_dispatch(std::move(segment_), *codec_meta_, encoding_version_);
         auto k = RefKey{id_, key_type_};
         return {std::move(k), std::move(enc_seg)};
     }
@@ -203,20 +198,20 @@ struct KeySegmentContinuation {
 };
 
 inline folly::Future<storage::KeySegmentPair> read_dispatch(
-        entity::VariantKey&& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts
+        VariantKey&& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts
 ) {
     return util::variant_match(variant_key, [&lib, &opts](auto&& key) { return lib->read(key, opts); });
 }
 
 inline storage::KeySegmentPair read_sync_dispatch(
-        const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, storage::ReadKeyOpts opts
+        const VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, storage::ReadKeyOpts opts
 ) {
     return util::variant_match(variant_key, [&lib, opts](const auto& key) { return lib->read_sync(key, opts); });
 }
 
 template<typename Callable>
 struct ReadCompressedTask : BaseTask {
-    entity::VariantKey key_;
+    VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
     storage::ReadKeyOpts opts_;
     Callable continuation_;
@@ -224,8 +219,7 @@ struct ReadCompressedTask : BaseTask {
     using ContinuationType = Callable;
 
     ReadCompressedTask(
-            entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts,
-            Callable&& continuation
+            VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts, Callable&& continuation
     ) :
         key_(std::move(key)),
         lib_(std::move(lib)),
@@ -257,14 +251,14 @@ struct PassThroughTask : BaseTask {
 
 template<typename ClockType>
 struct CopyCompressedTask : BaseTask {
-    entity::VariantKey source_key_;
+    VariantKey source_key_;
     KeyType key_type_;
     StreamId stream_id_;
     VersionId version_id_;
     std::shared_ptr<storage::Library> lib_;
 
     CopyCompressedTask(
-            entity::VariantKey source_key, KeyType key_type, StreamId stream_id, VersionId version_id,
+            VariantKey source_key, KeyType key_type, StreamId stream_id, VersionId version_id,
             std::shared_ptr<storage::Library> lib
     ) :
         source_key_(std::move(source_key)),
@@ -313,8 +307,8 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
     using ProcessingResult = std::variant<AllOk, FailedTargets>;
 
     CopyCompressedInterStoreTask(
-            entity::VariantKey key_to_read, std::optional<entity::AtomKey> key_to_write,
-            bool check_key_exists_on_targets, bool retry_on_failure, std::shared_ptr<Store> source_store,
+            VariantKey key_to_read, std::optional<AtomKey> key_to_write, bool check_key_exists_on_targets,
+            bool retry_on_failure, std::shared_ptr<Store> source_store,
             std::vector<std::shared_ptr<Store>> target_stores, std::shared_ptr<BitRateStats> bit_rate_stats = nullptr
     ) :
         key_to_read_(std::move(key_to_read)),
@@ -351,8 +345,8 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
     }
 
   private:
-    entity::VariantKey key_to_read_;
-    std::optional<entity::AtomKey> key_to_write_;
+    VariantKey key_to_read_;
+    std::optional<AtomKey> key_to_write_;
     bool check_key_exists_on_targets_;
     bool retry_on_failure_;
     std::shared_ptr<Store> source_store_;

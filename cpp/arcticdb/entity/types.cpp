@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_handler.hpp>
 
 namespace arcticdb::entity {

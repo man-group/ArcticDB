@@ -10,6 +10,7 @@
 
 #include <arcticdb/util/clock.hpp>
 #include <memory>
+#include <mutex>
 
 #if USE_SLAB_ALLOCATOR
 #include <arcticdb/util/slab_allocator.hpp>
@@ -148,7 +149,7 @@ class AllocatorImpl {
     static void init();
     static std::shared_ptr<AllocatorImpl> instance();
     static void destroy_instance();
-    static std::pair<uint8_t*, entity::timestamp> alloc(size_t size, bool no_realloc ARCTICDB_UNUSED = false);
+    static std::pair<uint8_t*, entity::timestamp> alloc(size_t size, [[maybe_unused]] bool no_realloc = false);
     static void trim();
     static void maybe_trim();
     static std::pair<uint8_t*, entity::timestamp> aligned_alloc(size_t size, bool no_realloc = false);

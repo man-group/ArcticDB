@@ -17,9 +17,9 @@
 
 #include <pybind11/numpy.h>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 

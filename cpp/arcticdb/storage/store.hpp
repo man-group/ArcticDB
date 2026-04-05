@@ -29,7 +29,7 @@ namespace arcticdb {
  */
 class Store : public stream::StreamSink, public stream::StreamSource, public std::enable_shared_from_this<Store> {
   public:
-    virtual void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) = 0;
+    virtual void set_failure_sim(const proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) = 0;
 
     virtual void move_storage(KeyType key_type, timestamp horizon, size_t storage_index) = 0;
 

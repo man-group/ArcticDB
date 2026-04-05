@@ -9,9 +9,7 @@
 #pragma once
 
 #include <arcticdb/util/preconditions.hpp>
-#include <entity/types.hpp>
-
-#include <cstdint>
+#include <arcticdb/entity/typedefs.hpp>
 
 namespace arcticdb {
 

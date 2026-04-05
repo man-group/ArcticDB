@@ -18,12 +18,10 @@
 #include <vector>
 
 namespace arcticdb {
-using namespace arcticdb::entity;
-using namespace arcticdb::stream;
 
 enum class LoadType : uint32_t { NOT_LOADED = 0, LATEST, DOWNTO, FROM_TIME, ALL, UNKNOWN };
 
-inline constexpr bool is_partial_load_type(LoadType load_type) {
+constexpr bool is_partial_load_type(LoadType load_type) {
     return load_type == LoadType::DOWNTO || load_type == LoadType::FROM_TIME;
 }
 

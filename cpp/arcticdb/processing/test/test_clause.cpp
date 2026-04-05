@@ -374,7 +374,7 @@ TEST(Clause, Split) {
     for (auto field = beg; field != std::end(fields); ++field) {
         desc.add_field(field->ref());
     }
-    SegmentSinkWrapper seg_wrapper(symbol, TimeseriesIndex::default_index(), std::move(desc));
+    SegmentSinkWrapper seg_wrapper(symbol, stream::TimeseriesIndex::default_index(), std::move(desc));
     for (auto segment : res.segments_.value()) {
         pipelines::FrameSlice slice(*segment);
         seg_wrapper.aggregator_.add_segment(std::move(*segment), slice, false);
@@ -395,7 +395,9 @@ TEST(Clause, Merge) {
 
     const auto stream_id = StreamId("Merge");
     const auto seg = get_standard_timeseries_segment(std::get<StringId>(stream_id), num_rows);
-    MergeClause merge_clause{TimeseriesIndex{"time"}, SparseColumnPolicy{}, stream_id, seg.descriptor(), false};
+    MergeClause merge_clause{
+            stream::TimeseriesIndex{"time"}, stream::SparseColumnPolicy{}, stream_id, seg.descriptor(), false
+    };
     merge_clause.set_component_manager(component_manager);
 
     std::vector<SegmentInMemory> segs;

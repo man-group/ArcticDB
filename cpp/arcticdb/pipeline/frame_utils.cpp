@@ -129,13 +129,13 @@ size_t adjust_slice_ranges(std::span<pipelines::SliceAndKey> slice_and_keys) {
 }
 
 void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
     auto& slice_and_keys = pipeline_context->slice_and_keys_;
     pipeline_context->total_rows_ = adjust_slice_ranges(slice_and_keys);
 }
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys) {
-    using namespace arcticdb::pipelines;
+    using namespace pipelines;
     if (slice_and_keys.empty())
         return 0u;
 

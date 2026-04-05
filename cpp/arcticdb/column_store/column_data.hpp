@@ -8,16 +8,16 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/block.hpp>
+#include <arcticdb/entity/typedefs.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
 
 namespace arcticdb {
-using namespace arcticdb::entity;
+using namespace entity;
 
 template<typename TDT>
 struct TypedBlockData {

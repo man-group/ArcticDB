@@ -6,7 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/stream/protobuf_mappings.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 #include <string>

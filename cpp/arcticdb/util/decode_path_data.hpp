@@ -11,7 +11,6 @@
 #include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/lazy.hpp>
 
 #include <vector>

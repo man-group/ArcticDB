@@ -9,7 +9,6 @@
 #pragma once
 
 #include <folly/Poly.h>
-#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 

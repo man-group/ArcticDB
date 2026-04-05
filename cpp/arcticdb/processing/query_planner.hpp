@@ -16,7 +16,7 @@
 
 namespace arcticdb {
 
-using GroupByClause = PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer>;
+using GroupByClause = PartitionClause<grouping::HashingGroupers, grouping::ModuloBucketizer>;
 using ClauseVariant = std::variant<
         std::shared_ptr<FilterClause>, std::shared_ptr<ProjectClause>, std::shared_ptr<GroupByClause>,
         std::shared_ptr<AggregationClause>, std::shared_ptr<ResampleClause<ResampleBoundary::LEFT>>,

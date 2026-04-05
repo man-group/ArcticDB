@@ -95,7 +95,7 @@ std::size_t segment_compressed_size(const FieldCollectionType& fields) {
     std::size_t total = 0;
     for (auto& field : fields) {
         switch (field.encoding_case()) {
-        case arcticdb::proto::encoding::EncodedField::kNdarray: {
+        case proto::encoding::EncodedField::kNdarray: {
             auto compressed_sz = ndarray_field_compressed_size(field.ndarray());
             ARCTICDB_TRACE(log::storage(), "From segment header: compressed: {}", compressed_sz);
             total += compressed_sz;

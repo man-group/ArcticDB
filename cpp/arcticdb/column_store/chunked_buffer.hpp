@@ -17,6 +17,7 @@
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/entity/types.hpp>
 
 #ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>

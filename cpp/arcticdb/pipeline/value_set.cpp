@@ -8,7 +8,6 @@
 
 #include <arcticdb/pipeline/value_set.hpp>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/util/preconditions.hpp>
 

@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/stage_result.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_source.hpp>
@@ -27,17 +26,17 @@ using CompactionError = std::vector<storage::KeyNotFoundInStageResultInfo>;
 struct AppendMapEntry {
     AppendMapEntry() = default;
 
-    arcticdb::pipelines::SliceAndKey slice_and_key_;
-    std::optional<arcticdb::entity::AtomKey> next_key_;
+    pipelines::SliceAndKey slice_and_key_;
+    std::optional<AtomKey> next_key_;
     uint64_t total_rows_ = 0;
 
-    const arcticdb::entity::StreamDescriptor& descriptor() const { return *slice_and_key_.slice_.desc(); }
+    const StreamDescriptor& descriptor() const { return *slice_and_key_.slice_.desc(); }
 
-    arcticdb::entity::StreamDescriptor& descriptor() { return *slice_and_key_.slice_.desc(); }
+    StreamDescriptor& descriptor() { return *slice_and_key_.slice_.desc(); }
 
-    const arcticdb::pipelines::FrameSlice& slice() const { return slice_and_key_.slice_; }
+    const FrameSlice& slice() const { return slice_and_key_.slice_; }
 
-    const arcticdb::entity::AtomKey& key() const { return slice_and_key_.key(); }
+    const AtomKey& key() const { return slice_and_key_.key(); }
 
     friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
         const auto& right_key = r.key();
@@ -50,8 +49,7 @@ struct AppendMapEntry {
 };
 
 AppendMapEntry append_map_entry_from_key(
-        const std::shared_ptr<arcticdb::stream::StreamSource>& store, const arcticdb::entity::AtomKey& key,
-        bool load_data
+        const std::shared_ptr<stream::StreamSource>& store, const AtomKey& key, bool load_data
 );
 
 void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount);

@@ -13,18 +13,16 @@
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <type_traits>
-#include <bitset>
 
 namespace arcticdb::detail {
 
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV1 {
-    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
+    using Opts = proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD>& block) {
         using Helper = CodecHelper<TD>;
-        if constexpr (Helper::dim == entity::Dimension::Dim0) {
+        if constexpr (Helper::dim == Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
             auto v_block = Helper::scalar_block(block.row_count());
             return v_block.bytes_;
@@ -38,7 +36,7 @@ struct PassthroughEncoderV1 {
     static void encode(
             const Opts&, const BlockType<TD>& block, EncodedFieldType& field, Buffer& out, std::ptrdiff_t& pos
     ) {
-        using namespace arcticdb::entity;
+        using namespace entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
         Helper helper;
@@ -46,7 +44,7 @@ struct PassthroughEncoderV1 {
         const T* d = block.data();
         std::size_t block_row_count = block.row_count();
 
-        if constexpr (Helper::dim == entity::Dimension::Dim0) {
+        if constexpr (Helper::dim == Dimension::Dim0) {
             // Only store data, no shapes since dimension is 0
             auto scalar_block = Helper::scalar_block(block_row_count);
             helper.ensure_buffer(out, pos, scalar_block.bytes_);
@@ -111,7 +109,7 @@ struct PassthroughEncoderV1 {
 /// @see arcticdb::ColumnEncoder2 arcticdb::detail::GenericBlockEncoder2
 template<template<typename> class BlockType, class TD>
 struct PassthroughEncoderV2 {
-    using Opts = arcticdb::proto::encoding::VariantCodec::Passthrough;
+    using Opts = proto::encoding::VariantCodec::Passthrough;
 
     static size_t max_compressed_size(const BlockType<TD>& block) { return block.nbytes(); }
 
@@ -119,7 +117,7 @@ struct PassthroughEncoderV2 {
     static void encode(
             const Opts&, const BlockType<TD>& block, Buffer& out, std::ptrdiff_t& pos, EncodedBlockType* encoded_block
     ) {
-        using namespace arcticdb::entity;
+        using namespace entity;
         using Helper = CodecHelper<TD>;
         using T = typename Helper::T;
         Helper helper;
@@ -150,9 +148,7 @@ struct PassthroughEncoderV2 {
 struct PassthroughDecoder {
     template<typename T>
     static void decode_block(const std::uint8_t* in, std::size_t in_bytes, T* t_out, std::size_t out_bytes) {
-        arcticdb::util::check_arg(
-                in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes, out_bytes
-        );
+        util::check_arg(in_bytes == out_bytes, "expected  in_bytes==out_bytes, actual {} != {}", in_bytes, out_bytes);
         memcpy(t_out, in, in_bytes);
     }
 };

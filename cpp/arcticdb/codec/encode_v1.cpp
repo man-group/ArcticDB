@@ -20,17 +20,17 @@ void encode_sparse_map(ColumnData& column_data, EncodedFieldImpl& variant_field,
 /// @brief Utility class used to encode and compute the max encoding size for regular data columns for V1 encoding
 struct ColumnEncoderV1 {
     static std::pair<size_t, size_t> max_compressed_size(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts, ColumnData& column_data
+            const proto::encoding::VariantCodec& codec_opts, ColumnData& column_data
     );
 
     static void encode(
-            const arcticdb::proto::encoding::VariantCodec& codec_opts, ColumnData& column_data,
-            EncodedFieldImpl& variant_field, Buffer& out, std::ptrdiff_t& pos
+            const proto::encoding::VariantCodec& codec_opts, ColumnData& column_data, EncodedFieldImpl& variant_field,
+            Buffer& out, std::ptrdiff_t& pos
     );
 };
 
 std::pair<size_t, size_t> ColumnEncoderV1::max_compressed_size(
-        const arcticdb::proto::encoding::VariantCodec& codec_opts, ColumnData& column_data
+        const proto::encoding::VariantCodec& codec_opts, ColumnData& column_data
 ) {
     return column_data.type().visit_tag([&codec_opts, &column_data](auto type_desc_tag) {
         size_t max_compressed_bytes = 0;
@@ -55,8 +55,8 @@ std::pair<size_t, size_t> ColumnEncoderV1::max_compressed_size(
 }
 
 void ColumnEncoderV1::encode(
-        const arcticdb::proto::encoding::VariantCodec& codec_opts, ColumnData& column_data, EncodedFieldImpl& field,
-        Buffer& out, std::ptrdiff_t& pos
+        const proto::encoding::VariantCodec& codec_opts, ColumnData& column_data, EncodedFieldImpl& field, Buffer& out,
+        std::ptrdiff_t& pos
 ) {
     column_data.type().visit_tag([&codec_opts, &column_data, &field, &out, &pos](auto type_desc_tag) {
         using TDT = decltype(type_desc_tag);
@@ -75,7 +75,7 @@ void ColumnEncoderV1::encode(
 using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1>;
 
 [[nodiscard]] SizeResult max_compressed_size_v1(
-        const SegmentInMemory& in_mem_seg, const arcticdb::proto::encoding::VariantCodec& codec_opts
+        const SegmentInMemory& in_mem_seg, const proto::encoding::VariantCodec& codec_opts
 ) {
     ARCTICDB_SAMPLE(GetSegmentCompressedSize, 0)
     SizeResult result{};
@@ -93,7 +93,7 @@ using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1
  * This takes an in memory segment with all the metadata, column tensors etc., loops through each column
  * and based on the type of the column, calls the typed block encoder for that column.
  */
-[[nodiscard]] Segment encode_v1(SegmentInMemory&& s, const arcticdb::proto::encoding::VariantCodec& codec_opts) {
+[[nodiscard]] Segment encode_v1(SegmentInMemory&& s, const proto::encoding::VariantCodec& codec_opts) {
     ARCTICDB_SAMPLE(EncodeSegment, 0)
     auto in_mem_seg = std::move(s);
     SegmentHeader segment_header{EncodingVersion::V1};

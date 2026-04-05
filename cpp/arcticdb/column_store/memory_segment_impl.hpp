@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>

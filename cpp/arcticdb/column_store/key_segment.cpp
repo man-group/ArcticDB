@@ -15,6 +15,10 @@
 
 namespace arcticdb {
 
+using uint8_TDT = ScalarTagType<DataTypeTag<DataType::UINT8>>;
+using uint64_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
+using int64_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+
 StreamId stream_id_from_column_entry(uint64_t column_entry, bool is_sequence_type, const StringPool& string_pool) {
     if (is_sequence_type) {
         // String columns are stored as uint64s (offsets into the string pool), but StringPool::get_const_view expects

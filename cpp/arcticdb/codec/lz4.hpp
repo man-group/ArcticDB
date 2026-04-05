@@ -14,13 +14,12 @@
 #include <arcticdb/util/hash.hpp>
 
 #include <lz4.h>
-#include <type_traits>
 
 namespace arcticdb::detail {
 
 struct Lz4BlockEncoder {
 
-    using Opts = arcticdb::proto::encoding::VariantCodec::Lz4;
+    using Opts = proto::encoding::VariantCodec::Lz4;
     static constexpr std::uint32_t VERSION = 1;
 
     static std::size_t max_compressed_size(std::size_t size) { return LZ4_compressBound(static_cast<int>(size)); }

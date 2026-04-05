@@ -19,7 +19,6 @@
 #include <deque>
 #include <gtest/gtest_prod.h>
 
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
@@ -401,10 +400,10 @@ class VersionMapImpl {
         ARCTICDB_DEBUG(log::version(), "Version map writing version for keys {}", keys);
 
         VariantKey journal_key;
-        IndexAggregator<RowCountIndex> journal_agg(
+        stream::IndexAggregator<stream::RowCountIndex> journal_agg(
                 stream_id,
                 [&store, &journal_key, &version_id, &stream_id](auto&& segment) {
-                    const PartialKey pk{
+                    const stream::PartialKey pk{
                             KeyType::VERSION,
                             version_id,
                             stream_id,
@@ -432,9 +431,12 @@ class VersionMapImpl {
     ) const {
         folly::Future<VariantKey> journal_key_fut = folly::Future<VariantKey>::makeEmpty();
 
-        IndexAggregator<RowCountIndex> version_agg(stream_id, [&journal_key_fut, &store, &version_key](auto&& segment) {
-            journal_key_fut = store->update(version_key, std::forward<decltype(segment)>(segment)).wait();
-        });
+        stream::IndexAggregator<stream::RowCountIndex> version_agg(
+                stream_id,
+                [&journal_key_fut, &store, &version_key](auto&& segment) {
+                    journal_key_fut = store->update(version_key, std::forward<decltype(segment)>(segment)).wait();
+                }
+        );
 
         for (auto& key : index_keys) {
             version_agg.add_key(key);
@@ -899,10 +901,10 @@ class VersionMapImpl {
         AtomKey journal_key;
         entry->validate_types();
 
-        IndexAggregator<RowCountIndex> version_agg(
+        stream::IndexAggregator<stream::RowCountIndex> version_agg(
                 stream_id,
                 [&store, &journal_key, &version_id, &stream_id](auto&& segment) {
-                    const PartialKey pk{
+                    const stream::PartialKey pk{
                             KeyType::VERSION,
                             version_id,
                             stream_id,

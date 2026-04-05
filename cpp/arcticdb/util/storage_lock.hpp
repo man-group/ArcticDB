@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>

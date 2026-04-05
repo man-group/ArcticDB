@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/entity/key.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
@@ -22,7 +21,7 @@
 namespace arcticdb {
 
 VariantKey write_multi_index_entry(
-        std::shared_ptr<StreamSink> store, std::vector<AtomKey>& keys, const StreamId& stream_id,
+        std::shared_ptr<stream::StreamSink> store, std::vector<AtomKey>& keys, const StreamId& stream_id,
         const py::object& metastruct, const py::object& user_meta, VersionId version_id
 );
 
@@ -37,7 +36,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
     timestamp earliest_loaded_undeleted_timestamp = std::numeric_limits<timestamp>::max();
 
     for (; row < ssize_t(seg.row_count()); ++row) {
-        auto key = read_key_row(seg, row);
+        auto key = stream::read_key_row(seg, row);
         ARCTICDB_TRACE(log::version(), "Reading key {}", key);
 
         if (is_index_key_type(key.type())) {
@@ -86,7 +85,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
 template<class Predicate>
 std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteration(
-        const std::shared_ptr<StreamSource>& store, Predicate&& predicate, const StreamId& stream_id,
+        const std::shared_ptr<stream::StreamSource>& store, Predicate&& predicate, const StreamId& stream_id,
         const std::vector<KeyType>& key_types, bool perform_read_segment_with_keys = true
 ) {
 
@@ -139,7 +138,7 @@ inline void check_is_version(const AtomKey& key) {
 }
 
 inline void read_symbol_ref(
-        const std::shared_ptr<StreamSource>& store, const StreamId& stream_id, VersionMapEntry& entry
+        const std::shared_ptr<stream::StreamSource>& store, const StreamId& stream_id, VersionMapEntry& entry
 ) {
     std::pair<entity::VariantKey, SegmentInMemory> key_seg_pair;
     // Trying to read a missing ref key is expected e.g. when writing a previously missing symbol.
@@ -163,8 +162,8 @@ inline void read_symbol_ref(
 }
 
 inline void write_symbol_ref(
-        std::shared_ptr<StreamSink> store, const AtomKey& latest_index, const std::optional<AtomKey>& previous_key,
-        const AtomKey& journal_key
+        std::shared_ptr<stream::StreamSink> store, const AtomKey& latest_index,
+        const std::optional<AtomKey>& previous_key, const AtomKey& journal_key
 ) {
     check_is_index_or_tombstone(latest_index);
     check_is_version(journal_key);
@@ -178,7 +177,7 @@ inline void write_symbol_ref(
             journal_key
     );
 
-    IndexAggregator<RowCountIndex> ref_agg(latest_index.id(), [&store, &latest_index](auto&& s) {
+    stream::IndexAggregator<stream::RowCountIndex> ref_agg(latest_index.id(), [&store, &latest_index](auto&& s) {
         auto segment = std::forward<decltype(s)>(s);
         store->write_sync(KeyType::VERSION_REF, latest_index.id(), std::move(segment));
     });

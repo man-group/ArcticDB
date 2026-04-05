@@ -17,8 +17,8 @@
 
 namespace arcticdb {
 
-arcticdb::proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader& header, const StreamDescriptor& desc) {
-    arcticdb::proto::encoding::SegmentHeader segment_header;
+proto::encoding::SegmentHeader generate_v1_header(const SegmentHeader& header, const StreamDescriptor& desc) {
+    proto::encoding::SegmentHeader segment_header;
     if (header.has_metadata_field())
         copy_encoded_field_to_proto(header.metadata_field(), *segment_header.mutable_metadata_field());
 
@@ -106,7 +106,7 @@ SegmentHeaderProtoWrapper decode_protobuf_header(const uint8_t* data, size_t hea
     google::protobuf::io::ArrayInputStream ais(data, static_cast<int>(header_bytes_size));
 
     auto arena = std::make_unique<google::protobuf::Arena>();
-    auto seg_hdr = google::protobuf::Arena::Create<arcticdb::proto::encoding::SegmentHeader>(arena.get());
+    auto seg_hdr = google::protobuf::Arena::Create<proto::encoding::SegmentHeader>(arena.get());
     seg_hdr->ParseFromZeroCopyStream(&ais);
     ARCTICDB_TRACE(log::codec(), "Decoded protobuf header: {}", seg_hdr->DebugString());
     return {seg_hdr, std::move(arena)};
@@ -431,9 +431,9 @@ std::tuple<uint8_t*, size_t, std::unique_ptr<Buffer>> Segment::serialize_header(
 
 [[nodiscard]] const Field& Segment::fields(size_t pos) const { return desc_.fields(pos); }
 
-const arcticdb::proto::encoding::SegmentHeader& Segment::generate_header_proto() {
+const proto::encoding::SegmentHeader& Segment::generate_header_proto() {
     if (!proto_) {
-        proto_ = std::make_unique<arcticdb::proto::encoding::SegmentHeader>(generate_v1_header(header_, desc_));
+        proto_ = std::make_unique<proto::encoding::SegmentHeader>(generate_v1_header(header_, desc_));
         proto_size_ = proto_->ByteSizeLong();
     }
 

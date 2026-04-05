@@ -12,7 +12,6 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/version/test/version_backwards_compat.hpp>
-#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
 

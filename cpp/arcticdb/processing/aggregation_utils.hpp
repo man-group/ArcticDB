@@ -8,10 +8,12 @@
 
 #pragma once
 
-#include <arcticdb/entity/types.hpp>
+#include <optional>
 
 namespace arcticdb {
-
+namespace entity {
+enum class DataType : uint8_t;
+}
 void add_data_type_impl(entity::DataType data_type, std::optional<entity::DataType>& current_data_type);
 
 } // namespace arcticdb

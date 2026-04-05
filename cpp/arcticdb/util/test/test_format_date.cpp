@@ -7,7 +7,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <limits>

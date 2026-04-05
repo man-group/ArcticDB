@@ -9,7 +9,6 @@
 #pragma once
 
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
