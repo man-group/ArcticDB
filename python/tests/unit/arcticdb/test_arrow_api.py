@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import polars as pl
 import pytest
 
@@ -32,6 +31,7 @@ no_str_output_format_args = [
 
 
 def expected_output_type(arctic_output_format, library_output_format, output_format_override):
+    pa = pytest.importorskip("pyarrow")
     expected_output_format = (
         output_format_override or library_output_format or arctic_output_format or OutputFormat.PANDAS
     )
