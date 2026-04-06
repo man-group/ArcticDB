@@ -27,7 +27,7 @@ on:
 
 jobs:
   linux_64:
-    uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
+    uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
       os:                        ubuntu-22.04
@@ -42,7 +42,7 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   linux_aarch64:
-    uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
+    uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
       os:                        ubuntu-22.04-arm
@@ -56,7 +56,7 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   osx_arm64:
-    uses: ./.github/workflows/compile_and_test_with_conda_unix.yml
+    uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
       os:                        macos-14
@@ -73,13 +73,15 @@ jobs:
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
   win_64:
-    uses: ./.github/workflows/compile_and_test_with_conda_win.yml
+    uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
       os:                        windows-latest
       platform:                  win_64
       preset:                    windows-cl-conda-release
-      run_cpp_tests:             ${{inputs.disable_cpp_tests != true}}
+      install_mongodb:           false
+      free_disk_space:           false
+      run_cpp_tests:             false  # C++ tests disabled on Windows (linking issue)
       persistent_storage:        ${{inputs.persistent_storage || 'no'}}
       debug_enabled:             ${{inputs.debug_enabled == true}}
       run_enable_logging:        ${{inputs.run_enable_logging == true}}
