@@ -132,6 +132,51 @@ QueryStats::QueryStatsOutput QueryStats::get_stats() const {
     return result;
 }
 
+QueryStats::LatenciesOutput QueryStats::get_latencies() const {
+    LatenciesOutput result;
+    for (size_t task_idx = 0; task_idx < static_cast<size_t>(TaskType::END); ++task_idx) {
+        std::vector<double> combined;
+        for (size_t key_idx = 0; key_idx < static_cast<size_t>(entity::KeyType::UNDEFINED); ++key_idx) {
+            auto lats = *stats_by_storage_op_type_[task_idx][key_idx].latencies_ms_.rlock();
+            combined.insert(combined.end(), lats.begin(), lats.end());
+        }
+        if (!combined.empty()) {
+            result[task_type_to_string(static_cast<TaskType>(task_idx))] = std::move(combined);
+        }
+    }
+    return result;
+}
+
+QueryStats::SizesOutput QueryStats::get_sizes() const {
+    SizesOutput result;
+    for (size_t task_idx = 0; task_idx < static_cast<size_t>(TaskType::END); ++task_idx) {
+        std::vector<uint64_t> combined;
+        for (size_t key_idx = 0; key_idx < static_cast<size_t>(entity::KeyType::UNDEFINED); ++key_idx) {
+            auto sizes = *stats_by_storage_op_type_[task_idx][key_idx].sizes_bytes_.rlock();
+            combined.insert(combined.end(), sizes.begin(), sizes.end());
+        }
+        if (!combined.empty()) {
+            result[task_type_to_string(static_cast<TaskType>(task_idx))] = std::move(combined);
+        }
+    }
+    return result;
+}
+
+QueryStats::DetailedLatenciesOutput QueryStats::get_detailed_latencies() const {
+    DetailedLatenciesOutput result;
+    for (size_t task_idx = 0; task_idx < static_cast<size_t>(TaskType::END); ++task_idx) {
+        auto task_name = task_type_to_string(static_cast<TaskType>(task_idx));
+        for (size_t key_idx = 0; key_idx < static_cast<size_t>(entity::KeyType::UNDEFINED); ++key_idx) {
+            auto lats = *stats_by_storage_op_type_[task_idx][key_idx].latencies_ms_.rlock();
+            if (!lats.empty()) {
+                auto key_name = get_key_type_str(static_cast<entity::KeyType>(key_idx));
+                result[task_name][key_name] = std::move(lats);
+            }
+        }
+    }
+    return result;
+}
+
 void QueryStats::add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value) {
     if (is_enabled()) {
         auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)];
@@ -144,6 +189,7 @@ void QueryStats::add(TaskType task_type, entity::KeyType key_type, StatType stat
             break;
         case StatType::SIZE_BYTES:
             stats.size_bytes_.increment(value);
+            stats.record_size(value);
             break;
         default:
             internal::raise<ErrorCode::E_INVALID_ARGUMENT>("Invalid stat type");
@@ -157,19 +203,39 @@ void QueryStats::add(TaskType task_type, entity::KeyType key_type, StatType stat
     if (is_enabled()) {
         auto& stats = stats_by_storage_op_type_[static_cast<size_t>(task_type)][static_cast<size_t>(key_type)];
         stats.count_.increment(1);
-        return std::make_optional<RAIIAddTime>(stats.total_time_ns_, start.value_or(std::chrono::steady_clock::now()));
+        auto* lat_ptr = &stats.latencies_ms_;
+        util::check(lat_ptr != nullptr, "Latencies pointer should not be null");
+        return RAIIAddTime(
+            stats.total_time_ns_,
+            start.value_or(std::chrono::steady_clock::now()),
+            lat_ptr);
     }
     return std::nullopt;
 }
 
-RAIIAddTime::RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start) :
+RAIIAddTime::RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start,
+                         folly::Synchronized<std::vector<double>>* latencies) :
     time_var_(time_var),
-    start_(start) {}
+    start_(start),
+    latencies_(latencies),
+    active_(true) {}
+
+RAIIAddTime::RAIIAddTime(RAIIAddTime&& other) noexcept :
+    time_var_(other.time_var_),
+    start_(other.start_),
+    latencies_(other.latencies_),
+    active_(other.active_) {
+    other.active_ = false;
+}
 
 RAIIAddTime::~RAIIAddTime() {
-    time_var_.increment(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start_).count()
-    );
+    if (!active_) return;
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - start_).count();
+    time_var_.increment(ns);
+    if (latencies_ != nullptr) {
+        latencies_->wlock()->push_back(static_cast<double>(ns) / 1e6);
+    }
 }
 
 void add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value) {
