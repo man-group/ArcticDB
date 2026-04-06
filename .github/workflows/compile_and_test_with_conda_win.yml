@@ -56,6 +56,9 @@ jobs:
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
 
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Build ArcticDB with conda
         run: |
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
