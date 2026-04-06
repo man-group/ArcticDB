@@ -9,12 +9,14 @@
 #pragma once
 
 #include <folly/ThreadCachedInt.h>
+#include <folly/Synchronized.h>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <atomic>
 #include <string>
 #include <chrono>
 #include <array>
+#include <vector>
 #include <memory>
 
 namespace arcticdb::query_stats {
@@ -38,12 +40,19 @@ enum class StatType : size_t { TOTAL_TIME_MS = 0, COUNT = 1, SIZE_BYTES = 2, END
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 class RAIIAddTime {
   public:
-    RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start);
+    RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start,
+                folly::Synchronized<std::vector<double>>* latencies = nullptr);
     ~RAIIAddTime();
+    RAIIAddTime(RAIIAddTime&& other) noexcept;
+    RAIIAddTime(const RAIIAddTime&) = delete;
+    RAIIAddTime& operator=(const RAIIAddTime&) = delete;
+    RAIIAddTime& operator=(RAIIAddTime&&) = delete;
 
   private:
     folly::ThreadCachedInt<timestamp>& time_var_;
     TimePoint start_;
+    folly::Synchronized<std::vector<double>>* latencies_;
+    bool active_ = true;
 };
 
 /*
@@ -71,10 +80,18 @@ class QueryStats {
         folly::ThreadCachedInt<timestamp> total_time_ns_;
         folly::ThreadCachedInt<uint64_t> count_;
         folly::ThreadCachedInt<uint64_t> size_bytes_;
+        folly::Synchronized<std::vector<double>> latencies_ms_;
+        folly::Synchronized<std::vector<uint64_t>> sizes_bytes_;
+
         void reset_stats() {
             total_time_ns_.set(0);
             count_.set(0);
             size_bytes_.set(0);
+            latencies_ms_.wlock()->clear();
+            sizes_bytes_.wlock()->clear();
+        }
+        void record_size(uint64_t bytes) {
+            sizes_bytes_.wlock()->push_back(bytes);
         }
         OperationStats() { reset_stats(); }
     };
@@ -94,6 +111,15 @@ class QueryStats {
             TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start = std::nullopt
     );
     QueryStatsOutput get_stats() const;
+    /// Per-call latencies (ms) grouped by task type name, aggregated across all key types.
+    using LatenciesOutput = std::map<std::string, std::vector<double>>;
+    LatenciesOutput get_latencies() const;
+    /// Per-call sizes (bytes) grouped by task type name, aggregated across all key types.
+    using SizesOutput = std::map<std::string, std::vector<uint64_t>>;
+    SizesOutput get_sizes() const;
+    /// Per-call latencies grouped by (task_type, key_type).
+    using DetailedLatenciesOutput = std::map<std::string, std::map<std::string, std::vector<double>>>;
+    DetailedLatenciesOutput get_detailed_latencies() const;
     QueryStats();
 
   private:
