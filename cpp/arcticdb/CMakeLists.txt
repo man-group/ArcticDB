@@ -188,7 +188,7 @@ set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
         arrow/arrow_handlers.hpp
-        arrow/arrow_output_frame.hpp
+        arrow/arrow_c_interface.hpp
         arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
@@ -363,7 +363,6 @@ set(arcticdb_srcs
         stream/stream_utils.hpp
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
-        toolbox/storage_mover.hpp
         toolbox/query_stats.hpp
         util/allocator.hpp
         util/allocation_tracing.hpp
@@ -417,6 +416,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/merge_options.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
@@ -434,7 +434,7 @@ set(arcticdb_srcs
         version/python_bindings_common.hpp
         # CPP files
         arrow/arrow_handlers.cpp
-        arrow/arrow_output_frame.cpp
+        arrow/arrow_c_interface.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -574,6 +574,7 @@ set(arcticdb_srcs
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
+        version/merge_options.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
         version/version_core.cpp
@@ -1070,6 +1071,7 @@ if(${TEST})
             util/test/gtest_main.cpp
             util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
+            util/test/test_bitset.cpp
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp

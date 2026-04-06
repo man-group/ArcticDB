@@ -183,6 +183,33 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
     assert_frame_equal_with_arrow(table, expected)
 
 
+@pytest.mark.xfail(reason="NaT values in datetime columns are not converted to Arrow nulls (monday ref: 11525537906)")
+def test_datetime_col_with_nats(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.PYARROW)
+    df = pd.DataFrame(
+        {
+            "x": pd.to_datetime(
+                [
+                    "2025-01-01",
+                    "2025-01-02",
+                    "2025-01-03",
+                    pd.NaT,
+                    pd.NaT,
+                    "2025-01-04",
+                    pd.NaT,
+                    pd.NaT,
+                ]
+            )
+        }
+    )
+    lib.write("arrow", df)
+    table = lib.read("arrow").data
+    expected = lib.read("arrow", output_format=OutputFormat.PANDAS).data
+    assert table.column("x").null_count == 4
+    assert_frame_equal_with_arrow(table, expected)
+
+
 def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):
     lib = lmdb_version_store_arrow
     df = pd.DataFrame(

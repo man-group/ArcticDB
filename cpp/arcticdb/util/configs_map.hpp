@@ -42,7 +42,15 @@ class ConfigsMap {
         return it == map_of_##LABEL.cend() ? std::nullopt : std::make_optional(it->second);                            \
     }                                                                                                                  \
                                                                                                                        \
-    void unset_##LABEL(const std::string& label) { map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); }
+    void unset_##LABEL(const std::string& label) { map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); }   \
+                                                                                                                       \
+    const std::unordered_map<std::string, TYPE>& get_all_##LABEL() const { return map_of_##LABEL; }                    \
+                                                                                                                       \
+    void set_all_##LABEL(const std::unordered_map<std::string, TYPE>& entries) {                                       \
+        for (const auto& [k, v] : entries) {                                                                           \
+            map_of_##LABEL[boost::to_upper_copy<std::string>(k)] = v;                                                  \
+        }                                                                                                              \
+    }
 
     // Also update python_module.cpp::register_configs_map_api() if below is changed:
     HANDLE_TYPE(int, int64_t)
@@ -51,7 +59,7 @@ class ConfigsMap {
 #undef HANDLE_TYPE
 
   private:
-    std::unordered_map<std::string, uint64_t> map_of_int;
+    std::unordered_map<std::string, int64_t> map_of_int;
     std::unordered_map<std::string, std::string> map_of_string;
     std::unordered_map<std::string, double> map_of_double;
 };

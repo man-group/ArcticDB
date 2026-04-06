@@ -22,6 +22,14 @@ static void for_each(const Column& input_column, functor&& f) {
     std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
 }
 
+template<typename input_tdt, typename functor>
+requires util::instantiation_of<input_tdt, TypeDescriptorTag> &&
+         std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type&>
+static void for_each(Column& input_column, functor&& f) {
+    auto input_data = input_column.data();
+    std::for_each(input_data.begin<input_tdt>(), input_data.end<input_tdt>(), std::forward<functor>(f));
+}
+
 // Thin wrapper around std::for_each that is marked flatten to force-inline callees.
 // Useful when running hot lambdas over large data.
 template<typename Iterator, typename functor>

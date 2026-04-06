@@ -8,13 +8,12 @@ if sys.version_info >= (3, 9):
 from packaging import version
 import pandas as pd
 import numpy as np
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, merge
 from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
-from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -298,31 +297,6 @@ lib._nvs.append("sym", df_2, incomplete=True)
             assert_frame_equal_with_arrow(read_df, df[["float_col", "str_col"]].iloc[4:9])
 
 
-def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
-    old_venv, arctic_uri = old_venv_and_arctic_uri
-    dst_lib_name = "local.extra"
-    with CompatLibrary(old_venv, arctic_uri, [lib_name, dst_lib_name]) as compat:
-        df = pd.DataFrame({"col": [1, 2, 3]})
-        df_2 = pd.DataFrame({"col": [4, 5, 6]})
-        sym = "a"
-
-        compat.old_libs[lib_name].write(sym, df)
-        compat.old_libs[lib_name].write(sym, df_2)
-
-        with compat.current_version() as curr:
-            src_lib = curr.ac.get_library(lib_name)
-            dst_lib = curr.ac.get_library(dst_lib_name)
-            s = StorageMover(src_lib._nvs._library, dst_lib._nvs._library)
-            s.clone_all_keys_for_symbol(sym, 1000)
-            assert_frame_equal(src_lib.read(sym).data, dst_lib.read(sym).data)
-
-        if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
-            pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
-
-        # Make sure that we can read the new lib with the old version
-        compat.old_libs[dst_lib_name].assert_read(sym, df_2)
-
-
 def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
     # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
     # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
@@ -560,6 +534,53 @@ def test_compat_merge_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, 
 
             result = curr.lib.read(sym).data
             assert_frame_equal(result, expected)
+
+
+def test_compat_merge_rowrange_write_new_read_old(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    sym = "sym"
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+
+    # 5 rows × 4 columns:
+    #   rows_per_segment=2  →  3 row segments  (rows 0–1, 2–3, 4)
+    #   columns_per_segment=2  →  2 column slices per row segment  (a/b and c/d)
+    # Source updates rows where a=2 (segment 0) and a=4 (segment 1), crossing segment boundaries.
+    target = pd.DataFrame(
+        {
+            "a": np.array([1, 2, 3, 4, 5], dtype=np.int64),
+            "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "c": np.array([10, 20, 30, 40, 50], dtype=np.int64),
+            "d": ["x", "y", "z", "w", "v"],
+        }
+    )
+    source = pd.DataFrame(
+        {
+            "a": np.array([2, 4], dtype=np.int64),
+            "b": [200.0, 400.0],
+            "c": np.array([2000, 4000], dtype=np.int64),
+            "d": ["Y", "W"],
+        }
+    )
+    expected = merge(target, source, strategy, on=["a"])
+
+    with CompatLibrary(old_venv, arctic_uri, lib_name, create_with_current_version=True) as compat:
+        with compat.current_version() as curr:
+            # Recreate the library with explicit row and column slicing so that the stored data
+            # is spread across multiple segments, exercising the full row-range merge code path.
+            curr.ac.delete_library(lib_name)
+            curr.ac.create_library(
+                lib_name,
+                library_options=LibraryOptions(rows_per_segment=2, columns_per_segment=2),
+            )
+            curr.lib = curr.ac.get_library(lib_name)
+
+            curr.lib.write(sym, target)
+            curr.lib.merge_experimental(sym, source, strategy=strategy, on=["a"])
+
+        if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+            pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
+
+        compat.old_lib.assert_read(sym, expected)
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):

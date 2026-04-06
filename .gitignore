@@ -41,6 +41,7 @@ CMakeUserPresets.json
 .claude/*
 !.claude/skills/
 CLAUDE_USER_SETTINGS.md
+Makefile.local
 
 *_pb2.py
 *.mdb

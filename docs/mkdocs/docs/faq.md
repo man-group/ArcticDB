@@ -176,6 +176,31 @@ ArcticDB currently offers extremely limited support for categorical data. Series
 However, `append` and `update` are not yet supported with categorical data, and will raise an exception if attempted.
 Analytics such as filtering using the `LazyDataFrame` or `QueryBuilder` classes is also not supported with categorical data, and will either raise an exception, or give incorrect results, depending on the exact operations requested.
 
+### *Why do I get a `NormalizationException` about timezones?*
+
+ArcticDB stores all timezone-aware timestamps as UTC internally. On read, the original timezone is restored by the output layer, which can fail if the timezone cannot be resolved on the host system.
+
+**Arrow or Polars output (Windows only)**
+
+PyArrow requires a separately installed IANA timezone database on Windows. If it is missing, you will see an error like:
+
+```
+arcticdb.exceptions.NormalizationException: Cannot locate timezone 'UTC':
+Unable to get Timezone database version from C:\Users\<user>\Downloads\tzdata
+
+ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which
+requires a timezone database on Windows.
+To install, run:
+  python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
+Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows
+```
+
+Running the one-liner above will download the database. This is only needed once per environment.
+
+**Pandas output**
+
+Timezone handling is delegated to Pandas. If a timezone is not recognized, you may see a `NormalizationException` wrapping a Pandas timezone lookup failure. Older versions of Pandas use `pytz` for timezone resolution, while newer versions (2.0+) use the standard library `zoneinfo` module, which supports a broader set of timezone names. Upgrading Pandas can resolve such errors.
+
 ### How does ArcticDB handle `NaN`?
 
 The handling of `NaN` in ArcticDB depends on the type of the column under consideration:

@@ -80,6 +80,7 @@ markers = [
     "azurite: Mark from test usage for execution against Simulated Azurite storage",
     "nfs: Mark from test usage for execution against Simulated NFS S3 storage",
     "mongo: Mark from test usage for execution against Mongo storage",
+    "merge_update: Merge update tests across unit, hypothesis, and stress",
     "real_s3: Mark from test usage for execution against AWS S3 storage",
     "real_azure: Mark from test usage for execution against Azure storage",
     "real_gcp: Mark from test usage for execution against GCP storage",

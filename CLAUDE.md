@@ -40,46 +40,65 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 
 ## Build Commands
 
-### Building the Python Wheel
-
-```bash
-# Build with a specific CMake preset (limit parallelism to avoid overloading the system)
-CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
-```
-
-Note: Limit `CMAKE_BUILD_PARALLEL_LEVEL` to min(16, nproc) to avoid memory pressure during compilation.
-
-### Building on Man Linux VMs
+### Prerequisites on Man Linux VMs
 
 The vcpkg-based build requires certain system packages that may not be installed by default:
 
 ```bash
-# Required system packages for vcpkg build
 sudo apt install pkg-config flex bison libsasl2-dev -y
 ```
 
-Use Pegasus for Python environment management:
+Initialize git submodules (required for vcpkg):
 
 ```bash
-# Create a Python 3.11 environment
-pegasus create -d 311-1 /turbo/<username>/pyenvs/arcticdb-dev
-source /turbo/<username>/pyenvs/arcticdb-dev/bin/activate
-
-# Initialize git submodules (required for vcpkg)
 git submodule update --init --recursive
-
-# Build with linux-debug preset (limit parallelism, use protobuf 4)
-ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip install -ve .
 ```
 
-### Building a Wheel
+Copy `Makefile.local.example` to `Makefile.local` for Man-specific settings (proxy, TMPDIR, protobuf version).
+
+### Environment Setup
+
+If `Makefile.local` is missing, prompt the user to create it, using `Makefile.local.example` as an example.
+
+If `VIRTUAL_ENV` is not set:
+
+- Ask for the NAME they want to use for the venv
+- If it already exists in `~/venvs/<NAME>` inform the user. They can either use it as is, or you can
+    run `make setup NAME=<name> CLEAN=1` to recreate it.
+- Otherwise if it does not already exist, create it, `make setup NAME=<name>`.
+
+Do not warn the user that it will take a while - it's usually fast.
+
+**The venv must be activated before running any make target or command that uses `python`** (protoc, lint, lint-check, test-py, bench-py, wheel). Prefix every such command with activation:
 
 ```bash
-# Build wheel (use ARCTICDB_PROTOC_VERS=4 to skip protobuf 5 on Man VMs)
-ARCTICDB_PROTOC_VERS=4 CMAKE_BUILD_PARALLEL_LEVEL=16 ARCTIC_CMAKE_PRESET=linux-debug pip wheel . --no-deps -w dist/
+source $(make activate NAME=<name>) && make test-py
 ```
 
-The wheel will be created in `dist/arcticdb-<version>-cp311-cp311-linux_x86_64.whl`.
+### Makefile Targets
+
+A root `Makefile` provides shortcuts for common tasks. User-specific overrides (presets, proxy, TMPDIR) go in `Makefile.local` (gitignored; see `Makefile.local.example`).
+
+| Target | Description | Key variables |
+|--------|-------------|---------------|
+| `make help` | List all targets and current variable values | |
+| `make setup NAME=x` | Full setup from scratch: submodules, venv, protoc, build, symlink | `CLEAN=1` to replace existing venv |
+| `make protoc` | Generate protobuf stubs | `PROTOC_VERS`, `PROXY_CMD` |
+| `make venv NAME=x` | Create a dev venv with all deps (`CLEAN=1` to replace existing) | `VENV_DIR`, `PROXY_CMD` |
+| `make activate NAME=x` | Print activate path. Use: `source $(make activate NAME=x)` | `VENV_DIR` |
+| `make lint` | Run formatters in-place | |
+| `make lint-check` | Check formatting without changes | |
+| `make build` / `build-debug` | Configure, build, and symlink `arcticdb_ext` | `RELEASE_PRESET` / `DEBUG_PRESET`, `CMAKE_JOBS` |
+| `make configure` / `configure-debug` | CMake configure only | |
+| `make test-cpp` / `test-cpp-debug` | Build and run C++ unit tests | `FILTER=` for gtest_filter |
+| `make symlink` / `symlink-debug` | Symlink built extension into `python/` | |
+| `make test-py` | Run Python tests | `TYPE=unit\|integration\|...`, `FILE=` path to file/test, `ARGS=` |
+| `make build-and-test-py` | Release build + symlink + Python tests | `RELEASE_PRESET`, `CMAKE_JOBS`, `TYPE=`, `FILE=`, `ARGS=` |
+| `make build-and-test-py-debug` | Debug build + symlink + Python tests | `DEBUG_PRESET`, `CMAKE_JOBS`, `TYPE=`, `FILE=`, `ARGS=` |
+| `make wheel` | Build a pip wheel into `dist/` | |
+| `make bench-cpp` | Build and run C++ benchmarks | `FILTER=` |
+| `make install-editable` | Install arcticdb in editable mode (no C++ rebuild) | |
+| `make bench-py` | Run ASV Python benchmarks (runs `install-editable` first) | `BENCH=` |
 
 ### CMake Presets
 
@@ -131,57 +150,9 @@ When upgrading a dependency like `sparrow` that has a custom port in vcpkg:
 
 4. **Rebuild** - vcpkg will fetch the new version on next build
 
-### Building C++ Tests
-
-Use the preset from `CLAUDE_USER_SETTINGS.md` (or `linux-debug` as default):
-
-```bash
-cmake -DTEST=ON --preset <preset> cpp
-cmake --build cpp/out/<preset>-build --target test_unit_arcticdb
-
-# Run a single test
-cpp/out/<preset>-build/arcticdb/test_unit_arcticdb --gtest_filter="TestSuite.TestName"
-```
-
-## Running Python Tests
-
-```bash
-# Run all tests
-python -m pytest python/tests
-
-# Run a single test file
-python -m pytest python/tests/unit/arcticdb/test_arctic.py
-
-# Run a specific test
-python -m pytest python/tests/unit/arcticdb/test_arctic.py::test_function_name
-```
-
 ## Benchmarking
 
-### C++ Benchmarks (Google Benchmark)
-
-```bash
-cmake -DTEST=ON --preset <preset> cpp
-cmake --build cpp/out/<preset>-build --target benchmarks
-
-# Run specific benchmarks
-cpp/out/<preset>-build/arcticdb/benchmarks --benchmark_filter=<regex>
-```
-
-Benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`.
-
-### Python Benchmarks (ASV)
-
-ASV benchmarks live in `python/benchmarks/`. Requires `asv` and `virtualenv` installed.
-
-```bash
-cd python
-python -m asv run -v --show-stderr HEAD^!              # Benchmark current commit
-python -m asv run -v --show-stderr --bench <regex>     # Run subset matching regex
-python -m asv run --python=$(which python) -v          # Use current env (faster)
-```
-
-See: [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks)
+C++ benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`. ASV Python benchmarks live in `python/benchmarks/`. See [ASV Benchmarks Wiki](https://github.com/man-group/ArcticDB/wiki/Dev:-ASV-Benchmarks).
 
 ## Code Review Guidelines
 
@@ -196,12 +167,7 @@ When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_
 
 ### Code Style
 
-Code style is enforced by `./build_tooling/format.py`. **Always run the formatter after making code changes:**
-
-```bash
-# Format all code
-python ./build_tooling/format.py --in-place --type all
-```
+Code style is enforced by `make lint` **Always run `make lint` after making code changes.**
 
 ### Git Commits
 

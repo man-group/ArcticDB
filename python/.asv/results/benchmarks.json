@@ -1,4 +1,116 @@
 {
+    "arrow.ArrowBools.peakmem_read": {
+        "code": "class ArrowBools:\n    def peakmem_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "name": "arrow.ArrowBools.peakmem_read",
+        "param_names": [
+            "rows",
+            "sparsity"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "0.0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        ],
+        "setup_cache_key": "arrow:205",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "61761fb7790a5d13aae091b25a217225c9a0374e5d71f02cf553ee4043016a9c"
+    },
+    "arrow.ArrowBools.peakmem_write": {
+        "code": "class ArrowBools:\n    def peakmem_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "name": "arrow.ArrowBools.peakmem_write",
+        "param_names": [
+            "rows",
+            "sparsity"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "0.0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        ],
+        "setup_cache_key": "arrow:205",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "520ea8c1e01d214d25ddb5d58aee260dad2816c17261c095be2a17b12e063bbc"
+    },
+    "arrow.ArrowBools.time_read": {
+        "code": "class ArrowBools:\n    def time_read(self, rows, sparsity):\n        self.lib.read(self.sym)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "min_run_count": 2,
+        "name": "arrow.ArrowBools.time_read",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "sparsity"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "0.0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:205",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "4f701aa9e985db8b2016003d360f4a80c8c9ebfcd7dd2161dde1343bd90e2597",
+        "warmup_time": -1
+    },
+    "arrow.ArrowBools.time_write": {
+        "code": "class ArrowBools:\n    def time_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "min_run_count": 2,
+        "name": "arrow.ArrowBools.time_write",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "sparsity"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "0.0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:205",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1696fec58f5bb904663f487665899938f20a287557347a49f345b25300cc5038",
+        "warmup_time": -1
+    },
     "arrow.ArrowNumeric.peakmem_read": {
         "code": "class ArrowNumeric:\n    def peakmem_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        np.random.seed(42)\n        random.seed(42)\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowNumeric.peakmem_read",
@@ -121,7 +233,7 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -145,7 +257,7 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -169,7 +281,7 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -193,7 +305,7 @@
                 "0.9"
             ]
         ],
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -222,7 +334,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -252,7 +364,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -282,7 +394,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -312,7 +424,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:122",
+        "setup_cache_key": "arrow:119",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -348,7 +460,7 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:201",
+        "setup_cache_key": "arrow:263",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -383,7 +495,7 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:201",
+        "setup_cache_key": "arrow:263",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -423,7 +535,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:201",
+        "setup_cache_key": "arrow:263",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -464,7 +576,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:201",
+        "setup_cache_key": "arrow:263",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

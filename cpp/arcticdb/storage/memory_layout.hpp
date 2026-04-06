@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <array>
+#include <fmt/format.h>
 #include "arcticdb/codec/magic_words.hpp"
 
 namespace arcticdb {
@@ -320,3 +321,34 @@ struct MemoryLayout {
 #pragma pack(pop)
 
 } // namespace arcticdb
+
+namespace fmt {
+
+template<>
+struct formatter<arcticdb::IndexDescriptor::Type> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(arcticdb::IndexDescriptor::Type type, FormatContext& ctx) const {
+        using Type = arcticdb::IndexDescriptor::Type;
+        switch (type) {
+        case Type::UNKNOWN:
+            return fmt::format_to(ctx.out(), "UNKNOWN");
+        case Type::EMPTY:
+            return fmt::format_to(ctx.out(), "EMPTY");
+        case Type::ROWCOUNT:
+            return fmt::format_to(ctx.out(), "ROWCOUNT");
+        case Type::STRING:
+            return fmt::format_to(ctx.out(), "STRING");
+        case Type::TIMESTAMP:
+            return fmt::format_to(ctx.out(), "TIMESTAMP");
+        default:
+            return fmt::format_to(ctx.out(), "UNKNOWN({})", static_cast<int32_t>(type));
+        }
+    }
+};
+
+} // namespace fmt

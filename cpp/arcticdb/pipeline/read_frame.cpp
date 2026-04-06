@@ -41,7 +41,9 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(context->slice_and_keys_, true, context->incompletes_after_).value();
 }
 
-std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
+using BlockConfigPerColumn = SegmentInMemory::BlockConfigPerColumn;
+
+std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
@@ -52,33 +54,34 @@ std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_ext
     return util::variant_match(
             index,
             [&desc, &filter_columns, &read_options](const auto& idx
-            ) -> std::pair<StreamDescriptor, std::vector<size_t>> {
+            ) -> std::pair<StreamDescriptor, BlockConfigPerColumn> {
                 const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-                auto extra_bytes_per_column = std::vector<size_t>();
-                extra_bytes_per_column.reserve(fields->size());
+                BlockConfigPerColumn block_config_per_column;
+                block_config_per_column.reserve(fields->size());
                 auto handlers = TypeHandlerRegistry::instance();
 
                 for (auto& field : *fields) {
                     if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
-                        auto [output_type, extra_bytes] =
-                                handler->output_type_and_extra_bytes(field.type(), field.name(), read_options);
-                        extra_bytes_per_column.emplace_back(extra_bytes);
+                        auto [output_type, block_config] =
+                                handler->output_type_and_block_config(field.type(), field.name(), read_options);
+                        block_config_per_column.emplace_back(block_config);
                         if (output_type != field.type())
                             field.mutable_type() = output_type;
                     } else {
-                        extra_bytes_per_column.emplace_back(0);
+                        block_config_per_column.emplace_back(detachable_block_config::Regular{0});
                     }
                 }
 
-                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, extra_bytes_per_column};
+                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, block_config_per_column
+                };
             }
     );
 }
 
-std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
+std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
 ) {
-    return get_filtered_descriptor_and_extra_bytes_per_column(
+    return get_filtered_descriptor_and_block_config(
             context->descriptor().clone(), read_options, context->filter_columns_
     );
 }
@@ -113,9 +116,9 @@ SegmentInMemory allocate_chunked_frame(
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
     ARCTICDB_DEBUG(log::version(), "Allocated chunked frame with offset {} and row count {}", offset, row_count);
-    auto [desc, extra_bytes_per_column] = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options);
+    auto [desc, block_config_per_column] = get_filtered_descriptor_and_block_config(context, read_options);
     SegmentInMemory output{
-            std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes_per_column
+            std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config_per_column
     };
 
     for (auto& column : output.columns()) {
@@ -129,8 +132,7 @@ SegmentInMemory allocate_chunked_frame(
                 // number of memory blocks not equal number of segments because follow-up methods like
                 // `copy_frame_data_to_buffer` rely on offsets rather than block indices.
                 const auto bytes = block_row_count * data_size;
-                column->allocate_data(bytes);
-                column->advance_data(bytes);
+                column->allocate_and_advance_by(bytes);
             }
         }
     }
@@ -144,8 +146,8 @@ SegmentInMemory allocate_contiguous_frame(
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    auto desc = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options).first;
-    // extra_bytes_per_column are not used for contiguous frame allocation
+    auto desc = get_filtered_descriptor_and_block_config(context, read_options).first;
+    // block_config_per_column is not used for contiguous frame allocation
     SegmentInMemory output{std::move(desc), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
@@ -333,7 +335,6 @@ void decode_or_expand(
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
     if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
         handler->handle_type(
                 data,
@@ -348,6 +349,7 @@ void decode_or_expand(
         );
     } else {
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
+        auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
         const auto dest_bytes = mapping.dest_bytes_;
         std::optional<util::BitMagic> bv;
         util::check(encoded_field_info.has_ndarray(), "Unsupported encoding for field {}", encoded_field_info);

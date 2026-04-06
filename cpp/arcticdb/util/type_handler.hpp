@@ -69,7 +69,7 @@ struct ITypeHandler {
             );
         }
 
-        std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+        std::pair<entity::TypeDescriptor, entity::DetachableBlockConfig> output_type_and_block_config(
                 const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
         ) const {
             return folly::poly_call<2>(*this, input_type, column_name, read_options);
@@ -85,7 +85,7 @@ struct ITypeHandler {
 
     template<class T>
     using Members = folly::PolyMembers<
-            &T::handle_type, &T::convert_type, &T::output_type_and_extra_bytes, &T::default_initialize>;
+            &T::handle_type, &T::convert_type, &T::output_type_and_block_config, &T::default_initialize>;
 };
 
 using TypeHandler = folly::Poly<ITypeHandler>;
