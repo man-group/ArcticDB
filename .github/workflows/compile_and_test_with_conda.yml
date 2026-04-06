@@ -332,12 +332,9 @@ jobs:
             python setup.py protoc --build-lib python
             cd python
             LMDB_MARKER=""
-            if [[ "$RUNNER_OS" == "Windows" ]]; then
-              LMDB_MARKER="-m not lmdb"
-            fi
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
               $LMDB_MARKER \
-              tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS || test $? -eq 5
+              tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
