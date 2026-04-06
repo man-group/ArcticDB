@@ -14,6 +14,7 @@ from arcticdb.version_store.library import MergeStrategy, MergeAction
 from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
+from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -295,6 +296,31 @@ lib._nvs.append("sym", df_2, incomplete=True)
                 columns=["float_col", "str_col"],
             ).data
             assert_frame_equal_with_arrow(read_df, df[["float_col", "str_col"]].iloc[4:9])
+
+
+def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+    dst_lib_name = "local.extra"
+    with CompatLibrary(old_venv, arctic_uri, [lib_name, dst_lib_name]) as compat:
+        df = pd.DataFrame({"col": [1, 2, 3]})
+        df_2 = pd.DataFrame({"col": [4, 5, 6]})
+        sym = "a"
+
+        compat.old_libs[lib_name].write(sym, df)
+        compat.old_libs[lib_name].write(sym, df_2)
+
+        with compat.current_version() as curr:
+            src_lib = curr.ac.get_library(lib_name)
+            dst_lib = curr.ac.get_library(dst_lib_name)
+            s = StorageMover(src_lib._nvs._library, dst_lib._nvs._library)
+            s.clone_all_keys_for_symbol(sym, 1000)
+            assert_frame_equal(src_lib.read(sym).data, dst_lib.read(sym).data)
+
+        if (arctic_uri.startswith("s3") or arctic_uri.startswith("azure")) and "1.6.2" in old_venv.version:
+            pytest.skip("Reading the new library on s3 or azure with 1.6.2 requires some work arounds")
+
+        # Make sure that we can read the new lib with the old version
+        compat.old_libs[dst_lib_name].assert_read(sym, df_2)
 
 
 def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
