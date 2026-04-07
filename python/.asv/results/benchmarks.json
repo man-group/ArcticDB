@@ -1883,6 +1883,62 @@
         "version": "2238d0faf29b5206ab9dd61d1acea68ae7883b8ac95bc8c0fafaefb85ff1527b",
         "warmup_time": 0.1
     },
+    "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols": {
+        "code": "class DeleteBatchSymbols:\n    def time_delete_batch_symbols(self, *args):\n        self.lib.delete_batch(self.syms)\n\n    def setup(self, num_symbols, storage):\n        if not is_storage_enabled(storage):\n            raise SkipNotImplemented\n    \n        if storage == Storage.LMDB:\n            self.ac = Arctic(f\"lmdb://{self.ARCTIC_DIR}\")\n        elif storage == Storage.AMAZON:\n            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables\n    \n            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)\n            self.ac = factory.create_fixture().create_arctic()\n    \n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n    \n        df = pd.DataFrame({\"col\": range(1000)})\n        self.syms = [f\"sym_{i}\" for i in range(num_symbols)]\n        for sym in self.syms:\n            self.lib.write(sym, df)",
+        "min_run_count": 2,
+        "name": "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "storage"
+        ],
+        "params": [
+            [
+                "10",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "702b091edd81bc045788ac89c04eb4422e58562f2463e391c14d7252f50e7599",
+        "warmup_time": 0
+    },
+    "modification_functions.DeleteBatchVersions.time_delete_batch_versions": {
+        "code": "class DeleteBatchVersions:\n    def time_delete_batch_versions(self, *args):\n        self.lib.delete_batch(self.delete_requests)\n\n    def setup(self, num_symbols, storage):\n        if not is_storage_enabled(storage):\n            raise SkipNotImplemented\n    \n        if storage == Storage.LMDB:\n            self.ac = Arctic(f\"lmdb://{self.ARCTIC_DIR}\")\n        elif storage == Storage.AMAZON:\n            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables\n    \n            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)\n            self.ac = factory.create_fixture().create_arctic()\n    \n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n    \n        df = pd.DataFrame({\"col\": range(1000)})\n        self.syms = [f\"sym_{i}\" for i in range(num_symbols)]\n        for sym in self.syms:\n            for _ in range(self.versions_per_symbol):\n                self.lib.write(sym, df, prune_previous_versions=False)\n    \n        from arcticdb.version_store.library import DeleteRequest\n    \n        # Prepare delete requests to delete all but the latest version for each symbol\n        self.delete_requests = [DeleteRequest(sym, list(range(self.versions_per_symbol - 1))) for sym in self.syms]",
+        "min_run_count": 2,
+        "name": "modification_functions.DeleteBatchVersions.time_delete_batch_versions",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "storage"
+        ],
+        "params": [
+            [
+                "10",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ff97024f7d6ef19b36c6f6c3afbdbd5170fbdbd539a9dc041eccf89852808190",
+        "warmup_time": 0
+    },
     "modification_functions.DeleteMultipleVersions.time_delete_multiple_versions": {
         "code": "class DeleteMultipleVersions:\n    def time_delete_multiple_versions(self):\n        self.lib.delete(self.sym, list(range(99)))\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n        self.sym = f\"sym_{random.randint(0, 1_000_000)}\"\n    \n        for i in range(100):\n            self.lib.write(self.sym, pd.DataFrame({\"a\": [0]}), prune_previous_versions=False)",
         "min_run_count": 2,
@@ -1936,7 +1992,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:128",
+        "setup_cache_key": "modification_functions:129",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1966,7 +2022,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1996,7 +2052,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2026,7 +2082,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2056,7 +2112,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2086,7 +2142,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

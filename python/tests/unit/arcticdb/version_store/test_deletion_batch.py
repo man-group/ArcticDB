@@ -18,7 +18,7 @@ ErrorCode
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_basic(basic_store):
+def test_batch_delete_versions_basic(basic_store, single_threaded_config):
     """Test basic functionality of batch_delete_versions with multiple symbols."""
     lib = basic_store
 
@@ -53,7 +53,7 @@ def test_batch_delete_versions_basic(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_with_snapshots(basic_store):
+def test_batch_delete_versions_with_snapshots(basic_store, single_threaded_config):
     """Test batch_delete_versions with snapshots."""
     lib = basic_store
 
@@ -86,7 +86,7 @@ def test_batch_delete_versions_with_snapshots(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_partial_symbols(basic_store):
+def test_batch_delete_versions_partial_symbols(basic_store, single_threaded_config):
     """Test batch_delete_versions with a subset of symbols."""
     lib = basic_store
 
@@ -131,7 +131,7 @@ def test_batch_delete_versions_partial_symbols(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_empty_input(basic_store):
+def test_batch_delete_versions_empty_input(basic_store, single_threaded_config):
     """Test batch_delete_versions with empty input lists."""
     lib = basic_store
 
@@ -168,7 +168,7 @@ def test_batch_delete_versions_empty_input(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_invalid_input(basic_store):
+def test_batch_delete_versions_invalid_input(basic_store, single_threaded_config):
     """Test batch_delete_versions with invalid inputs."""
     lib = basic_store
 
@@ -216,7 +216,7 @@ def test_batch_delete_versions_invalid_input(basic_store):
 
 
 @pytest.mark.storage
-def test_batch_delete_versions_with_tombstones(basic_store):
+def test_batch_delete_versions_with_tombstones(basic_store, single_threaded_config):
     """Test batch_delete_versions with tombstone functionality."""
     lib = basic_store
 
@@ -248,3 +248,92 @@ def test_batch_delete_versions_with_tombstones(basic_store):
 
         # Verify that non-deleted version is still accessible
         assert_frame_equal(lib.read(sym).data, df3)
+
+
+@pytest.mark.storage
+def test_batch_delete_symbols(basic_store, single_threaded_config):
+    """Test delete_batch with whole symbol deletion exercises recurse_index_keys .get() with multiple symbols.
+
+    With single_threaded_config=True (1 IO + 1 CPU thread), this would deadlock if .get() blocked a
+    pool thread that the queued IO tasks depend on.
+    """
+    lib = basic_store
+
+    df = pd.DataFrame({"x": np.arange(100, dtype=np.int64)})
+    symbols = [f"sym_{i}" for i in range(10)]
+    for sym in symbols:
+        lib.write(sym, df)
+
+    lib.batch_delete_symbols(symbols)
+
+    assert lib.list_symbols() == []
+
+
+@pytest.mark.storage
+def test_batch_write_with_pruning(basic_store, single_threaded_config):
+    """Test batch write with prune_previous_versions=True exercises the cpu_executor code path.
+
+    write_index_key_to_version_map_async routes delete_unreferenced_pruned_indexes onto the CPU
+    executor via .via(&cpu_executor()). Inside that callback, delete_trees_responsibly calls
+    recurse_index_keys which uses .get() to block on IO futures. With single_threaded_config=True
+    (1 IO + 1 CPU thread), this would deadlock if IO and CPU tasks competed for the same thread.
+    """
+    lib = basic_store
+
+    df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
+    df2 = pd.DataFrame({"y": np.arange(10, dtype=np.int64)})
+
+    symbols = [f"sym_{i}" for i in range(5)]
+    for sym in symbols:
+        lib.write(sym, df1)
+
+    results = lib.batch_write(symbols, [df2] * len(symbols), prune_previous_version=True)
+
+    assert len(results) == len(symbols)
+    for sym in symbols:
+        assert len(lib.list_versions(sym)) == 1
+        assert_frame_equal(lib.read(sym).data, df2)
+
+
+@pytest.mark.storage
+def test_delete_snapshot_single_threaded(basic_store, single_threaded_config):
+    """Test delete_snapshot exercises delete_trees_responsibly with full PreDeleteChecks (all=true).
+
+    This hits both .get() calls: the check_reload path (load_type != NOT_LOADED because
+    version_visible=true) and the recurse_index_keys path.
+    """
+    lib = basic_store
+
+    df = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
+    symbols = [f"sym_{i}" for i in range(5)]
+    for sym in symbols:
+        lib.write(sym, df)
+
+    lib.snapshot("snap1")
+
+    for sym in symbols:
+        lib.delete(sym)
+
+    lib.delete_snapshot("snap1")
+
+    assert lib.list_symbols() == []
+
+
+@pytest.mark.storage
+def test_delete_tree_via_prune_previous(basic_store, single_threaded_config):
+    """Test that sequential writes with prune_previous_version=True don't deadlock.
+
+    Each write triggers delete_unreferenced_pruned_indexes on the CPU executor, which calls
+    delete_trees_responsibly -> recurse_index_keys -> .get(). Running many of these sequentially
+    with a single-threaded pool config stresses the thread handoff.
+    """
+    lib = basic_store
+
+    symbols = [f"sym_{i}" for i in range(5)]
+    for sym in symbols:
+        for i in range(5):
+            df = pd.DataFrame({"x": np.arange(i * 10, (i + 1) * 10, dtype=np.int64)})
+            lib.write(sym, df, prune_previous_version=True)
+
+    for sym in symbols:
+        assert len(lib.list_versions(sym)) == 1
