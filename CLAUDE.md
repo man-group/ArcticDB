@@ -69,12 +69,6 @@ If `VIRTUAL_ENV` is not set:
 
 Do not warn the user that it will take a while - it's usually fast.
 
-**The venv must be activated before running any make target or command that uses `python`** (protoc, lint, lint-check, test-py, bench-py, wheel). Prefix every such command with activation:
-
-```bash
-source $(make activate NAME=<name>) && make test-py
-```
-
 ### Makefile Targets
 
 A root `Makefile` provides shortcuts for common tasks. User-specific overrides (presets, proxy, TMPDIR) go in `Makefile.local` (gitignored; see `Makefile.local.example`).
