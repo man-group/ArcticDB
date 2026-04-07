@@ -1820,12 +1820,14 @@ def _filter_pyarrow_table_to_date_range(data: "pa.Table", index_column: str, sta
         f"Expected timestamp[ns] index column, got {col.type}",
     )
     n = len(col)
+    start_ns = start.value
+    end_ns = end.value
 
     # bisect_left for start
     lo, hi = 0, n
     while lo < hi:
         mid = (lo + hi) // 2
-        if col[mid].as_py() < start:
+        if col[mid].value < start_ns:
             lo = mid + 1
         else:
             hi = mid
@@ -1835,7 +1837,7 @@ def _filter_pyarrow_table_to_date_range(data: "pa.Table", index_column: str, sta
     lo, hi = left, n
     while lo < hi:
         mid = (lo + hi) // 2
-        if col[mid].as_py() <= end:
+        if col[mid].value <= end_ns:
             lo = mid + 1
         else:
             hi = mid
