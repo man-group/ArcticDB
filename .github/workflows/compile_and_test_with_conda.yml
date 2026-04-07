@@ -333,6 +333,7 @@ jobs:
             cd python
             BASETEMP_ARG=""
             if [[ "$RUNNER_OS" == "Windows" ]]; then
+              mkdir -p D:/temp
               BASETEMP_ARG="--basetemp=D:/temp/pytest"
             fi
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
