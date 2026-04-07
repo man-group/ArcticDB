@@ -370,6 +370,182 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
+// All six operators with query at min-1, min, min+1, max-1, max, max+1 for range [5, 10].
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryLessThan, BinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::LT, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::LT, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 6, OperationType::LT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::LT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::LT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::LT, StatsComparison::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryLessThanEquals, BinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::LE, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::LE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::LE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::LE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::LE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 11, OperationType::LE, StatsComparison::ALL_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryGreaterThan, BinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::GT, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::GT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::GT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::GT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::GT, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 11, OperationType::GT, StatsComparison::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryGreaterThanEquals, BinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::GE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::GE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 6, OperationType::GE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::GE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::GE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::GE, StatsComparison::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryEquals, BinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::EQ, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::EQ, StatsComparison::NONE_MATCH)
+        )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryNotEquals, BinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::NE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::NE, StatsComparison::ALL_MATCH)
+        )
+);
+
+// Flipped operand order: dispatch_binary_stats(value, column_stats, op) exercises the FlippedComparator path.
+// Parameters: (min, max, query_value, op, expected)
+// Runs queries like 5 < q["a"], which we normalize to a form like q["a"] > 5.
+class FlippedBinaryComparisonTest
+    : public ::testing::TestWithParam<
+              std::tuple<std::optional<int64_t>, std::optional<int64_t>, int64_t, OperationType, StatsComparison>> {};
+
+TEST_P(FlippedBinaryComparisonTest, AllCases) {
+    auto [min, max, value, op, expected] = GetParam();
+    std::optional<Value> min_value = min.has_value() ? std::make_optional(Value(*min, DataType::INT64)) : std::nullopt;
+    std::optional<Value> max_value = max.has_value() ? std::make_optional(Value(*max, DataType::INT64)) : std::nullopt;
+    std::vector<ColumnStatsValues> column_stats_values{{min_value, max_value}};
+    std::shared_ptr<Value> value_ptr = std::make_shared<Value>(Value(value, DataType::INT64));
+    auto result = dispatch_binary_stats(value_ptr, column_stats_values, op);
+    auto visitation_result = std::get<std::vector<StatsComparison>>(result);
+    ASSERT_EQ(visitation_result.size(), 1);
+    ASSERT_EQ(visitation_result.at(0), expected);
+}
+
+// value < col  =>  col > value
+// 5 < q["a"]
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryLessThan, FlippedBinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::LT, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::LT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::LT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::LT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::LT, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 11, OperationType::LT, StatsComparison::NONE_MATCH)
+        )
+);
+
+// value <= col  =>  col >= value
+// 5 <= q["a"]
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryLessThanEquals, FlippedBinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::LE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::LE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 6, OperationType::LE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::LE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::LE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::LE, StatsComparison::NONE_MATCH)
+        )
+);
+
+// value > col  =>  col < value
+// 5 > q["a"]
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryGreaterThan, FlippedBinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::GT, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::GT, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 6, OperationType::GT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::GT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::GT, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::GT, StatsComparison::ALL_MATCH)
+        )
+);
+
+// value >= col  =>  col <= value
+// 5 >= q["a"]
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryGreaterThanEquals, FlippedBinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::GE, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::GE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::GE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::GE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::GE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 11, OperationType::GE, StatsComparison::ALL_MATCH)
+        )
+);
+
+// value == col  =>  col == value (symmetric)
+// 5 == q["a"]
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryEquals, FlippedBinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::EQ, StatsComparison::NONE_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::EQ, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::EQ, StatsComparison::NONE_MATCH)
+        )
+);
+
+// value != col  =>  col != value (symmetric)
+// 5 != q["a"]
+INSTANTIATE_TEST_SUITE_P(
+        BoundaryNotEquals, FlippedBinaryComparisonTest,
+        ::testing::Values(
+                std::make_tuple(5, 10, 4, OperationType::NE, StatsComparison::ALL_MATCH),
+                std::make_tuple(5, 10, 5, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 6, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 9, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 10, OperationType::NE, StatsComparison::UNKNOWN),
+                std::make_tuple(5, 10, 11, OperationType::NE, StatsComparison::ALL_MATCH)
+        )
+);
+
 // NaT is not treated specially by column stats - it compares as its raw int64 value (int64_min).
 class StatsComparatorNaTTest
     : public ::testing::TestWithParam<std::tuple<Value, Value, OperationType, StatsComparison>> {};
