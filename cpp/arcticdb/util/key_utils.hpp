@@ -197,9 +197,8 @@ inline ankerl::unordered_dense::set<AtomKey> recurse_index_keys(
     };
 
     // Read all top-level index keys in parallel and process each segment in the read callback.
-    // Note: for MULTI_KEY entries, recurse_segment calls recurse_index_key → store->read_sync()
-    // sequentially for each nested key. This limits parallelism for snapshot-deletion workloads
-    // with deep multi-key chains.
+    // For MULTI_KEY entries, recurse_segment handles the contained TABLE_INDEX keys
+    // (MULTI_KEY is flat — it only ever contains TABLE_INDEX keys, never nested MULTI_KEYs).
     std::vector<folly::Future<PerKeyResult>> process_futures;
     process_futures.reserve(keys.size());
     for (const auto& index_key : keys) {
