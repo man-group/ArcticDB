@@ -527,7 +527,7 @@ class NativeVersionStore:
                 "string": get_all_config_string(),
                 "double": get_all_config_double(),
             },
-            "skip_df_consolidation": self._normalizer.df._skip_df_consolidation,
+            "skip_df_consolidation": getattr(self._normalizer.df, "_skip_df_consolidation", False),
         }
 
     def __repr__(self):
