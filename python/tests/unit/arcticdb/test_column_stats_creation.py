@@ -750,3 +750,6 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
     ]:
         test()
         clear()
+
+
+# TODO aseaton test the types of stats created with dynamic schema

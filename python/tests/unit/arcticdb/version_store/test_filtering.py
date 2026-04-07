@@ -1675,3 +1675,29 @@ def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynami
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     assert not expected.empty
+
+
+@pytest.mark.xfail(reason="Filtering does not have special handling for NaT. Monday: 11688915824")
+def test_column_stats_select_nat_values(in_memory_version_store, column_stats_filtering_enabled_and_disabled):
+    lib = in_memory_version_store
+
+    ts = pd.date_range("2000-01-01", periods=2)
+    df0 = pd.DataFrame({"col": [pd.Timestamp("2020-01-01"), pd.NaT]}, index=ts)
+    df1 = pd.DataFrame(
+        {"col": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-06-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    sym = "sym"
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["col"] == pd.NaT]
+    result = lib.read(sym, query_builder=q).data
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[full_df["col"] == pd.NaT]
+    assert_frame_equal(expected, result)

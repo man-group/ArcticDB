@@ -81,12 +81,6 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
         return StatsComparison::UNKNOWN;
     }
 
-    // We are conservative with NaT so that we don't prune away blocks in an int64 column by interpreting
-    // a min(int64) a NaT. There is special handling for NaN in the operators themselves.
-    if (stats_lhs.min->is_nat() || stats_lhs.max->is_nat()) {
-        return StatsComparison::UNKNOWN;
-    }
-
     return details::visit_type(stats_lhs.min->data_type(), [&](auto stats_tag) -> StatsComparison {
         using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
 
@@ -102,7 +96,10 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                 auto min_val = static_cast<comp::left_type>(stats_lhs.min->get<StatsRawType>());
                 auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
                 auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
-                return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
+                return func(
+                        ValueRange<typename comp::left_type>{min_val, max_val, StatsTag::data_type},
+                        ValueAndType{query_value, ValTag::data_type}
+                );
             }
 
             return StatsComparison::UNKNOWN;

@@ -895,13 +895,10 @@ def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, col
 
 
 def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    """When a segment contains NaT in a timestamp column, its min/max stats are NaT so the
-    comparator returns UNKNOWN and the segment is not pruned. The cases are covered exhaustively
-    in test_column_stats_dispatch.cpp"""
     lib = in_memory_version_store
 
     ts = pd.date_range("2000-01-01", periods=2)
-    df0 = pd.DataFrame({"col": [pd.Timestamp("2020-01-01"), pd.NaT]}, index=ts)
+    df0 = pd.DataFrame({"col": [pd.NaT, pd.NaT]}, index=ts)
     df1 = pd.DataFrame(
         {"col": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-06-01")]},
         index=pd.date_range("2000-01-03", periods=2),
@@ -924,9 +921,7 @@ def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, col
     expected = full_df[full_df["col"] > pd.Timestamp("2024-01-01")]
     assert_frame_equal(expected, result)
 
-    # Both segments must be read: seg1 because its values match, seg0 because NaT makes
-    # its stats UNKNOWN so it cannot be pruned.
-    assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads (NaT prevents pruning), got {table_data_reads}"
+    assert table_data_reads == 1
 
 
 @pytest.mark.parametrize(

@@ -16,6 +16,8 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_traits.hpp>
+#include <arcticdb/pipeline/value.hpp>
+
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -32,6 +34,13 @@ template<typename T>
 struct ValueRange {
     T min;
     T max;
+    DataType data_type;
+};
+
+template<typename T>
+struct ValueAndType {
+    T value;
+    DataType data_type;
 };
 
 // If reordering this enum, is_binary_operation may also need to be changed
@@ -326,6 +335,25 @@ struct IsNullOperator {
     bool apply(std::floating_point auto t) { return std::isnan(t); }
 };
 
+inline bool is_nan(Value v) {
+    return details::visit_type(v.data_type(), [&v]<typename TagType>(TagType) -> bool {
+        using RawType = TagType::raw_type;
+        using type_info = ScalarTypeInfo<TagType>;
+        IsNullOperator is_null_operator;
+        if constexpr (is_floating_point_type(type_info::data_type)) {
+            return is_null_operator.apply(v.get<RawType>());
+        } else if constexpr (is_sequence_type(type_info::data_type)) {
+            return is_null_operator.apply<StringTypeTag>(v.get<RawType>());
+        }
+        // Monday: 11688915824. Query builder filtering does not handle NaT specially, so nor does
+        // column stats yet.
+        // else if constexpr (is_time_type(type_info::data_type)) {
+        //     return is_null_operator.apply<TimeTypeTag>(v.get<timestamp>());
+        // }
+        return false;
+    });
+}
+
 struct NotNullOperator {
     template<typename tag>
     requires util::any_of<tag, TimeTypeTag, StringTypeTag>
@@ -388,10 +416,10 @@ struct LessThanOperator {
     bool operator()(int64_t t, uint64_t u) const { return comparison::less_than(t, u); }
 
     template<typename T, typename U>
-    StatsComparison operator()(ValueRange<T> range, U value) const {
-        if ((*this)(range.max, value))
+    StatsComparison operator()(ValueRange<T> range, ValueAndType<U> value) const {
+        if ((*this)(range.max, value.value))
             return StatsComparison::ALL_MATCH;
-        if (!(*this)(range.min, value))
+        if (!(*this)(range.min, value.value))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -414,10 +442,10 @@ struct LessThanEqualsOperator {
     bool operator()(int64_t t, uint64_t u) const { return comparison::less_than_equals(t, u); }
 
     template<typename T, typename U>
-    StatsComparison operator()(ValueRange<T> range, U value) const {
-        if ((*this)(range.max, value))
+    StatsComparison operator()(ValueRange<T> range, ValueAndType<U> value) const {
+        if ((*this)(range.max, value.value))
             return StatsComparison::ALL_MATCH;
-        if (!(*this)(range.min, value))
+        if (!(*this)(range.min, value.value))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -440,10 +468,10 @@ struct GreaterThanOperator {
     bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than(t, u); }
 
     template<typename T, typename U>
-    StatsComparison operator()(ValueRange<T> range, U value) const {
-        if ((*this)(range.min, value))
+    StatsComparison operator()(ValueRange<T> range, ValueAndType<U> value) const {
+        if ((*this)(range.min, value.value))
             return StatsComparison::ALL_MATCH;
-        if (!(*this)(range.max, value))
+        if (!(*this)(range.max, value.value))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -466,10 +494,10 @@ struct GreaterThanEqualsOperator {
     bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than_equals(t, u); }
 
     template<typename T, typename U>
-    StatsComparison operator()(ValueRange<T> range, U value) const {
-        if ((*this)(range.min, value))
+    StatsComparison operator()(ValueRange<T> range, ValueAndType<U> value) const {
+        if ((*this)(range.min, value.value))
             return StatsComparison::ALL_MATCH;
-        if (!(*this)(range.max, value))
+        if (!(*this)(range.max, value.value))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -502,18 +530,18 @@ struct EqualsOperator {
     bool operator()(int64_t t, uint64_t u) const { return comparison::equals(t, u); }
 
     template<typename T, typename U>
-    StatsComparison operator()(ValueRange<T> range, U value) const {
-        if constexpr (std::is_floating_point_v<T>) {
-            if (std::isnan(range.min) || std::isnan(range.max))
-                return StatsComparison::NONE_MATCH;
+    StatsComparison operator()(ValueRange<T> range, ValueAndType<U> value) const {
+        bool is_min_nan = is_nan(Value{range.min, range.data_type});
+        bool is_max_nan = is_nan(Value{range.max, range.data_type});
+        util::check(is_min_nan == is_max_nan, "Should only get NaN at both ends of stats, saw {}", range);
+        if (is_min_nan || is_nan(Value{value.value, value.data_type})) {
+            // We store NaN at both ends iff the entire column in this block is NaN, NaN != anything
+            return StatsComparison::NONE_MATCH;
         }
-        if constexpr (std::is_floating_point_v<U>) {
-            if (std::isnan(value))
-                return StatsComparison::NONE_MATCH;
-        }
-        if ((*this)(range.min, value) && (*this)(range.max, value))
+
+        if ((*this)(range.min, value.value) && (*this)(range.max, value.value))
             return StatsComparison::ALL_MATCH;
-        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+        if (LessThanOperator{}(range.max, value.value) || GreaterThanOperator{}(range.min, value.value))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -546,18 +574,18 @@ struct NotEqualsOperator {
     bool operator()(int64_t t, uint64_t u) const { return comparison::not_equals(t, u); }
 
     template<typename T, typename U>
-    StatsComparison operator()(ValueRange<T> range, U value) const {
-        if constexpr (std::is_floating_point_v<T>) {
-            if (std::isnan(range.min) || std::isnan(range.max))
-                return StatsComparison::ALL_MATCH;
-        }
-        if constexpr (std::is_floating_point_v<U>) {
-            if (std::isnan(value))
-                return StatsComparison::ALL_MATCH;
-        }
-        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+    StatsComparison operator()(ValueRange<T> range, ValueAndType<U> value) const {
+        bool is_min_nan = is_nan(Value{range.min, range.data_type});
+        bool is_max_nan = is_nan(Value{range.max, range.data_type});
+        util::check(is_min_nan == is_max_nan, "Should only get NaN at both ends of stats, saw {}", range);
+        if (is_min_nan || is_nan(Value{value.value, value.data_type})) {
+            // We store NaN at both ends iff the entire column in this block is NaN, NaN != anything
             return StatsComparison::ALL_MATCH;
-        if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
+        }
+
+        if (LessThanOperator{}(range.max, value.value) || GreaterThanOperator{}(range.min, value.value))
+            return StatsComparison::ALL_MATCH;
+        if (EqualsOperator{}(range.min, value.value) && EqualsOperator{}(range.max, value.value))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -930,6 +958,19 @@ struct formatter<arcticdb::StatsComparison> {
         default:
             return fmt::format_to(ctx.out(), "INVALID");
         }
+    }
+};
+
+template<typename T>
+struct formatter<arcticdb::ValueRange<T>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::ValueRange<T>& range, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "[{}, {}]", range.min, range.max);
     }
 };
 
