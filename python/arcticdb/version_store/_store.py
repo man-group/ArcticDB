@@ -3974,11 +3974,11 @@ class NativeVersionStore:
 
         The metadata from the version being compacted is maintained with the newly created version.
 
+        Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
+
         !!! warning
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
-
-            String columns are not yet supported.
 
             Dynamic schema is not yet supported.
 
@@ -4008,8 +4008,8 @@ class NativeVersionStore:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
-            schema enabled, or the data is sparse
+            If the existing data is recursively normalized, the library has dynamic schema enabled, or the data is
+            sparse
 
         Examples
         --------

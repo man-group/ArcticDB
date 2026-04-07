@@ -19,7 +19,8 @@ import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
 )
-from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
+from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count, random_strings_of_length
+from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
 def generic_compact_data_test(lib, sym, method_arg=None):
@@ -142,13 +143,16 @@ def test_compact_data_explicit_rows_per_segment(
     in_memory_store_factory, clear_query_stats, lib_config_value, method_arg
 ):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=lib_config_value)
+    lib = in_memory_store_factory(segment_row_size=lib_config_value, dynamic_strings=True)
     sym = "test_compact_data_explicit_rows_per_segment"
     df = pd.DataFrame(
         {
             "ints": np.arange(30, dtype=np.int64),
             "floats": np.arange(30, 60, dtype=np.float32),
             "bools": rng.random(30) > 0.5,
+            # Include multiple string columns with overlap of the values to test string pool construction
+            "strings_1": 6 * ["hello", None, "gutentag", np.nan, "konichiwa"],
+            "strings_2": 6 * ["hello", "bonjour", "gutentag", "nihao", "konichiwa"],
         }
     )
     lib.write(sym, df)
@@ -158,13 +162,14 @@ def test_compact_data_explicit_rows_per_segment(
 @pytest.mark.parametrize("method_argument", [1, 8, 10, 13, 100])
 def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_query_stats, method_argument):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=100)
+    lib = in_memory_store_factory(segment_row_size=100, dynamic_strings=True)
     sym = "test_compact_data_widely_varying_row_counts"
     df = pd.DataFrame(
         {
             "ints": np.arange(303, dtype=np.int64),
             "floats": np.arange(303, dtype=np.float32),
             "bools": rng.random(303) > 0.5,
+            "strings": 101 * ["hello", "bonjour", "gutentag"],
         }
     )
     # Produce alternating 100 and 1 row segments
@@ -182,13 +187,15 @@ def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_q
 @pytest.mark.parametrize("append_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, append_rows):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_append"
+    string_values = random_strings_of_length(5, 5, True)
     df = pd.DataFrame(
         {
             "ints": np.arange(initial_rows + append_rows, dtype=np.int64),
             "floats": np.arange(initial_rows + append_rows, 2 * (initial_rows + append_rows), dtype=np.int64),
             "bools": rng.random(initial_rows + append_rows) > 0.5,
+            "strings": rng.choice(string_values, initial_rows + append_rows),
         }
     )
     lib.write(sym, df[:initial_rows])
@@ -201,13 +208,15 @@ def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_pe
 @pytest.mark.parametrize("update_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, update_rows):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_update"
+    string_values = random_strings_of_length(5, 5, True)
     write_df = pd.DataFrame(
         {
             "ints": np.arange(initial_rows, dtype=np.int64),
             "floats": np.arange(initial_rows, 2 * initial_rows, dtype=np.float32),
             "bools": rng.random(initial_rows) > 0.5,
+            "strings": rng.choice(string_values, initial_rows),
         },
         index=pd.date_range("2026-01-01", periods=initial_rows),
     )
@@ -217,6 +226,7 @@ def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_pe
             "ints": np.arange(initial_rows, initial_rows + update_rows, dtype=np.int64),
             "floats": np.arange(initial_rows, initial_rows + update_rows, dtype=np.float32),
             "bools": rng.random(update_rows) > 0.5,
+            "strings": rng.choice(string_values, update_rows),
         },
         index=pd.date_range("2026-01-15", periods=update_rows),
     )
@@ -239,12 +249,14 @@ def test_compact_data_column_slicing(in_memory_store_factory, clear_query_stats,
 @pytest.mark.parametrize("names", [None, ["ts", None], [None, "level 2"], ["ts", "level 2"]])
 def test_compact_data_multiindex(in_memory_store_factory, clear_query_stats, names):
     rows_per_segment = 100
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_multiindex"
     num_rows = rows_per_segment
     df = pd.DataFrame(
         {"col": np.arange(num_rows)},
-        index=pd.MultiIndex.from_product([pd.date_range("2026-01-01", periods=num_rows // 2), [10, 20]], names=names),
+        index=pd.MultiIndex.from_product(
+            [pd.date_range("2026-01-01", periods=num_rows // 2), ["GOOG", "AAPL"]], names=names
+        ),
     )
     lib.write(sym, df[: num_rows // 2])
     lib.append(sym, df[num_rows // 2 :])
@@ -253,9 +265,9 @@ def test_compact_data_multiindex(in_memory_store_factory, clear_query_stats, nam
 
 @pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
 def test_compact_data_many_appends(in_memory_store_factory, clear_query_stats, rows_per_segment):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_many_appends"
-    df = pd.DataFrame({"col": np.arange(50)})
+    df = pd.DataFrame({"ints": np.arange(50), "strings": 10 * ["hello", None, "gutentag", np.nan, "konichiwa"]})
     for i in range(50):
         lib.append(sym, df[i : i + 1])
     generic_compact_data_test(lib, sym)
@@ -306,11 +318,13 @@ def test_compact_data_read_previous_version(in_memory_store_factory):
 
 @pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
 def test_compact_data_date_range_read(in_memory_store_factory, rows_per_segment):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_date_range_read"
     num_rows = 100
     index = pd.date_range("2026-01-01", periods=num_rows)
-    df = pd.DataFrame({"col": np.arange(num_rows)}, index=index)
+    df = pd.DataFrame(
+        {"ints": np.arange(num_rows), "strings": 20 * ["hello", None, "gutentag", np.nan, "konichiwa"]}, index=index
+    )
     for i in range(20):
         lib.append(sym, df[i * 5 : (i + 1) * 5])
     mid = index[num_rows // 2]
@@ -366,6 +380,50 @@ def test_compact_data_column_filtered_read(in_memory_store_factory, clear_query_
     assert_frame_equal(expected_col_bc, lib.read(sym, columns=["col_b", "col_c"]).data)
 
 
+def test_compact_data_fixed_width_strings(in_memory_store_factory):
+    lib = in_memory_store_factory()
+    sym = "test_compact_data_fixed_width_strings"
+    assert not lib.lib_cfg().lib_desc.version.write_options.dynamic_strings
+    lib.write(sym, pd.DataFrame({"col": ["a", "bb", "ccc"]}))
+    lib.append(sym, pd.DataFrame({"col": ["dddd", "eeeee"]}))
+    generic_compact_data_test(lib, sym)
+
+
+@pytest.mark.parametrize("dynamic_strings_first", [True, False])
+def test_compact_data_fixed_width_and_dynamic_strings(in_memory_store_factory, dynamic_strings_first):
+    lib = in_memory_store_factory()
+    sym = "test_compact_data_fixed_width_and_dynamic_strings"
+    # Include two segments with different widths of strings
+    lib.write(sym, pd.DataFrame({"col": ["a", "bb", "ccc"]}), dynamic_strings=dynamic_strings_first)
+    lib.append(sym, pd.DataFrame({"col": ["dddd", "eeeee"]}), dynamic_strings=dynamic_strings_first)
+    lib.append(sym, pd.DataFrame({"col": ["f", "gg"]}), dynamic_strings=not dynamic_strings_first)
+    lib.append(sym, pd.DataFrame({"col": ["hhhhhhhhhhhhhh", "i"]}), dynamic_strings=not dynamic_strings_first)
+    generic_compact_data_test(lib, sym)
+
+
+@pytest.mark.parametrize("dynamic_strings_first", [True, False])
+@pytest.mark.parametrize("operation", ["combine", "split"])
+def test_compact_data_blns(in_memory_store_factory, dynamic_strings_first, operation):
+    lib = in_memory_store_factory()
+    sym = "test_compact_data_blns"
+    df = pd.DataFrame({"col": read_big_list_of_naughty_strings()})
+    lib.write(sym, df[: len(df) // 2], dynamic_strings=dynamic_strings_first)
+    lib.append(sym, df[len(df) // 2 :], dynamic_strings=not dynamic_strings_first)
+    generic_compact_data_test(lib, sym, len(df) if operation == "combine" else len(df) // 4)
+
+
+def test_compact_data_string_none_nan_handling(in_memory_store_factory):
+    lib = in_memory_store_factory(dynamic_strings=True)
+    sym = "test_compact_data_string_none_nan_handling"
+    # Combine string columns with only Nones and NaNs
+    lib.write(sym, pd.DataFrame({"col": [None, np.nan, np.nan, None, None]}), coerce_columns={"col": object})
+    lib.append(sym, pd.DataFrame({"col": [None, np.nan, np.nan, None, None]}), coerce_columns={"col": object})
+    generic_compact_data_test(lib, sym)
+    # Split a string column so that one segment gets all the strings, and the other gets only Nones and NaNs
+    lib.write(sym, pd.DataFrame({"col": ["a", "b", "c", "d", "e", None, np.nan, np.nan, None, None]}))
+    generic_compact_data_test(lib, sym, method_arg=5)
+
+
 def test_compact_pickled_data(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=1000)
     sym = "test_compact_pickled_data"
@@ -385,18 +443,6 @@ def test_compact_recursively_normalized_data(lmdb_version_store_v1):
     with pytest.raises(SchemaException) as e:
         lib.compact_data_experimental(sym)
     assert "recursive" in str(e.value) and sym in str(e.value)
-
-
-def test_compact_data_string_column(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_compact_data_string_column"
-    write_df = pd.DataFrame({"col": ["hello"]})
-    append_df = pd.DataFrame({"col": ["bonjour"]})
-    lib.write(sym, write_df)
-    lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "string" in str(e.value)
 
 
 def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
@@ -453,9 +499,9 @@ def test_compact_data_hypothesis_general(
 ):
     rng = np.random.default_rng(42)
     lib_sliced = in_memory_store_factory(
-        column_group_size=cols_per_segment, segment_row_size=rows_per_segment, name="_unique_"
+        column_group_size=cols_per_segment, segment_row_size=rows_per_segment, dynamic_strings=True, name="_unique_"
     )
-    lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, name="_unique_")
+    lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, dynamic_strings=True, name="_unique_")
     sym = "test_compact_data_hypothesis_general"
     supported_types = [
         np.uint8,
@@ -469,10 +515,12 @@ def test_compact_data_hypothesis_general(
         np.float32,
         np.float64,
         bool,
+        str,
         np.datetime64,
     ]
     col_types = rng.choice(supported_types, num_cols)
     data = {}
+    string_values = random_strings_of_length(10, 5, True)
     for idx in range(num_cols):
         col_name = f"col_{idx}"
         col_type = col_types[idx]
@@ -482,6 +530,8 @@ def test_compact_data_hypothesis_general(
             arr = rng.random(num_rows, col_type)
         elif col_type == bool:
             arr = rng.random(num_rows) > 0.5
+        elif col_type == str:
+            arr = rng.choice(string_values, num_rows)
         else:
             # datetime
             arr = pd.date_range("2026-01-01", freq="s", periods=num_rows).values

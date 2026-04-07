@@ -74,6 +74,10 @@ std::string utf32_to_u8(std::string_view strv) {
     return boost::locale::conv::utf_to_utf<char>(strv32.data(), strv32.data() + strv32.size());
 }
 
+std::u32string utf8_to_u32(std::string_view strv) {
+    return boost::locale::conv::utf_to_utf<char32_t>(strv.data(), strv.data() + strv.size());
+}
+
 uint64_t TransparentStringHash::operator()(std::string_view str) const noexcept {
     return ankerl::unordered_dense::hash<std::string_view>{}(str);
 }

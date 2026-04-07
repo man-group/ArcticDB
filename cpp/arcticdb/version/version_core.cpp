@@ -2988,9 +2988,9 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         pipeline_context->slice_and_keys_.clear();
                         const size_t row_count = slices_and_keys.back().slice().row_range.second -
                                                  slices_and_keys.front().slice().row_range.first;
-                        const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                        TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                 row_count,
-                                pipeline_context->descriptor(),
+                                std::move(*pipeline_context->desc_),
                                 std::move(*pipeline_context->norm_meta_),
                                 pipeline_context->user_meta_
                                         ? std::make_optional(std::move(*pipeline_context->user_meta_))
@@ -2999,6 +2999,12 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                                 std::nullopt,
                                 write_options.bucketize_dynamic
                         );
+                        // String columns always compacted to dynamic UTF-8
+                        for (auto& field : tsd.mutable_fields()) {
+                            if (is_sequence_type(field.type().data_type())) {
+                                field.type_.data_type_ = DataType::UTF_DYNAMIC64;
+                            }
+                        }
                         return index::write_index(
                                 index_type_from_descriptor(pipeline_context->descriptor()),
                                 tsd,
