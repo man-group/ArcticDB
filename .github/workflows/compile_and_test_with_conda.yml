@@ -25,9 +25,6 @@ jobs:
   # ==================== JOB 1: COMPILE ====================
   compile:
     name: Compile (${{inputs.platform}})
-    if: |
-      always() &&
-      !cancelled()
     runs-on: ${{inputs.os}}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -102,8 +99,7 @@ jobs:
     if: |
       always() &&
       !cancelled() &&
-      inputs.run_cpp_tests &&
-      !contains(inputs.platform, 'win')
+      inputs.run_cpp_tests
     runs-on: ${{inputs.os}}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -185,9 +181,6 @@ jobs:
   python_tests:
     name: Python Tests (${{inputs.platform}}) - ${{matrix.type}}
     needs: [compile]
-    if: |
-      always() &&
-      !cancelled()
     runs-on: ${{inputs.os}}
     strategy:
       fail-fast: false
