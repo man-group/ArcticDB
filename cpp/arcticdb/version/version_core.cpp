@@ -1251,7 +1251,6 @@ std::optional<index::IndexSegmentReader> get_index_segment_reader(
     return std::make_optional<index::IndexSegmentReader>(std::move(index_key_seg.second));
 }
 
-
 void check_can_read_index_only_if_required(
         const index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query
 ) {
@@ -1938,8 +1937,29 @@ void create_column_stats_impl(
         const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
-    // TODO aseaton read the index key and the column stats key together in parallel
-    IndexInformation index_info = read_index_key_without_column_stats(store, versioned_item.key_);
+    auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+    auto index_future = store->read(versioned_item.key_);
+
+    using OptionalSeg = std::optional<SegmentInMemory>;
+    auto column_stats_future = store->read(column_stats_key)
+                                       .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalSeg {
+                                           return std::move(key_seg.second);
+                                       });
+
+    auto [index_try, column_stats_try] =
+            folly::collectAll(std::move(index_future), std::move(column_stats_future)).get();
+
+    if (index_try.hasException()) {
+        throw storage::NoDataFoundException(fmt::format(
+                "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                versioned_item.key_.version_id(),
+                versioned_item.key_.id(),
+                versioned_item.key_,
+                index_try.exception().what()
+        ));
+    }
+
+    IndexInformation index_info(std::move(index_try).value(), std::nullopt);
 
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
             variant_key_type(index_info.index_.first) != KeyType::MULTI_KEY,
@@ -1956,12 +1976,11 @@ void create_column_stats_impl(
     // fields.
     column_stats.calculate_offsets(tsd);
 
-    auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
-    try {
-        old_segment = store->read(column_stats_key).get().second;
-    } catch (...) {
-        // Old segment doesn't exist
+    if (column_stats_try.hasException()) {
+        // Old column stats key doesn't exist
+    } else {
+        old_segment = std::move(column_stats_try).value();
     }
 
     if (old_segment) {

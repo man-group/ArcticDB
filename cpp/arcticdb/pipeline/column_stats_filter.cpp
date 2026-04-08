@@ -222,7 +222,9 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
                 stats.max = value;
                 break;
             default:
-                log::version().warn("Unknown column stats type {} at offset {}, skipping", static_cast<int>(stat_type), col_idx);
+                log::version().warn(
+                        "Unknown column stats type {} at offset {}, skipping", static_cast<int>(stat_type), col_idx
+                );
                 break;
             }
         }
