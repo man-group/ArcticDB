@@ -179,6 +179,7 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
     )
     lib.write("arrow", df, dynamic_strings=True)
     table = lib.read("arrow", row_range=row_range).data
+    table.column("x").null_count == 10
     expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
 

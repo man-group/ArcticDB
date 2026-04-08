@@ -284,7 +284,7 @@ void encode_dictionary(
                         for_each_enumerated_flattened<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                                    if (is_a_string(en.value())) {
+                                    if (is_a_string(en.value())) { 
                                         if (auto it = unique_offsets_view.find(en.value());
                                             it == unique_offsets_view.end()) {
                                             auto entry = unique_offsets_view
@@ -307,8 +307,8 @@ void encode_dictionary(
                                         if (!populate_inverted_bitset) {
                                             inserter = en.idx();
                                         }
-                                    } else if (populate_inverted_bitset) {
-                                        inserter = en.idx();
+                                    } else if (populate_inverted_bitset) { // is it np.nan or is it None
+                                        inserter = en.idx(); // set to 0
                                     }
                                 },
                                 positions.first_idx_after_truncation,

@@ -13,12 +13,15 @@
 namespace arcticdb {
 
 struct ArrowStringHandler {
+        // input is compressed data, which we need to decompress onto dest
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
             const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
+    // lib.read(query_builder) codepath 
+    // input is a decompressed column
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
             const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
@@ -61,6 +64,20 @@ struct ArrowBoolHandler {
             std::any& handler_data
     ) const;
 };
+
+ArrowTimestampHandler {
+        ....
+        /*
+                for each element in data:
+                   if data == pd.NaT:
+                      bv.set_bit(i, 0)
+
+                if (bv->count !- bv.size){
+                    //same as above
+                }
+            }
+                */
+}
 
 struct ArrowHandlerDataFactory : public TypeHandlerDataFactory {
     std::any get_data() const override { return {}; }

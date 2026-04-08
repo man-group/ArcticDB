@@ -328,6 +328,7 @@ void handle_type_promotion(const ColumnMapping& m, Column& column) {
     }
 }
 
+// Called for each table data
 void decode_or_expand(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
@@ -336,6 +337,7 @@ void decode_or_expand(
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
     if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
+        // pandas string, arrow string, arrow bool, arrow timestamp
         handler->handle_type(
                 data,
                 dest_column,
@@ -348,8 +350,9 @@ void decode_or_expand(
                 read_options
         );
     } else {
+        // timestamps
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
-        auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
+        auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_); // destination bytes at corresponding position
         const auto dest_bytes = mapping.dest_bytes_;
         std::optional<util::BitMagic> bv;
         util::check(encoded_field_info.has_ndarray(), "Unsupported encoding for field {}", encoded_field_info);
@@ -369,7 +372,8 @@ void decode_or_expand(
             // fast forward enumerator, which outweighs any savings from skipping the allocation.
             ChunkedBuffer dense_buffer = ChunkedBuffer::presized(uncompressed_bytes);
             SliceDataSink dense_sink{dense_buffer.data(), uncompressed_bytes};
-            data += decode_field(source_type_desc, encoded_field_info, data, dense_sink, bv, encoding_version);
+            data += decode_field(source_type_desc, encoded_field_info, data, dense_sink, bv, encoding_version); //decoding
+            // only can be written by arrow or tick streaming (pd.NaT)
 
             if (!bv.has_value()) {
                 bv = util::BitMagic();
@@ -386,7 +390,7 @@ void decode_or_expand(
                 }
                 source_type_desc.visit_tag([&](auto src_tdt) {
                     using SrcType = typename decltype(src_tdt)::DataTypeTag::raw_type;
-                    util::expand_dense_buffer_and_promote_type<SrcType, DestType>(
+                    util::expand_dense_buffer_and_promote_type<SrcType, DestType>( // expands the arrow buffer
                             bv.value(), dense_buffer.data(), dest
                     );
                 });
@@ -399,7 +403,7 @@ void decode_or_expand(
                 if (bv->count() != bv->size()) {
                     auto first_offset_after_truncation = mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0
                                                                                  ) * dest_type_desc.get_type_bytes();
-                    create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE);
+                    create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE); // attaches the validity bitmap to the column for arrow
                 }
             }
         } else {
