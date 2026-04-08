@@ -264,23 +264,11 @@ jobs:
           node-version: '24'
 
       - name: Install Azurite
-        shell: bash -elo pipefail {0}
-        run: |
-          npm install -g azurite
-          npm_config_prefix=$(npm config get prefix)
-          npm_bin_dir="$npm_config_prefix"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            npm_bin_dir=$(echo "$npm_bin_dir" | sed 's|\\|/|g')
-            if [[ "$npm_bin_dir" =~ ^([A-Za-z]):/(.*) ]]; then
-              drive_letter="${BASH_REMATCH[1]}"
-              rest="${BASH_REMATCH[2]}"
-              npm_bin_dir="/${drive_letter,,}/${rest}"
-            fi
-          fi
-          npm_bin_dir="${npm_bin_dir}/bin"
-          echo "$npm_bin_dir" >> $GITHUB_PATH
-          export PATH="$npm_bin_dir:$PATH"
-          which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: npm install -g azurite
 
       - name: Check no arcticdb file depend on tests package
         run: build_tooling/checks.sh
