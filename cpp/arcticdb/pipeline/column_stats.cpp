@@ -125,7 +125,6 @@ std::string to_segment_column_name(const std::string& column, ColumnStatTypeInte
     return fmt::format("{}({})", type_to_operator_string(type), column);
 }
 
-
 ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats) {
     for (const auto& [column, column_stat_names] : column_stats) {
         if (!column_stat_names.empty()) {
@@ -195,8 +194,10 @@ void ColumnStats::calculate_offsets(const TimeseriesDescriptor& tsd, utils::Miss
     for (auto& offset_and_mangled_name : offsets_and_mangled_names) {
         offset_to_stat_info_.emplace(
                 offset_and_mangled_name.offset,
-                NameAndStatTypes{offset_and_mangled_name.mangled_name,
-                  user_specified_column_stats_.at(offset_and_mangled_name.unmangled_name)}
+                NameAndStatTypes{
+                        offset_and_mangled_name.mangled_name,
+                        user_specified_column_stats_.at(offset_and_mangled_name.unmangled_name)
+                }
         );
     }
     offset_to_stat_info_set_ = true;
