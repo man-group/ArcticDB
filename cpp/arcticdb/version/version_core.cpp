@@ -1251,6 +1251,7 @@ std::optional<index::IndexSegmentReader> get_index_segment_reader(
     return std::make_optional<index::IndexSegmentReader>(std::move(index_key_seg.second));
 }
 
+
 void check_can_read_index_only_if_required(
         const index::IndexSegmentReader& index_segment_reader, const ReadQuery& read_query
 ) {
@@ -1348,7 +1349,7 @@ static void read_indexed_keys_to_pipeline(
 
     if (index_information.column_stats_.has_value()) {
         auto column_stats_filter =
-                create_column_stats_filter(std::move(*index_information.column_stats_), read_query.clauses_);
+                create_column_stats_filter(std::move(*index_information.column_stats_), tsd, read_query.clauses_);
         queries.push_back(std::move(column_stats_filter));
     }
 
@@ -1937,20 +1938,23 @@ void create_column_stats_impl(
         const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
-    auto pipeline_context = std::make_shared<PipelineContext>();
-    pipeline_context->stream_id_ = versioned_item.key_.id();
-    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item);
+    // TODO aseaton read the index key and the column stats key together in parallel
+    IndexInformation index_info = read_index_key_without_column_stats(store, versioned_item.key_);
+
     schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            !pipeline_context->multi_key_, "Column stats generation not supported with recursively normalized symbols"
+            variant_key_type(index_info.index_.first) != KeyType::MULTI_KEY,
+            "Column stats generation not supported with recursively normalized symbols"
     );
-    util::check(maybe_isr.has_value(), "If not recursively normalized we should have a present IndexSegmentReader");
+    const auto& tsd = index_info.index_.second.index_descriptor();
     schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
-            !maybe_isr->is_pickled(), "Cannot create column stats on pickled data"
+            tsd.proto().normalization().input_type_case() !=
+                    arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame,
+            "Cannot create column stats on pickled data"
     );
 
     // column_stats contains a user-specified map of string col names to stats. Map these to offsets in to the TSD's
     // fields.
-    column_stats.calculate_offsets(maybe_isr->tsd());
+    column_stats.calculate_offsets(tsd);
 
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     std::optional<SegmentInMemory> old_segment;
@@ -1968,7 +1972,7 @@ void create_column_stats_impl(
                 "Could not unpack metadata of old_header in create_column_stats_impl? key={}",
                 column_stats_key
         );
-        ColumnStats old_column_stats{old_header, maybe_isr->tsd()};
+        ColumnStats old_column_stats(old_header, tsd);
         // No need to redo work for any stats that already exist
         column_stats.drop(old_column_stats, false);
         // If all the column stats we are being asked to create already exist, there's no work to do
@@ -1985,15 +1989,8 @@ void create_column_stats_impl(
 
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
-    IndexInformation index_info = read_index_key_without_column_stats(store, versioned_item.key_);
+    auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, std::move(index_info));
-
-    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            !pipeline_context->multi_key_, "Column stats generation not supported with multi-indexed symbols"
-    );
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
-            !pipeline_context->is_pickled(), "Cannot create column stats on pickled data"
-    );
 
     auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(

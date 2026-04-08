@@ -57,7 +57,7 @@ struct ColumnStatsRow {
  */
 class ColumnStatsData {
   public:
-    explicit ColumnStatsData(SegmentInMemory&& segment);
+    explicit ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDescriptor& tsd);
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ColumnStatsData)
 
@@ -102,7 +102,8 @@ bool should_try_column_stats_read(const ReadQuery& read_query);
  * Precondition: should_try_column_stats_read(clauses) == true
  */
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        SegmentInMemory&& column_stats_segment, const std::vector<std::shared_ptr<Clause>>& clauses
+        SegmentInMemory&& column_stats_segment, const TimeseriesDescriptor& tsd,
+        const std::vector<std::shared_ptr<Clause>>& clauses
 );
 
 /**

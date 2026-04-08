@@ -163,22 +163,29 @@ StatsVariantData compute_stats(
     return std::vector(stats_rows.size(), StatsComparison::UNKNOWN);
 }
 
-ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
+ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDescriptor& tsd) {
+    using namespace arcticc::pb2::descriptors_pb2;
     if (segment.row_count() == 0) {
         return;
     }
 
-    std::unordered_map<size_t, std::pair<std::string, ColumnStatElement>> stats_at_column_index;
+    // Build reverse lookup: stats_seg_offset -> (column_name, stat_type)
+    ColumnStatsHeader header;
+    auto* metadata = segment.metadata();
+    util::check(metadata != nullptr, "Column stats segment has no metadata");
+    bool unpacked = metadata->UnpackTo(&header);
+    util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
 
-    const auto& fields = segment.descriptor().fields();
-    for (size_t i = end_index_column_offset + 1; i < fields.size(); ++i) {
-        const auto& field = fields[i];
-        std::string_view name = field.name();
-        auto parsed = from_segment_column_name_to_internal(name);
-        stats_at_column_index.emplace(i, std::move(parsed));
+    std::unordered_map<size_t, std::pair<std::string, ColumnStatsType>> stats_at_column_index;
+    for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
+        std::string col_name{tsd.fields().at(data_col_offset).name()};
+        for (const auto& entry : entry_list.entries()) {
+            stats_at_column_index.emplace(entry.stats_seg_offset(), std::make_pair(col_name, entry.type()));
+        }
     }
 
     // Future aseaton consider iterating column-wise rather than row-wise?
+    const auto& fields = segment.descriptor().fields();
     rows_.reserve(segment.row_count());
     for (auto it = segment.begin(); it != segment.end(); ++it) {
         ColumnStatsRow stats_row;
@@ -199,17 +206,23 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment) {
 
         for (size_t col_idx = end_index_column_offset + 1; col_idx < fields.size(); ++col_idx) {
             const auto& field = fields[col_idx];
-
-            const auto& stats_type = stats_at_column_index.at(col_idx);
+            auto lookup_it = stats_at_column_index.find(col_idx);
+            if (lookup_it == stats_at_column_index.end()) {
+                continue;
+            }
+            const auto& [col_name, stat_type] = lookup_it->second;
             auto value = extract_value_from_column(it, col_idx, field.type().data_type());
 
-            auto& stats = stats_row.stats_for_column[stats_type.first];
-            switch (stats_type.second) {
-            case ColumnStatElement::MIN:
+            auto& stats = stats_row.stats_for_column[col_name];
+            switch (stat_type) {
+            case COLUMN_STATS_MIN_V1:
                 stats.min = value;
                 break;
-            case ColumnStatElement::MAX:
+            case COLUMN_STATS_MAX_V1:
                 stats.max = value;
+                break;
+            default:
+                log::version().warn("Unknown column stats type {} at offset {}, skipping", static_cast<int>(stat_type), col_idx);
                 break;
             }
         }
@@ -292,7 +305,8 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 }
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        SegmentInMemory&& column_stats_segment, const std::vector<std::shared_ptr<Clause>>& clauses
+        SegmentInMemory&& column_stats_segment, const TimeseriesDescriptor& tsd,
+        const std::vector<std::shared_ptr<Clause>>& clauses
 ) {
     std::vector<std::shared_ptr<ExpressionContext>> filter_expressions;
 
@@ -315,7 +329,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
 
     util::check(!filter_expressions.empty(), "Expected at least one filter expression");
 
-    ColumnStatsData column_stats{std::move(column_stats_segment)};
+    ColumnStatsData column_stats{std::move(column_stats_segment), tsd};
 
     ARCTICDB_DEBUG(log::version(), "AND-ing expression contexts from filters");
     ExpressionContext overall_context = and_filter_expression_contexts(filter_expressions);

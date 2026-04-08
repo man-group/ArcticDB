@@ -135,8 +135,8 @@ def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
     )
 
     # Note that for df4 we have min=1.0 max=2.0 even though the values include np.nan
-    expected_column_stats["v1.0_MIN(col_1)"] = [1.0, np.nan, 5.0, np.nan, 1.0]
-    expected_column_stats["v1.0_MAX(col_1)"] = [3.0, np.nan, 5.0, np.nan, 2.0]
+    expected_column_stats["v1_MIN(col_1)"] = [1.0, np.nan, 5.0, np.nan, 1.0]
+    expected_column_stats["v1_MAX(col_1)"] = [3.0, np.nan, 5.0, np.nan, 2.0]
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -175,8 +175,8 @@ def test_column_stats_nat_values(lmdb_version_store_v1, any_output_format):
         axis=1,
         inplace=True,
     )
-    expected_column_stats["v1.0_MIN(col_1)"] = [pd.Timestamp("2020-01-01"), pd.NaT, pd.NaT, pd.NaT]
-    expected_column_stats["v1.0_MAX(col_1)"] = [
+    expected_column_stats["v1_MIN(col_1)"] = [pd.Timestamp("2020-01-01"), pd.NaT, pd.NaT, pd.NaT]
+    expected_column_stats["v1_MAX(col_1)"] = [
         pd.Timestamp("2020-06-01"),
         pd.Timestamp("2025-01-01"),
         pd.Timestamp("2025-01-01"),
