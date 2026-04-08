@@ -37,8 +37,7 @@ ArcticDB has a layered Python API: `Arctic` -> `Library` -> `NativeVersionStore`
 - **QueryBuilder**: New operations must follow the existing fluent builder pattern.
 - **Return type changes** from read/write operations affect downstream code.
 - **Exception hierarchy**: Preserve error codes and exception types users may catch.
-- **Docstrings**: Public methods must have accurate, complete docstrings (see §21 for
-  format requirements).
+- **Docstrings**: See §21 for scope and format requirements.
 
 ---
 
@@ -308,29 +307,18 @@ ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
 
 ## 21. DOCUMENTATION
 
-### User-Facing Docs (`docs/mkdocs/docs/`)
+Full documentation requirements and checklists are in
+[`.claude/skills/update-docs/SKILL.md`](../../.claude/skills/update-docs/SKILL.md).
+Read that file and apply its checks when reviewing documentation completeness.
 
-- **Docstring completeness**: New or modified public methods must have complete
-  NumPy-format docstrings with all applicable sections: `Parameters`, `Returns`,
-  `Raises`, `Examples`. "Accurate" is not enough — missing sections are a gap.
-- **Tutorials**: Features with multiple use cases or non-obvious behaviour must have
-  a tutorial in `docs/mkdocs/docs/tutorials/`. A docstring alone is insufficient for
-  complex features.
-- **mkdocs.yml nav**: Any new documentation pages must be added to the `nav` section
-  of `docs/mkdocs/mkdocs.yml` — otherwise the page is unreachable.
-- **Edge cases and limitations**: Behaviour that may surprise users (e.g. performance
-  cliffs, unsupported dtypes, ordering guarantees) must be documented.
-- **Disambiguation guidance**: When multiple similar features coexist (e.g. `update`
-  vs `append`), "when to use A vs B" must be explained.
+Key areas to verify:
 
-### Claude-Maintained Technical Docs (`docs/claude/`)
-
-- **Update on change**: If the PR modifies code in an area covered by a `docs/claude/`
-  document (see CLAUDE.md for the area→document mapping, e.g. `CACHING.md`,
-  `VERSIONING.md`, `PIPELINE.md`), that document must be updated to reflect the
-  changes.
-- **Scope**: Only update documents for areas actually changed. Do not touch unrelated
-  technical docs.
+- **Docstrings**: New/modified public methods in `library.py`, `arctic.py`, and `_store.py`
+  have complete NumPy-format docstrings.
+- **Tutorials**: Complex features have a tutorial in `docs/mkdocs/docs/tutorials/`.
+- **mkdocs.yml nav**: New pages are reachable.
+- **Edge cases & disambiguation**: Surprising behaviour and "A vs B" guidance documented.
+- **`docs/claude/` technical docs**: Updated for each area of code that was changed.
 
 ---
 
@@ -395,10 +383,9 @@ ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
 - [ ] PR labelled appropriately (enhancement, bug, etc.)
 
 ### Documentation
-- [ ] New/modified public methods have complete NumPy-format docstrings (Parameters, Returns, Raises, Examples)
+- [ ] New/modified public methods in `library.py`, `arctic.py`, `_store.py` have complete NumPy-format docstrings
 - [ ] Complex or multi-use features have a tutorial in `docs/mkdocs/docs/tutorials/`
 - [ ] `docs/mkdocs/mkdocs.yml` nav updated for any new documentation pages
 - [ ] Edge cases, limitations, and "when to use A vs B" guidance documented where applicable
 - [ ] `docs/claude/` technical doc updated if code in a documented area was changed
-- [ ] Breaking changes flagged with appropriate labels
 ```

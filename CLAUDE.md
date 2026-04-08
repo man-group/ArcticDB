@@ -8,36 +8,13 @@ ArcticDB is a high-performance, serverless DataFrame database for the Python Dat
 
 ## Documentation
 
-### User-Facing Documentation (`docs/mkdocs/docs/`)
-
-**New features must include documentation:**
-
-- **Tutorials** (`tutorials/`): Step-by-step guides for features (e.g., `sql_queries.md`)
-- **API Reference** (`api/`): Auto-generated from docstrings via mkdocstrings
-- **Technical docs** (`technical/`): Architecture and implementation details
-
-When adding a new feature:
-
-1. **Add/update docstrings** in the Python code (NumPy format)
-2. **Create a tutorial** if the feature has multiple use cases or nuances
-3. **Update `mkdocs.yml`** nav section to include new pages
-4. **Build docs locally** to verify: `cd docs/mkdocs && mkdocs serve`
-
-Documentation checklist:
-- [ ] Public API has complete docstrings (Parameters, Returns, Raises, Examples)
-- [ ] Complex features have a tutorial with code examples
-- [ ] Edge cases and limitations are documented
-- [ ] When to use feature A vs feature B is explained (if applicable)
+**New features must include documentation.** Full requirements and checklists for both
+user-facing docs and Claude-maintained technical docs are in
+[`.claude/skills/update-docs/SKILL.md`](.claude/skills/update-docs/SKILL.md) — read that
+file when adding or modifying public API, and follow its checklists before considering the
+work complete.
 
 ### Claude-Maintained Technical Docs (`docs/claude/`)
-
-Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
-
-- **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
-- **Update** the doc only when making changes to that area
-- Do NOT proactively read or update docs for unrelated areas
-
-Keep documentation **high-level and terse**: reference `file_path:ClassName:method_name` instead of copying code; use tables and bullet points over code blocks; avoid duplicating what's already in source code.
 
 | Area | Document |
 |------|----------|
