@@ -80,7 +80,7 @@ jobs:
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: ${{inputs.preset}}
 
       - name: Show sccache stats
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
