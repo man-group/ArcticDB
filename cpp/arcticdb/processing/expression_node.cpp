@@ -172,6 +172,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
         case OperationType::SUB:
         case OperationType::MUL:
         case OperationType::DIV:
+        case OperationType::MOD:
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     std::holds_alternative<DataType>(left_type),
                     "Unexpected bitset input as left operand to {}",
@@ -223,6 +224,14 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                                     typename left_type_info::RawType,
                                     typename right_type_info::RawType,
                                     std::remove_reference_t<DivideOperator>>::type;
+                            res = data_type_from_raw_type<TargetType>();
+                            break;
+                        }
+                        case OperationType::MOD: {
+                            using TargetType = typename binary_operation_promoted_type<
+                                    typename left_type_info::RawType,
+                                    typename right_type_info::RawType,
+                                    std::remove_reference_t<ModOperator>>::type;
                             res = data_type_from_raw_type<TargetType>();
                             break;
                         }
