@@ -310,13 +310,11 @@ jobs:
           eval "$COMMANDLINE"
           export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+          python setup.py protoc --build-lib python # Moved before the if/else
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            python -m pip install pytest-repeat setuptools wheel
-            python setup.py protoc --build-lib python
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
           else
-            python setup.py protoc --build-lib python
             cd python
             BASETEMP_ARG=""
             if [[ "$RUNNER_OS" == "Windows" ]]; then
