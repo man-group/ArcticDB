@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -46,19 +46,30 @@ sparrow::primitive_array<T> create_primitive_array(
     }
 }
 
-template<>
-sparrow::primitive_array<bool> create_primitive_array(
-        bool* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
+sparrow::array create_packed_bool_array(
+        TypedBlockData<ScalarTagType<DataTypeTag<DataType::BOOL8>>>& block, std::string_view name,
+        std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
-    // We need special handling for bools because arrow uses dense bool representation (i.e. 8 bools per byte)
-    // Our internal representation is not dense. We use sparrow's `make_data_buffer` utility, but if needed, we can use
-    // our own.
-    auto buffer = sparrow::details::primitive_data_access<bool>::make_data_buffer(std::span{data_ptr, data_size});
-    if (validity_bitmap) {
-        return sparrow::primitive_array<bool>{std::move(buffer), data_size, std::move(*validity_bitmap)};
-    } else {
-        return sparrow::primitive_array<bool>{std::move(buffer), data_size};
-    }
+    util::check(
+            block.mem_block()->get_type() == MemBlockType::EXTERNAL_PACKED, "Expected packed block for bool column"
+    );
+    const auto num_bools = block.row_count();
+    const auto packed_bytes = block.mem_block()->physical_bytes();
+    auto* data_ptr = block.release();
+    // u8_buffer<bool> treats each element as 1 byte. We pass packed_bytes as the element count so that
+    // the buffer owns exactly the packed allocation. sparrow's primitive_array<bool> interprets this
+    // buffer as packed bits, using num_bools as the logical element count.
+    sparrow::u8_buffer<bool> buffer(data_ptr, packed_bytes, get_detachable_allocator());
+    auto arr = [&]() {
+        if (maybe_bitmap) {
+            return sparrow::array{sparrow::primitive_array<bool>{std::move(buffer), num_bools, std::move(*maybe_bitmap)}
+            };
+        } else {
+            return sparrow::array{sparrow::primitive_array<bool>{std::move(buffer), num_bools}};
+        }
+    }();
+    arr.set_name(name);
+    return arr;
 }
 
 template<typename T>
@@ -300,6 +311,9 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
                 } else {
                     vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
                 }
+            } else if constexpr (is_bool_type(TagType::DataTypeTag::data_type)) {
+                util::check(column_data.buffer().is_packed(), "Expected packed bool column for arrow output");
+                vec.emplace_back(create_packed_bool_array(*block, name, std::move(bitmap)));
             } else {
                 vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
             }

@@ -35,6 +35,7 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 #include <arcticdb/util/format_date.hpp>
 #include <iterator>
 #include <aws/core/utils/stream/ResponseStream.h>
@@ -844,7 +845,7 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
                             return folly::collect(work_futures).via(&async::io_executor());
                         });
     }
-    return std::move(entity_ids_vec_fut).thenValueInline(flatten_entities);
+    return std::move(entity_ids_vec_fut).thenValueInline(util::flatten_vectors<EntityId>);
 }
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
@@ -1629,9 +1630,6 @@ void copy_frame_data_to_buffer(
     const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
 
-    auto src_data = src_column.data();
-    auto dst_ptr = dst_column.bytes_at(offset, total_size);
-
     auto type_promotion_error_msg = fmt::format(
             "Can't promote type {} to type {} in field {}",
             src_column.type(),
@@ -1654,57 +1652,30 @@ void copy_frame_data_to_buffer(
         handler->convert_type(
                 src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr(), read_options
         );
-    } else if (is_empty_type(src_column.type().data_type())) {
-        init_sparse_dst_column_before_copy(
-                dst_column,
-                offset,
-                num_rows,
-                dst_rawtype_size,
-                read_options.output_format(),
-                std::nullopt,
-                default_value
-        );
-        // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows
-        // values
-    } else if (src_column.opt_sparse_map().has_value() &&
-               is_valid_type_promotion_to_target(
-                       src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE
-               )) {
-        details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
-            using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
-            typename dst_type_info::RawType* typed_dst_ptr =
-                    reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+    } else {
+        auto src_data = src_column.data();
+        auto dst_ptr = dst_column.bytes_at(offset, total_size);
+
+        if (is_empty_type(src_column.type().data_type())) {
             init_sparse_dst_column_before_copy(
                     dst_column,
                     offset,
                     num_rows,
                     dst_rawtype_size,
                     read_options.output_format(),
-                    src_column.opt_sparse_map(),
+                    std::nullopt,
                     default_value
             );
-            details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
-                using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
-                arcticdb::for_each_enumerated<typename src_type_info::TDT>(
-                        src_column,
-                        [typed_dst_ptr] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
-                            typed_dst_ptr[enumerating_it.idx()] =
-                                    static_cast<typename dst_type_info::RawType>(enumerating_it.value());
-                        }
-                );
-            });
-        });
-    } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
-        details::visit_type(src_column.type().data_type(), [&](auto src_desc_tag) {
-            using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
-            using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-            if (!src_column.is_sparse()) {
-                while (auto block = src_data.next<SourceTDT>()) {
-                    const auto row_count = block->row_count();
-                    memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
-                    dst_ptr += row_count * sizeof(SourceType);
-                }
-            } else {
+            // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than
+            // num_rows values
+        } else if (src_column.opt_sparse_map().has_value() &&
+                   is_valid_type_promotion_to_target(
+                           src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE
+                   )) {
+            details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
+                using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
+                typename dst_type_info::RawType* typed_dst_ptr =
+                        reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
                 init_sparse_dst_column_before_copy(
                         dst_column,
                         offset,
@@ -1714,70 +1685,104 @@ void copy_frame_data_to_buffer(
                         src_column.opt_sparse_map(),
                         default_value
                 );
-                SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
-                arcticdb::for_each_enumerated<SourceTDT>(src_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& row) {
-                    typed_dst_ptr[row.idx()] = row.value();
+                details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
+                    using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
+                    arcticdb::for_each_enumerated<typename src_type_info::TDT>(
+                            src_column,
+                            [typed_dst_ptr] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                                typed_dst_ptr[enumerating_it.idx()] =
+                                        static_cast<typename dst_type_info::RawType>(enumerating_it.value());
+                            }
+                    );
                 });
-            }
-        });
-    } else if (is_valid_type_promotion_to_target(
-                       src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE
-               ) ||
-               (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64
-               ) ||
-               (src_column.type().data_type() == DataType::FLOAT64 && dst_column.type().data_type() == DataType::FLOAT32
-               )) {
-        // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type between
-        // these types. This means that the second condition cannot happen during a regular read. The processing
-        // pipeline, however, can produce a set of segments where some are int64 and other uint64. This can happen in
-        // the sum aggregation (both for unsorted aggregations and resampling). Because we promote the sum type to the
-        // largest type of the respective category. E.g., we have int8 and uint8. Dynamic schema will allow this, and
-        // the global type descriptor will be int16. However, when segments are processed on their own int8 -> int64 and
-        // uint8 -> int64. We have decided to allow this and assign a common type of int64 (done in the modify_schema
-        // procedure). This is what pyarrow does as well. Because of the above, we allow here copying uint64 buffer in
-        // an int64 buffer.
-        //
-        // Having float64 as a source and float32 as a destination should not appear during a regular read however it
-        // can happen in the processing pipeline. E.g., performing a first/last/min/max aggregations in resampling or
-        // groupby. There might be 4 segments float32, uint16, int8 and float32, if the first segment is in a separate
-        // group/bucket and the second 3 segments are in the same group the processing pipeline will output two segments
-        // one with float32 dtype and one with dtype:
-        // common_type(common_type(uint16, int8), float32) = common_type(int32, float32) = float64
-        details::visit_type(dst_column.type().data_type(), [&](auto dest_desc_tag) {
-            using DestinationRawType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            auto typed_dst_ptr = reinterpret_cast<DestinationRawType*>(dst_ptr);
+            });
+        } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
             details::visit_type(src_column.type().data_type(), [&](auto src_desc_tag) {
-                using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
-                if constexpr (std::is_arithmetic_v<typename source_type_info::RawType> &&
-                              std::is_arithmetic_v<DestinationRawType>) {
-                    if (src_column.is_sparse()) {
-                        init_sparse_dst_column_before_copy(
-                                dst_column,
-                                offset,
-                                num_rows,
-                                dst_rawtype_size,
-                                read_options.output_format(),
-                                src_column.opt_sparse_map(),
-                                default_value
-                        );
-                        arcticdb::for_each_enumerated<typename source_type_info::TDT>(
-                                src_column,
-                                [&] ARCTICDB_LAMBDA_INLINE(const auto& row) { typed_dst_ptr[row.idx()] = row.value(); }
-                        );
-                    } else {
-                        arcticdb::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
-                            *typed_dst_ptr = value;
-                            ++typed_dst_ptr;
-                        });
+                using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
+                using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+                if (!src_column.is_sparse()) {
+                    while (auto block = src_data.next<SourceTDT>()) {
+                        const auto row_count = block->row_count();
+                        memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
+                        dst_ptr += row_count * sizeof(SourceType);
                     }
-
                 } else {
-                    util::raise_rte(type_promotion_error_msg.c_str());
+                    init_sparse_dst_column_before_copy(
+                            dst_column,
+                            offset,
+                            num_rows,
+                            dst_rawtype_size,
+                            read_options.output_format(),
+                            src_column.opt_sparse_map(),
+                            default_value
+                    );
+                    SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
+                    arcticdb::for_each_enumerated<SourceTDT>(src_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& row) {
+                        typed_dst_ptr[row.idx()] = row.value();
+                    });
                 }
             });
-        });
-    } else {
-        util::raise_rte(type_promotion_error_msg.c_str());
+        } else if (is_valid_type_promotion_to_target(
+                           src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE
+                   ) ||
+                   (src_column.type().data_type() == DataType::UINT64 &&
+                    dst_column.type().data_type() == DataType::INT64) ||
+                   (src_column.type().data_type() == DataType::FLOAT64 &&
+                    dst_column.type().data_type() == DataType::FLOAT32)) {
+            // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type
+            // between these types. This means that the second condition cannot happen during a regular read. The
+            // processing pipeline, however, can produce a set of segments where some are int64 and other uint64. This
+            // can happen in the sum aggregation (both for unsorted aggregations and resampling). Because we promote the
+            // sum type to the largest type of the respective category. E.g., we have int8 and uint8. Dynamic schema
+            // will allow this, and the global type descriptor will be int16. However, when segments are processed on
+            // their own int8 -> int64 and uint8 -> int64. We have decided to allow this and assign a common type of
+            // int64 (done in the modify_schema procedure). This is what pyarrow does as well. Because of the above, we
+            // allow here copying uint64 buffer in an int64 buffer.
+            //
+            // Having float64 as a source and float32 as a destination should not appear during a regular read however
+            // it can happen in the processing pipeline. E.g., performing a first/last/min/max aggregations in
+            // resampling or groupby. There might be 4 segments float32, uint16, int8 and float32, if the first segment
+            // is in a separate group/bucket and the second 3 segments are in the same group the processing pipeline
+            // will output two segments one with float32 dtype and one with dtype: common_type(common_type(uint16,
+            // int8), float32) = common_type(int32, float32) = float64
+            details::visit_type(dst_column.type().data_type(), [&](auto dest_desc_tag) {
+                using DestinationRawType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+                auto typed_dst_ptr = reinterpret_cast<DestinationRawType*>(dst_ptr);
+                details::visit_type(src_column.type().data_type(), [&](auto src_desc_tag) {
+                    using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
+                    if constexpr (std::is_arithmetic_v<typename source_type_info::RawType> &&
+                                  std::is_arithmetic_v<DestinationRawType>) {
+                        if (src_column.is_sparse()) {
+                            init_sparse_dst_column_before_copy(
+                                    dst_column,
+                                    offset,
+                                    num_rows,
+                                    dst_rawtype_size,
+                                    read_options.output_format(),
+                                    src_column.opt_sparse_map(),
+                                    default_value
+                            );
+                            arcticdb::for_each_enumerated<typename source_type_info::TDT>(
+                                    src_column,
+                                    [&] ARCTICDB_LAMBDA_INLINE(const auto& row) {
+                                        typed_dst_ptr[row.idx()] = row.value();
+                                    }
+                            );
+                        } else {
+                            arcticdb::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
+                                *typed_dst_ptr = value;
+                                ++typed_dst_ptr;
+                            });
+                        }
+
+                    } else {
+                        util::raise_rte(type_promotion_error_msg.c_str());
+                    }
+                });
+            });
+        } else {
+            util::raise_rte(type_promotion_error_msg.c_str());
+        }
     }
 }
 
@@ -2870,10 +2875,13 @@ folly::Future<VersionedItem> merge_update_impl(
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !write_options.dynamic_schema, "Cannot merge update with dynamic schema"
     );
+    const IndexDescriptor::Type index_type = pipeline_context->descriptor().index().type();
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP &&
-                    pipeline_context->descriptor().sorted() == SortedValue::ASCENDING,
-            "Only timeseries ascending indexed target data is supported for merge update"
+            (index_type == IndexDescriptor::Type::TIMESTAMP &&
+             (pipeline_context->descriptor().sorted() == SortedValue::ASCENDING ||
+              pipeline_context->descriptor().sorted() == SortedValue::UNKNOWN)) ||
+                    index_type == IndexDescriptor::Type::ROWCOUNT,
+            "Merge update supports only ascending indexed data and row count indexed data"
     );
     return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context),
@@ -2916,6 +2924,90 @@ folly::Future<VersionedItem> merge_update_impl(
                         store
                 );
             });
+}
+
+folly::Future<std::optional<VersionedItem>> compact_data_impl(
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
+) {
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
+    std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, versioned_item, *read_query, {});
+    return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
+            .thenValue(
+                    [pipeline_context = std::move(pipeline_context),
+                     store,
+                     write_options,
+                     target_partial_index_key,
+                     read_query](std::vector<SliceAndKey>&& slices_and_keys
+                    ) -> folly::Future<std::optional<VersionedItem>> {
+                        if (slices_and_keys.empty()) {
+                            return folly::makeFuture(std::optional<VersionedItem>());
+                        }
+                        // Use an ordered set so we can binary search afterwards
+                        std::set<RowRange> new_row_ranges_set;
+                        for (const auto& slice_and_key : slices_and_keys) {
+                            new_row_ranges_set.insert(slice_and_key.slice().row_range);
+                        }
+                        std::vector<RowRange> new_row_ranges(
+                                std::make_move_iterator(new_row_ranges_set.begin()),
+                                std::make_move_iterator(new_row_ranges_set.end())
+                        );
+                        // When there is column slicing, this means we only binary search for the first_row once per
+                        // row slice in the original data
+                        std::unordered_set<size_t> first_rows_to_keep;
+                        std::unordered_set<size_t> first_rows_to_discard;
+                        for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
+                            auto first_row = slice_and_key.slice().row_range.first;
+                            if (first_rows_to_keep.contains(first_row)) {
+                                slices_and_keys.emplace_back(std::move(slice_and_key));
+                            } else if (!first_rows_to_discard.contains(first_row)) {
+                                auto begin = new_row_ranges.cbegin();
+                                auto end = new_row_ranges.cend();
+                                auto mid = begin + std::distance(begin, end) / 2;
+                                while (begin != end) {
+                                    if (mid->contains(first_row)) {
+                                        break;
+                                    } else if (first_row < mid->first) {
+                                        end = mid;
+                                        mid = begin + std::distance(begin, end) / 2;
+                                    } else { // first_row >= mid->second
+                                        begin = std::next(mid);
+                                        mid = begin + std::distance(begin, end) / 2;
+                                    }
+                                }
+                                if (begin == end) {
+                                    slices_and_keys.emplace_back(std::move(slice_and_key));
+                                    first_rows_to_keep.emplace(first_row);
+                                } else {
+                                    first_rows_to_discard.emplace(first_row);
+                                }
+                            }
+                        }
+                        ranges::sort(slices_and_keys);
+                        pipeline_context->slice_and_keys_.clear();
+                        const size_t row_count = slices_and_keys.back().slice().row_range.second -
+                                                 slices_and_keys.front().slice().row_range.first;
+                        const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                                row_count,
+                                pipeline_context->descriptor(),
+                                std::move(*pipeline_context->norm_meta_),
+                                pipeline_context->user_meta_
+                                        ? std::make_optional(std::move(*pipeline_context->user_meta_))
+                                        : std::nullopt,
+                                std::nullopt,
+                                std::nullopt,
+                                write_options.bucketize_dynamic
+                        );
+                        return index::write_index(
+                                index_type_from_descriptor(pipeline_context->descriptor()),
+                                tsd,
+                                std::move(slices_and_keys),
+                                target_partial_index_key,
+                                store
+                        );
+                    }
+            );
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(

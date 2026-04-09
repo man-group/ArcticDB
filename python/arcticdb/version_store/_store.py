@@ -39,7 +39,15 @@ from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb_ext import get_config_int
+from arcticdb_ext import (
+    get_config_int,
+    get_all_config_int,
+    set_all_config_int,
+    get_all_config_string,
+    set_all_config_string,
+    get_all_config_double,
+    set_all_config_double,
+)
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -98,6 +106,7 @@ from packaging.version import Version
 import arcticdb_ext as ae
 
 from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
+from arcticdb.util.utils import strtobool
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -475,6 +484,19 @@ class NativeVersionStore:
             return cfgs, None
 
     def __setstate__(self, state):
+        # Restore ConfigsMap before any library creation so that
+        # settings like AWS.LogLevel are available when S3ApiInstance initializes.
+        # Note: this merges into the process-wide ConfigsMap singleton rather than
+        # replacing it. In spawn/forkserver children the singleton already has
+        # values from env vars (set_config_from_env_vars runs on import), so the
+        # merge adds back any values that were set via set_config_* in the parent.
+        # Values from the pickle payload take precedence over existing entries.
+        configs = state.get("configs_map")
+        if configs:
+            set_all_config_int(configs.get("int", {}))
+            set_all_config_string(configs.get("string", {}))
+            set_all_config_double(configs.get("double", {}))
+
         lib_cfg = LibraryConfig()
         lib_cfg.ParseFromString(state["lib_cfg"])
         custom_norm = CompositeCustomNormalizer([], False)
@@ -490,6 +512,8 @@ class NativeVersionStore:
             open_mode=open_mode,
             native_cfg=native_cfg,
         )
+        if state.get("skip_df_consolidation"):
+            self._normalizer.df.set_skip_df_consolidation()
 
     def __getstate__(self):
         return {
@@ -498,6 +522,12 @@ class NativeVersionStore:
             "custom_norm": self._custom_normalizer.__getstate__() if self._custom_normalizer is not None else "",
             "open_mode": self._open_mode,
             "native_cfg": self._native_cfg,
+            "configs_map": {
+                "int": get_all_config_int(),
+                "string": get_all_config_string(),
+                "double": get_all_config_double(),
+            },
+            "skip_df_consolidation": getattr(self._normalizer.df, "_skip_df_consolidation", False),
         }
 
     def __repr__(self):
@@ -663,11 +693,20 @@ class NativeVersionStore:
                 invalid_args.append(arg)
         if invalid_args:
             # Log formatting gets confused by curly braces in input string, hence the conversion to a list
-            msg = f"{method} received invalid kwargs {invalid_args}. Supported kwargs are {sorted(list(valid_kwargs))}"
-            if os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", None) == "1":
+            base_msg = (
+                f"{method} received unrecognized keyword argument(s) {invalid_args}. "
+                f"Supported keyword arguments are {sorted(list(valid_kwargs))}. "
+                f"If you want to explicitly opt out of the validation exception, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
+            )
+            if strtobool(os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", "1")):
+                msg = (
+                    base_msg
+                    + "This warning will be changed to an exception in a future version of ArcticDB. "
+                    + "If you want to preview the future behavior, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to 0. "
+                )
                 log.warning(msg)
             else:
-                raise ArcticNativeException(msg)
+                raise ArcticNativeException(base_msg)
 
     def stage(
         self,
@@ -3920,6 +3959,84 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
+    def compact_data_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> VersionedItem:
+        """
+        Compact the data keys associated with the latest version of a symbol such that the number of rows in each
+        segment is close to rows_per_segment. After compaction, all segments will have a row count within 33% of
+        rows_per_segment.
+
+        This operation creates a new version, unless the data is already compacted.
+
+        The metadata from the version being compacted is maintained with the newly created version.
+
+        !!! warning
+            This API is under development and is subject to change. The API is not subject to semver and can change in
+            minor or patch releases.
+
+            String columns are not yet supported.
+
+            Dynamic schema is not yet supported.
+
+            Sparse data is not yet supported.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_version : bool, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
+            schema enabled, or the data is sparse
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> len(lib.read_index("sym"))
+        100
+        >>> lib.compact_data_experimental("sym")
+        >>> len(lib.read_index("sym"))
+        1
+        """
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+        cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
+        return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
+
+    # TODO: Mark these and Library methods as deprecated
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the

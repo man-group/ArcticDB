@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
@@ -20,7 +20,7 @@ namespace py = pybind11;
 using namespace arcticdb::entity;
 
 // py::tuple for Pandas data, record batches for Arrow data
-using InputItem = std::variant<py::tuple, std::vector<RecordBatchData>>;
+using InputItem = std::variant<py::tuple, std::vector<std::shared_ptr<RecordBatchData>>>;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     char* buffer_;
@@ -76,6 +76,10 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
 );
 
 NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view> column_name = std::nullopt);
+
+void record_batches_to_frame(
+        const std::vector<std::shared_ptr<RecordBatchData>>& record_batches, pipelines::InputFrame& frame
+);
 
 std::shared_ptr<pipelines::InputFrame> py_ndf_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,

@@ -24,20 +24,20 @@ class SegmentInMemory {
     using Row = SegmentInMemoryImpl::Row;
     using iterator = SegmentInMemoryImpl::iterator;
     using const_iterator = SegmentInMemoryImpl::const_iterator;
-    using ExtraBytesPerColumn = SegmentInMemoryImpl::ExtraBytesPerColumn;
+    using BlockConfigPerColumn = SegmentInMemoryImpl::BlockConfigPerColumn;
 
     SegmentInMemory();
 
     explicit SegmentInMemory(
             const StreamDescriptor& tsd, size_t expected_column_size = 0,
             AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
+            const std::optional<BlockConfigPerColumn>& block_config_per_column = std::nullopt
     );
 
     explicit SegmentInMemory(
             StreamDescriptor&& tsd, size_t expected_column_size = 0,
             AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
+            const std::optional<BlockConfigPerColumn>& block_config_per_column = std::nullopt
     );
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept;

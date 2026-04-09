@@ -317,11 +317,6 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
-    q = q[q["col_bool"].isnull()]
-    with pytest.raises(UserInputException, match="Cannot perform null check: ISNULL\(col_bool\).*type=BOOL"):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
     q = q[q["col1"] / q["col_str"] == 3]
     with pytest.raises(
         UserInputException,
@@ -903,7 +898,7 @@ def test_filter_string_nans_col_col(lmdb_version_store_v1, any_output_format):
 
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
-@pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
+@pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str, bool))
 def test_filter_null_filtering(lmdb_version_store_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -926,9 +921,13 @@ def test_filter_null_filtering(lmdb_version_store_v1, method, dtype, any_output_
             np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")
         ).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
-    else:  # str
+    elif dtype is str:  # str
         data = [str(idx) for idx in range(num_rows)]
         null_values = cycle([None, np.nan])
+    else:
+        data = [idx % 2 == 0 for idx in range(num_rows)]
+        null_values = cycle([True, False])  # There are no null values for bool columns
+
     for idx in range(num_rows):
         if idx % 2 == 0:
             data[idx] = next(null_values)

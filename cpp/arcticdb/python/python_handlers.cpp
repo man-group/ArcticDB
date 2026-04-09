@@ -85,9 +85,9 @@ void PythonEmptyHandler::
 
 int PythonEmptyHandler::type_size() const { return sizeof(PyObject*); }
 
-std::pair<TypeDescriptor, size_t> PythonEmptyHandler::
-        output_type_and_extra_bytes(const TypeDescriptor&, std::string_view, const ReadOptions&) const {
-    return {make_scalar_type(DataType::EMPTYVAL), 0};
+std::pair<TypeDescriptor, DetachableBlockConfig> PythonEmptyHandler::
+        output_type_and_block_config(const TypeDescriptor&, std::string_view, const ReadOptions&) const {
+    return {make_scalar_type(DataType::EMPTYVAL), {}};
 }
 
 void PythonEmptyHandler::default_initialize(
@@ -152,9 +152,9 @@ void PythonBoolHandler::
 
 int PythonBoolHandler::type_size() const { return sizeof(PyObject*); }
 
-std::pair<TypeDescriptor, size_t> PythonBoolHandler::
-        output_type_and_extra_bytes(const TypeDescriptor&, std::string_view, const ReadOptions&) const {
-    return {make_scalar_type(DataType::BOOL_OBJECT8), 0};
+std::pair<TypeDescriptor, DetachableBlockConfig> PythonBoolHandler::
+        output_type_and_block_config(const TypeDescriptor&, std::string_view, const ReadOptions&) const {
+    return {make_scalar_type(DataType::BOOL_OBJECT8), {}};
 }
 
 void PythonBoolHandler::default_initialize(
@@ -211,9 +211,9 @@ void PythonStringHandler::
 
 int PythonStringHandler::type_size() const { return sizeof(PyObject*); }
 
-std::pair<TypeDescriptor, size_t> PythonStringHandler::
-        output_type_and_extra_bytes(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
-    return {input_type, 0};
+std::pair<TypeDescriptor, DetachableBlockConfig> PythonStringHandler::
+        output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
+    return {input_type, {}};
 }
 
 void PythonStringHandler::default_initialize(
@@ -320,9 +320,9 @@ void PythonArrayHandler::convert_type(
     );
 }
 
-std::pair<TypeDescriptor, size_t> PythonArrayHandler::
-        output_type_and_extra_bytes(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
-    return {input_type, 0};
+std::pair<TypeDescriptor, DetachableBlockConfig> PythonArrayHandler::
+        output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
+    return {input_type, {}};
 }
 
 int PythonArrayHandler::type_size() const { return sizeof(PyObject*); }

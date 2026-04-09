@@ -33,8 +33,7 @@ static void BM_arrow_string_handler(benchmark::State& state) {
     const double sparsity_ratio = num_sparse / num_rows;
     const auto data_type = fixed_width_strings ? DataType::UTF_FIXED64 : DataType::UTF_DYNAMIC64;
     auto source_type_desc = TypeDescriptor{data_type, Dimension::Dim0};
-    auto [dest_type_desc, extra_bytes_per_block] =
-            handler.output_type_and_extra_bytes(source_type_desc, "col", read_options);
+    auto [dest_type_desc, block_config] = handler.output_type_and_block_config(source_type_desc, "col", read_options);
     auto dest_size = data_type_size(dest_type_desc);
     auto sparsity = num_sparse == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
 
@@ -81,7 +80,7 @@ static void BM_arrow_string_handler(benchmark::State& state) {
 
     for (auto _ : state) {
         state.PauseTiming();
-        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity, extra_bytes_per_block);
+        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity, block_config);
         allocate_chunked_column(dest_column, num_rows, num_rows);
         state.ResumeTiming();
         handler.convert_type(

@@ -188,7 +188,7 @@ set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
         arrow/arrow_handlers.hpp
-        arrow/arrow_output_frame.hpp
+        arrow/arrow_c_interface.hpp
         arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
@@ -221,6 +221,7 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
+        column_store/segment_reslicer.hpp
         column_store/segment_utils.hpp
         column_store/memory_segment_pretty_print.hpp
         entity/atom_key.hpp
@@ -371,6 +372,7 @@ set(arcticdb_srcs
         util/buffer.hpp
         util/buffer_pool.hpp
         util/clock.hpp
+        util/collection_utils.hpp
         util/configs_map.hpp
         util/constants.hpp
         util/constructors.hpp
@@ -417,6 +419,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/merge_options.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
@@ -434,7 +437,7 @@ set(arcticdb_srcs
         version/python_bindings_common.hpp
         # CPP files
         arrow/arrow_handlers.cpp
-        arrow/arrow_output_frame.cpp
+        arrow/arrow_c_interface.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -457,6 +460,7 @@ set(arcticdb_srcs
         column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/segment_reslicer.cpp
         column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
@@ -574,6 +578,7 @@ set(arcticdb_srcs
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
+        version/merge_options.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
         version/version_core.cpp
@@ -1018,6 +1023,7 @@ if(${TEST})
             column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
+             column_store/test/test_segment_reslicer.cpp
             column_store/test/test_statistics.cpp
             entity/test/test_atom_key.cpp
             entity/test/test_key_serialization.cpp
@@ -1034,6 +1040,7 @@ if(${TEST})
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
+            processing/test/test_compact_data.cpp
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
@@ -1070,6 +1077,7 @@ if(${TEST})
             util/test/gtest_main.cpp
             util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
+            util/test/test_bitset.cpp
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp
@@ -1230,6 +1238,7 @@ if(${TEST})
             column_store/test/rapidcheck_column.cpp
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
+            processing/test/rapidcheck_compact_data.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_bitset.cpp
@@ -1238,7 +1247,8 @@ if(${TEST})
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
-            version/test/rapidcheck_version_map.cpp)
+            version/test/rapidcheck_version_map.cpp
+    )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 

@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import datetime
+import contextlib
 import io
 import sys
 
@@ -71,6 +72,25 @@ except ImportError:
 
 
 IS_WINDOWS = sys.platform == "win32"
+
+
+@contextlib.contextmanager
+def _tz_error_context():
+    """Wraps PyArrow timezone operations with a helpful error message on Windows."""
+    try:
+        yield
+    except pa.lib.ArrowInvalid as e:
+        if not IS_WINDOWS or "timezone" not in str(e).lower():
+            raise
+        raise NormalizationException(
+            f"{e}\n\n"
+            "ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which "
+            "requires a timezone database on Windows.\n"
+            "To install, run:\n"
+            '  python -c "from pyarrow.util import download_tzdata_on_windows; '
+            'download_tzdata_on_windows()"\n'
+            "Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows"
+        ) from e
 
 
 NPDDataFrame = NamedTuple(
@@ -712,9 +732,9 @@ class ArrowTableNormalizer(Normalizer):
                 field = field.with_name(op.renames_for_table[i])
             if i in op.timezones:
                 timezone = op.timezones[i]
-                # All arcticdb timestamps are stored as UTC for timezone aware timestamps.
-                col = pa.compute.assume_timezone(col, timezone="UTC")
-                col = col.cast(pa.timestamp("ns", timezone))
+                with _tz_error_context():
+                    col = pa.compute.assume_timezone(col, timezone="UTC")
+                    col = col.cast(pa.timestamp("ns", timezone))
                 field = field.with_type(pa.timestamp("ns", timezone))
             new_columns.append(col)
             new_fields.append(field)
@@ -1783,6 +1803,49 @@ def normalize_dataframe(df, **kwargs):
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
 
+def _filter_pyarrow_table_to_date_range(data: "pa.Table", index_column: str, start, end) -> "pa.Table":
+    """Slice a sorted PyArrow table to rows where ``start <= index <= end``.
+
+    Uses Python binary search over the index column. This is suboptimal for two reasons:
+     - Python loops are slow.
+     - Random access into a heavily fragmented ChunkedArray is O(log num_chunks) per element.
+    The ideal solution is a C++ binary search over chunks then within the target chunk.
+    A hybrid approach (Python bisect to find the chunk, numpy.searchsorted within it) was
+    attempted but is slower beyond ~100 chunks because PyArrow doesn't expose its internal
+    ChunkResolver with precomputed offsets, making efficient chunk-level slicing impossible.
+    """
+    col = data.column(index_column)
+    check(
+        pa.types.is_timestamp(col.type) and col.type.unit == "ns",
+        f"Expected timestamp[ns] index column, got {col.type}",
+    )
+    n = len(col)
+    start_ns = start.value
+    end_ns = end.value
+
+    # bisect_left for start
+    lo, hi = 0, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if col[mid].value < start_ns:
+            lo = mid + 1
+        else:
+            hi = mid
+    left = lo
+
+    # bisect_right for end
+    lo, hi = left, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if col[mid].value <= end_ns:
+            lo = mid + 1
+        else:
+            hi = mid
+    right = lo
+
+    return data.slice(left, right - left)
+
+
 def restrict_data_to_date_range_only(
     data: T, *, start: Timestamp, end: Timestamp, index_column: Optional[str] = None
 ) -> T:
@@ -1811,12 +1874,15 @@ def restrict_data_to_date_range_only(
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
     elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
         check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
-        col = data.column(index_column)
-        start, end = _strip_tz(start, end)
-        check(
-            start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None),
-            "update with date_range and pyarrow Table not yet supported with date_range overlapping the data",
-        )
+        if not data.column(index_column).type.tz:
+            # Matches pandas behavior to strip the timezone if index column is timezone naive.
+            # TODO: This is potentially surprising and we should consider raising when comparing
+            # naive vs timezone aware timestamps. (monday ref: 11669271306)
+            start, end = _strip_tz(start, end)
+        # Assumes index column is sorted.
+        # TODO: Decide on a consistent way to deal with unsorted index column. E.g. a flag `validate_index`
+        # which will enable the index sortedness check. (monday ref: 11668250872)
+        data = _filter_pyarrow_table_to_date_range(data, index_column, start, end)
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)

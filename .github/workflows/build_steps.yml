@@ -553,17 +553,6 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
-      - name: Windows download timezone data for pyarrow
-        if: matrix.os == 'windows'
-        shell: pwsh
-        # Script sourced from: https://arrow.apache.org/docs/cpp/build_system.html#download-timezone-database
-        run: |
-          curl https://data.iana.org/time-zones/releases/tzdata2021e.tar.gz --output tzdata.tar.gz
-          mkdir tzdata
-          tar --extract --file tzdata.tar.gz --directory tzdata
-          move tzdata C:\Users\runneradmin\Downloads\tzdata
-          curl https://raw.githubusercontent.com/unicode-org/cldr/master/common/supplemental/windowsZones.xml --output C:\Users\runneradmin\Downloads\tzdata\windowsZones.xml
-
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
         if: matrix.os == 'linux' || matrix.os == 'macos'
@@ -601,6 +590,10 @@ jobs:
           ${{vars.EXTRA_TEST_PREPARE_CMD || ''}}
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
+
+      - name: Download Windows timezone data for PyArrow
+        if: matrix.os == 'windows'
+        run: python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB

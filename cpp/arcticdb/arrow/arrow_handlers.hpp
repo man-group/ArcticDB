@@ -25,7 +25,7 @@ struct ArrowStringHandler {
             const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+    [[nodiscard]] std::pair<entity::TypeDescriptor, entity::DetachableBlockConfig> output_type_and_block_config(
             const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
     ) const;
 
@@ -39,12 +39,41 @@ struct ArrowStringHandler {
     ) const;
 };
 
+struct ArrowBoolHandler {
+    void handle_type(
+            const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+            const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+            const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+    );
+
+    void convert_type(
+            const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
+            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+            const ReadOptions& read_options
+    ) const;
+
+    [[nodiscard]] std::pair<entity::TypeDescriptor, entity::DetachableBlockConfig> output_type_and_block_config(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
+    ) const;
+
+    void default_initialize(
+            ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
+            std::any& handler_data
+    ) const;
+};
+
 struct ArrowHandlerDataFactory : public TypeHandlerDataFactory {
     std::any get_data() const override { return {}; }
 };
 
 inline void register_arrow_handler_data_factory() {
     TypeHandlerRegistry::instance()->set_handler_data(OutputFormat::ARROW, std::make_unique<ArrowHandlerDataFactory>());
+}
+
+inline void register_arrow_bool_type() {
+    TypeHandlerRegistry::instance()->register_handler(
+            OutputFormat::ARROW, make_scalar_type(entity::DataType::BOOL8), arcticdb::ArrowBoolHandler{}
+    );
 }
 
 inline void register_arrow_string_types() {

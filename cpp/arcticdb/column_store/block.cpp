@@ -136,7 +136,7 @@ uint8_t* ExternalMemBlock::data() { return external_data_; }
 
 // ExternalPackedMemBlock implementation
 ExternalPackedMemBlock::ExternalPackedMemBlock(
-        const uint8_t* data, size_t logical_size, size_t shift, size_t offset, entity::timestamp ts, bool owning
+        const uint8_t* data, size_t logical_size, size_t offset, entity::timestamp ts, size_t shift, bool owning
 ) :
     ExternalMemBlock(data, (logical_size + shift - 1) / 8 + 1, offset, ts, owning),
     logical_size_(logical_size),
@@ -152,6 +152,8 @@ uint8_t* ExternalPackedMemBlock::ptr(size_t pos) {
 const uint8_t* ExternalPackedMemBlock::ptr(size_t pos) const {
     util::raise_rte("Accessing position {} for a packed mem block is not supported", pos);
 }
+
+uint8_t* ExternalPackedMemBlock::end() const { return const_cast<uint8_t*>(data()) + physical_bytes(); }
 
 size_t ExternalPackedMemBlock::shift() const { return shift_; }
 

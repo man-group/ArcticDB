@@ -185,8 +185,16 @@ bool operator==(const Column& left, const Column& right) {
                 for (auto i = 0u; i < left.row_count(); ++i) {
                     auto left_val = left.scalar_at<LeftRawType>(i);
                     auto right_val = right.scalar_at<RightRawType>(i);
-                    if (left_val != right_val)
-                        return false;
+                    const bool same = left_val == right_val;
+                    if constexpr (std::floating_point<LeftRawType>) {
+                        if (!same && !(left_val && right_val && std::isnan(*left_val) && std::isnan(*right_val))) {
+                            return false;
+                        }
+                    } else {
+                        if (!same) {
+                            return false;
+                        }
+                    }
                 }
                 return true;
             } else {
@@ -217,9 +225,9 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
 
 Column::Column(
         TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-        size_t extra_bytes_per_block
+        DetachableBlockConfig block_config
 ) :
-    data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
+    data_(expected_rows * entity::data_type_size(type), allocation_type, block_config),
     type_(type),
     allow_sparse_(allow_sparse) {
     ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -311,6 +319,12 @@ uint8_t* Column::allocate_data(std::size_t bytes) {
 void Column::advance_data(std::size_t size) { data_.advance(position_t(size)); }
 
 void Column::advance_shapes(std::size_t size) { shapes_.advance(position_t(size)); }
+
+void Column::allocate_and_advance_by(std::size_t bytes) {
+    util::check(bytes != 0, "allocate_and_advance_by data called with zero size");
+    data_.ensure_bytes(bytes);
+    advance_data(bytes);
+}
 
 [[nodiscard]] ChunkedBuffer& Column::buffer() { return data_.buffer(); }
 

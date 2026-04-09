@@ -243,7 +243,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     register_version_store_common_bindings(version, BindingScope::GLOBAL);
 
-    py::class_<RecordBatchData>(version, "RecordBatchData")
+    py::class_<RecordBatchData, std::shared_ptr<RecordBatchData>>(version, "RecordBatchData")
             .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);
@@ -691,6 +691,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_library,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact the whole library wherever necessary")
+            .def("_compact_data",
+                 &PythonVersionStore::compact_data,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Compact data segments")
             .def("is_symbol_fragmented",
                  &PythonVersionStore::is_symbol_fragmented,
                  py::call_guard<SingleThreadMutexHolder>(),
