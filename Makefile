@@ -151,5 +151,5 @@ install-editable: ## Install arcticdb in editable mode
 	$(PROXY_CMD) $(_VENV_PIP) install -e . --no-deps
 
 # ── bench-py ─────────────────────────────────────────────────────────────────
-bench-py: install-editable ## Run ASV Python benchmarks (BENCH= for --bench filter)
-	$(_VENV_PYTHON) -m asv run --python=same -v --show-stderr $(if $(BENCH),--bench $(BENCH))
+bench-py: install-editable ## Run ASV Python benchmarks (BENCH= for --bench filter, QUICK=1 for single iteration)
+	$(_VENV_PYTHON) -m asv run --python=same -v --show-stderr $(if $(QUICK),--quick) $(if $(BENCH),--bench $(BENCH))
