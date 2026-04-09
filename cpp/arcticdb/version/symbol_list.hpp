@@ -21,8 +21,6 @@ struct SymbolListEntry;
 struct SymbolEntryData;
 
 using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
-using Compaction = std::vector<AtomKey>::const_iterator;
-using MaybeCompaction = std::optional<Compaction>;
 using CollectionType = std::vector<SymbolListEntry>;
 
 enum class WillAttemptCompaction : uint8_t {
@@ -32,10 +30,10 @@ enum class WillAttemptCompaction : uint8_t {
 };
 
 struct LoadResult {
-    std::vector<AtomKey> symbol_list_keys_;
-    MaybeCompaction maybe_previous_compaction;
+    std::vector<AtomKey> symbol_list_keys_; // all SYMBOL_LIST keys, for deletion after compaction
+    std::optional<AtomKey> compaction_key_; // the latest compaction key found, if any
     CollectionType symbols_;
-    timestamp timestamp_ = 0L;
+    size_t total_key_count_ = 0; // total number of SYMBOL_LIST keys, for compaction threshold
 
     std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
 };
@@ -154,6 +152,7 @@ class SymbolList {
                 return WillAttemptCompaction::NO_INSUFFICIENT_PERMISSIONS;
             return WillAttemptCompaction::YES;
         }();
+
         LoadResult load_result = ExponentialBackoff<StorageException>(100, 2000).go(
                 [this, &version_map, &store, will_attempt_compaction]() {
                     return attempt_load(version_map, store, data_, will_attempt_compaction);
@@ -181,9 +180,9 @@ class SymbolList {
         }
 
         R output;
-        for (const auto& entry : load_result.symbols_) {
+        for (auto& entry : load_result.symbols_) {
             if (entry.action_ == ActionType::ADD)
-                output.insert(entry.stream_id_);
+                output.insert(std::move(entry.stream_id_));
         }
 
         return output;
