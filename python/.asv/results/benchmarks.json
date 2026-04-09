@@ -1883,6 +1883,62 @@
         "version": "2238d0faf29b5206ab9dd61d1acea68ae7883b8ac95bc8c0fafaefb85ff1527b",
         "warmup_time": 0.1
     },
+    "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols": {
+        "code": "class DeleteBatchSymbols:\n    def time_delete_batch_symbols(self, *args):\n        self.lib.delete_batch(self.syms)\n\n    def setup(self, num_symbols, storage):\n        if not is_storage_enabled(storage):\n            raise SkipNotImplemented\n    \n        if storage == Storage.LMDB:\n            self.ac = Arctic(f\"lmdb://{self.ARCTIC_DIR}\")\n        elif storage == Storage.AMAZON:\n            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables\n    \n            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)\n            self.ac = factory.create_fixture().create_arctic()\n    \n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n    \n        df = pd.DataFrame({\"col\": range(1000)})\n        self.syms = [f\"sym_{i}\" for i in range(num_symbols)]\n        for sym in self.syms:\n            self.lib.write(sym, df)",
+        "min_run_count": 2,
+        "name": "modification_functions.DeleteBatchSymbols.time_delete_batch_symbols",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "storage"
+        ],
+        "params": [
+            [
+                "10",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "702b091edd81bc045788ac89c04eb4422e58562f2463e391c14d7252f50e7599",
+        "warmup_time": 0
+    },
+    "modification_functions.DeleteBatchVersions.time_delete_batch_versions": {
+        "code": "class DeleteBatchVersions:\n    def time_delete_batch_versions(self, *args):\n        self.lib.delete_batch(self.delete_requests)\n\n    def setup(self, num_symbols, storage):\n        if not is_storage_enabled(storage):\n            raise SkipNotImplemented\n    \n        if storage == Storage.LMDB:\n            self.ac = Arctic(f\"lmdb://{self.ARCTIC_DIR}\")\n        elif storage == Storage.AMAZON:\n            from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables\n    \n            factory = real_s3_from_environment_variables(shared_path=True, validate=True, log=True)\n            self.ac = factory.create_fixture().create_arctic()\n    \n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n    \n        df = pd.DataFrame({\"col\": range(1000)})\n        self.syms = [f\"sym_{i}\" for i in range(num_symbols)]\n        for sym in self.syms:\n            for _ in range(self.versions_per_symbol):\n                self.lib.write(sym, df, prune_previous_versions=False)\n    \n        from arcticdb.version_store.library import DeleteRequest\n    \n        # Prepare delete requests to delete all but the latest version for each symbol\n        self.delete_requests = [DeleteRequest(sym, list(range(self.versions_per_symbol - 1))) for sym in self.syms]",
+        "min_run_count": 2,
+        "name": "modification_functions.DeleteBatchVersions.time_delete_batch_versions",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "storage"
+        ],
+        "params": [
+            [
+                "10",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ff97024f7d6ef19b36c6f6c3afbdbd5170fbdbd539a9dc041eccf89852808190",
+        "warmup_time": 0
+    },
     "modification_functions.DeleteMultipleVersions.time_delete_multiple_versions": {
         "code": "class DeleteMultipleVersions:\n    def time_delete_multiple_versions(self):\n        self.lib.delete(self.sym, list(range(99)))\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.ac.delete_library(\"test_lib\")\n        self.lib = self.ac.create_library(\"test_lib\")\n        self.sym = f\"sym_{random.randint(0, 1_000_000)}\"\n    \n        for i in range(100):\n            self.lib.write(self.sym, pd.DataFrame({\"a\": [0]}), prune_previous_versions=False)",
         "min_run_count": 2,
@@ -1936,7 +1992,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:128",
+        "setup_cache_key": "modification_functions:129",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1966,7 +2022,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1996,7 +2052,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2026,7 +2082,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2056,7 +2112,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2086,7 +2142,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "modification_functions:51",
+        "setup_cache_key": "modification_functions:52",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2273,14 +2329,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "9c9e9cd8492f587c0ffc69bc7367905281a11229bea0b1f7042214de7895f436",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_filtering_string_isin": {
         "code": "class QueryBuilderFunctions:\n    def time_filtering_string_isin(self, lib_for_storage, num_rows, storage):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2301,14 +2357,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "e3264e4f0b655d3b381488fe3d0906362671d2e640b3ca0c729a644d237e0bb1",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_filtering_string_regex_match": {
         "code": "class QueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, *args):\n        pattern = r\"^id\\d\\d\\d$\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2329,14 +2385,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "57afa0ac498853e31288aced64f87c946d84a2db67af6058f77bc8bd6cd6ec32",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_projection": {
         "code": "class QueryBuilderFunctions:\n    def time_projection(self, *args):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        self.lib.read(self.symbol, columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2357,14 +2413,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "60d5bdab793a5bfc17913dd4f0af6224f86247b49afc9a064384b640c66f460f",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_1": {
         "code": "class QueryBuilderFunctions:\n    def time_query_1(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2385,14 +2441,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "ba8983e5c8df1cc9b61131f42ac04147af2bbca98b230f208b048dd1a6a80070",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_3": {
         "code": "class QueryBuilderFunctions:\n    def time_query_3(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2413,14 +2469,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "90510c3d0cf383bd728b23b90b4c30ed14423d81d410c8ebb477e52793733fde",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_4": {
         "code": "class QueryBuilderFunctions:\n    def time_query_4(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2441,14 +2497,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "32c12c7f850640e929401b67cc7be03231a37994a4dffdea7dc228e8765c7293",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_adv_query_2": {
         "code": "class QueryBuilderFunctions:\n    def time_query_adv_query_2(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -2469,14 +2525,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
         "setup_cache_key": "query_builder:42",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "8f0f2114a5f0bb59e2c5857dfa305d134a8464c4270722fff6758ed44488a257",
-        "warmup_time": 0.2
+        "warmup_time": 1.0
     },
     "recursive_normalizer.LMDBRecursiveNormalizerRead.peakmem_read_batch_nested_dict": {
         "code": "class LMDBRecursiveNormalizerRead:\n    def peakmem_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            data = get_data(num_dict_entry)\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)",

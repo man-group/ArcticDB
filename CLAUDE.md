@@ -6,25 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
-## Claude-Maintained Documentation
+## Documentation
 
-Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
+**New features must include documentation.** Full requirements and checklists for both
+user-facing docs and Claude-maintained technical docs are in
+[`.claude/skills/update-docs/SKILL.md`](.claude/skills/update-docs/SKILL.md) — read that
+file when adding or modifying public API, and follow its checklists before considering the
+work complete.
 
-### When to Read/Update Documentation
-
-- **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
-- **Update** the doc only when making changes to that area
-- Do NOT proactively read or update docs for unrelated areas
-
-### Documentation Style
-
-Keep documentation **high-level and terse**:
-- Reference `file_path:ClassName:method_name` instead of copying code
-- Use tables and bullet points over code blocks
-- Keep conceptual diagrams; remove implementation details
-- Avoid duplicating what's already in source code
-
-### Documentation Index
+### Claude-Maintained Technical Docs (`docs/claude/`)
 
 | Area | Document |
 |------|----------|
@@ -159,6 +149,26 @@ C++ benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`. ASV Python b
 When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
 
 ## Key Development Guidelines
+
+### Test-Driven Development
+
+**Every code change must be accompanied by a failing test that the change fixes.** 
+
+When fixing a bug or adding a feature:
+1. Write a test that demonstrates the bug or missing functionality
+2. Verify the test fails
+3. Implement the fix
+4. Verify the test passes
+
+### Git Workflow
+
+**Always confirm with the developer before committing and pushing changes upstream.** 
+
+Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
+
+### Branch Work Logs
+
+When working on a feature branch, maintain a work log in `docs/claude/plans/<branch-name>/branch-work-log.md`. Update it at the end of each task with a few bullet points summarizing what was done. This provides continuity across sessions and helps with PR descriptions.
 
 ### Backwards Compatibility
 

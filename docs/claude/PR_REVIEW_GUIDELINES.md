@@ -37,7 +37,7 @@ ArcticDB has a layered Python API: `Arctic` -> `Library` -> `NativeVersionStore`
 - **QueryBuilder**: New operations must follow the existing fluent builder pattern.
 - **Return type changes** from read/write operations affect downstream code.
 - **Exception hierarchy**: Preserve error codes and exception types users may catch.
-- **Docstrings**: Public methods must have accurate docstrings matching signatures.
+- **Docstrings**: See §21 for scope and format requirements.
 
 ---
 
@@ -305,6 +305,23 @@ ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
 
 ---
 
+## 21. DOCUMENTATION
+
+Full documentation requirements and checklists are in
+[`.claude/skills/update-docs/SKILL.md`](../../.claude/skills/update-docs/SKILL.md).
+Read that file and apply its checks when reviewing documentation completeness.
+
+Key areas to verify:
+
+- **Docstrings**: New/modified public methods in `library.py`, `arctic.py`, and `_store.py`
+  have complete NumPy-format docstrings.
+- **Tutorials**: Complex features have a tutorial in `docs/mkdocs/docs/tutorials/`.
+- **mkdocs.yml nav**: New pages are reachable.
+- **Edge cases & disambiguation**: Surprising behaviour and "A vs B" guidance documented.
+- **`docs/claude/` technical docs**: Updated for each area of code that was changed.
+
+---
+
 ## REVIEW SUMMARY CHECKLIST
 
 ```markdown
@@ -366,6 +383,9 @@ ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
 - [ ] PR labelled appropriately (enhancement, bug, etc.)
 
 ### Documentation
-- [ ] Public API docstrings accurate
-- [ ] Breaking changes flagged with appropriate labels
+- [ ] New/modified public methods in `library.py`, `arctic.py`, `_store.py` have complete NumPy-format docstrings
+- [ ] Complex or multi-use features have a tutorial in `docs/mkdocs/docs/tutorials/`
+- [ ] `docs/mkdocs/mkdocs.yml` nav updated for any new documentation pages
+- [ ] Edge cases, limitations, and "when to use A vs B" guidance documented where applicable
+- [ ] `docs/claude/` technical doc updated if code in a documented area was changed
 ```

@@ -198,7 +198,6 @@ ProcessingUnit gather_entities(ComponentManager& component_manager, const std::v
     );
     return res;
 }
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
 using FutureOrSplitter =
         std::variant<folly::Future<pipelines::SegmentAndSlice>, folly::FutureSplitter<pipelines::SegmentAndSlice>>;

@@ -251,7 +251,9 @@ class CMakeBuild(build_ext):
             try:
                 # Python API is not cgroups-aware yet, so use CMake:
                 cpu_output = subprocess.check_output([cmake, "-P", "cpp/CMake/CpuCount.cmake"], universal_newlines=True)
-                jobs = "-j", cpu_output.replace("-- CMAKE_BUILD_PARALLEL_LEVEL=", "").rstrip()
+                level = next(l.split("CMAKE_BUILD_PARALLEL_LEVEL=")[1].strip()
+                             for l in cpu_output.splitlines() if "CMAKE_BUILD_PARALLEL_LEVEL=" in l)
+                jobs = "-j", level
             except Exception as e:
                 print("Failed to retrieve CPU count:", e)
                 jobs = ()

@@ -9,6 +9,7 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
+#include <arcticdb/util/collection_utils.hpp>
 
 namespace arcticdb {
 namespace ranges = std::ranges;
@@ -18,7 +19,7 @@ using namespace proto::descriptors;
 std::vector<std::vector<EntityId>> structure_by_row_slice(
         ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = util::flatten_vectors(std::move(entity_ids_vec));
     return structure_by_row_slice(component_manager, std::move(entity_ids));
 }
 
@@ -84,21 +85,6 @@ std::vector<EntityId> push_entities(
         );
     }
     return ids;
-}
-
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-    size_t res_size = std::accumulate(
-            entity_ids_vec.cbegin(),
-            entity_ids_vec.cend(),
-            size_t(0),
-            [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); }
-    );
-    std::vector<EntityId> res;
-    res.reserve(res_size);
-    for (const auto& entity_ids : entity_ids_vec) {
-        res.insert(res.end(), entity_ids.begin(), entity_ids.end());
-    }
-    return res;
 }
 
 using SegmentAndSlice = pipelines::SegmentAndSlice;
