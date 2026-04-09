@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import pyarrow as pa
 import pytest
 import tracemalloc
 import sys
@@ -71,6 +70,7 @@ def test_peakmem_write_basic(lmdb_version_store_v1):
 
 @pytest.mark.skipif(sys.version_info < (3, 9), reason="Tracemalloc doesn't support `reset_peak` before python 3.9")
 def test_peakmem_write_arrow_basic(lmdb_version_store_arrow):
+    pa = pytest.importorskip("pyarrow")
     lib = lmdb_version_store_arrow
     sym = "sym"
 
