@@ -23,9 +23,9 @@ def _symbol_name(rows):
 
 class QueryBuilderFunctions:
     sample_time = 2
-    rounds = 2
+    rounds = 3
     repeat = (1, 10, 20.0)
-    warmup_time = 0.2
+    warmup_time = 1.0
     timeout = 600
 
     num_rows = [1_000_000, 10_000_000]
