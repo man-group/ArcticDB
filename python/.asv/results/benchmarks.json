@@ -1556,6 +1556,502 @@
         "version": "3cd2c7d90725498da459157638eb15b5a3fcc68aa91684951717ed5ab1c8ca63",
         "warmup_time": 0
     },
+    "column_stats.ColumnStatsCreate.time_create_column_stats": {
+        "code": "class ColumnStatsCreate:\n    def time_create_column_stats(self, *args):\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        # Drop stats so time_ measures creation from scratch\n        self.nvs.drop_column_stats(self.symbol)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsCreate.num_rows:\n            df = _generate_column_stats_dataframe(rows)\n            sym = _symbol_name(rows, ordered=True)\n            for storage in ColumnStatsCreate.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsCreate.time_create_column_stats",
+        "number": 1,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "column_stats:243",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "37ae3b0b362b4403bf5cc8e055a098712609664f344542f69e603a6be2c38fe6",
+        "warmup_time": 0
+    },
+    "column_stats.ColumnStatsManagement.time_drop_column_stats": {
+        "code": "class ColumnStatsManagement:\n    def time_drop_column_stats(self, *args):\n        self.nvs.drop_column_stats(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsManagement.num_rows:\n            df = _generate_column_stats_dataframe(rows)\n            sym = _symbol_name(rows, ordered=True)\n            for storage in ColumnStatsManagement.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsManagement.time_drop_column_stats",
+        "number": 1,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "column_stats:287",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e8ac44df433a44200b6a538db48dde33d8144c219306d284051d70b5c8c1ca2d",
+        "warmup_time": 0
+    },
+    "column_stats.ColumnStatsManagement.time_get_column_stats_info": {
+        "code": "class ColumnStatsManagement:\n    def time_get_column_stats_info(self, *args):\n        self.nvs.get_column_stats_info(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsManagement.num_rows:\n            df = _generate_column_stats_dataframe(rows)\n            sym = _symbol_name(rows, ordered=True)\n            for storage in ColumnStatsManagement.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsManagement.time_get_column_stats_info",
+        "number": 1,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "column_stats:287",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b7c703433b5d5997475127cf3a4bf3ac6d58cd6cc3fb8172a2b9abef9cb3ff2a",
+        "warmup_time": 0
+    },
+    "column_stats.ColumnStatsManagement.time_read_column_stats": {
+        "code": "class ColumnStatsManagement:\n    def time_read_column_stats(self, *args):\n        self.nvs.read_column_stats(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsManagement.num_rows:\n            df = _generate_column_stats_dataframe(rows)\n            sym = _symbol_name(rows, ordered=True)\n            for storage in ColumnStatsManagement.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsManagement.time_read_column_stats",
+        "number": 1,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "column_stats:287",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "18e6e8c2283903300366c1c8b824045b5d14e4c7594dd43e2a092b177aa99f41",
+        "warmup_time": 0
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_bool": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_bool(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"bool_col\"] == True]\n        self.lib.read(self.symbol, columns=[\"bool_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_bool",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "1f230dcdaedf7f0e949f21f7e6cce17975354ced56811633820cc0837ec6b0f1",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_combined_and": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_combined_and(self, *args):\n        q = QueryBuilder()\n        q = q[(q[\"uint64_col\"] > self.uint64_high) & (q[\"float_col\"] > 900.0)]\n        self.lib.read(self.symbol, columns=[\"uint64_col\", \"float_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_combined_and",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9ace40d640224399bf0c06ea47efe1717ffb90512ec8080e26fc02f1cfe1785d",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_combined_or": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_combined_or(self, *args):\n        q = QueryBuilder()\n        q = q[(q[\"uint64_col\"] < self.uint64_low) | (q[\"float_col\"] > 900.0)]\n        self.lib.read(self.symbol, columns=[\"uint64_col\", \"float_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_combined_or",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "a5b267335062002eea45cede70d4f06c67ec639fa89eaef50fa0ac0b4e233184",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_datetime": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_datetime(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"datetime_col\"] > self.datetime_high]\n        self.lib.read(self.symbol, columns=[\"datetime_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_datetime",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9bb3361e680d29ee14395c5eab579b8a0e039bc84fdc22f5cee81c44094ae0cb",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_float": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_float(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"float_col\"] > 900.0]\n        self.lib.read(self.symbol, columns=[\"float_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_float",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "a8429bc6881f84f4e06f9df428d74c5acc2ac3e25575f4004f5757521e082a34",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_uint64": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_uint64(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] < self.uint64_low]\n        self.lib.read(self.symbol, columns=[\"uint64_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_uint64",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "7de9e9a56f47cc6ea6e25484679a94cbf5fe40bad50425079123664cef71f9a3",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_with_date_range": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_with_date_range(self, *args):\n        \"\"\"date_range narrows to 50% of rows, then filter selects the top 10% of uint64 values.\n    \n        Tests whether stats provide additional pruning on top of index-based date range filtering.\n        \"\"\"\n        if not self.data_ordered:\n            raise SkipNotImplemented\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] > self.uint64_high]\n        self.lib.read(self.symbol, columns=[\"uint64_col\"], date_range=self.date_range_half, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_with_date_range",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "38d1ac195a18e232fcf4a11e91b1da26b94658ccb16943b8cff246aa381b9c0c",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_zero_match": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_zero_match(self, *args):\n        \"\"\"Filter that matches no rows, best case for column stats.\"\"\"\n        if not self.data_ordered:\n            raise SkipNotImplemented\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] > self.zero_match_threshold]\n        self.lib.read(self.symbol, columns=[\"uint64_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_zero_match",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e843c513aa00f199b3e699843faf7731a68967bf1c7d09b77b8f08ff9fefd2bc",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_isin_uint64": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_isin_uint64(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"].isin(self.isin_values)]\n        self.lib.read(self.symbol, columns=[\"uint64_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_isin_uint64",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "402a43b46203bb6c9acce4a0a739269b8904131ef57c8187457954c325641feb",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_isnotin_uint64": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_isnotin_uint64(self, *args):\n        if not self.data_ordered:\n            # Not that interesting - we already run isin in the unordered case\n            raise SkipNotImplemented\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"].isnotin(self.isin_values)]\n        self.lib.read(self.symbol, columns=[\"uint64_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for rows in ColumnStatsQueryPerformance.num_rows:\n            for ordered in ColumnStatsQueryPerformance.data_ordered:\n                df = _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                sym = _symbol_name(rows, ordered)\n                for storage in ColumnStatsQueryPerformance.storages:\n                    if not is_storage_enabled(storage):\n                        continue\n                    lib = lib_for_storage[storage]\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_isnotin_uint64",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:118",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6c04e95306c5b47791ccd53cfc61d690925e768fb3da3b59a1ccd53917a5a29a",
+        "warmup_time": 0.5
+    },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
         "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
