@@ -16,7 +16,7 @@ from arcticdb_ext.exceptions import KeyNotFoundException
 from arcticdb.exceptions import SchemaException
 from arcticdb.options import ArrowOutputStringFormat, OutputFormat
 import arcticdb.toolbox.query_stats as qs
-from arcticdb.util.test import assert_frame_equal_with_arrow, config_context
+from arcticdb.util.test import assert_frame_equal_with_arrow, config_context, query_stats_operation_count
 
 
 @pytest.mark.parametrize("num_rows", [0, 1])
@@ -246,26 +246,26 @@ def test_collect_schema_and_collect_multiple_times(mem_library):
             stats = qs.get_query_stats()
         qs.reset_stats()
         # Read the vref and index key to get the schema, but no data keys yet
-        assert stats["storage_operations"]["Memory_GetObject"]["VERSION_REF"]["count"] == 1
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_INDEX"]["count"] == 1
-        assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
         with qs.query_stats():
             lazy_df._collect_schema()
             stats = qs.get_query_stats()
         qs.reset_stats()
         # Read the same keys again, see comment in _collect_schema() impl for explanation of why
-        assert stats["storage_operations"]["Memory_GetObject"]["VERSION_REF"]["count"] == 1
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_INDEX"]["count"] == 1
-        assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
         with qs.query_stats():
             received_df = lazy_df.collect().data
             stats = qs.get_query_stats()
         qs.reset_stats()
         # Read the data key, but no vref, version, or index keys
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == 1
-        assert "VERSION_REF" not in stats["storage_operations"]["Memory_GetObject"]
-        assert "VERSION" not in stats["storage_operations"]["Memory_GetObject"]
-        assert "TABLE_INDEX" not in stats["storage_operations"]["Memory_GetObject"]
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
         assert_frame_equal_with_arrow(df, received_df)
 
         # Change the query
@@ -314,12 +314,12 @@ def test_collect_schema_and_collect_version_deleted(mem_library):
             stats = qs.get_query_stats()
         qs.reset_stats()
         # Attempted to read the data key but failed (hence 0 bytes)
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
         assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["size_bytes"] == 0
         # Did not attempt to read from the version chain again
-        assert "VERSION_REF" not in stats["storage_operations"]["Memory_GetObject"]
-        assert "VERSION" not in stats["storage_operations"]["Memory_GetObject"]
-        assert "TABLE_INDEX" not in stats["storage_operations"]["Memory_GetObject"]
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
 
 
 def test_collect_schema_recursive_normalizers(lmdb_library):

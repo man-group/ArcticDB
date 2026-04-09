@@ -5,7 +5,7 @@ from arcticdb_ext.storage import KeyType
 import arcticdb.toolbox.query_stats as qs
 import pandas as pd
 
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 
 # We create more data keys for rowcount and string indexes because these are just written like normal columns,
 # in a TABLE_DATA key.
@@ -52,15 +52,12 @@ def test_column_slicing(
     lib.write("sym", df)
     check_n_data_keys(lib, "sym", expected_total_data_keys)
 
-    qs.enable()
-
-    lib.read("sym", columns=["a"])
-
-    res = qs.get_query_stats()["storage_operations"]["Memory_GetObject"]
-
-    assert res["TABLE_INDEX"]["count"] == 1
-    # We prune off 3 keys by excluding "b"
-    assert res["TABLE_DATA"]["count"] == expected_total_data_keys - 3
+    with qs.query_stats():
+        lib.read("sym", columns=["a"])
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == expected_total_data_keys - 3
 
 
 @pytest.mark.parametrize("index_and_expected_data_keys", INDEXES_AND_EXPECTED_DATA_KEYS, ids=INDEX_IDS)
@@ -72,14 +69,12 @@ def test_row_slicing(in_memory_version_store_single_element_segment, index_and_e
     lib.write("sym", df)
     check_n_data_keys(lib, "sym", expected_total_data_keys)
 
-    qs.enable()
-
-    lib.read("sym", row_range=(2, 3))
-
-    res = qs.get_query_stats()["storage_operations"]["Memory_GetObject"]
-
-    assert res["TABLE_INDEX"]["count"] == 1
-    assert res["TABLE_DATA"]["count"] == expected_total_data_keys / 3
+    with qs.query_stats():
+        lib.read("sym", row_range=(2, 3))
+    stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == expected_total_data_keys / 3
 
 
 @pytest.mark.parametrize("index_and_expected_data_keys", INDEXES_AND_EXPECTED_DATA_KEYS, ids=INDEX_IDS)

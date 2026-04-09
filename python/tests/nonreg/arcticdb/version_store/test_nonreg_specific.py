@@ -24,6 +24,7 @@ from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.conftest import Marks
 from tests.util.date import DateRange
 from tests.util.marking import marks
+from arcticdb.util.test import query_stats_operation_count
 
 
 @pytest.mark.storage
@@ -518,15 +519,14 @@ def test_use_norm_failure_handler_known_types(lmdb_version_store_allows_pickling
     Library("dummy", nvs)
 
 
-def test_all_snapshots_not_loaded_for_tombstoned_as_of(s3_version_store_v1, tiny_thread_pool):
+def test_all_snapshots_not_loaded_for_tombstoned_as_of(in_memory_store_factory, tiny_thread_pool):
     # Prior to https://github.com/man-group/ArcticDB/pull/2699 if a version was requested as_of a version number that
     # had been tombstoned, we would load all of the snapshots into memory, and then search for the specified index key.
     # The new implementation:
     # 1. Loads snapshots in parallel (windowed on the number of IO threads)
     # 2. Short-circuits and stops reading snapshot keys when the required index key has been found
-    lib = s3_version_store_v1
+    lib = in_memory_store_factory()
     sym = "test_all_snapshots_not_loaded_for_tombstoned_as_of_sym"
-
     lib.write(sym, 1)
     for idx in range(10):
         lib.snapshot(f"snap_{idx}")
@@ -540,6 +540,6 @@ def test_all_snapshots_not_loaded_for_tombstoned_as_of(s3_version_store_v1, tiny
     assert received == 1
     # There should be exactly 1 listing of snapshot ref keys, 1 listing of the legacy snapshot keys, and 1 GET
     # of a snapshot ref key
-    assert stats["storage_operations"]["S3_ListObjectsV2"]["SNAPSHOT_REF"]["count"] == 1
-    assert stats["storage_operations"]["S3_ListObjectsV2"]["SNAPSHOT"]["count"] == 1
-    assert stats["storage_operations"]["S3_GetObject"]["SNAPSHOT_REF"]["count"] == 1
+    assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT_REF") == 1
+    assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT") == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "SNAPSHOT_REF") == 1

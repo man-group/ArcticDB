@@ -17,7 +17,7 @@ import dateutil
 
 from arcticdb import OutputFormat
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
@@ -1260,8 +1260,8 @@ def test_to_strings():
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_output_format):
-    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+def test_column_select_projected_column(in_memory_store_factory, dynamic_schema, any_output_format):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     lib.write(sym, pd.DataFrame({"a": [1, 2], "b": ["a", "b"], "c": [5, 6]}))
@@ -1273,12 +1273,12 @@ def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_ou
     qs.reset_stats()
     expected = pd.DataFrame({"new_column": [3, 4]})
     assert_frame_equal(expected, result)
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_schema, any_output_format):
-    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+def test_column_select_projected_column_and_filter_it(in_memory_store_factory, dynamic_schema, any_output_format):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     lib.write(sym, pd.DataFrame({"b": ["a", "b"], "c": [5, 6], "a": [1, 2]}))
@@ -1291,15 +1291,15 @@ def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_
     qs.reset_stats()
     expected = pd.DataFrame({"new_column": [4]})
     assert_frame_equal(expected, result)
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("column_to_read", ["b", "c"])
 def test_filter_synthetic_column_and_select_on_disk_column(
-    s3_store_factory, dynamic_schema, column_to_read, any_output_format
+    in_memory_store_factory, dynamic_schema, column_to_read, any_output_format
 ):
-    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     df = pd.DataFrame({"a": [1, 2], "b": [7, 8], "c": [5, 6]})
@@ -1319,4 +1319,4 @@ def test_filter_synthetic_column_and_select_on_disk_column(
         # Column c is in the second column slice. This means that we must read the first column slice to perform the
         # filter and then read the second column slice to return the requested column
         data_keys_count = 2
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == data_keys_count
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == data_keys_count
