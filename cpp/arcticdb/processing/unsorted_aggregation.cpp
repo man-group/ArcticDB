@@ -23,8 +23,16 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [this](auto value) {
+            bool any_nan{false};
+            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [this, &any_nan](auto value) {
                 const auto& curr = static_cast<RawType>(value);
+                if constexpr (is_floating_point_type(type_info::data_type)) {
+                    // We skip nan as it doesn't generate a stable ordering
+                    if (std::isnan(curr)) {
+                        any_nan = true;
+                        return;
+                    }
+                }
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
                     min_ = Value{curr, type_info::data_type};
                     max_ = Value{curr, type_info::data_type};
@@ -33,6 +41,13 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     max_->set(std::max(max_->get<RawType>(), curr));
                 }
             });
+            if constexpr (is_floating_point_type(type_info::data_type)) {
+                if (any_nan && !min_) {
+                    // Everything in the block is NaN, reflect this in the stats
+                    min_ = Value{std::numeric_limits<RawType>::quiet_NaN(), type_info::data_type};
+                    max_ = Value{std::numeric_limits<RawType>::quiet_NaN(), type_info::data_type};
+                }
+            }
         } else {
             schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                     "Minmax column stat generation not supported with string types"
