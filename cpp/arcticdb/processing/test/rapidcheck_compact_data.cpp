@@ -55,7 +55,7 @@ RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureRowRanges, ()) {
     }
 }
 
-RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureForProcessing, ()) {
+RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureForProcessingStatic, ()) {
     const auto cols_per_segment = *rc::gen::inRange<uint64_t>(1, 1'000);
     const auto num_col_slices = *rc::gen::inRange<uint64_t>(1, 10);
     std::vector<ColRange> col_ranges;
@@ -79,6 +79,42 @@ RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureForProcessing, ()) {
         for (auto idx = proc_unit.cbegin(); idx != proc_unit.cend(); ++idx) {
             // All segments in a processing unit should have the same column range with static schema
             RC_ASSERT(ranges_and_keys.at(*idx).col_range() == col_range);
+            if (std::next(idx) != proc_unit.cend()) {
+                // The second entry of the row range for each element of a processing unit should match the first entry
+                // of the row range of the next element. e.g. [0, 10), [10, 20),...
+                RC_ASSERT(
+                        ranges_and_keys.at(*idx).row_range().second ==
+                        ranges_and_keys.at(*std::next(idx)).row_range().first
+                );
+            }
+        }
+    }
+    const auto flattened = util::flatten_vectors(std::move(proc_unit_ids));
+    // This is asserting that the order of reading ranges_and_keys is 0, 1, 2,...
+    if (!flattened.empty()) {
+        for (auto idx = flattened.cbegin(); idx != std::prev(flattened.cend()); ++idx) {
+            RC_ASSERT((*idx) + 1 == *std::next(idx));
+        }
+    }
+}
+
+RC_GTEST_FIXTURE_PROP(CompactDataFixture, StructureForProcessingDynamic, ()) {
+    std::vector<RangesAndKey> ranges_and_keys;
+    for (const auto& row_range : row_ranges) {
+        const auto num_cols = *rc::gen::inRange<uint64_t>(1, 1'000);
+        ranges_and_keys.emplace_back(row_range, ColRange{0, num_cols}, AtomKey{});
+    }
+    auto proc_unit_ids = clause->structure_for_processing(ranges_and_keys);
+    for (const auto& proc_unit : proc_unit_ids) {
+        // There should be no empty processing units
+        RC_ASSERT_FALSE(proc_unit.empty());
+        const auto total_rows = ranges_and_keys.at(proc_unit.back()).row_range().second -
+                                ranges_and_keys.at(proc_unit.front()).row_range().first;
+        RC_ASSERT(total_rows >= min_rows_per_segment);
+        const auto col_range_start = ranges_and_keys.at(proc_unit.front()).col_range().first;
+        for (auto idx = proc_unit.cbegin(); idx != proc_unit.cend(); ++idx) {
+            // All segments in a processing unit should have the same column range start with dynamic schema
+            RC_ASSERT(ranges_and_keys.at(*idx).col_range().first == col_range_start);
             if (std::next(idx) != proc_unit.cend()) {
                 // The second entry of the row range for each element of a processing unit should match the first entry
                 // of the row range of the next element. e.g. [0, 10), [10, 20),...
