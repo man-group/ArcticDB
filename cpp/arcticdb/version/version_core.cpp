@@ -2718,19 +2718,6 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
                 util::raise_rte("setup_pipeline_context should not receive a bare VersionedItem; "
                                 "callers must resolve to IndexInformation first");
             },
-            [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
-                pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
-                // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
-                // dataframe, hence the clone
-                auto column_stats = preloaded_index_query->column_stats_seg_.has_value()
-                                            ? std::optional{preloaded_index_query->column_stats_seg_->clone()}
-                                            : std::nullopt;
-                IndexInformation cloned_index{
-                        {preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
-                        std::move(column_stats)
-                };
-                read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, cloned_index);
-            },
             [&](const std::shared_ptr<IndexInformation>& index_info) {
                 pipeline_context->stream_id_ = to_atom(index_info->index_.first).id();
                 read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, *index_info);
@@ -2785,9 +2772,6 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
                                              .build<KeyType::TABLE_INDEX>(stream_id));
             },
             [](const VersionedItem& versioned_item) { return versioned_item; },
-            [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
-                return VersionedItem(preloaded_index_query->index_key_);
-            },
             [](const std::shared_ptr<IndexInformation>& index_info) {
                 return VersionedItem(to_atom(index_info->index_.first));
             }

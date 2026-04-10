@@ -436,7 +436,14 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                return {preloaded_index_query};
+                // Clone because Python holds the PreloadedIndexQuery across multiple collect() calls.
+                auto column_stats = preloaded_index_query->column_stats_seg_.has_value()
+                                            ? std::optional{preloaded_index_query->column_stats_seg_->clone()}
+                                            : std::nullopt;
+                return std::make_shared<IndexInformation>(
+                        std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
+                        std::move(column_stats)
+                );
             },
             [&](const auto&) -> VersionIdentifier {
                 auto version = get_version_to_read(stream_id, version_query);
