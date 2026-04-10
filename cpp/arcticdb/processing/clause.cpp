@@ -2761,7 +2761,7 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     std::vector<std::shared_ptr<ColRange>> col_ranges;
     auto row_range_start = proc.row_ranges_->front()->first;
     for (const auto& segment : segment_ptrs) {
-        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        col_ranges.emplace_back(std::make_shared<ColRange>(col_range.first, segment->num_columns()));
         row_ranges.emplace_back(std::make_shared<RowRange>(row_range_start, row_range_start + segment->row_count()));
         row_range_start += segment->row_count();
     }

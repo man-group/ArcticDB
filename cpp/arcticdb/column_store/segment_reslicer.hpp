@@ -80,6 +80,10 @@ class SegmentReslicer {
             std::vector<std::shared_ptr<Column>>&& cols, const SlicingInfo& slicing_info,
             const TypeDescriptor& common_type
     );
+    std::vector<std::optional<Column>> reslice_sparse_numeric_dynamic_schema_columns(
+            std::vector<std::variant<std::shared_ptr<Column>, size_t>>&& cols, const SlicingInfo& slicing_info,
+            const TypeDescriptor& common_type
+    );
     std::vector<std::optional<Column>> reslice_dense_string_columns(
             std::vector<ColumnWithStrings>&& cols_with_strings, const SlicingInfo& slicing_info,
             std::vector<StringPool>& string_pools

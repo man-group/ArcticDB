@@ -467,16 +467,14 @@ def test_compact_data_dynamic_schema_changing_types(in_memory_store_factory):
     generic_compact_data_test(lib, sym)
 
 
-def test_compact_data_dynamic_schema_changing_column_names(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_compact_data_dynamic_schema_changing_column_names(in_memory_store_factory):
+    lib = in_memory_store_factory(dynamic_schema=True)
     sym = "test_compact_data_dynamic_schema_changing_column_names"
-    write_df = pd.DataFrame({"col1": np.arange(10, dtype=np.int64)})
-    append_df = pd.DataFrame({"col2": np.arange(10, dtype=np.int64)})
+    write_df = pd.DataFrame({"col1": np.arange(2, dtype=np.int64)})
+    append_df = pd.DataFrame({"col2": np.arange(3, dtype=np.int64)})
     lib.write(sym, write_df)
     lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "dynamic" in str(e.value)
+    generic_compact_data_test(lib, sym)
 
 
 # We are more interested in the slicing than the data, so the parameters are for:

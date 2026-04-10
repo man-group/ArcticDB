@@ -117,6 +117,103 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_dynami
     return res;
 }
 
+std::vector<std::optional<Column>> SegmentReslicer::reslice_sparse_numeric_dynamic_schema_columns(
+        std::vector<std::variant<std::shared_ptr<Column>, size_t>>&& cols, const SlicingInfo& slicing_info,
+        const TypeDescriptor& common_type
+) {
+    std::vector<std::optional<Column>> res;
+    res.reserve(slicing_info.num_segments);
+    // Represents a global bitset for all of the input columns, with 0s where an entire row slice is missing
+    util::BitSet bitset(slicing_info.total_rows);
+    util::BitSet::bulk_insert_iterator inserter(bitset);
+    size_t idx{0};
+    for (const auto& col_or_rows : cols) {
+        util::variant_match(
+                col_or_rows,
+                [&](const std::shared_ptr<Column>& col) {
+                    if (col->is_sparse()) {
+                        const auto& sparse_map = col->sparse_map();
+                        auto end_bit = sparse_map.end();
+                        for (auto set_bit = sparse_map.first(); set_bit < end_bit; ++set_bit) {
+                            inserter = *set_bit + idx;
+                        }
+                    } else {
+                        for (auto local_idx = 0; local_idx < col->last_row() + 1; ++local_idx) {
+                            inserter = local_idx + idx;
+                        }
+                    }
+                    idx += col->last_row() + 1;
+                },
+                [&](size_t rows) { idx += rows; }
+        );
+    }
+    inserter.flush();
+    util::BitIndex bit_index;
+    bitset.build_rs_index(&bit_index);
+    uint64_t output_rows{0};
+    for (idx = 0; idx < slicing_info.num_segments; ++idx) {
+        auto num_rows = slicing_info.rows_in_slice(idx);
+        auto set_bits = bitset.count_range(output_rows, output_rows + num_rows - 1, bit_index);
+        if (set_bits == 0) {
+            res.emplace_back(); // std::nullopt
+        } else if (set_bits == num_rows) {
+            res.emplace_back(
+                    std::make_optional<Column>(common_type, num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED)
+            );
+        } else { // Output column is sparse
+            res.emplace_back(
+                    std::make_optional<Column>(common_type, set_bits, AllocationType::PRESIZED, Sparsity::PERMITTED)
+            );
+            res.back()->set_sparse_map(util::truncate_sparse_map(bitset, output_rows, output_rows + num_rows));
+        }
+        output_rows += num_rows;
+    }
+    auto output_col = res.begin();
+    auto output_data = output_col->value().data();
+    details::visit_type(common_type.data_type(), [&](auto output_tag) {
+        using output_type_info = ScalarTypeInfo<decltype(output_tag)>;
+        // This is true by construction, just to prevent generation of invalid/useless code generation
+        if constexpr (is_numeric_type(output_type_info::data_type) || is_bool_type(output_type_info::data_type)) {
+            auto output_it = output_data.begin<typename output_type_info::TDT>();
+            auto output_end_it = output_data.end<typename output_type_info::TDT>();
+            for (auto& col_or_rows : cols) {
+                if (std::holds_alternative<std::shared_ptr<Column>>(col_or_rows)) {
+                    auto& input_col = std::get<std::shared_ptr<Column>>(col_or_rows);
+                    details::visit_type(input_col->type().data_type(), [&](auto input_tag) {
+                        using input_type_info = ScalarTypeInfo<decltype(input_tag)>;
+                        // This is true by construction, just to prevent generation of invalid/useless code generation
+                        if constexpr (is_numeric_type(input_type_info::data_type) ||
+                                      is_bool_type(input_type_info::data_type)) {
+                            auto input_data = input_col->data();
+                            auto input_end_it = input_data.cend<typename input_type_info::TDT>();
+                            for (auto input_it = input_data.cbegin<typename input_type_info::TDT>();
+                                 input_it != input_end_it;
+                                 ++input_it, ++output_it) {
+                                if (output_it == output_end_it) {
+                                    ++output_col;
+                                    output_data = output_col->value().data();
+                                    output_it = output_data.begin<typename output_type_info::TDT>();
+                                    output_end_it = output_data.end<typename output_type_info::TDT>();
+                                }
+                                *output_it = static_cast<output_type_info::RawType>(*input_it);
+                            }
+                        }
+                    });
+                    ARCTICDB_DEBUG_CHECK(
+                            ErrorCode::E_ASSERTION_FAILURE,
+                            input_col.use_count() == 1,
+                            "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
+                            input_col.use_count()
+                    );
+                    input_col.reset();
+                }
+            }
+        }
+    });
+    cols.clear();
+    return res;
+}
+
 std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_string_columns(
         std::vector<ColumnWithStrings>&& cols_with_strings, const SlicingInfo& slicing_info,
         std::vector<StringPool>& string_pools
@@ -206,39 +303,41 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
         std::vector<StringPool>& string_pools
 ) {
     std::optional<TypeDescriptor> type;
+    bool missing_row_slice{false};
     bool numeric_types_all_same{true};
     for (const auto& col_with_strings : cols_with_strings) {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                std::holds_alternative<ColumnWithStrings>(col_with_strings),
-                "compact_data not yet supported with dynamic schema"
-        );
-        const auto& col = *std::get<ColumnWithStrings>(col_with_strings).column_;
-        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                !col.is_sparse(), "compact_data not yet supported with sparse data"
-        );
-        if (type.has_value()) {
-            if (type->data_type() == DataType::UTF_DYNAMIC64) {
-                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                        is_sequence_type(col.type().data_type()),
-                        "Cannot compact data: no common type between {} and {}",
-                        type->data_type(),
-                        col.type().data_type()
-                );
-            } else {
-                if (col.type() != *type) {
-                    numeric_types_all_same = false;
+        if (std::holds_alternative<ColumnWithStrings>(col_with_strings)) {
+            const auto& col = *std::get<ColumnWithStrings>(col_with_strings).column_;
+            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                    !col.is_sparse(), "compact_data not yet supported with sparse data"
+            );
+            if (type.has_value()) {
+                if (type->data_type() == DataType::UTF_DYNAMIC64) {
+                    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                            is_sequence_type(col.type().data_type()),
+                            "Cannot compact data: no common type between {} and {}",
+                            type->data_type(),
+                            col.type().data_type()
+                    );
+                } else {
+                    if (col.type() != *type) {
+                        numeric_types_all_same = false;
+                    }
+                    auto opt_common_type = has_valid_common_type(*type, col.type(), IntToFloatConversion::PERMISSIVE);
+                    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                            opt_common_type.has_value(),
+                            "Cannot compact data: no common type between {} and {}",
+                            type->data_type(),
+                            col.type().data_type()
+                    );
+                    type = opt_common_type;
                 }
-                auto opt_common_type = has_valid_common_type(*type, col.type(), IntToFloatConversion::PERMISSIVE);
-                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                        opt_common_type.has_value(),
-                        "Cannot compact data: no common type between {} and {}",
-                        type->data_type(),
-                        col.type().data_type()
-                );
-                type = opt_common_type;
+            } else {
+                type = is_sequence_type(col.type().data_type()) ? make_scalar_type(DataType::UTF_DYNAMIC64)
+                                                                : col.type();
             }
         } else {
-            type = is_sequence_type(col.type().data_type()) ? make_scalar_type(DataType::UTF_DYNAMIC64) : col.type();
+            missing_row_slice = true;
         }
     }
     if (is_sequence_type(type->data_type())) {
@@ -248,15 +347,28 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
         }
         return reslice_dense_string_columns(std::move(cols), slicing_info, string_pools);
     } else {
-        std::vector<std::shared_ptr<Column>> cols;
-        for (auto& var : cols_with_strings) {
-            cols.emplace_back(std::get<ColumnWithStrings>(var).column_);
-        }
-        cols_with_strings.clear();
-        if (numeric_types_all_same) {
-            return reslice_dense_numeric_static_schema_columns(std::move(cols), slicing_info);
+        if (missing_row_slice) {
+            std::vector<std::variant<std::shared_ptr<Column>, size_t>> cols;
+            for (auto& var : cols_with_strings) {
+                if (std::holds_alternative<ColumnWithStrings>(var)) {
+                    cols.emplace_back(std::get<ColumnWithStrings>(var).column_);
+                } else {
+                    cols.emplace_back(std::get<size_t>(var));
+                }
+            }
+            cols_with_strings.clear();
+            return reslice_sparse_numeric_dynamic_schema_columns(std::move(cols), slicing_info, *type);
         } else {
-            return reslice_dense_numeric_dynamic_schema_columns(std::move(cols), slicing_info, *type);
+            std::vector<std::shared_ptr<Column>> cols;
+            for (auto& var : cols_with_strings) {
+                cols.emplace_back(std::get<ColumnWithStrings>(var).column_);
+            }
+            cols_with_strings.clear();
+            if (numeric_types_all_same) {
+                return reslice_dense_numeric_static_schema_columns(std::move(cols), slicing_info);
+            } else {
+                return reslice_dense_numeric_dynamic_schema_columns(std::move(cols), slicing_info, *type);
+            }
         }
     }
 }
@@ -336,9 +448,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
         }
     }
     for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
-        auto rows_to_consume = std::min(slicing_info.rows_in_slice(idx), total_rows);
-        res.at(idx).set_row_data(rows_to_consume - 1);
-        total_rows -= rows_to_consume;
+        res.at(idx).set_row_data(slicing_info.rows_in_slice(idx) - 1);
         res.at(idx).set_string_pool(std::make_shared<StringPool>(std::move(string_pools.at(idx))));
     }
     return res;
