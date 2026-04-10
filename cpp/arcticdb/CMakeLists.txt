@@ -1027,7 +1027,7 @@ if(${TEST})
             column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
-             column_store/test/test_segment_reslicer.cpp
+            column_store/test/test_segment_reslicer.cpp
             column_store/test/test_statistics.cpp
             entity/test/test_atom_key.cpp
             entity/test/test_key_serialization.cpp

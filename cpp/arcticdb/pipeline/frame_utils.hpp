@@ -61,6 +61,14 @@ TimeseriesDescriptor make_timeseries_descriptor(
         std::optional<AtomKey>&& next_key, bool bucketize_dynamic
 );
 
+// The overload above returns a TSD that shares a std::shared_ptr<FieldCollection> with the input StreamDescriptor,
+// which is error-prone. However, it is sometimes the desired behaviour, so needs to still be available.
+TimeseriesDescriptor make_timeseries_descriptor(
+        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
+        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+);
+
 TimeseriesDescriptor timseries_descriptor_from_index_segment(
         size_t total_rows, pipelines::index::IndexSegmentReader&& index_segment_reader,
         std::optional<AtomKey>&& prev_key, bool bucketize_dynamic
