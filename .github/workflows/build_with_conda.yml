@@ -176,6 +176,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          CMAKE_BUILD_PARALLEL_LEVEL: 2
 
       - name: Show sccache stats (linux_aarch64)
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
@@ -413,8 +414,8 @@ jobs:
       - name: Build C++ Tests (linux_aarch64)
         run: |
           cd cpp
-          cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
-          cmake --build --preset linux-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
+          cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j 2
+          cmake --build --preset linux-conda-release --target test_unit_arcticdb -j 2
         env:
           ARCTICDB_USING_CONDA: 1
 
