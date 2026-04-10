@@ -527,7 +527,7 @@ class LazyDataFrame(QueryBuilder):
             iterate_snapshots_if_tombstoned=False,
             include_index_segment=True,
         )
-        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment)
+        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment, dit.column_stats_segment)
         read_request = self._to_read_request()
         return self.lib._nvs._modify_schema(
             self._preloaded_index,

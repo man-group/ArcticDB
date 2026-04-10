@@ -40,13 +40,17 @@ struct SpecificVersionQuery {
 };
 
 struct PreloadedIndexQuery {
-    PreloadedIndexQuery(AtomKey index_key, SegmentInMemory index_seg) :
+    PreloadedIndexQuery(
+            AtomKey index_key, SegmentInMemory index_seg, std::optional<SegmentInMemory> column_stats_seg = std::nullopt
+    ) :
         index_key_(std::move(index_key)),
-        index_seg_(std::move(index_seg)) {}
+        index_seg_(std::move(index_seg)),
+        column_stats_seg_(std::move(column_stats_seg)) {}
 
     // Key is just needed for constructing the VersionedItem to return
     const AtomKey index_key_;
     const SegmentInMemory index_seg_;
+    const std::optional<SegmentInMemory> column_stats_seg_;
 };
 
 using VersionQueryType = std::variant<
