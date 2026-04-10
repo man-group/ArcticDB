@@ -215,10 +215,10 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
 
             auto& stats = stats_row.stats_for_column[col_name];
             switch (stat_type) {
-            case COLUMN_STATS_MIN_V1:
+            case COLUMN_STATS_TYPE_MIN_V1:
                 stats.min = value;
                 break;
-            case COLUMN_STATS_MAX_V1:
+            case COLUMN_STATS_TYPE_MAX_V1:
                 stats.max = value;
                 break;
             default:
