@@ -201,6 +201,35 @@ Running the one-liner above will download the database. This is only needed once
 
 Timezone handling is delegated to Pandas. If a timezone is not recognized, you may see a `NormalizationException` wrapping a Pandas timezone lookup failure. Older versions of Pandas use `pytz` for timezone resolution, while newer versions (2.0+) use the standard library `zoneinfo` module, which supports a broader set of timezone names. Upgrading Pandas can resolve such errors.
 
+### *What are the naming rules for symbols, snapshots, and libraries?*
+
+ArcticDB validates names for symbols, snapshots, and libraries. The rules are enforced when creating new entities. Existing entities with non-conforming names remain accessible and writeable.
+
+**Symbol and snapshot names:**
+
+- Must not be empty.
+- Maximum length of 254 characters.
+- Only printable ASCII characters (codes 32 through 126 inclusive) are allowed.
+- The characters `*`, `<`, and `>` are forbidden (they are problematic for S3-compatible storage).
+- Numeric symbol keys (integer identifiers) are not subject to these checks.
+
+**Library names** follow the same rules as above, with additional constraints. Library names may be dot-separated (e.g. `research.equities`), and each dot-separated part:
+
+- Must not be empty (i.e. the name must not contain `..` or end with `.`).
+- Must not start with `/` (this causes failures with LMDB and MongoDB backends).
+
+Some storage backends impose additional restrictions on library names:
+
+- **MongoDB** forbids `/` anywhere in the library name.
+- **LMDB on Windows** forbids the characters `<>:"|?*`, and names ending with `.` or whitespace.
+
+**Bypassing symbol/snapshot validation:**
+
+If you need to write symbols or snapshots that do not conform to these rules, you can disable strict checking by setting the environment variable `ARCTICDB_VersionStore_NoStrictSymbolCheck_int=1`.
+This is not recommended for new data as our testing only covers names that conform to these rules.
+
+See also [error codes 7002 and 7003](error_messages.md#7000---naming-errors) for the error messages raised on validation failure.
+
 ### How does ArcticDB handle `NaN`?
 
 The handling of `NaN` in ArcticDB depends on the type of the column under consideration:
