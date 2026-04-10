@@ -313,8 +313,7 @@ TEST_F(SegmentReslicerDenseStringStaticSchema, CombineIntoOne) {
     SegmentReslicer reslicer{total_rows};
     SegmentReslicer::SlicingInfo slicing_info{total_rows, total_rows};
     std::vector<StringPool> string_pools(1);
-    auto res =
-            reslicer.reslice_dense_string_static_schema_columns(std::move(input_columns), slicing_info, string_pools);
+    auto res = reslicer.reslice_dense_string_columns(std::move(input_columns), slicing_info, string_pools);
     ASSERT_EQ(res.size(), 1);
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
@@ -376,8 +375,7 @@ TEST_P(SegmentReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     SegmentReslicer reslicer{max_rows_per_slice};
     SegmentReslicer::SlicingInfo slicing_info{total_rows, max_rows_per_slice};
     std::vector<StringPool> string_pools(2);
-    auto res =
-            reslicer.reslice_dense_string_static_schema_columns(std::move(input_columns), slicing_info, string_pools);
+    auto res = reslicer.reslice_dense_string_columns(std::move(input_columns), slicing_info, string_pools);
     ASSERT_EQ(res.size(), 2);
     ASSERT_TRUE(res.front().has_value());
     ASSERT_TRUE(res.back().has_value());

@@ -120,7 +120,7 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_dynami
     return res;
 }
 
-std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_string_static_schema_columns(
+std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_string_columns(
         std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info,
         std::vector<StringPool>& string_pools
 ) {
@@ -242,7 +242,7 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
         }
     }
     if (is_sequence_type(type->data_type())) {
-        return reslice_dense_string_static_schema_columns(std::move(cols_with_strings), slicing_info, string_pools);
+        return reslice_dense_string_columns(std::move(cols_with_strings), slicing_info, string_pools);
     } else {
         if (numeric_types_all_same) {
             return reslice_dense_numeric_static_schema_columns(std::move(cols_with_strings), slicing_info);
