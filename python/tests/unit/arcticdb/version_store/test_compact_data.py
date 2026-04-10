@@ -457,16 +457,14 @@ def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
     assert "sparse" in str(e.value)
 
 
-def test_compact_data_dynamic_schema_changing_types(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
+def test_compact_data_dynamic_schema_changing_types(in_memory_store_factory):
+    lib = in_memory_store_factory(dynamic_schema=True)
     sym = "test_compact_data_dynamic_schema_changing_types"
     write_df = pd.DataFrame({"col": np.arange(10, dtype=np.int32)})
     append_df = pd.DataFrame({"col": np.arange(10, dtype=np.int64)})
     lib.write(sym, write_df)
     lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "dynamic" in str(e.value)
+    generic_compact_data_test(lib, sym)
 
 
 def test_compact_data_dynamic_schema_changing_column_names(lmdb_version_store_dynamic_schema_v1):

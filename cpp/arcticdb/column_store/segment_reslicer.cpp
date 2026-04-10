@@ -10,6 +10,7 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
 
@@ -63,6 +64,59 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static
         );
         input_col_with_strings.reset();
     }
+    return res;
+}
+
+std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_dynamic_schema_columns(
+        std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info,
+        const TypeDescriptor& type
+) {
+    std::vector<std::optional<Column>> res;
+    res.reserve(slicing_info.num_segments);
+    for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
+        res.emplace_back(std::make_optional<Column>(
+                type, slicing_info.rows_in_slice(idx), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
+        ));
+    }
+    auto output_col = res.begin();
+    auto output_data = output_col->value().data();
+    details::visit_type(type.data_type(), [&](auto output_tag) {
+        using output_type_info = ScalarTypeInfo<decltype(output_tag)>;
+        // This is true by construction, just to prevent generation of invalid/useless code generation
+        if constexpr (is_numeric_type(output_type_info::data_type) || is_bool_type(output_type_info::data_type)) {
+            auto output_it = output_data.begin<typename output_type_info::TDT>();
+            auto output_end_it = output_data.end<typename output_type_info::TDT>();
+            for (auto& input_col_with_strings : cols_with_strings) {
+                details::visit_type(input_col_with_strings->column_->type().data_type(), [&](auto input_tag) {
+                    using input_type_info = ScalarTypeInfo<decltype(input_tag)>;
+                    // This is true by construction, just to prevent generation of invalid/useless code generation
+                    if constexpr (is_numeric_type(input_type_info::data_type) ||
+                                  is_bool_type(input_type_info::data_type)) {
+                        auto input_data = input_col_with_strings->column_->data();
+                        auto input_end_it = input_data.cend<typename input_type_info::TDT>();
+                        for (auto input_it = input_data.cbegin<typename input_type_info::TDT>();
+                             input_it != input_end_it;
+                             ++input_it, ++output_it) {
+                            if (output_it == output_end_it) {
+                                ++output_col;
+                                output_data = output_col->value().data();
+                                output_it = output_data.begin<typename output_type_info::TDT>();
+                                output_end_it = output_data.end<typename output_type_info::TDT>();
+                            }
+                            *output_it = static_cast<output_type_info::RawType>(*input_it);
+                        }
+                    }
+                });
+                ARCTICDB_DEBUG_CHECK(
+                        ErrorCode::E_ASSERTION_FAILURE,
+                        input_col_with_strings->column_.use_count() == 1,
+                        "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
+                        input_col_with_strings->column_.use_count()
+                );
+                input_col_with_strings.reset();
+            }
+        }
+    });
     return res;
 }
 
@@ -153,6 +207,7 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
         std::vector<StringPool>& string_pools
 ) {
     std::optional<TypeDescriptor> type;
+    bool numeric_types_all_same{true};
     for (const auto& col_with_strings : cols_with_strings) {
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 col_with_strings, "compact_data not yet supported with dynamic schema"
@@ -162,11 +217,26 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
                 !col.is_sparse(), "compact_data not yet supported with sparse data"
         );
         if (type.has_value()) {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    col.type() == *type ||
-                            (is_sequence_type(col.type().data_type()) && type->data_type() == DataType::UTF_DYNAMIC64),
-                    "compact_data not yet supported with dynamic schema"
-            );
+            if (type->data_type() == DataType::UTF_DYNAMIC64) {
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        is_sequence_type(col.type().data_type()),
+                        "Cannot compact data: no common type between {} and {}",
+                        type->data_type(),
+                        col.type().data_type()
+                );
+            } else {
+                if (col.type() != *type) {
+                    numeric_types_all_same = false;
+                }
+                auto opt_common_type = has_valid_common_type(*type, col.type(), IntToFloatConversion::PERMISSIVE);
+                schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                        opt_common_type.has_value(),
+                        "Cannot compact data: no common type between {} and {}",
+                        type->data_type(),
+                        col.type().data_type()
+                );
+                type = opt_common_type;
+            }
         } else {
             type = is_sequence_type(col.type().data_type()) ? make_scalar_type(DataType::UTF_DYNAMIC64) : col.type();
         }
@@ -174,7 +244,11 @@ std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
     if (is_sequence_type(type->data_type())) {
         return reslice_dense_string_static_schema_columns(std::move(cols_with_strings), slicing_info, string_pools);
     } else {
-        return reslice_dense_numeric_static_schema_columns(std::move(cols_with_strings), slicing_info);
+        if (numeric_types_all_same) {
+            return reslice_dense_numeric_static_schema_columns(std::move(cols_with_strings), slicing_info);
+        } else {
+            return reslice_dense_numeric_dynamic_schema_columns(std::move(cols_with_strings), slicing_info, *type);
+        }
     }
 }
 
@@ -204,9 +278,6 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     }
     SlicingInfo slicing_info{total_rows, max_rows_per_segment_};
     std::vector<SegmentInMemory> res(slicing_info.num_segments);
-    // This won't be sufficient with dynamic schema
-    // In that case, col_names_in_order will represent the correct columns. The types should probably be calculated
-    // in reslice_columns
     const auto& desc = segments.front().descriptor();
     for (auto& segment : res) {
         // add_column also adds to the FieldCollection, so start with an empty one
@@ -214,8 +285,8 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
                 desc.segment_desc_, std::make_shared<FieldCollection>(), desc.stream_id_
         ));
     }
-    // For each segment, append the column to the corresponding vector in columns if it is present, or a nullptr if it
-    // is missing from this segment (dynamic schema)
+    // For each segment, append the column to the corresponding vector in columns if it is present, or std::nullopt if
+    // it is missing from this segment (dynamic schema)
     for (const auto& segment : segments) {
         for (const auto& col_name : col_names_in_order) {
             if (auto col_idx = segment.column_index(col_name); col_idx.has_value()) {
