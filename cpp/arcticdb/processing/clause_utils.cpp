@@ -294,12 +294,45 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     return non_matching_name_indices;
 }
 
-NormalizationMetadata generate_norm_meta(
-        const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
+// Combines two normalization metadata values, returning the merged result.
+NormalizationMetadata accumulate_norm_metadata(
+        const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
+        std::unordered_set<size_t>& fake_field_pos_acc
 ) {
+    // Arrow + Arrow
+    // Arrow schemas are compatible as long as both have the same `has_index`.
+    // We return the `accumulated` metadata if compatible.
+    if (accumulated.has_experimental_arrow() && other.has_experimental_arrow()) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                accumulated.experimental_arrow().has_index() == other.experimental_arrow().has_index(),
+                "Cannot join indexed arrow data with unindexed arrow data"
+        );
+        return accumulated;
+    }
+
+    // One arrow, one pandas
+    // Pandas norm metadata is preferred over arrow when mixing, because it carries more detail
+    // (index name, timezone, range index params, etc.). Arrow and pandas are compatible when:
+    //   arrow.has_index() == pandas.index().is_physically_stored()
+    if (accumulated.has_experimental_arrow() || other.has_experimental_arrow()) {
+        const auto& arrow_meta = accumulated.has_experimental_arrow() ? accumulated : other;
+        const auto& pandas_meta = accumulated.has_experimental_arrow() ? other : accumulated;
+        const auto& common = pandas_meta.has_series() ? pandas_meta.series().common() : pandas_meta.df().common();
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                common.has_index() && !common.has_multi_index(),
+                "Cannot join arrow-written data with multi-indexed pandas data"
+        );
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                arrow_meta.experimental_arrow().has_index() == common.index().is_physically_stored(),
+                "Cannot join unindexed with indexed data"
+        );
+        return pandas_meta;
+    }
+
+    // Pandas + Pandas
     // Ensure:
-    // All are Series or all are DataFrames
-    // All have PandasIndex OR PandasMultiIndex
+    // Both are Series or both are DataFrames
+    // Both have PandasIndex or both have PandasMultiIndex
     // If PandasIndex:
     //  - name/is_int/fake_name - if all the same maintain, otherwise "index"/false/true
     //  - tz - if all the same maintain, otherwise empty string
@@ -312,88 +345,101 @@ NormalizationMetadata generate_norm_meta(
     //  - name/is_int - if all the same maintain, otherwise "index"/false
     //  - field_count must all be same
     //  - tz - if all the same maintain, otherwise empty string
-    //  - fake_field_pos - unioned together, along with non_matching_name_indices
+    //  - fake_field_pos - added to fake_field_pos_acc
     //      fake_field_pos.contains(0) serves same purpose as fake_name flag on PandasIndex
     //  - timezone - Like tz, for a given key all values must be same, otherwise set value to empty string
-    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
-    auto res = input_schemas.front().norm_metadata_;
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            res.has_series() || res.has_df(), "Multi-symbol joins only supported with Series and DataFrames"
+            accumulated.has_series() == other.has_series(), "Multi-symbol joins cannot join a Series to a DataFrame"
     );
+
+    auto res = accumulated;
     auto* res_common = res.has_series() ? res.mutable_series()->mutable_common() : res.mutable_df()->mutable_common();
+    const auto& other_common = other.has_series() ? other.series().common() : other.df().common();
+
+    if (res.has_series()) {
+        if (res_common->name() != other_common.name() || !other_common.has_name() || !res_common->has_name()) {
+            res_common->set_name("");
+            res_common->set_has_name(false);
+        }
+    }
+
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            other_common.has_multi_index() == res_common->has_multi_index(), "Mismatching norm metadata in schema join"
+    );
+
     if (res_common->has_multi_index()) {
-        for (auto pos : res_common->multi_index().fake_field_pos()) {
+        auto* res_index = res_common->mutable_multi_index();
+        const auto& other_index = other_common.multi_index();
+        if (other_index.name() != res_index->name() || other_index.is_int() != res_index->is_int()) {
+            res_index->clear_name();
+            res_index->set_is_int(false);
+        }
+        if (other_index.tz() != res_index->tz()) {
+            res_index->clear_tz();
+        }
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                other_index.field_count() == res_index->field_count(), "Mismatching norm metadata in schema join"
+        );
+        for (const auto& [idx, idx_timezone] : other_index.timezone()) {
+            if ((*res_index->mutable_timezone())[idx] != idx_timezone) {
+                (*res_index->mutable_timezone())[idx] = "";
+            }
+        }
+        for (auto pos : other_index.fake_field_pos()) {
+            fake_field_pos_acc.insert(pos);
+        }
+    } else {
+        auto* res_index = res_common->mutable_index();
+        const auto& other_index = other_common.index();
+        if (other_index.name() != res_index->name() || other_index.is_int() != res_index->is_int() ||
+            other_index.fake_name() || res_index->fake_name()) {
+            res_index->set_name("index");
+            res_index->set_is_int(false);
+            res_index->set_fake_name(true);
+        }
+        if (other_index.tz() != res_index->tz()) {
+            res_index->clear_tz();
+        }
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                other_index.is_physically_stored() == res_index->is_physically_stored(),
+                "Mismatching norm metadata in schema join"
+        );
+        if (other_index.step() != res_index->step()) {
+            log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
+            res_index->set_start(0);
+            res_index->set_step(1);
+        }
+    }
+    return res;
+}
+
+NormalizationMetadata generate_norm_meta(
+        const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
+) {
+    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
+    for (const auto& schema : input_schemas) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                schema.norm_metadata_.has_experimental_arrow() || schema.norm_metadata_.has_series() ||
+                        schema.norm_metadata_.has_df(),
+                "Multi-symbol joins only supported with Arrow, Series, and DataFrames"
+        );
+    }
+    auto res = input_schemas.front().norm_metadata_;
+    for (auto it = std::next(input_schemas.cbegin()); it != input_schemas.cend(); ++it) {
+        res = accumulate_norm_metadata(res, it->norm_metadata_, non_matching_name_indices);
+    }
+    // Apply accumulated non_matching_name_indices to the result multi-index.
+    // non_matching_name_indices contains values from add_index_fields (index fields with mismatched names)
+    // plus fake_field_pos accumulated from all schemas during pairwise merges above.
+    auto* res_common = res.has_series() ? res.mutable_series()->mutable_common()
+                       : res.has_df()   ? res.mutable_df()->mutable_common()
+                                        : nullptr;
+    if (res_common && res_common->has_multi_index()) {
+        auto* index = res_common->mutable_multi_index();
+        // Make sure the result fake_field_pos are also included. E.g. if input_schemas.size() == 1
+        for (auto pos : index->fake_field_pos()) {
             non_matching_name_indices.insert(pos);
         }
-    }
-    for (auto it = std::next(input_schemas.cbegin()); it != input_schemas.cend(); ++it) {
-        const auto& input_schema = *it;
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                input_schema.norm_metadata_.has_series() || input_schema.norm_metadata_.has_df(),
-                "Multi-symbol joins only supported with Series and DataFrames"
-        );
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                res.has_series() == input_schema.norm_metadata_.has_series(),
-                "Multi-symbol joins cannot join a Series to a DataFrame"
-        );
-        const auto& common = res.has_series() ? input_schema.norm_metadata_.series().common()
-                                              : input_schema.norm_metadata_.df().common();
-        if (res.has_series()) {
-            if (res_common->name() != common.name() || !common.has_name() || !res_common->has_name()) {
-                res_common->set_name("");
-                res_common->set_has_name(false);
-            }
-        }
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                common.has_multi_index() == res_common->has_multi_index(), "Mismatching norm metadata in schema join"
-        );
-        if (res_common->has_multi_index()) {
-            auto* res_index = res_common->mutable_multi_index();
-            const auto& index = common.multi_index();
-            if ((index.name() != res_index->name()) || (index.is_int() != res_index->is_int())) {
-                res_index->clear_name();
-                res_index->set_is_int(false);
-            }
-            if (index.tz() != res_index->tz()) {
-                res_index->clear_tz();
-            }
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index.field_count() == res_index->field_count(), "Mismatching norm metadata in schema join"
-            );
-            for (const auto& [idx, idx_timezone] : index.timezone()) {
-                (*res_index->mutable_timezone())[idx] =
-                        (*res_index->mutable_timezone())[idx] == idx_timezone ? idx_timezone : "";
-            }
-            for (auto pos : index.fake_field_pos()) {
-                // Do not modify the result fake_field_pos directly as it would likely result in many duplicate values
-                // Track in this set and then just insert them all into the result at the end
-                non_matching_name_indices.insert(pos);
-            }
-        } else {
-            auto* res_index = res_common->mutable_index();
-            const auto& index = common.index();
-            if ((index.name() != res_index->name()) || (index.is_int() != res_index->is_int()) || index.fake_name() ||
-                res_index->fake_name()) {
-                res_index->set_name("index");
-                res_index->set_is_int(false);
-                res_index->set_fake_name(true);
-            }
-            if (index.tz() != res_index->tz()) {
-                res_index->clear_tz();
-            }
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index.is_physically_stored() == res_index->is_physically_stored(),
-                    "Mismatching norm metadata in schema join"
-            );
-            if (index.step() != res_index->step()) {
-                log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
-                res_index->set_start(0);
-                res_index->set_step(1);
-            }
-        }
-    }
-    if (res_common->has_multi_index()) {
-        auto* index = res_common->mutable_multi_index();
         index->clear_fake_field_pos();
         for (auto idx : non_matching_name_indices) {
             index->add_fake_field_pos(idx);
