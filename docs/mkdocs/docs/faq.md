@@ -228,7 +228,7 @@ Some storage backends impose additional restrictions on library names:
 If you need to write symbols or snapshots that do not conform to these rules, you can disable strict checking by setting the environment variable `ARCTICDB_VersionStore_NoStrictSymbolCheck_int=1`.
 This is not recommended for new data as our testing only covers names that conform to these rules.
 
-See also [error codes 7002 and 7003](error_messages.md#7000---naming-errors) for the error messages raised on validation failure.
+See also [error codes 7002 and 7003](error_messages.md#user-input-errors) for the error messages raised on validation failure.
 
 ### How does ArcticDB handle `NaN`?
 
