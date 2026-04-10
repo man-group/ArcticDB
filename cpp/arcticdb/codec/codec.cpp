@@ -355,7 +355,7 @@ std::pair<std::optional<google::protobuf::Any>, StreamDescriptor> decode_metadat
 
     auto maybe_any = decode_metadata(hdr, data, begin);
     if (EncodingVersion(hdr.encoding_version()) == EncodingVersion::V2)
-        util::check_magic<DescriptorFieldsMagic>(data);
+        skip_descriptor(data, hdr);
 
     return std::make_pair(std::move(maybe_any), segment.descriptor());
 }
