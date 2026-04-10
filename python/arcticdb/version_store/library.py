@@ -3309,7 +3309,9 @@ class Library:
         Returns
         -------
         VersionedItem
-            Structure containing metadata and version number of the defragmented symbol in the store.
+            Structure containing version number of the defragmented symbol in the store. The ``metadata``
+            and ``data`` fields of the returned object will always be ``None``; call ``read_metadata`` or
+            ``read`` to retrieve the metadata or data associated with the defragmented version.
 
         Raises
         ------
