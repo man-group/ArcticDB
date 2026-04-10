@@ -2706,11 +2706,11 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     std::vector<std::vector<size_t>> res;
     std::vector<size_t> current;
     auto row_range = retained_processing_row_ranges.cbegin();
-    ColRange col_range = ranges_and_keys.front().col_range();
+    // Use first element of col_range rather than full col range equality so that it works with dynamic schema where
+    // number of columns in each row slice can be different
+    auto col_range_start = ranges_and_keys.front().col_range().first;
     for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
-        // Use first element of col_range rather than equality so that it works with dynamic schema where number of
-        // columns in each row slice can be different
-        if (range_and_key.col_range().first == col_range.first) {
+        if (range_and_key.col_range().first == col_range_start) {
             if (row_range->contains(range_and_key.row_range().first)) {
                 current.emplace_back(idx);
             } else {
@@ -2722,7 +2722,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
             // Moving to the next column slice
             res.emplace_back(std::move(current));
             current = std::vector<size_t>{idx};
-            col_range = range_and_key.col_range();
+            col_range_start = range_and_key.col_range().first;
             row_range = retained_processing_row_ranges.cbegin();
         }
     }
