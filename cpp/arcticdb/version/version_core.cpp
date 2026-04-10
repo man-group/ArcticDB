@@ -2081,25 +2081,25 @@ void drop_column_stats_impl(
 
     storage::ReadKeyOpts read_opts;
     read_opts.dont_warn_about_missing_key = true;
-    SegmentInMemory segment_in_memory;
-    try {
-        segment_in_memory = store->read(column_stats_key, read_opts).get().second;
-    } catch (const std::exception& e) {
-        log::version().warn("No column stats exist to drop: {}", e.what());
+    auto stats_future = store->read(column_stats_key, read_opts);
+    auto tsd_future = store->read_timeseries_descriptor(versioned_item.key_, read_opts);
+    auto [stats_try, tsd_try] = folly::collectAll(std::move(stats_future), std::move(tsd_future)).get();
+
+    if (stats_try.hasException()) {
+        log::version().warn("No column stats exist to drop: {}", stats_try.exception().what());
         return;
     }
-
-    TimeseriesDescriptor tsd;
-    try {
-        tsd = store->read_timeseries_descriptor(versioned_item.key_, read_opts).get().second;
-    } catch (const std::exception& e) {
+    if (tsd_try.hasException()) {
         log::version().warn(
                 "Could not find index key associated with stats - cannot drop: key={} error={}",
                 versioned_item.key_,
-                e.what()
+                tsd_try.exception().what()
         );
         return;
     }
+
+    auto segment_in_memory = std::move(stats_try).value().second;
+    auto tsd = std::move(tsd_try).value().second;
 
     arcticc::pb2::descriptors_pb2::ColumnStatsHeader column_stats_header;
     auto* metadata = segment_in_memory.metadata();

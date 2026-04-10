@@ -13,7 +13,7 @@ import pytest
 from arcticc.pb2.descriptors_pb2 import ColumnStatsHeader, ColumnStatsType
 from google.protobuf.any_pb2 import Any as ProtobufAny
 
-from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException, InternalException
+from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb import QueryBuilder
@@ -1051,3 +1051,42 @@ def test_column_stats_multiindex_outer_level_not_possible(lmdb_version_store_tin
 
     # Note: We don't support writing a multi-indexed dataframe with duplicate level names, so no need to test that
     # with column stats.
+
+
+def test_column_stats_create_tiny_thread_pool(lmdb_version_store_tiny_segment, any_output_format, tiny_thread_pool):
+    """Simple test with tiny thread pool to check against deadlocks from the parallel load of the index key
+    and the column stats key."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_create_tiny_thread_pool"
+    expected_column_stats = generate_symbol(lib, sym)
+
+    column_stats_dict_1 = {"col_1": {"MINMAX"}}
+    lib.create_column_stats(sym, column_stats_dict_1)
+    assert lib.get_column_stats_info(sym) == column_stats_dict_1
+
+    column_stats_dict_2 = {"col_2": {"MINMAX"}}
+    lib.create_column_stats(sym, column_stats_dict_2)
+    column_stats_dict_merged = {**column_stats_dict_1, **column_stats_dict_2}
+    assert lib.get_column_stats_info(sym) == column_stats_dict_merged
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
+def test_column_stats_drop_tiny_thread_pool(lmdb_version_store_tiny_segment, any_output_format, tiny_thread_pool):
+    """Simple test with tiny thread pool to check against deadlocks from the parallel load of the index key
+    and the column stats key."""
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_drop_tiny_thread_pool"
+    generate_symbol(lib, sym)
+
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}})
+
+    lib.drop_column_stats(sym, {"col_1": {"MINMAX"}})
+    assert lib.get_column_stats_info(sym) == {"col_2": {"MINMAX"}}
+
+    lib.drop_column_stats(sym)
+    with pytest.raises(StorageException):
+        lib.get_column_stats_info(sym)
