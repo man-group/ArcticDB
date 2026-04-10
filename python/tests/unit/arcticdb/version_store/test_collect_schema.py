@@ -274,6 +274,8 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        if create_column_stats:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
         with qs.query_stats():
             lazy_df._collect_schema()
             stats = qs.get_query_stats()
@@ -282,15 +284,17 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        if create_column_stats:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
         with qs.query_stats():
             received_df = lazy_df.collect().data
             stats = qs.get_query_stats()
         qs.reset_stats()
         if create_column_stats:
-            # Column stats should be read during collect, and segment 0 (col1 max=4) should be pruned
-            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
+            # Column stats were preloaded during _collect_schema, segment 0 (col1 max=4) should be pruned
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
             assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
-            expected = df[df["col1"] > 4]
+            expected = df[df["col1"] > 4].reset_index()
         else:
             # Read the data key, but no vref, version, or index keys
             assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == 1
@@ -311,16 +315,18 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
         # Read the same keys again, see comment in _collect_schema() impl for explanation of why
         assert stats["storage_operations"]["Memory_GetObject"]["VERSION_REF"]["count"] == 1
         assert stats["storage_operations"]["Memory_GetObject"]["TABLE_INDEX"]["count"] == 1
+        if create_column_stats:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
         assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
         with qs.query_stats():
             received_df = lazy_df.collect().data
             stats = qs.get_query_stats()
         qs.reset_stats()
         if create_column_stats:
-            # Column stats should still work after the first collect (clone preserves them)
-            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
+            # Column stats were preloaded during _collect_schema, clone preserves them
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
             assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
-            expected = df[df["col1"] > 4].copy()
+            expected = df[df["col1"] > 4].reset_index()
         else:
             # Read the data key, but no vref, version, or index keys
             assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == 1

@@ -31,6 +31,7 @@ struct DescriptorItem {
     std::optional<timestamp> end_index_;
     std::optional<TimeseriesDescriptor> timeseries_descriptor_;
     std::optional<SegmentInMemory> index_segment_;
+    std::optional<SegmentInMemory> column_stats_segment_;
 
     std::string symbol() const { return fmt::format("{}", key_.id()); }
     uint64_t version() const { return key_.version_id(); }
@@ -40,5 +41,6 @@ struct DescriptorItem {
     std::optional<TimeseriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
     entity::AtomKey key() const { return key_; }
     std::optional<SegmentInMemory> index_segment() const { return index_segment_; }
+    std::optional<SegmentInMemory> column_stats_segment() const { return column_stats_segment_; }
 };
 } // namespace arcticdb

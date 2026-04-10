@@ -2722,11 +2722,12 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
                 pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
                 // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
                 // dataframe, hence the clone
-                auto missing_stats_seg = std::nullopt; // TODO aseaton support column stats with preloaded index reads,
-                                                       // for Polars plugin Monday: 11526152128
+                auto column_stats = preloaded_index_query->column_stats_seg_.has_value()
+                                            ? std::optional{preloaded_index_query->column_stats_seg_->clone()}
+                                            : std::nullopt;
                 IndexInformation cloned_index{
                         {preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
-                        missing_stats_seg
+                        std::move(column_stats)
                 };
                 read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, cloned_index);
             },
