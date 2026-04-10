@@ -13,10 +13,6 @@
 
 using namespace arcticdb;
 
-static std::optional<ColumnWithStrings> col_with_strings(Column&& col) {
-    return std::make_optional<ColumnWithStrings>(std::move(col), std::shared_ptr<StringPool>{}, std::string_view{});
-}
-
 template<typename type>
 class SegmentReslicerDenseNumericStaticSchemaFixture : public testing::Test {};
 
@@ -28,20 +24,20 @@ TYPED_TEST_SUITE(SegmentReslicerDenseNumericStaticSchemaFixture, test_types);
 TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineIntoOne) {
     using RawType = TypeParam;
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
+    std::vector<std::shared_ptr<Column>> input_columns;
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{{0, 0, 1, 1}, {1, 0, 1}, {1, 0, 0, 0, 1}};
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(uint8_t));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            input_columns.emplace_back(std::make_shared<Column>(std::move(col)));
         }
     } else {
         std::vector<std::vector<RawType>> input_data{{1, 2, 3, 4}, {11, 12, 13}, {101, 102, 103, 104, 105}};
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(RawType));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            input_columns.emplace_back(std::make_shared<Column>(std::move(col)));
         }
     }
     uint64_t total_rows{12};
@@ -87,8 +83,8 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
         std::vector<RawType> input_data{11, 12, 13, 14, 15, 16, 17};
         memcpy(input_col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
     }
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
-    input_columns.emplace_back(col_with_strings(std::move(input_col)));
+    std::vector<std::shared_ptr<Column>> input_columns;
+    input_columns.emplace_back(std::make_shared<Column>(std::move(input_col)));
     uint64_t max_rows_per_slice{4};
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
     SegmentReslicer reslicer{max_rows_per_slice};
@@ -132,7 +128,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
     uint64_t total_rows{30};
 
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
+    std::vector<std::shared_ptr<Column>> input_columns;
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{
                 {true, false, true, false, true, false, true, false, true, false},
@@ -142,7 +138,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(RawType));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            input_columns.emplace_back(std::make_shared<Column>(std::move(col)));
         }
     } else {
         std::vector<std::vector<RawType>> input_data{
@@ -153,7 +149,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(RawType));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            input_columns.emplace_back(std::make_shared<Column>(std::move(col)));
         }
     }
     SegmentReslicer reslicer{total_rows};
@@ -202,22 +198,22 @@ TEST(SegmentReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     uint64_t total_rows{3000};
     input_data.resize(total_rows);
     std::iota(input_data.begin(), input_data.end(), 42);
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
-    input_columns.emplace_back(col_with_strings(Column(type_descriptor, Sparsity::NOT_PERMITTED)));
-    input_columns.emplace_back(col_with_strings(Column(type_descriptor, Sparsity::NOT_PERMITTED)));
-    input_columns.emplace_back(col_with_strings(Column(type_descriptor, Sparsity::NOT_PERMITTED)));
+    std::vector<std::shared_ptr<Column>> input_columns;
+    input_columns.emplace_back(std::make_shared<Column>(type_descriptor, Sparsity::NOT_PERMITTED));
+    input_columns.emplace_back(std::make_shared<Column>(type_descriptor, Sparsity::NOT_PERMITTED));
+    input_columns.emplace_back(std::make_shared<Column>(type_descriptor, Sparsity::NOT_PERMITTED));
     // 3968 bytes == 496 int64s per block, so 3 blocks per input column here
     for (size_t idx = 0; idx < input_data.size() / 3; ++idx) {
-        input_columns.at(0)->column_->push_back<int64_t>(input_data.at(idx));
-        input_columns.at(1)->column_->push_back<int64_t>(input_data.at(idx + total_rows / 3));
-        input_columns.at(2)->column_->push_back<int64_t>(input_data.at(idx + 2 * total_rows / 3));
+        input_columns.at(0)->push_back<int64_t>(input_data.at(idx));
+        input_columns.at(1)->push_back<int64_t>(input_data.at(idx + total_rows / 3));
+        input_columns.at(2)->push_back<int64_t>(input_data.at(idx + 2 * total_rows / 3));
     }
-    ASSERT_TRUE(input_columns.at(0)->column_->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(0)->column_->num_blocks(), 3);
-    ASSERT_TRUE(input_columns.at(1)->column_->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(1)->column_->num_blocks(), 3);
-    ASSERT_TRUE(input_columns.at(2)->column_->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(2)->column_->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(0)->buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(0)->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(1)->buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(1)->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(2)->buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(2)->num_blocks(), 3);
 
     SegmentReslicer reslicer{total_rows};
     uint64_t max_rows_per_slice{total_rows / 2};
@@ -300,7 +296,7 @@ class SegmentReslicerDenseStringStaticSchema : public ::testing::Test {
 TEST_F(SegmentReslicerDenseStringStaticSchema, CombineIntoOne) {
     using RawType = StringPool::offset_t;
     // Combine columns of each of the 4 supported string types into a single column
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
+    std::vector<ColumnWithStrings> input_columns;
     // "hello" appears in all columns
     // A string representation of the column type appears only in the column
     // Others appear in 2 or 3 of the columns
@@ -366,7 +362,7 @@ class SegmentReslicerDenseStringStaticSchemaSplit : public SegmentReslicerDenseS
 
 TEST_P(SegmentReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     using RawType = StringPool::offset_t;
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
+    std::vector<ColumnWithStrings> input_columns;
     const std::vector<std::string> input_data{"hello", "gutentag", "hello", "bonjour", "bonjour", "hello", "nihao"};
     input_columns.emplace_back(column_with_strings(input_data, GetParam()));
     size_t total_rows{input_data.size()};
