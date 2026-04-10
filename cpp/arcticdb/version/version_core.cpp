@@ -2808,7 +2808,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                             read_query,
                             read_options,
                             res_versioned_item = std::move(res_versioned_item),
-                            &handler_data](auto&& pipeline_context) mutable {
+                            handler_data](auto&& pipeline_context) mutable {
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
                             check_can_perform_processing(pipeline_context, *read_query);
