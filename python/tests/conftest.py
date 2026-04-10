@@ -2055,3 +2055,61 @@ def pytest_collection_modifyitems(config, items):
 
 
 # endregion
+
+# region ======================== V1/V2 Encoding Fixture Variants ============================
+
+
+@pytest.fixture
+def lmdb_version_store_tiny_segment_v1_v2(version_store_factory, lib_name, encoding_version):
+    return version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
+
+
+@pytest.fixture
+def lmdb_version_store_tiny_segment_dynamic_v1_v2(version_store_factory, lib_name, encoding_version):
+    return version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        dynamic_schema=True,
+        encoding_version=int(encoding_version),
+        name=lib_name + f"_{encoding_version.name}",
+    )
+
+
+@pytest.fixture
+def in_memory_version_store_v1_v2(in_memory_store_factory, encoding_version):
+    return in_memory_store_factory(encoding_version=int(encoding_version))
+
+
+@pytest.fixture
+def in_memory_version_store_tiny_segment_v1_v2(in_memory_store_factory, encoding_version):
+    return in_memory_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+    )
+
+
+@pytest.fixture
+def in_memory_version_store_dynamic_schema_v1_v2(in_memory_store_factory, encoding_version):
+    return in_memory_store_factory(
+        dynamic_schema=True,
+        encoding_version=int(encoding_version),
+    )
+
+
+@pytest.fixture
+def in_memory_store_factory_v1_v2(in_memory_store_factory, encoding_version):
+    def factory(*args, **kwargs):
+        kwargs["encoding_version"] = int(encoding_version)
+        return in_memory_store_factory(*args, **kwargs)
+
+    return factory
+
+
+# endregion
