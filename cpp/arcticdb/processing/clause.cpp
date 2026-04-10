@@ -2743,6 +2743,7 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, entity_ids
     );
+    // TODO: Make this log message more accurate with dynamic schema
     ColRange col_range = *proc.col_ranges_->front();
     log::version().debug(
             "CompactDataClause processing {} segments in Col{} with row ranges spanning [{:d}, {:d}]",
