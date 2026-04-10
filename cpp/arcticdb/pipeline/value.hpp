@@ -112,6 +112,19 @@ struct Value {
 
     [[nodiscard]] DataType data_type() const { return data_type_; }
 
+    [[nodiscard]] bool is_nan() const {
+        if (is_floating_point_type(data_type_)) {
+            return details::visit_type(data_type_, [this]<typename TagType>(TagType) -> bool {
+                using RawType = typename TagType::raw_type;
+                if constexpr (std::is_floating_point_v<RawType>) {
+                    return std::isnan(get<RawType>());
+                }
+                return false;
+            });
+        }
+        return false;
+    }
+
   private:
     void assign_string(const char* c, const size_t len) {
         const auto data = new char[len + 1];

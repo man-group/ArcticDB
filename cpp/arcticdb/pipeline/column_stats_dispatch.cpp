@@ -24,9 +24,129 @@ size_t stats_variant_size(const StatsVariantData& v) {
             util::overload{
                     [](const std::vector<StatsComparison>& vec) -> size_t { return vec.size(); },
                     [](const std::shared_ptr<Value>&) -> size_t { return 0; },
-                    [](const std::vector<ColumnStatsValues>& vec) -> size_t { return vec.size(); }
+                    [](const std::vector<ColumnStatsValues>& vec) -> size_t { return vec.size(); },
+                    [](const std::shared_ptr<ValueSet>&) -> size_t { return 0; }
             },
             v
+    );
+}
+
+StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, ValueSet& value_set, OperationType op) {
+    util::check(op == OperationType::ISIN || op == OperationType::ISNOTIN, "Should only be called on ISIN / ISNOTIN");
+    bool is_isin = op == OperationType::ISIN;
+
+    if (value_set.empty()) {
+        return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
+    }
+
+    if (!stats.min || !stats.max) {
+        return StatsComparison::UNKNOWN;
+    }
+
+    // Both stats NaN means the entire segment is NaN. NaN never matches isin.
+    if (stats.min->is_nan() && stats.max->is_nan()) {
+        return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
+    }
+
+    if (stats.min->is_nan() || stats.max->is_nan()) {
+        return StatsComparison::UNKNOWN;
+    }
+
+    const auto& set_min = value_set.min_value();
+    const auto& set_max = value_set.max_value();
+    // Non-empty set with nullopt min/max means all elements are NaN (filtered by compute_min_max).
+    if (!set_min || !set_max) {
+        return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
+    }
+
+    return details::visit_type(stats.min->data_type(), [&](auto stats_tag) -> StatsComparison {
+        using StatsTag = std::remove_reference_t<decltype(stats_tag)>;
+
+        return details::visit_type(set_min->data_type(), [&](auto set_tag) -> StatsComparison {
+            using SetTag = std::remove_reference_t<decltype(set_tag)>;
+
+            // TODO add bool support once the bool PR is merged
+            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
+                          (is_numeric_type(SetTag::data_type) || is_time_type(SetTag::data_type))) {
+                using StatsRawType = StatsTag::raw_type;
+                using SetRawType = SetTag::raw_type;
+                using comp = Comparable<StatsRawType, SetRawType>;
+                using LeftType = comp::left_type;
+                using RightType = comp::right_type;
+                auto stats_min = static_cast<LeftType>(stats.min->get<StatsRawType>());
+                auto stats_max = static_cast<LeftType>(stats.max->get<StatsRawType>());
+                auto set_min_raw = static_cast<RightType>(set_min->get<SetRawType>());
+                auto set_max_raw = static_cast<RightType>(set_max->get<SetRawType>());
+
+                // Do one pass where we evaluate stats against the min and max values in the set.
+                // If this gives an ambiguous result, do a second pass where we evaluate stats against each element in
+                // the set.
+
+                // We evaluate as if the operator is IsIn. If it's IsNotIn, we just flip the result at the end.
+                StatsComparison isin_result;
+                if (LessThanOperator{}(set_max_raw, stats_min) || GreaterThanOperator{}(set_min_raw, stats_max)) {
+                    isin_result = StatsComparison::NONE_MATCH;
+                } else if (EqualsOperator{}(set_min_raw, set_max_raw) &&
+                           EqualsOperator{}(ValueRange<LeftType>{stats_min, stats_max}, set_min_raw) ==
+                                   StatsComparison::ALL_MATCH) {
+                    isin_result = StatsComparison::ALL_MATCH;
+                } else {
+                    auto typed_set = value_set.get_set<SetRawType>();
+                    isin_result = StatsComparison::NONE_MATCH;
+                    for (const auto& elem : *typed_set) {
+                        auto elem_raw = static_cast<RightType>(elem);
+                        auto comparison = EqualsOperator{}(ValueRange<LeftType>{stats_min, stats_max}, elem_raw);
+
+                        if (comparison == StatsComparison::ALL_MATCH) {
+                            // min == max == elem
+                            isin_result = StatsComparison::ALL_MATCH;
+                            break;
+                        }
+                        if (comparison == StatsComparison::UNKNOWN) {
+                            // min <= elem <= max, elem might be in the block
+                            isin_result = StatsComparison::UNKNOWN;
+                            break;
+                        }
+                        // comparison == NONE_MATCH -> elem outside of [min, max], so not relevant
+                    }
+                }
+
+                if (!is_isin) {
+                    if (isin_result == StatsComparison::ALL_MATCH)
+                        return StatsComparison::NONE_MATCH;
+                    if (isin_result == StatsComparison::NONE_MATCH)
+                        return StatsComparison::ALL_MATCH;
+                }
+                return isin_result;
+            }
+
+            return StatsComparison::UNKNOWN;
+        });
+    });
+}
+
+std::vector<StatsComparison> visit_binary_membership_stats(
+        const StatsVariantData& left, const StatsVariantData& right, OperationType operation
+) {
+    return std::visit(
+            util::overload{
+                    [operation](
+                            const std::vector<ColumnStatsValues>& stats_vec, const std::shared_ptr<ValueSet>& value_set
+                    ) -> std::vector<StatsComparison> {
+                        std::vector<StatsComparison> result;
+                        result.reserve(stats_vec.size());
+                        for (const auto& csv : stats_vec) {
+                            result.emplace_back(stats_membership_comparator(csv, *value_set, operation));
+                        }
+                        return result;
+                    },
+                    [&left, &right](const auto&, const auto&) -> std::vector<StatsComparison> {
+                        size_t sz = std::max(stats_variant_size(left), stats_variant_size(right));
+                        return std::vector(sz, StatsComparison::UNKNOWN);
+                    }
+            },
+            left,
+            right
     );
 }
 
@@ -171,6 +291,9 @@ StatsVariantData visit_unary_boolean_stats(const StatsVariantData& left, Operati
             },
             [](const std::shared_ptr<Value>&) -> std::vector<StatsComparison> {
                 util::raise_rte("Value should never be provided to visit_unary_boolean_stats");
+            },
+            [](const std::shared_ptr<ValueSet>&) -> std::vector<StatsComparison> {
+                util::raise_rte("ValueSet should never be provided to visit_unary_boolean_stats");
             }
     );
 }
