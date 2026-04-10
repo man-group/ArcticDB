@@ -225,15 +225,32 @@ def test_collect_schema_with_query(lmdb_library):
     assert schema == pl.Schema([("col1", pl.Int64), ("col2", pl.Float32), ("new_col", pl.Int64)])
 
 
-def test_collect_schema_and_collect_multiple_times(mem_library):
-    with config_context("VersionMap.ReloadInterval", 0):
+@pytest.mark.parametrize("create_column_stats", [True, False])
+def test_collect_schema_and_collect_multiple_times(mem_library, create_column_stats):
+    with (
+        config_context("VersionMap.ReloadInterval", 0),
+        config_context("ColumnStats.UseForQueries", int(create_column_stats)),
+    ):
         lib = mem_library
         lib._nvs.set_output_format(OutputFormat.POLARS)
         sym = "test_collect_schema_multiple_times"
-        df = pd.DataFrame(
-            {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.float32)},
+
+        df0 = pd.DataFrame(
+            {"col1": np.arange(5, dtype=np.int64), "col2": np.arange(100, 105, dtype=np.float32)},
+            index=pd.date_range("2000-01-01", periods=5),
         )
-        lib.write(sym, df)
+        df1 = pd.DataFrame(
+            {"col1": np.arange(5, 10, dtype=np.int64), "col2": np.arange(105, 110, dtype=np.float32)},
+            index=pd.date_range("2000-01-06", periods=5),
+        )
+        df0.index.name = "ts"
+        df1.index.name = "ts"
+        lib.write(sym, df0)
+        lib.append(sym, df1)
+        df = pd.concat([df0, df1])
+
+        if create_column_stats:
+            lib._nvs.create_column_stats(sym, {"col1": {"MINMAX"}})
 
         with qs.query_stats():
             lazy_df = lib.read(sym, lazy=True)
@@ -241,6 +258,9 @@ def test_collect_schema_and_collect_multiple_times(mem_library):
         qs.reset_stats()
         # No IO yet
         assert stats == dict()
+
+        lazy_df = lazy_df[lazy_df["col1"] > 4]
+
         with qs.query_stats():
             lazy_df._collect_schema()
             stats = qs.get_query_stats()
@@ -249,6 +269,8 @@ def test_collect_schema_and_collect_multiple_times(mem_library):
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        if create_column_stats:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
         with qs.query_stats():
             lazy_df._collect_schema()
             stats = qs.get_query_stats()
@@ -257,38 +279,53 @@ def test_collect_schema_and_collect_multiple_times(mem_library):
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+        if create_column_stats:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
         with qs.query_stats():
             received_df = lazy_df.collect().data
             stats = qs.get_query_stats()
         qs.reset_stats()
-        # Read the data key, but no vref, version, or index keys
-        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        if create_column_stats:
+            # Read the data key, but no vref, version, or index keys
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        else:
+            # Read the data key, but no vref, version, or index keys
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 2
+        assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 0
         assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION") == 0
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 0
-        assert_frame_equal_with_arrow(df, received_df)
+        expected = df[df["col1"] > 4].reset_index()
+        assert_frame_equal_with_arrow(expected, received_df)
 
-        # Change the query
+        # Change the query by adding a projection
         lazy_df["new_col"] = lazy_df["col1"] + lazy_df["col2"]
         with qs.query_stats():
             lazy_df._collect_schema()
             stats = qs.get_query_stats()
         qs.reset_stats()
         # Read the same keys again, see comment in _collect_schema() impl for explanation of why
-        assert stats["storage_operations"]["Memory_GetObject"]["VERSION_REF"]["count"] == 1
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_INDEX"]["count"] == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        if create_column_stats:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
         assert "TABLE_DATA" not in stats["storage_operations"]["Memory_GetObject"]
         with qs.query_stats():
             received_df = lazy_df.collect().data
             stats = qs.get_query_stats()
         qs.reset_stats()
-        # Read the data key, but no vref, version, or index keys
-        assert stats["storage_operations"]["Memory_GetObject"]["TABLE_DATA"]["count"] == 1
+        if create_column_stats:
+            # Column stats were preloaded during _collect_schema, clone preserves them
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        else:
+            # Read the data key, but no vref, version, or index keys
+            assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 2
         assert "VERSION_REF" not in stats["storage_operations"]["Memory_GetObject"]
         assert "VERSION" not in stats["storage_operations"]["Memory_GetObject"]
         assert "TABLE_INDEX" not in stats["storage_operations"]["Memory_GetObject"]
-        df["new_col"] = df["col1"] + df["col2"]
-        assert_frame_equal_with_arrow(df, received_df)
+        expected["new_col"] = expected["col1"] + expected["col2"]
+        assert_frame_equal_with_arrow(expected, received_df)
 
 
 def test_collect_schema_and_collect_version_deleted(mem_library):
