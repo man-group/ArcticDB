@@ -1467,8 +1467,8 @@ INSTANTIATE_TEST_SUITE_P(
 // Helper to build a column stats SegmentInMemory with the expected schema:
 //   col 0: "start_index" (NANOSECONDS_UTC64)
 //   col 1: "end_index"   (NANOSECONDS_UTC64)
-//   col 2: "v1.0_MIN(price)" (INT64)
-//   col 3: "v1.0_MAX(price)" (INT64)
+//   col 2: min of "price" (INT64)
+//   col 3: max of "price" (INT64)
 //
 // Each entry in |rows| is (start_index, end_index, min_price, max_price).
 // If a row's start_index is std::nullopt, that row has an absent start_index
@@ -1479,7 +1479,19 @@ struct StatsSegmentRow {
     int64_t max_price;
 };
 
+// "price" is at data_col_offset=1 in the TSD (offset 0 is the timestamp index)
+static constexpr uint32_t price_data_col_offset = 1;
+
+TimeseriesDescriptor build_test_tsd() {
+    TimeseriesDescriptor tsd;
+    tsd.mutable_fields().add_field(scalar_field(DataType::NANOSECONDS_UTC64, "timestamp"));
+    tsd.mutable_fields().add_field(scalar_field(DataType::INT64, "price"));
+    return tsd;
+}
+
 SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
+    using namespace arcticc::pb2::descriptors_pb2;
+
     auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
     auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
     auto min_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
@@ -1510,9 +1522,25 @@ SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_col);
-    seg.add_column(scalar_field(DataType::INT64, "v1.0_MIN(price)"), min_col);
-    seg.add_column(scalar_field(DataType::INT64, "v1.0_MAX(price)"), max_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_col);
     seg.set_row_data(last_row);
+
+    // Attach ColumnStatsHeader proto metadata
+    ColumnStatsHeader header;
+    header.set_version(1);
+    auto& entry_list = (*header.mutable_stats_by_column())[price_data_col_offset];
+    auto* min_entry = entry_list.add_entries();
+    min_entry->set_stats_seg_offset(2); // col 2 in the stats segment
+    min_entry->set_type(COLUMN_STATS_TYPE_MIN_V1);
+    auto* max_entry = entry_list.add_entries();
+    max_entry->set_stats_seg_offset(3); // col 3 in the stats segment
+    max_entry->set_type(COLUMN_STATS_TYPE_MAX_V1);
+
+    google::protobuf::Any any;
+    any.PackFrom(header);
+    seg.set_metadata(std::move(any));
+
     return seg;
 }
 
@@ -1524,7 +1552,8 @@ TEST(ColumnStatsData, FindStatsAllRowsPresent) {
             {500, 600, 50, 60},
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
     auto* row0 = data.find_stats(100, 200);
@@ -1551,7 +1580,8 @@ TEST(ColumnStatsData, MalformedMiddleRowDiscardsAll) {
             {500, 600, 50, 60},          // never reached
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
     ASSERT_EQ(data.find_stats(100, 200), nullptr);
     ASSERT_EQ(data.find_stats(500, 600), nullptr);
@@ -1563,7 +1593,8 @@ TEST(ColumnStatsData, MalformedEndIndexDiscardsAll) {
             {100, std::nullopt, 10, 20},
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
 }
 
@@ -1573,7 +1604,8 @@ TEST(ColumnStatsData, FindStatsNonExistentIndex) {
             {100, 200, 10, 20},
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_EQ(data.find_stats(999, 888), nullptr);
 }
 
@@ -1581,7 +1613,8 @@ TEST(ColumnStatsData, FindStatsNonExistentIndex) {
 TEST(ColumnStatsData, EmptySegment) {
     auto seg = build_stats_segment({});
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
     ASSERT_EQ(data.find_stats(0, 0), nullptr);
 }
@@ -1597,7 +1630,8 @@ TEST(ColumnStatsData, DuplicateIndexPairDropsBothRows) {
             {100, 200, 50, 60}, // row 1: same index range, price in [50, 60]
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
     // Neither row is reachable via find_stats because the key is ambiguous.
@@ -1613,7 +1647,8 @@ TEST(ColumnStatsData, DuplicateIndexPairDoesNotAffectOtherRows) {
             {400, 600, 70, 80}, // row 3: unique key
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
     // Unique rows are still reachable.
