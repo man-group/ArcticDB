@@ -7,47 +7,43 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/column_store/segment_reslicer.hpp>
+#include <arcticdb/column_store/column_reslicer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/string_utils.hpp>
 
 using namespace arcticdb;
 
-static std::optional<ColumnWithStrings> col_with_strings(Column&& col) {
-    return std::make_optional<ColumnWithStrings>(std::move(col), std::shared_ptr<StringPool>{}, std::string_view{});
-}
-
 template<typename type>
-class SegmentReslicerDenseNumericStaticSchemaFixture : public testing::Test {};
+class ColumnReslicerDenseNumericSameTypeFixture : public testing::Test {};
 
 using test_types =
         ::testing::Types<bool, uint8_t, uint16_t, uint32_t, uint64_t, int8_t, int16_t, int32_t, int64_t, float, double>;
 
-TYPED_TEST_SUITE(SegmentReslicerDenseNumericStaticSchemaFixture, test_types);
+TYPED_TEST_SUITE(ColumnReslicerDenseNumericSameTypeFixture, test_types);
 
-TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineIntoOne) {
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneStatic) {
     using RawType = TypeParam;
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
+    uint64_t total_rows{12};
+    ReslicingInfo rereslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{rereslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{{0, 0, 1, 1}, {1, 0, 1}, {1, 0, 0, 0, 1}};
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(uint8_t));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
         }
     } else {
         std::vector<std::vector<RawType>> input_data{{1, 2, 3, 4}, {11, 12, 13}, {101, 102, 103, 104, 105}};
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(RawType));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
         }
     }
-    uint64_t total_rows{12};
-    SegmentReslicer reslicer{total_rows};
-    SegmentReslicer::SlicingInfo slicing_info{total_rows, total_rows};
-    auto res = reslicer.reslice_dense_numeric_static_schema_columns(std::move(input_columns), slicing_info);
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
@@ -75,10 +71,231 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineIntoOne) {
     ASSERT_EQ(col.buffer().blocks().front()->capacity(), total_rows * sizeof(RawType));
 }
 
-TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissingFirstSlice) {
+    using RawType = TypeParam;
+    auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
+    uint64_t total_rows{12};
+    uint64_t value_count{8};
+    ReslicingInfo rereslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{rereslicing_info};
+    if constexpr (std::is_same_v<RawType, bool>) {
+        // Missing first row slice with 4 rows
+        reslicer.push_back(4);
+        std::vector<uint8_t> input_data{1, 0, 1};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        input_data = std::vector<uint8_t>{1, 0, 0, 0, 1};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    } else {
+        // Missing first row slice with 4 rows
+        reslicer.push_back(4);
+        std::vector<RawType> input_data{11, 12, 13};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        input_data = std::vector<RawType>{101, 102, 103, 104, 105};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    }
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_TRUE(res.front().has_value());
+    auto& col = *res.front();
+    ASSERT_EQ(col.row_count(), value_count);
+    // This happens for the whole segment later in the real flow
+    col.set_row_data(total_rows - 1);
+    ASSERT_TRUE(col.is_sparse());
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<std::optional<bool>> expected_values{
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                true,
+                false,
+                true,
+                true,
+                false,
+                false,
+                false,
+                true
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    } else {
+        std::vector<std::optional<RawType>> expected_values{
+                std::nullopt, std::nullopt, std::nullopt, std::nullopt, 11, 12, 13, 101, 102, 103, 104, 105
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    }
+    ASSERT_EQ(col.buffer().bytes(), value_count * sizeof(RawType));
+    ASSERT_EQ(col.num_blocks(), 1);
+    ASSERT_EQ(col.buffer().blocks().front()->capacity(), value_count * sizeof(RawType));
+}
+
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissingMiddleSlice) {
+    using RawType = TypeParam;
+    auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
+    uint64_t total_rows{12};
+    uint64_t value_count{9};
+    ReslicingInfo rereslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{rereslicing_info};
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<uint8_t> input_data{0, 0, 1, 1};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        // Missing middle row slice with 3 rows
+        reslicer.push_back(3);
+        input_data = std::vector<uint8_t>{1, 0, 0, 0, 1};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    } else {
+        std::vector<RawType> input_data{1, 2, 3, 4};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        // Missing middle row slice with 3 rows
+        reslicer.push_back(3);
+        input_data = std::vector<RawType>{101, 102, 103, 104, 105};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    }
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_TRUE(res.front().has_value());
+    auto& col = *res.front();
+    ASSERT_EQ(col.row_count(), value_count);
+    // This happens for the whole segment later in the real flow
+    col.set_row_data(total_rows - 1);
+    ASSERT_TRUE(col.is_sparse());
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<std::optional<bool>> expected_values{
+                false, false, true, true, std::nullopt, std::nullopt, std::nullopt, true, false, false, false, true
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    } else {
+        std::vector<std::optional<RawType>> expected_values{
+                1, 2, 3, 4, std::nullopt, std::nullopt, std::nullopt, 101, 102, 103, 104, 105
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    }
+    ASSERT_EQ(col.buffer().bytes(), value_count * sizeof(RawType));
+    ASSERT_EQ(col.num_blocks(), 1);
+    ASSERT_EQ(col.buffer().blocks().front()->capacity(), value_count * sizeof(RawType));
+}
+
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissingLastSlice) {
+    using RawType = TypeParam;
+    auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
+    uint64_t total_rows{12};
+    uint64_t value_count{7};
+    ReslicingInfo rereslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{rereslicing_info};
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<uint8_t> input_data{0, 0, 1, 1};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        input_data = std::vector<uint8_t>{1, 0, 1};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        // Missing last row slice with 5 rows
+        reslicer.push_back(5);
+    } else {
+        std::vector<RawType> input_data{1, 2, 3, 4};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        input_data = std::vector<RawType>{11, 12, 13};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        // Missing last row slice with 5 rows
+        reslicer.push_back(5);
+    }
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_TRUE(res.front().has_value());
+    auto& col = *res.front();
+    ASSERT_EQ(col.row_count(), value_count);
+    // This happens for the whole segment later in the real flow
+    col.set_row_data(total_rows - 1);
+    ASSERT_TRUE(col.is_sparse());
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<std::optional<bool>> expected_values{
+                false,
+                false,
+                true,
+                true,
+                true,
+                false,
+                true,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    } else {
+        std::vector<std::optional<RawType>> expected_values{
+                1, 2, 3, 4, 11, 12, 13, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    }
+    ASSERT_EQ(col.buffer().bytes(), value_count * sizeof(RawType));
+    ASSERT_EQ(col.num_blocks(), 1);
+    ASSERT_EQ(col.buffer().blocks().front()->capacity(), value_count * sizeof(RawType));
+}
+
+// Do not need a dynamic schema version of this test as for splitting it gives the same result
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, SplitInTwoStatic) {
     using RawType = TypeParam;
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
     size_t total_rows{7};
+    uint64_t max_rows_per_slice{4};
+    ReslicingInfo rereslicing_info{total_rows, max_rows_per_slice};
+    ColumnReslicer reslicer{rereslicing_info};
     Column input_col{type_descriptor, total_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<uint8_t> input_data{0, 0, 1, 0, 1, 1, 1};
@@ -87,13 +304,11 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
         std::vector<RawType> input_data{11, 12, 13, 14, 15, 16, 17};
         memcpy(input_col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
     }
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
-    input_columns.emplace_back(col_with_strings(std::move(input_col)));
-    uint64_t max_rows_per_slice{4};
+    reslicer.push_back(std::make_shared<Column>(std::move(input_col)), std::shared_ptr<StringPool>{});
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
-    SegmentReslicer reslicer{max_rows_per_slice};
-    SegmentReslicer::SlicingInfo slicing_info{total_rows, max_rows_per_slice};
-    auto res = reslicer.reslice_dense_numeric_static_schema_columns(std::move(input_columns), slicing_info);
     ASSERT_EQ(res.size(), 2);
     ASSERT_TRUE(res.front().has_value());
     ASSERT_TRUE(res.back().has_value());
@@ -127,12 +342,14 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, SplitInTwo) {
     ASSERT_EQ(col_1.buffer().blocks().front()->capacity(), max_rows_per_slice * sizeof(RawType));
 }
 
-TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) {
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineThreeIntoTwoStatic) {
     using RawType = TypeParam;
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
     uint64_t total_rows{30};
+    uint64_t max_rows_per_slice{15};
+    ReslicingInfo rereslicing_info{total_rows, max_rows_per_slice};
+    ColumnReslicer reslicer{rereslicing_info};
 
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{
                 {true, false, true, false, true, false, true, false, true, false},
@@ -142,7 +359,7 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(RawType));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
         }
     } else {
         std::vector<std::vector<RawType>> input_data{
@@ -153,13 +370,12 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
         for (const auto& data : input_data) {
             Column col{type_descriptor, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
             memcpy(col.ptr(), data.data(), data.size() * sizeof(RawType));
-            input_columns.emplace_back(col_with_strings(std::move(col)));
+            reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
         }
     }
-    SegmentReslicer reslicer{total_rows};
-    uint64_t max_rows_per_slice{15};
-    SegmentReslicer::SlicingInfo slicing_info{total_rows, max_rows_per_slice};
-    auto res = reslicer.reslice_dense_numeric_static_schema_columns(std::move(input_columns), slicing_info);
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+
     ASSERT_EQ(res.size(), 2);
     ASSERT_TRUE(res.front().has_value());
     ASSERT_TRUE(res.back().has_value());
@@ -196,33 +412,37 @@ TYPED_TEST(SegmentReslicerDenseNumericStaticSchemaFixture, CombineThreeIntoTwo) 
     ASSERT_EQ(col_1.buffer().blocks().front()->capacity(), max_rows_per_slice * sizeof(RawType));
 }
 
-TEST(SegmentReslicerDenseNumericStaticSchema, MultiBlockColumns) {
+TEST(ColumnReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<int64_t>());
     std::vector<int64_t> input_data;
     uint64_t total_rows{3000};
+    uint64_t max_rows_per_slice{total_rows / 2};
+    ReslicingInfo rereslicing_info{total_rows, max_rows_per_slice};
+    ColumnReslicer reslicer{rereslicing_info};
     input_data.resize(total_rows);
     std::iota(input_data.begin(), input_data.end(), 42);
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
-    input_columns.emplace_back(col_with_strings(Column(type_descriptor, Sparsity::NOT_PERMITTED)));
-    input_columns.emplace_back(col_with_strings(Column(type_descriptor, Sparsity::NOT_PERMITTED)));
-    input_columns.emplace_back(col_with_strings(Column(type_descriptor, Sparsity::NOT_PERMITTED)));
+    std::vector<Column> input_columns;
+    input_columns.emplace_back(type_descriptor, Sparsity::NOT_PERMITTED);
+    input_columns.emplace_back(type_descriptor, Sparsity::NOT_PERMITTED);
+    input_columns.emplace_back(type_descriptor, Sparsity::NOT_PERMITTED);
     // 3968 bytes == 496 int64s per block, so 3 blocks per input column here
     for (size_t idx = 0; idx < input_data.size() / 3; ++idx) {
-        input_columns.at(0)->column_->push_back<int64_t>(input_data.at(idx));
-        input_columns.at(1)->column_->push_back<int64_t>(input_data.at(idx + total_rows / 3));
-        input_columns.at(2)->column_->push_back<int64_t>(input_data.at(idx + 2 * total_rows / 3));
+        input_columns.at(0).push_back<int64_t>(input_data.at(idx));
+        input_columns.at(1).push_back<int64_t>(input_data.at(idx + total_rows / 3));
+        input_columns.at(2).push_back<int64_t>(input_data.at(idx + 2 * total_rows / 3));
     }
-    ASSERT_TRUE(input_columns.at(0)->column_->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(0)->column_->num_blocks(), 3);
-    ASSERT_TRUE(input_columns.at(1)->column_->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(1)->column_->num_blocks(), 3);
-    ASSERT_TRUE(input_columns.at(2)->column_->buffer().is_regular_sized());
-    ASSERT_EQ(input_columns.at(2)->column_->num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(0).buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(0).num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(1).buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(1).num_blocks(), 3);
+    ASSERT_TRUE(input_columns.at(2).buffer().is_regular_sized());
+    ASSERT_EQ(input_columns.at(2).num_blocks(), 3);
+    reslicer.push_back(std::make_shared<Column>(std::move(input_columns.at(0))), std::shared_ptr<StringPool>{});
+    reslicer.push_back(std::make_shared<Column>(std::move(input_columns.at(1))), std::shared_ptr<StringPool>{});
+    reslicer.push_back(std::make_shared<Column>(std::move(input_columns.at(2))), std::shared_ptr<StringPool>{});
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
 
-    SegmentReslicer reslicer{total_rows};
-    uint64_t max_rows_per_slice{total_rows / 2};
-    SegmentReslicer::SlicingInfo slicing_info{total_rows, max_rows_per_slice};
-    auto res = reslicer.reslice_dense_numeric_static_schema_columns(std::move(input_columns), slicing_info);
     ASSERT_EQ(res.size(), 2);
     ASSERT_TRUE(res.front().has_value());
     ASSERT_TRUE(res.back().has_value());
@@ -250,7 +470,7 @@ TEST(SegmentReslicerDenseNumericStaticSchema, MultiBlockColumns) {
 }
 
 // Test strings separately as they are quite different
-class SegmentReslicerDenseStringStaticSchema : public ::testing::Test {
+class ColumnReslicerDenseStringStaticSchema : public ::testing::Test {
   protected:
     ColumnWithStrings column_with_strings(const std::vector<std::string>& strings, DataType data_type) {
         Column col{make_scalar_type(data_type), Sparsity::NOT_PERMITTED};
@@ -297,10 +517,13 @@ class SegmentReslicerDenseStringStaticSchema : public ::testing::Test {
     TypeDescriptor utf8_td{make_scalar_type(DataType::UTF_DYNAMIC64)};
 };
 
-TEST_F(SegmentReslicerDenseStringStaticSchema, CombineIntoOne) {
+TEST_F(ColumnReslicerDenseStringStaticSchema, CombineIntoOne) {
     using RawType = StringPool::offset_t;
+    uint64_t total_rows{12};
+    ReslicingInfo rereslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{rereslicing_info};
     // Combine columns of each of the 4 supported string types into a single column
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
+    std::vector<ColumnWithStrings> input_columns;
     // "hello" appears in all columns
     // A string representation of the column type appears only in the column
     // Others appear in 2 or 3 of the columns
@@ -309,12 +532,13 @@ TEST_F(SegmentReslicerDenseStringStaticSchema, CombineIntoOne) {
     );
     input_columns.emplace_back(column_with_strings({"fixed", "hello", "utf32"}, utf32_td.data_type()));
     input_columns.emplace_back(column_with_strings({"dynamic", "utf8", "hello"}, utf8_td.data_type()));
-    uint64_t total_rows{12};
-    SegmentReslicer reslicer{total_rows};
-    SegmentReslicer::SlicingInfo slicing_info{total_rows, total_rows};
+    for (const auto& col_with_strings : input_columns) {
+        reslicer.push_back(col_with_strings.column_, col_with_strings.string_pool_);
+    }
+    input_columns.clear(); // In debug builds there are checks that the reslicer has the last reference to input columns
+
     std::vector<StringPool> string_pools(1);
-    auto res =
-            reslicer.reslice_dense_string_static_schema_columns(std::move(input_columns), slicing_info, string_pools);
+    auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
@@ -362,22 +586,25 @@ TEST_F(SegmentReslicerDenseStringStaticSchema, CombineIntoOne) {
     ASSERT_EQ(col.buffer().blocks().front()->capacity(), total_rows * sizeof(RawType));
 }
 
-class SegmentReslicerDenseStringStaticSchemaSplit : public SegmentReslicerDenseStringStaticSchema,
-                                                    public ::testing::WithParamInterface<DataType> {};
+class ColumnReslicerDenseStringStaticSchemaSplit : public ColumnReslicerDenseStringStaticSchema,
+                                                   public ::testing::WithParamInterface<DataType> {};
 
-TEST_P(SegmentReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
+TEST_P(ColumnReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     using RawType = StringPool::offset_t;
-    std::vector<std::optional<ColumnWithStrings>> input_columns;
-    const std::vector<std::string> input_data{"hello", "gutentag", "hello", "bonjour", "bonjour", "hello", "nihao"};
-    input_columns.emplace_back(column_with_strings(input_data, GetParam()));
-    size_t total_rows{input_data.size()};
+    size_t total_rows{7};
     uint64_t max_rows_per_slice{4};
+    ReslicingInfo rereslicing_info{total_rows, max_rows_per_slice};
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
-    SegmentReslicer reslicer{max_rows_per_slice};
-    SegmentReslicer::SlicingInfo slicing_info{total_rows, max_rows_per_slice};
+    ColumnReslicer reslicer{rereslicing_info};
+
+    const std::vector<std::string> input_data{"hello", "gutentag", "hello", "bonjour", "bonjour", "hello", "nihao"};
+    auto col_with_strings = std::make_optional<ColumnWithStrings>(column_with_strings(input_data, GetParam()));
+    reslicer.push_back(col_with_strings->column_, col_with_strings->string_pool_);
+    col_with_strings.reset(
+    ); // In debug builds there are checks that the reslicer has the last reference to input columns
+
     std::vector<StringPool> string_pools(2);
-    auto res =
-            reslicer.reslice_dense_string_static_schema_columns(std::move(input_columns), slicing_info, string_pools);
+    auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 2);
     ASSERT_TRUE(res.front().has_value());
     ASSERT_TRUE(res.back().has_value());
@@ -416,7 +643,7 @@ TEST_P(SegmentReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        SplitInTwo, SegmentReslicerDenseStringStaticSchemaSplit,
+        SplitInTwo, ColumnReslicerDenseStringStaticSchemaSplit,
         ::testing::Values(
                 DataType::ASCII_FIXED64, DataType::ASCII_DYNAMIC64, DataType::UTF_FIXED64, DataType::UTF_DYNAMIC64
         )

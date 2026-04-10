@@ -12,7 +12,6 @@
 #include <vector>
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {
 
@@ -27,59 +26,14 @@ namespace arcticdb {
 // - Combining an arbitrary number of segments into a single one - by providing max_rows_per_segment to the constructor
 //   that is >= the total number of rows in the input segments
 // - Splitting a segment into a set of (approximately) equally sized smaller segments
-// Currently only supports dense numeric data and static schema, these limitations will be removed in future PRs.
+// Currently does not support sparse data, this limitation will be removed in future PRs.
 class SegmentReslicer {
   public:
-    class SlicingInfo {
-      public:
-        SlicingInfo(uint64_t _total_rows, uint64_t _rows_per_segment) :
-            total_rows(_total_rows),
-            num_segments((total_rows + _rows_per_segment - 1) / _rows_per_segment),
-            rows_per_segment(total_rows / num_segments),
-            num_remainder_segments(total_rows % num_segments),
-            num_exact_segments(num_segments - num_remainder_segments) {
-            auto output_rows = num_exact_segments * rows_per_segment + num_remainder_segments * (rows_per_segment + 1);
-            util::check(
-                    output_rows == total_rows,
-                    "SlicingInfo input rows does not match constructed output rows {} != {}",
-                    total_rows,
-                    output_rows
-            );
-        }
-
-        uint64_t rows_in_slice(uint64_t idx) const {
-            return idx < num_exact_segments ? rows_per_segment : rows_per_segment + 1;
-        }
-
-        const uint64_t total_rows;
-        const uint64_t num_segments;
-
-      private:
-        // This is how many rows most segments will have
-        const uint64_t rows_per_segment;
-        // This is how many segments will have rows_per_segment+1 rows
-        const uint64_t num_remainder_segments;
-        // This is how many segments will have exactly rows_per_segment rows
-        const uint64_t num_exact_segments;
-    };
-
     explicit SegmentReslicer(uint64_t max_rows_per_segment);
 
     ARCTICDB_NO_MOVE_OR_COPY(SegmentReslicer)
 
-    // Main entry point. The other methods are public for testing purposes only
     std::vector<SegmentInMemory> reslice_segments(std::vector<SegmentInMemory>&& segments);
-    std::vector<std::optional<Column>> reslice_columns(
-            std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info,
-            std::vector<StringPool>& string_pools
-    );
-    std::vector<std::optional<Column>> reslice_dense_numeric_static_schema_columns(
-            std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info
-    );
-    std::vector<std::optional<Column>> reslice_dense_string_static_schema_columns(
-            std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info,
-            std::vector<StringPool>& string_pools
-    );
 
   private:
     const uint64_t max_rows_per_segment_;
