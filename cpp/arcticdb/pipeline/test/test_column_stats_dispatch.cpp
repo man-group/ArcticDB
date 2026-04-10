@@ -1532,10 +1532,10 @@ SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
     auto& entry_list = (*header.mutable_stats_by_column())[price_data_col_offset];
     auto* min_entry = entry_list.add_entries();
     min_entry->set_stats_seg_offset(2); // col 2 in the stats segment
-    min_entry->set_type(COLUMN_STATS_MIN_V1);
+    min_entry->set_type(COLUMN_STATS_TYPE_MIN_V1);
     auto* max_entry = entry_list.add_entries();
     max_entry->set_stats_seg_offset(3); // col 3 in the stats segment
-    max_entry->set_type(COLUMN_STATS_MAX_V1);
+    max_entry->set_type(COLUMN_STATS_TYPE_MAX_V1);
 
     google::protobuf::Any any;
     any.PackFrom(header);
@@ -1630,7 +1630,8 @@ TEST(ColumnStatsData, DuplicateIndexPairDropsBothRows) {
             {100, 200, 50, 60}, // row 1: same index range, price in [50, 60]
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
     // Neither row is reachable via find_stats because the key is ambiguous.
@@ -1646,7 +1647,8 @@ TEST(ColumnStatsData, DuplicateIndexPairDoesNotAffectOtherRows) {
             {400, 600, 70, 80}, // row 3: unique key
     });
 
-    ColumnStatsData data(std::move(seg));
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
     // Unique rows are still reachable.

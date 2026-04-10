@@ -95,8 +95,8 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
     struct Tag {};
     using TypeToOperatorStringMap = semi::static_map<ColumnStatTypeInternal, std::string, Tag>;
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MIN_V1) = "v1_MIN";
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_MAX_V1) = "v1_MAX";
+    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_TYPE_MIN_V1) = "v1_MIN";
+    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_TYPE_MAX_V1) = "v1_MAX";
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(
             TypeToOperatorStringMap::contains(type), "Unknown column stat type requested"
     );
@@ -156,11 +156,11 @@ ColumnStats::ColumnStats(
         for (const auto& entry : entry_list.entries()) {
             ColumnStatType external_type;
             switch (entry.type()) {
-            case COLUMN_STATS_MIN_V1:
-            case COLUMN_STATS_MAX_V1:
+            case COLUMN_STATS_TYPE_MIN_V1:
+            case COLUMN_STATS_TYPE_MAX_V1:
                 external_type = ColumnStatType::MINMAX;
                 break;
-            case COLUMN_STATS_UNKNOWN:
+            case COLUMN_STATS_TYPE_UNKNOWN:
             default:
                 log::version().warn(
                         "Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat."
@@ -207,8 +207,9 @@ namespace {
 std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
     struct Tag {};
     using Map = semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
-    Map::get(ColumnStatType::MINMAX
-    ) = std::unordered_set{ColumnStatTypeInternal::COLUMN_STATS_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1};
+    Map::get(ColumnStatType::MINMAX) = std::unordered_set{
+            ColumnStatTypeInternal::COLUMN_STATS_TYPE_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_TYPE_MAX_V1
+    };
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(Map::contains(type), "Unknown column stat type");
     return Map::get(type);
 }
@@ -288,10 +289,10 @@ std::optional<Clause> ColumnStats::clause() const {
                         ColumnName(name_and_stat_types.mangled_name),
                         offset,
                         ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_MIN_V1
+                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_TYPE_MIN_V1
                         )),
                         ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_MAX_V1
+                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_TYPE_MAX_V1
                         ))
                 ));
                 break;

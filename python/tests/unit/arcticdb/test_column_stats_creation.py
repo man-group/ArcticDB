@@ -803,8 +803,8 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     assert header.version == 1
     assert header_stat_count(header) == 2
     assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.COLUMN_STATS_MIN_V1),
-        (2, ColumnStatsType.COLUMN_STATS_MAX_V1),
+        (2, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
+        (2, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
     }
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
     assert len(set(offsets)) == 2
@@ -815,7 +815,7 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     fields = lib_tool.read_descriptor(keys[0]).fields()
     for _, entry in header_all_entries(header):
         field_name = fields[entry.stats_seg_offset].name
-        if entry.type == ColumnStatsType.COLUMN_STATS_MIN_V1:
+        if entry.type == ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1:
             assert field_name == "v1_MIN(col_1)"
         else:
             assert field_name == "v1_MAX(col_1)"
@@ -827,10 +827,10 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     assert header.version == 1
     assert header_stat_count(header) == 4
     assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.COLUMN_STATS_MIN_V1),
-        (2, ColumnStatsType.COLUMN_STATS_MAX_V1),
-        (3, ColumnStatsType.COLUMN_STATS_MIN_V1),
-        (3, ColumnStatsType.COLUMN_STATS_MAX_V1),
+        (2, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
+        (2, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
+        (3, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
+        (3, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
     }
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
     assert len(set(offsets)) == 4
@@ -845,15 +845,15 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     )  # if you change the structure, consider whether you need to change header.version too
     assert header_stat_count(header) == 2
     assert header_stat_pairs(header) == {
-        (3, ColumnStatsType.COLUMN_STATS_MIN_V1),
-        (3, ColumnStatsType.COLUMN_STATS_MAX_V1),
+        (3, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
+        (3, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
     }
 
     keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
     fields = lib_tool.read_descriptor(keys[0]).fields()
     for _, entry in header_all_entries(header):
         field_name = fields[entry.stats_seg_offset].name
-        if entry.type == ColumnStatsType.COLUMN_STATS_MIN_V1:
+        if entry.type == ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1:
             assert field_name == "v1_MIN(col_2)"
         else:
             assert field_name == "v1_MAX(col_2)"
