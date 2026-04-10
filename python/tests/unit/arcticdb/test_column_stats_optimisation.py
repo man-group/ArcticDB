@@ -39,10 +39,10 @@ sym = "sym"
     ids=["gt_2", "gt_4", "lt_2", "eq_3", "gte_1"],
 )
 def test_column_stats_query_optimisation(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
 ):
     """Test that column stats are used to optimize QueryBuilder queries by pruning segments."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
@@ -65,9 +65,9 @@ def test_column_stats_query_optimisation(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
-def test_column_stats_query_optimisation_disabled(in_memory_version_store, clear_query_stats):
+def test_column_stats_query_optimisation_disabled(in_memory_version_store_v1_v2, clear_query_stats):
     """Check that we don't use column stats by default (yet)."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
@@ -88,10 +88,10 @@ def test_column_stats_query_optimisation_disabled(in_memory_version_store, clear
 
 
 def test_column_stats_query_optimisation_no_stats(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled
 ):
     """Check that everything still works if there aren't any column stats."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
@@ -110,12 +110,12 @@ def test_column_stats_query_optimisation_no_stats(
 
 
 def test_column_stats_query_optimisation_column_not_in_stats(
-    lmdb_version_store_tiny_segment, column_stats_filtering_enabled
+    lmdb_version_store_tiny_segment_v1_v2, column_stats_filtering_enabled
 ):
     """
     Test that queries work when column stats exist but not for the filtered column.
     """
-    lib = lmdb_version_store_tiny_segment
+    lib = lmdb_version_store_tiny_segment_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=pd.date_range("2000-01-03", periods=2))
@@ -134,9 +134,9 @@ def test_column_stats_query_optimisation_column_not_in_stats(
 
 
 def test_column_stats_query_optimisation_empty_segment(
-    in_memory_version_store_tiny_segment, column_stats_filtering_enabled
+    in_memory_version_store_tiny_segment_v1_v2, column_stats_filtering_enabled
 ):
-    lib = in_memory_version_store_tiny_segment
+    lib = in_memory_version_store_tiny_segment_v1_v2
 
     df0 = pd.DataFrame({"col_1": []}, dtype=np.int64)
     df1 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
@@ -169,9 +169,9 @@ def test_column_stats_query_optimisation_empty_segment(
     ],
 )
 def test_column_stats_query_optimisation_multiple_filters(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40]}, index=pd.date_range("2000-01-03", periods=2))
@@ -217,7 +217,7 @@ def test_column_stats_query_optimisation_multiple_filters(
     ],
 )
 def test_column_stats_query_optimisation_different_types(
-    in_memory_version_store,
+    in_memory_version_store_v1_v2,
     clear_query_stats,
     column_stats_filtering_enabled,
     dtype,
@@ -225,7 +225,7 @@ def test_column_stats_query_optimisation_different_types(
     values_seg1,
     filter_val,
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame(
         {"col": np.array(values_seg0, dtype=dtype)}, index=pd.date_range("2000-01-01", periods=len(values_seg0))
@@ -252,9 +252,9 @@ def test_column_stats_query_optimisation_different_types(
 
 
 def test_column_stats_query_optimisation_with_date_range(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
@@ -304,9 +304,14 @@ def test_column_stats_query_optimisation_with_date_range(
     ],
 )
 def test_column_stats_and_filter_one_column_with_stats(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, col_stats, filter_exprs, expected_reads
+    in_memory_version_store_v1_v2,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+    col_stats,
+    filter_exprs,
+    expected_reads,
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [6, 5]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [8, 7]}, index=pd.date_range("2000-01-03", periods=2))
@@ -333,8 +338,8 @@ def test_column_stats_and_filter_one_column_with_stats(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
-def test_column_stats_or_filter(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_or_filter(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
@@ -362,10 +367,10 @@ def test_column_stats_or_filter(in_memory_version_store, clear_query_stats, colu
     assert table_data_reads == 2, f"Expected 2 TABLE_DATA reads but got {table_data_reads}"
 
 
-def test_column_stats_negation(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+def test_column_stats_negation(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
     """Negation needs careful handling because if a block's statistics satisfy a comparison, we
     may still need to visit that block when the comparison is negated."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df_0 = pd.DataFrame({"col_1": [1, 3]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
     df_1 = pd.DataFrame({"col_1": [4, 6]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
@@ -394,10 +399,10 @@ def test_column_stats_negation(in_memory_version_store, clear_query_stats, colum
 @pytest.mark.parametrize("filter_first", [True, False])
 @pytest.mark.parametrize("extra_clause", ["PROJECTION", "RESAMPLE", "GROUPBY"])
 def test_column_stats_projection_before_filter_disables_pruning(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, extra_clause, filter_first
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, extra_clause, filter_first
 ):
     """Filter clause after a projection should NOT use column stats pruning at the moment."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df_0 = pd.DataFrame({"col_1": [1, 3]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
     df_1 = pd.DataFrame({"col_1": [4, 6]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
@@ -438,10 +443,10 @@ def test_column_stats_projection_before_filter_disables_pruning(
 
 @pytest.mark.parametrize("append_type", (np.int32, np.float64))
 def test_column_stats_dynamic_schema_column_type_varies(
-    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled, append_type
+    in_memory_version_store_dynamic_schema_v1_v2, clear_query_stats, column_stats_filtering_enabled, append_type
 ):
     """Test pruning when column type varies across segments (dynamic schema)."""
-    lib = in_memory_version_store_dynamic_schema
+    lib = in_memory_version_store_dynamic_schema_v1_v2
 
     df_int8 = pd.DataFrame({"col_1": np.array([1, 2], dtype=np.int8)}, index=pd.date_range("2000-01-01", periods=2))
     df_different_type = pd.DataFrame(
@@ -466,10 +471,10 @@ def test_column_stats_dynamic_schema_column_type_varies(
 
 
 def test_column_stats_dynamic_schema_new_column_added(
-    in_memory_version_store_dynamic_schema, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_dynamic_schema_v1_v2, clear_query_stats, column_stats_filtering_enabled
 ):
     """Test when a column is added in later segments (not present in older segments)."""
-    lib = in_memory_version_store_dynamic_schema
+    lib = in_memory_version_store_dynamic_schema_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [10, 20]}, index=pd.date_range("2000-01-03", periods=2))
@@ -535,9 +540,9 @@ def test_column_stats_dynamic_schema_new_column_added(
     ],
 )
 def test_column_stats_comparison_operators(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.float64)
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.float64)
     df2 = pd.DataFrame({"col_1": [6, 5]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.float64)
@@ -560,10 +565,10 @@ def test_column_stats_comparison_operators(
 
 
 @pytest.mark.xfail(reason="Creating column stats on multi-indexed symbols is not supported yet")
-def test_column_stats_multiindex_index_col(in_memory_version_store):
+def test_column_stats_multiindex_index_col(in_memory_version_store_v1_v2):
     """Test column stats creation and usage with a multi-index DataFrame, with column stats created
     on part of the multi-index."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     index0 = pd.MultiIndex.from_tuples(
         [(datetime(2000, 1, 1), "A"), (datetime(2000, 1, 1), "B")], names=["date", "category"]
@@ -597,10 +602,10 @@ RANGE_INDEXES = [pd.RangeIndex(start=0, stop=3, step=1), pd.RangeIndex(start=3, 
     "indexes", [ROWCOUNT_INDEXES, STRING_INDEXES, RANGE_INDEXES], ids=["rowcount", "string", "range"]
 )
 def test_column_stats_query_optimisation_index_types(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, indexes
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, indexes
 ):
     """Test how column stats filtering copes with different index types. Datetime indexes are covered repeatedly in other tests in this file."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
     df1 = pd.DataFrame({"col_1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
@@ -622,9 +627,9 @@ def test_column_stats_query_optimisation_index_types(
 
 @pytest.mark.parametrize("create_stats", [True, False], ids=["with_stats", "no_stats"])
 def test_column_stats_no_deadlock_single_thread(
-    in_memory_version_store, column_stats_filtering_enabled, create_stats, tiny_thread_pool
+    in_memory_version_store_v1_v2, column_stats_filtering_enabled, create_stats, tiny_thread_pool
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
     lib.write(sym, df0)
@@ -670,9 +675,9 @@ THREE_SEGMENT_INDEX_IDS = ["datetime", "rowcount", "string", "range"]
 
 @pytest.mark.parametrize("indexes", THREE_SEGMENT_INDEXES, ids=THREE_SEGMENT_INDEX_IDS)
 def test_column_stats_with_column_slicing(
-    in_memory_store_factory, clear_query_stats, column_stats_filtering_enabled, indexes
+    in_memory_store_factory_v1_v2, clear_query_stats, column_stats_filtering_enabled, indexes
 ):
-    lib = in_memory_store_factory(column_group_size=1, segment_row_size=10)
+    lib = in_memory_store_factory_v1_v2(column_group_size=1, segment_row_size=10)
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": [10, 20], "col_3": [100, 200]}, index=indexes[0], dtype=np.int64)
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": [30, 40], "col_3": [300, 400]}, index=indexes[1], dtype=np.int64)
@@ -712,9 +717,9 @@ def test_column_stats_with_column_slicing(
 
 @pytest.mark.parametrize("indexes", THREE_SEGMENT_INDEXES, ids=THREE_SEGMENT_INDEX_IDS)
 def test_column_stats_with_row_range(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, indexes
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, indexes
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=indexes[0], dtype=np.int64)
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=indexes[1], dtype=np.int64)
@@ -741,8 +746,8 @@ def test_column_stats_with_row_range(
     assert_frame_equal(result, expected)
 
 
-def test_column_stats_with_date_range(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_with_date_range(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.int64)
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.int64)
@@ -770,9 +775,9 @@ def test_column_stats_with_date_range(in_memory_version_store, clear_query_stats
 
 @pytest.mark.parametrize("negated", (True, False))
 def test_column_stats_bool_column_filters(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, negated
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, negated
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df_0 = pd.DataFrame({"col_1": [True, True]}, index=pd.date_range("2000-01-01", periods=2))
     df_1 = pd.DataFrame({"col_1": [False, True]}, index=pd.date_range("2000-01-03", periods=2))
@@ -812,9 +817,9 @@ def test_column_stats_bool_column_filters(
 
 
 def test_column_stats_three_chained_filter_clauses(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame(
         {"col_1": [1, 2], "col_2": [10, 20], "col_3": [100, 200]}, index=pd.date_range("2000-01-01", periods=2)
@@ -847,9 +852,11 @@ def test_column_stats_three_chained_filter_clauses(
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
 
 
-def test_column_stats_repeated_expressions(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
+def test_column_stats_repeated_expressions(
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled
+):
     """Nonreg test: ConstMap.set_value is called repeatedly with name=Num(2) here. We shouldn't validate against the repetition."""
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
@@ -874,8 +881,8 @@ def test_column_stats_repeated_expressions(in_memory_version_store, clear_query_
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read (segment 1 only), got {table_data_reads}"
 
 
-def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_nan_values(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col": [1.0, np.nan, 3.0]}, index=pd.date_range("2000-01-01", periods=3))
     df1 = pd.DataFrame({"col": [10.0, 20.0]}, index=pd.date_range("2000-01-04", periods=2))
@@ -894,8 +901,8 @@ def test_column_stats_nan_values(in_memory_version_store, clear_query_stats, col
     assert_frame_equal(expected, result)
 
 
-def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_nat_values(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     ts = pd.date_range("2000-01-01", periods=2)
     df0 = pd.DataFrame({"col": [pd.NaT, pd.NaT]}, index=ts)
@@ -933,7 +940,7 @@ def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, col
     ids=["int_col_float_filter", "float_col_int_filter"],
 )
 def test_column_stats_cross_type_comparison(
-    in_memory_version_store,
+    in_memory_version_store_v1_v2,
     clear_query_stats,
     column_stats_filtering_enabled,
     col_dtype,
@@ -941,7 +948,7 @@ def test_column_stats_cross_type_comparison(
     col_values_seg1,
     filter_val,
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame(
         {"col": np.array(col_values_seg0, dtype=col_dtype)}, index=pd.date_range("2000-01-01", periods=2)
@@ -980,9 +987,9 @@ def test_column_stats_cross_type_comparison(
     ids=["gt_0", "lt_neg3", "gte_neg1", "lt_neg10"],
 )
 def test_column_stats_negative_value_ranges(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, filter_expr, expected_reads
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, filter_expr, expected_reads
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col": [-10, -1]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.int64)
     df1 = pd.DataFrame({"col": [-5, 5]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.int64)
@@ -1015,14 +1022,14 @@ def test_column_stats_negative_value_ranges(
     ],
 )
 def test_column_stats_single_value_segments(
-    in_memory_version_store,
+    in_memory_version_store_v1_v2,
     clear_query_stats,
     column_stats_filtering_enabled,
     query_expr,
     expected_result_segs,
     expected_reads,
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     dfs = [
         pd.DataFrame({"col": [5, 5]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.int64),
@@ -1048,8 +1055,8 @@ def test_column_stats_single_value_segments(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} reads, got {table_data_reads}"
 
 
-def test_column_stats_snapshot_read(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_snapshot_read(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2000-01-03", periods=2))
@@ -1071,8 +1078,8 @@ def test_column_stats_snapshot_read(in_memory_version_store, clear_query_stats, 
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
 
 
-def test_column_stats_batch_read(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_batch_read(in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     sym1, sym2 = "batch_sym1", "batch_sym2"
 
@@ -1117,9 +1124,9 @@ def test_column_stats_batch_read(in_memory_version_store, clear_query_stats, col
     ),
 )
 def test_column_stats_boundary_values_integral(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, dtype
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, dtype
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     test_cases = [
         (lambda q: q["col"] >= np.iinfo(dtype).min, 4),
@@ -1167,9 +1174,9 @@ def test_column_stats_boundary_values_integral(
 
 @pytest.mark.parametrize("dtype", (np.float64, np.float32))
 def test_column_stats_boundary_values_float(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, dtype
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, dtype
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     test_cases = [
         (lambda q: q["col"] > np.finfo(dtype).min, 2),
@@ -1210,8 +1217,10 @@ def test_column_stats_boundary_values_float(
         assert get_table_data_read_count() == expected_reads
 
 
-def test_column_stats_boundary_values_ts(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_boundary_values_ts(
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled
+):
+    lib = in_memory_version_store_v1_v2
 
     test_cases = [
         (lambda q: q["col"] >= pd.Timestamp.min, 4),
@@ -1266,9 +1275,9 @@ def test_column_stats_boundary_values_ts(in_memory_version_store, clear_query_st
     ],
 )
 def test_column_stats_timestamp_column(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+    in_memory_version_store_v1_v2, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
 ):
-    lib = in_memory_version_store
+    lib = in_memory_version_store_v1_v2
 
     df0 = pd.DataFrame(
         {"ts": pd.to_datetime(["2001-01-01", "2001-01-02"]), "val": [1, 2]},
@@ -1297,8 +1306,8 @@ def test_column_stats_timestamp_column(
     assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
-def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_empty_dataframe(in_memory_version_store_v1_v2, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     df = pd.DataFrame({"col": pd.Series([], dtype=np.float64)})
     lib.write(sym, df)
@@ -1309,8 +1318,8 @@ def test_column_stats_empty_dataframe(in_memory_version_store, column_stats_filt
     assert len(result) == 0
 
 
-def test_column_stats_empty_stats(in_memory_version_store, column_stats_filtering_enabled):
-    lib = in_memory_version_store
+def test_column_stats_empty_stats(in_memory_version_store_v1_v2, column_stats_filtering_enabled):
+    lib = in_memory_version_store_v1_v2
 
     df = pd.DataFrame({"col": pd.Series([-1, 0, 1, 2, 3], dtype=np.float64)})
     lib.write(sym, df)
