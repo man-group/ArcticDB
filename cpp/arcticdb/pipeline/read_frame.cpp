@@ -847,14 +847,14 @@ class NullValueReducer {
     size_t pos_;
     size_t column_block_idx_;
     DecodePathData shared_data_;
-    std::any& handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     const OutputFormat output_format_;
     std::optional<Value> default_value_;
 
   public:
     NullValueReducer(
             Column& column, std::shared_ptr<PipelineContext>& context, SegmentInMemory frame,
-            DecodePathData shared_data, std::any& handler_data, OutputFormat output_format,
+            DecodePathData shared_data, std::shared_ptr<std::any> handler_data, OutputFormat output_format,
             std::optional<Value> default_value = {}
     ) :
         column_(column),
@@ -916,7 +916,7 @@ class NullValueReducer {
                 handler) {
                 auto type_size = data_type_size(column_.type());
                 handler->default_initialize(
-                        column_.buffer(), start_row * type_size, num_rows * type_size, shared_data_, handler_data_
+                        column_.buffer(), start_row * type_size, num_rows * type_size, shared_data_, *handler_data_
                 );
             } else if (output_format_ != OutputFormat::ARROW || default_value_.has_value()) {
                 // Arrow does not care what values are in the main buffer where the validity bitmap is zero
@@ -952,13 +952,13 @@ struct ReduceColumnTask : async::BaseTask {
     std::shared_ptr<FrameSliceMap> slice_map_;
     std::shared_ptr<PipelineContext> context_;
     DecodePathData shared_data_;
-    std::any& handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     ReadOptions read_options_;
 
     ReduceColumnTask(
             SegmentInMemory frame, size_t c, std::shared_ptr<FrameSliceMap> slice_map,
-            std::shared_ptr<PipelineContext>& context, DecodePathData shared_data, std::any& handler_data,
-            const ReadOptions& read_options
+            std::shared_ptr<PipelineContext>& context, DecodePathData shared_data,
+            std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
     ) :
         frame_(std::move(frame)),
         column_index_(c),
@@ -1050,7 +1050,7 @@ struct ReduceColumnTask : async::BaseTask {
 
 folly::Future<folly::Unit> reduce_and_fix_columns(
         std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
@@ -1074,7 +1074,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
     return folly::collect(folly::window(
                                   std::move(fields_to_reduce),
-                                  [context, frame, slice_map, shared_data, read_options, &handler_data](size_t field
+                                  [context, frame, slice_map, shared_data, read_options, handler_data](size_t field
                                   ) mutable {
                                       return async::submit_cpu_task(ReduceColumnTask(
                                               frame, field, slice_map, context, shared_data, handler_data, read_options
@@ -1089,7 +1089,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
 folly::Future<SegmentInMemory> fetch_data(
         SegmentInMemory&& frame, const std::shared_ptr<PipelineContext>& context,
         const std::shared_ptr<stream::StreamSource>& ssource, const ReadQuery& read_query,
-        const ReadOptions& read_options, DecodePathData shared_data, std::any& handler_data
+        const ReadOptions& read_options, DecodePathData shared_data, std::shared_ptr<std::any> handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
     if (frame.empty())
@@ -1108,17 +1108,17 @@ folly::Future<SegmentInMemory> fetch_data(
                      frame = frame,
                      dynamic_schema = dynamic_schema,
                      shared_data,
-                     &handler_data,
+                     handler_data,
                      read_query,
                      read_options](auto&& ks) mutable {
                         auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                         if (dynamic_schema) {
                             decode_into_frame_dynamic(
-                                    frame, row, key_seg, shared_data, handler_data, read_query, read_options
+                                    frame, row, key_seg, shared_data, *handler_data, read_query, read_options
                             );
                         } else {
                             decode_into_frame_static(
-                                    frame, row, key_seg, shared_data, handler_data, read_query, read_options
+                                    frame, row, key_seg, shared_data, *handler_data, read_query, read_options
                             );
                         }
 

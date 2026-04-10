@@ -69,7 +69,7 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context);
 folly::Future<SegmentInMemory> fetch_data(
         SegmentInMemory&& frame, const std::shared_ptr<PipelineContext>& context,
         const std::shared_ptr<stream::StreamSource>& ssource, const ReadQuery& read_query,
-        const ReadOptions& read_options, DecodePathData shared_data, std::any& handler_data
+        const ReadOptions& read_options, DecodePathData shared_data, std::shared_ptr<std::any> handler_data
 );
 
 void decode_into_frame_static(
@@ -86,7 +86,7 @@ void decode_into_frame_dynamic(
 
 folly::Future<folly::Unit> reduce_and_fix_columns(
         std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 );
 
 StreamDescriptor get_filtered_descriptor(
