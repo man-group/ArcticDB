@@ -2,6 +2,7 @@ option(TEST "Build all tests." ON)
 option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
+option(ARCTICDB_THIN_ARCHIVES "Use thin archives for intermediate static libraries. Faster incremental builds but archives are not self-contained — do not use for installed/distributed builds." OFF)
 
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
@@ -867,6 +868,16 @@ if(NOT ${ARCTICDB_USING_CONDA})
     target_include_directories(arcticdb_core_object PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
 endif()
 
+if(ARCTICDB_THIN_ARCHIVES)
+    # Override archive creation to use thin archives (store paths, not data).
+    # Skip ranlib: mold reads all input objects directly and doesn't need the symbol index.
+    # Saves ~26s per incremental build (ar: 14s + ranlib: 12s → ar qcT: 3.5s + no ranlib).
+    set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_FINISH "true")
+    set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_C_ARCHIVE_FINISH   "true")
+endif()
+
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
 # Disable default api so both UTF-8 and UTF-32 can be supported
@@ -904,7 +915,6 @@ set(arcticdb_python_srcs
         python/adapt_read_dataframe.hpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
-
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_python")
     target_precompile_headers(

@@ -99,6 +99,11 @@ Key presets in `cpp/CMakePresets.json`:
 
 User-specific presets can be defined in `cpp/CMakeUserPresets.json` (git-ignored).
 
+The `linux-debug` and `linux-release` presets enable `ARCTICDB_THIN_ARCHIVES=ON` by default,
+which speeds up incremental builds by ~20s per touch-and-rebuild cycle. Thin archives store
+paths to `.o` files rather than copying data, so they are not portable — do not enable this
+for conda builds or `make wheel` (those use the conda presets and are unaffected).
+
 ## Git Submodules
 
 The project uses several git submodules. **Do not directly edit files inside submodule directories** - instead update the submodule reference.
