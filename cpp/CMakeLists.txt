@@ -88,6 +88,16 @@ if(ARCTICDB_SANITIZER_FLAGS)
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
 endif()
 
+# Use mold linker if available on Linux (faster linking via async I/O; ~30% speedup over GNU ld)
+# Skipped when sanitizers are active, as Clang sanitizer builds require lld.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS)
+    find_program(MOLD_PROGRAM mold)
+    if(MOLD_PROGRAM)
+        add_link_options(-fuse-ld=mold)
+        message(STATUS "Using mold linker: ${MOLD_PROGRAM}")
+    endif()
+endif()
+
 if(${ARCTICDB_USING_CONDA})
     # Required to be able to include headers from glog since glog 0.7
     # See: https://github.com/google/glog/pull/1030
