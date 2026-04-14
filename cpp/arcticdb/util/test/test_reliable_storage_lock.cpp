@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/storage/test/in_memory_store.hpp>
+#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
 #include <gtest/gtest.h>
 #include <folly/executors/FutureExecutor.h>

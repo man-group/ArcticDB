@@ -14,7 +14,6 @@
 #include <arcticdb/storage/library.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
-#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
 namespace arcticdb::toolbox::apy {
