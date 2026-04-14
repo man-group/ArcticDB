@@ -115,7 +115,7 @@ def test_sparse_arrow_date_range(
             "cat_str_col": pa.array(str_data, pa.large_string()),
         }
     )
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table, index_column=True)
     date_range = (date_range_start, date_range_start + pd.Timedelta(days=date_range_width - 1))
     offset = (date_range_start - pd.Timestamp("2025-01-01")).days
     expected = table.slice(offset=offset, length=date_range_width)
@@ -180,7 +180,7 @@ def test_sparse_arrow_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, u
 
 @pytest.mark.parametrize("column_group_size", [1, 2, 3])
 @pytest.mark.parametrize("use_row_range", [False, True])
-@pytest.mark.parametrize("index_column", [None, "ts"])
+@pytest.mark.parametrize("index_column", [False, True])
 @pytest.mark.parametrize(
     "columns",
     [
@@ -193,27 +193,34 @@ def test_sparse_column_selection(version_store_factory, column_group_size, use_r
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_col_selection"
-    table = pa.table(
-        {
-            "a": pa.array([1, None, 3, None, 5], pa.int64()),
-            "b": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
-            "c": pa.array([True, None, False, None, True], pa.bool_()),
-        }
-    )
-    if index_column is not None:
+    if index_column:
         ts = pa.Array.from_pandas(pd.date_range("2025-01-01", periods=5), type=pa.timestamp("ns"))
-        table = table.append_column(index_column, ts)
+        table = pa.table(
+            {
+                "ts": ts,
+                "a": pa.array([1, None, 3, None, 5], pa.int64()),
+                "b": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
+                "c": pa.array([True, None, False, None, True], pa.bool_()),
+            }
+        )
+    else:
+        table = pa.table(
+            {
+                "a": pa.array([1, None, 3, None, 5], pa.int64()),
+                "b": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
+                "c": pa.array([True, None, False, None, True], pa.bool_()),
+            }
+        )
     lib.write(sym, table, index_column=index_column)
     row_range = (1, 4) if use_row_range else None
-    # The index column should always be included in the result
-    expected_columns = ([index_column] if index_column is not None else []) + columns
+    expected_columns = (["ts"] if index_column else []) + columns
     expected_table = table.select(expected_columns)
     if use_row_range:
         expected_table = expected_table.slice(offset=1, length=3)
     received = lib.read(sym, columns=columns, row_range=row_range).data
     assert expected_table.equals(received)
     received_pandas = lib.read(sym, columns=columns, row_range=row_range, output_format="PANDAS").data
-    if index_column is not None:
+    if index_column:
         received_pandas = received_pandas.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected_table, received_pandas)
 
@@ -231,7 +238,7 @@ class TestSparseArrowQueryBuilder:
                 "float_col": pa.array([None, 2.0, None, 4.0, None, 6.0, None, 8.0], pa.float64()),
             }
         )
-        lib.write(self.sym, self.table, index_column="ts")
+        lib.write(self.sym, self.table, index_column=True)
 
     def test_filter_isnull(self, lmdb_version_store_arrow):
         q = QueryBuilder()
@@ -532,8 +539,8 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
                 "cat_str_col": pa.array(update_str_data, pa.large_string()),
             }
         )
-    lib.write(sym, write_table, index_column="ts")
-    lib.update(sym, update_table, index_column="ts", date_range=date_range)
+    lib.write(sym, write_table, index_column=True)
+    lib.update(sym, update_table, index_column=True, date_range=date_range)
 
     # Compute expected
     start = date_range[0] if date_range is not None else update_dates[0]
@@ -561,7 +568,7 @@ def test_sparse_update_all_nulls(lmdb_version_store_arrow):
             "col": pa.array([1, 2, 3, 4], pa.int64()),
         }
     )
-    lib.write(sym, write_table, index_column="ts")
+    lib.write(sym, write_table, index_column=True)
     update_dates = pd.date_range("2025-01-02", periods=2)
     update_table = pa.table(
         {
@@ -569,7 +576,7 @@ def test_sparse_update_all_nulls(lmdb_version_store_arrow):
             "col": pa.array([None, None], pa.int64()),
         }
     )
-    lib.update(sym, update_table, index_column="ts")
+    lib.update(sym, update_table, index_column=True)
     received = lib.read(sym).data
     expected = pa.table(
         {
