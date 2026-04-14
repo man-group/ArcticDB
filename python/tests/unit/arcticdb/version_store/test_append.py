@@ -194,7 +194,8 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_pre
 
     versions = [version["version"] for version in lmdb_version_store_ignore_order.list_versions(symbol)]
     if prune_previous_versions:
-        assert len(versions) == 1 and versions[0] == len(list_df)
+        # Anchor rule keeps the newest pre-existing version alongside the sorted result.
+        assert len(versions) == 2 and versions[0] == len(list_df)
     else:
         assert len(versions) == len(list_df) + 1
         for version in sorted(versions)[:-1]:
@@ -677,7 +678,9 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_v
     assert lmdb_version_store.get_info(sym)["sorted"] == "ASCENDING"
     assert versioned_item.version == 101
     if prune_previous_versions:
-        assert len(lmdb_version_store.list_versions(sym)) == 1
+        # Anchor rule keeps the newest pre-existing version (V100) alive alongside the
+        # defrag result (V101).
+        assert len(lmdb_version_store.list_versions(sym)) == 2
         assert lmdb_version_store.list_versions(sym)[0]["version"] == 101
     else:
         assert len(lmdb_version_store.list_versions(sym)) == 102

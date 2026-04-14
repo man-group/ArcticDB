@@ -135,6 +135,20 @@ if platform.system() == "Linux":
         pass
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _disable_prune_protection_window():
+    """Set PrunePreviousProtectionSecs=0 for the entire test session.
+
+    The default 600-second window causes prune_previous_version=True writes to retain all recently
+    written versions, breaking tests that expect aggressive pruning.  Tests that specifically test
+    the protection-window behaviour request the _with_protection_window fixture, which temporarily
+    overrides this to 600 s and resets it back to 0 in its own teardown.
+    """
+    set_config_int("VersionStore.PrunePreviousProtectionSecs", 0)
+    yield
+    unset_config_int("VersionStore.PrunePreviousProtectionSecs")
+
+
 @pytest.fixture(
     params=[True, False],
 )

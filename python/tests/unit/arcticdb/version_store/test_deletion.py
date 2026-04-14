@@ -157,13 +157,13 @@ def test_delete_snapshot(version_store_factory):
     with pytest.raises(NoDataFoundException):
         lmdb_version_store.read(symbol, as_of=snap)
 
+    # Anchor rule: V0 (sole pre-existing version) is kept alive alongside V1 and
+    # is not cleaned up when the snapshot is deleted.  Both V0 and V1 have keys.
     index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)
-    for k in index_keys:
-        assert k.version_id != 0
+    assert all(k.version_id in (0, 1) for k in index_keys)
 
     data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)
-    for k in data_keys:
-        assert k.version_id != 0
+    assert all(k.version_id in (0, 1) for k in data_keys)
 
 
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
@@ -176,7 +176,9 @@ def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, s
     lib.write(sym, 3)
     lib_tool = lib.library_tool()
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
-    assert len(data_keys) == 1
+    # Anchor rule: after V1(prune)→V2(prune), V1 is anchor alongside V2 (latest).
+    # V0 is pruned on the second prune but V1 survives as anchor, so 2 TABLE_DATA keys remain.
+    assert len(data_keys) == 2
 
     lib.delete(sym)
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)

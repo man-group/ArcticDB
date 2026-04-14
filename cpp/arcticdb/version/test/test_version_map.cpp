@@ -906,6 +906,9 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
 }
 
 TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
+    // Disable the protection window so write_and_prune_previous prunes immediately;
+    // this test is about chain-following behaviour, not the protection policy.
+    ScopedConfig no_protection("VersionStore.PrunePreviousProtectionSecs", 0);
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
     StreamId id{"test"};
@@ -926,14 +929,26 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
     read_symbol_ref(store, id, ref_entry);
     auto follow_result = std::make_shared<VersionMapEntry>();
 
-    // LATEST should load only the latest version
-    for (auto load_strategy :
-         {LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY},
-          LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}}) {
-        follow_result->clear();
-        version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{3});
-    }
+    // write_and_prune_previous(V3, prev=V2) with 0-second protection:
+    //   candidates (old-enough, ≤ V2): [V2, V1, V0]
+    //   anchor = V2 (newest eligible, kept alive)
+    //   boundary = V1 (second-newest, tombstone up to here)
+    //   → TOMBSTONE_ALL at V1; V2 (anchor) and V3 (latest) are both live above it.
+    //
+    // LATEST finds V3 immediately and stops; oldest_loaded = 3.
+    // LATEST + INCLUDE_DELETED: full chain traversal, stops after V3 → oldest = 3.
+    follow_result->clear();
+    version_map->follow_version_chain(
+            store, ref_entry, follow_result, LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}
+    );
+    EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{3});
+
+    // LATEST + UNDELETED_ONLY: takes the 3-item ref-entry fast path (V3, V2, J3), so oldest = min(3, 2) = 2.
+    follow_result->clear();
+    version_map->follow_version_chain(
+            store, ref_entry, follow_result, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}
+    );
+    EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{2});
 
     for (auto load_strategy : {
                  LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)},
@@ -942,9 +957,9 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
          }) {
         follow_result->clear();
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        // When loading with any of the specified load strategies with include_deleted=false we should end following the
-        // version chain early at version 2 because that's when we encounter the TOMBSTONE_ALL.
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{2});
+        // UNDELETED_ONLY stops at the TOMBSTONE_ALL (version_id=1), so oldest_loaded reflects
+        // the boundary at V1 rather than the old V2 boundary from the pre-anchor-rule code.
+        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
     }
 
     for (auto load_strategy :
@@ -957,6 +972,49 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
         // beginning at version 0 even though it was deleted.
         EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
     }
+}
+
+TEST(VersionMap, PrunePreviousProtectsBaseVersionForConcurrentWriters) {
+    // Regression test for the prune_previous race condition.
+    //
+    // Two writers both start from the same base version (V0) and both call
+    // write_and_prune_previous with V0 as the previous key.  This mirrors the real-world
+    // scenario where:
+    //   1. Writer A and Writer B both read V0 as the current head.
+    //   2. Writer A commits V1 (prune from V0) — without the fix this tombstones V0 and
+    //      deletes its data segments.
+    //   3. Writer B commits V2 (also from V0).  V2 is an append that references V0's data
+    //      segments — which Writer A already deleted, so V2 becomes unreadable.
+    //
+    // The fix: versions within PrunePreviousProtectionSecs are never pruned.  V0 is written
+    // at PilotedClock time ~0 and the cutoff is 0 - 600e9, which is deeply negative, so
+    // V0's creation_ts is always above the cutoff and the protection is always active.
+    PilotedClock::reset();
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test_concurrent_prune"};
+
+    // V0 — the shared base version, written just now.
+    auto v0_key = atom_key_with_version(id, 0, PilotedClock::nanos_since_epoch());
+    auto entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    version_map->do_write(store, v0_key, entry);
+    write_symbol_ref(store, v0_key, std::nullopt, entry->head_.value());
+
+    // Writer A: commits V1 from V0, requests prune.
+    auto v1_key = atom_key_with_version(id, 1, PilotedClock::nanos_since_epoch());
+    version_map->write_and_prune_previous(store, v1_key, v0_key);
+
+    // Writer B: commits V2 also from V0 (same base — the race).
+    auto v2_key = atom_key_with_version(id, 2, PilotedClock::nanos_since_epoch());
+    version_map->write_and_prune_previous(store, v2_key, v0_key);
+
+    // V0 must still be live.  Without the fix, Writer A's prune tombstones V0 and deletes
+    // its data segments, so V2's reference to those segments becomes dangling.
+    auto live = get_all_versions(store, version_map, id);
+    auto v0_alive = std::any_of(live.begin(), live.end(), [](const AtomKey& k) { return k.version_id() == 0; });
+    EXPECT_TRUE(v0_alive) << "V0 (shared base) must not be pruned while within the protection window";
 }
 
 TEST(VersionMap, HasCachedEntry) {

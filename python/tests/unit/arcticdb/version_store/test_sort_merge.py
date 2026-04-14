@@ -321,7 +321,8 @@ def test_prune_previous(lmdb_library_static_dynamic):
     lib.write("sym", df, staged=True)
     lib.sort_and_finalize_staged_data("sym", prune_previous_versions=True)
     assert_frame_equal(df, lib.read("sym").data)
-    assert len(lib.list_versions("sym")) == 1
+    # Anchor rule: v0 (boundary, tombstoned), v1 (anchor, kept), v2 (latest) — 2 versions survive.
+    assert len(lib.list_versions("sym")) == 2
 
 
 @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])

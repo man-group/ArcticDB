@@ -409,7 +409,8 @@ def test_parallel_write_sort_merge(
         result.sort_index(axis=1, inplace=True)
         assert_frame_equal(vit.data, df)
         if prune_previous_versions:
-            assert 0 not in [version["version"] for version in lib._nvs.list_versions(symbol)]
+            # Anchor rule: V0 (sole pre-existing version) is kept alive as an anchor alongside V1.
+            assert 0 in [version["version"] for version in lib._nvs.list_versions(symbol)]
         else:
             assert_frame_equal(lib.read(symbol, as_of=0).data, dataframes[0])
 
@@ -462,7 +463,8 @@ def test_sort_merge_append(basic_store_dynamic_schema, prune_previous_versions):
 
     versions = [version["version"] for version in lib.list_versions(symbol)]
     if prune_previous_versions:
-        assert len(versions) == 1 and versions[0] == int(half_way)
+        # Anchor rule keeps the newest pre-existing version alongside the sort_merge result.
+        assert len(versions) == 2 and versions[0] == int(half_way)
     else:
         assert len(versions) == int(half_way) + 1
         for version in range(int(half_way)):
@@ -518,11 +520,14 @@ def test_datetimes_to_nats(lmdb_version_store_dynamic_schema):
 @pytest.mark.parametrize("lib_config", (True, False))
 def test_compact_incomplete_prune_previous(lib_config, arg, append, version_store_factory):
     lib = version_store_factory(prune_previous_version=lib_config)
-    lib.write("sym", pd.DataFrame({"col": [3]}, index=pd.DatetimeIndex([0])))
+    # Two pre-existing versions so the anchor rule still prunes one:
+    # with prune, anchor=V1 survives, boundary=V0 is removed.
+    lib.write("sym", pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([-1])))  # V0
+    lib.write("sym", pd.DataFrame({"col": [3]}, index=pd.DatetimeIndex([0])))  # V1
     lib.append("sym", pd.DataFrame({"col": [4]}, index=pd.DatetimeIndex([1])), incomplete=True)
 
     lib.compact_incomplete("sym", append, convert_int_to_float=False, prune_previous_version=arg)
-    assert lib.read_metadata("sym").version == 1
+    assert lib.read_metadata("sym").version == 2
 
     should_prune = lib_config if arg is None else arg
     assert lib.has_symbol("sym", 0) != should_prune

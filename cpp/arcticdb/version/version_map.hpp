@@ -284,19 +284,31 @@ class VersionMapImpl {
     }
 
     std::vector<AtomKey> write_and_prune_previous(
-            std::shared_ptr<Store> store, const AtomKey& key, const std::optional<AtomKey>& previous_key
+            std::shared_ptr<Store> store, const AtomKey& key, const std::optional<AtomKey>& previous_key,
+            bool delayed_deletes = false
     ) {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
         auto entry =
                 check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__);
-        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
+
+        // Compute the effective tombstone boundary, respecting the protection window for recent versions.
+        // We never prune versions younger than the protection window, and (unless delayed_deletes is set)
+        // we always keep the most recent eligible version as an anchor for concurrent writers still in flight.
+        // With delayed_deletes the background deletion tool handles reference-checking before physically
+        // removing data, so the anchor is not needed for safety.
+        auto effective_tombstone_key = get_prune_previous_boundary(store, entry, previous_key, delayed_deletes);
+
+        std::vector<AtomKey> result;
+        if (effective_tombstone_key) {
+            auto [_, r] = tombstone_from_key_or_all_internal(store, key.id(), effective_tombstone_key, entry, false);
+            result = std::move(r);
+        }
 
         std::vector<AtomKey> keys_to_write;
         std::optional<AtomKey> tombstone_all_key;
         keys_to_write.push_back(key);
         if (!result.empty()) {
-            auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
-            tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
+            tombstone_all_key = get_tombstone_all_key(effective_tombstone_key.value(), store->current_timestamp());
             entry->try_set_tombstone_all(tombstone_all_key.value());
             keys_to_write.push_back(tombstone_all_key.value());
         }
@@ -1115,6 +1127,58 @@ class VersionMapImpl {
 
   private:
     FRIEND_TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad);
+
+    // Returns the key that should be used as the tombstone boundary in write_and_prune_previous,
+    // or nullopt if nothing should be pruned.
+    //
+    // Rules (when delayed_deletes is false):
+    //   1. Never prune versions younger than PrunePreviousProtectionSecs (default 10 minutes).
+    //   2. Always keep the most recently created version that is old enough to prune (as an anchor
+    //      for concurrent writers that may still be in flight based on that version).
+    //   3. If there is only one pre-existing version eligible for pruning, keep it (same as rule 2).
+    //
+    // When delayed_deletes is true, rule 2/3 (the anchor) is skipped: the background deletion tool
+    // does its own reference-check before physically removing data, so keeping an extra live version
+    // is unnecessary overhead.
+    //
+    // The returned key is the tombstone boundary: all undeleted versions with version_id <=
+    // returned_key.version_id() will be tombstoned.
+    std::optional<AtomKey> get_prune_previous_boundary(
+            const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMapEntry>& entry,
+            const std::optional<AtomKey>& requested_first_key, bool delayed_deletes = false
+    ) const {
+        const auto protection_secs = ConfigsMap::instance()->get_int("VersionStore.PrunePreviousProtectionSecs", 600);
+        const timestamp cutoff = store->current_timestamp() - static_cast<timestamp>(protection_secs) * 1'000'000'000LL;
+
+        const auto& first_key =
+                requested_first_key.has_value() ? requested_first_key : entry->get_first_index(false).first;
+        if (!first_key)
+            return std::nullopt;
+
+        // Walk the chain (newest-first) looking for the first two undeleted index keys that are
+        // both within the requested version range and old enough to prune.
+        // We only need two, so break as soon as we find them rather than collecting all candidates.
+        std::optional<AtomKey> anchor;   // newest eligible — kept alive (unless delayed_deletes)
+        std::optional<AtomKey> boundary; // second-newest eligible — tombstone up to here
+        for (const auto& k : entry->keys_) {
+            if (is_index_key_type(k.type()) && !entry->is_tombstoned(k) && k.version_id() <= first_key->version_id() &&
+                k.creation_ts() < cutoff) {
+                if (!anchor) {
+                    anchor = k;
+                } else {
+                    boundary = k;
+                    break;
+                }
+            }
+        }
+
+        // With delayed_deletes the background tool is responsible for safe physical deletion, so we
+        // can tombstone everything including the anchor (returning anchor means it becomes the boundary).
+        // Without delayed_deletes we need both an anchor and a boundary: the anchor is kept alive,
+        // and everything up to and including the boundary is tombstoned.
+        return delayed_deletes ? anchor : boundary;
+    }
+
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
             std::shared_ptr<Store> store, const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,

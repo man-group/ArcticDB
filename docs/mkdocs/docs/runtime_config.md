@@ -104,6 +104,32 @@ Values:
 * 0: Disable
 * 1: Enable (Default)
 
+### VersionStore.PrunePreviousProtectionSecs
+
+Controls the time-based protection window used by the `prune_previous_versions` parameter on
+write/append/update operations (but **not** by the explicit `prune_previous_versions()` method).
+
+When `prune_previous_versions=True` is passed to a write operation, any version created more
+recently than this threshold is exempt from pruning. Additionally, when the library is configured
+with **eager (inline) deletion** (the default), the newest eligible version is always retained as
+an *anchor* — ensuring there is always a safe base for concurrent writers that may still be
+in-flight at the point the data would be physically removed.
+
+With eager deletion this means that after a pruning write there will be **at least 2 live
+versions**: the newly written version plus the anchor. If fewer than 2 versions are eligible (old
+enough), no pruning occurs at all.
+
+When the library is configured with **background deletion** (`EnterpriseLibraryOptions(background_deletion=True)`),
+the anchor is not retained because physical deletion is deferred: the background deletion tool
+performs its own reference-check before removing any data, making the anchor unnecessary. In this
+mode a pruning write leaves exactly **1 live version** (the newly written version), matching
+pre-fix behaviour.
+
+Increase this value if your environment has write operations that can remain in-flight for longer
+than the default window (e.g., very slow networks or large staged writes).
+
+Default: `600` (10 minutes)
+
 ### VersionStore.RecursiveNormalizerMetastructure
 
 Controls whether the recursive normalizer will use meta structure V2

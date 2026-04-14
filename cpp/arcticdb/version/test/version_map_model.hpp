@@ -167,7 +167,14 @@ struct VersionMapTombstonesModel {
         VersionId version_id{0};
         if (prev) {
             version_id = *prev + 1;
-            delete_all_versions(id);
+            // Anchor rule: only tombstone when there are >= 2 eligible candidates.
+            // PilotedClock timestamps are near epoch so all non-tombstoned versions are
+            // eligible. The newest eligible becomes the anchor (kept); older ones are tombstoned.
+            auto eligible = get_all_versions(id); // non-tombstoned, sorted descending
+            if (eligible.size() >= 2) {
+                for (size_t i = 1; i < eligible.size(); ++i)
+                    tombstones_[id].insert(eligible[i]);
+            }
         }
         data_[id].insert(version_id);
     }

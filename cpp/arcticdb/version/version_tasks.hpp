@@ -224,19 +224,21 @@ struct WriteAndPrunePreviousTask : async::BaseTask {
     const std::shared_ptr<VersionMap> version_map_;
     const AtomKey key_;
     const std::optional<AtomKey> maybe_prev_;
+    const bool delayed_deletes_;
 
     WriteAndPrunePreviousTask(
             std::shared_ptr<Store> store, std::shared_ptr<VersionMap> version_map, AtomKey key,
-            std::optional<AtomKey> maybe_prev
+            std::optional<AtomKey> maybe_prev, bool delayed_deletes = false
     ) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
         key_(std::move(key)),
-        maybe_prev_(std::move(maybe_prev)) {}
+        maybe_prev_(std::move(maybe_prev)),
+        delayed_deletes_(delayed_deletes) {}
 
     folly::Future<std::vector<AtomKey>> operator()() {
         ScopedLock lock(version_map_->get_lock_object(key_.id()));
-        return version_map_->write_and_prune_previous(store_, key_, maybe_prev_);
+        return version_map_->write_and_prune_previous(store_, key_, maybe_prev_, delayed_deletes_);
     }
 };
 

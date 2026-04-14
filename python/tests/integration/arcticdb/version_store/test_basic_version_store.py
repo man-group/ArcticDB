@@ -368,7 +368,8 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     version_store.write(symbol, df, metadata={"something": "something"}, prune_previous_version=True)
     version_store.write(symbol, modified_df, prune_previous_version=True)
 
-    assert len(version_store.list_versions()) == 1
+    # Anchor rule: V0 is the sole eligible version so it is kept as anchor alongside V1.
+    assert len(version_store.list_versions()) == 2
 
     version_store.snapshot("my_snap")
 
@@ -376,8 +377,8 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     version_store.write(symbol, final_df, prune_previous_version=True)
     version_store.snapshot("my_snap2")
 
-    # previous versions should have been deleted by now.
-    assert len([ver for ver in version_store.list_versions() if not ver["deleted"]]) == 1
+    # V0 is now pruned (boundary); V1 (anchor, also in my_snap) and V2 (latest) survive.
+    assert len([ver for ver in version_store.list_versions() if not ver["deleted"]]) == 2
     # previous versions should be accessible through snapshot
     assert_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
     assert_equal(version_store.read(symbol, as_of="my_snap2").data, final_df)
@@ -474,7 +475,10 @@ def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key, latest_v
     assert keys_in_tombstone_ver[1].type == KeyType.TOMBSTONE_ALL
     assert keys_in_tombstone_ver[2].type == KeyType.VERSION
     assert keys_in_tombstone_ver[0].version_id == latest_version_id
-    assert keys_in_tombstone_ver[1].version_id == latest_version_id - 1
+    # Anchor rule: TOMBSTONE_ALL covers up to the boundary (one below the anchor), so its
+    # version_id is latest_version_id - 2, not latest_version_id - 1.
+    # The anchor (latest_version_id - 1) is kept alive; the VERSION entry points to it.
+    assert keys_in_tombstone_ver[1].version_id == latest_version_id - 2
     assert keys_in_tombstone_ver[2].version_id == latest_version_id - 1
 
 
@@ -498,15 +502,19 @@ def check_append_ref_key_structure(keys_in_ref, latest_version_id=1):
 
 def check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=1):
     """
-    The ref key for after a regular write with prune should have the following structure:
+    The ref key after a prune write under the anchor rule has the same 3-entry structure as an
+    append, because the anchor version (latest_version_id - 1) is kept alive:
     - TABLE_INDEX: latest index
+    - TABLE_INDEX: anchor index (latest_version_id - 1)
     - VERSION: latest version
     """
-    assert len(keys_in_ref) == 2
+    assert len(keys_in_ref) == 3
     assert keys_in_ref[0].type == KeyType.TABLE_INDEX
     assert keys_in_ref[0].version_id == latest_version_id
-    assert keys_in_ref[1].type == KeyType.VERSION
-    assert keys_in_ref[1].version_id == latest_version_id
+    assert keys_in_ref[1].type == KeyType.TABLE_INDEX
+    assert keys_in_ref[1].version_id == latest_version_id - 1
+    assert keys_in_ref[2].type == KeyType.VERSION
+    assert keys_in_ref[2].version_id == latest_version_id
 
 
 @pytest.mark.storage
@@ -529,10 +537,10 @@ def test_prune_previous_versions_write(basic_store, sym):
 
     lib.write(sym, df2, prune_previous_version=True)
 
-    # Then - only latest version and keys should survive
-    assert len(lib.list_versions(sym)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 1
+    # Anchor rule: V1 survives as anchor alongside V2 (latest); V0 is tombstoned.
+    assert len(lib.list_versions(sym)) == 2
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
 
     ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
     keys_in_ref = lib_tool.read_to_keys(ref_key)
@@ -614,12 +622,13 @@ def test_prune_previous_versions_write_batch(basic_store):
     for sym in syms:
         ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
         keys_in_ref = lib_tool.read_to_keys(ref_key)
-        assert len(lib.list_versions(sym)) == 1
+        # Anchor rule: V1 survives as anchor alongside V2 (latest); V0 is tombstoned.
+        assert len(lib.list_versions(sym)) == 2
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-        # Then - only latest version and keys should survive
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
+        # Anchor rule: V1 (anchor) and V2 (latest) both have live index and data keys.
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 2
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 2
 
         # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
         keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
@@ -658,11 +667,13 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
     for sym in syms:
         ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
         keys_in_ref = lib_tool.read_to_keys(ref_key)
-        assert len(lib.list_versions(sym)) == 1
+        # Anchor rule: V1 survives as anchor alongside V2 (latest); V0 is tombstoned.
+        assert len(lib.list_versions(sym)) == 2
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-        # Then - only latest version and keys should survive
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        # Anchor rule: V1 (anchor) and V2 (latest) both have live index keys.
+        # V2 is a metadata-only write and reuses V1's TABLE_DATA, so only V1's data key survives.
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 2
         assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
 
         # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
@@ -705,12 +716,15 @@ def test_prune_previous_versions_append_batch(basic_store):
     for sym in syms:
         ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
         keys_in_ref = lib_tool.read_to_keys(ref_key)
-        assert len(lib.list_versions(sym)) == 1
+        # Anchor rule: V1 survives as anchor alongside V2 (latest); V0 is tombstoned.
+        assert len(lib.list_versions(sym)) == 2
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-        # Then - only latest version and index keys should survive. Data keys remain the same
-        assert len(lib.list_versions(sym)) == 1
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        # Anchor rule: V1 (anchor) and V2 (latest) both have live index keys.
+        # Data keys: all 3 segments are retained because V2 (the new version) references all of
+        # them via append inheritance, so delete_unreferenced_pruned_indexes spares them.
+        assert len(lib.list_versions(sym)) == 2
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 2
         assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 3
 
         # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all

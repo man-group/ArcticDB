@@ -101,11 +101,25 @@ class VersionStoreComparison(RuleBasedStateMachine):
 
     # ================================ Basic version ops ================================
 
-    def _prune_previous_versions(self, sym):
+    def _tombstone_all_versions(self, sym):
+        """Model for lib.delete(sym): tombstones every NORMAL version."""
         vers = self._versions[sym]
         for value in vers:
             if value.state == State.NORMAL:
                 value.state = State.TOMBSTONED  # Delayed deletes
+
+    def _prune_previous_versions(self, sym):
+        """Model for write(..., prune_previous_version=True): anchor rule.
+
+        The protection window is 0 in tests (session-scoped conftest), so all
+        NORMAL versions are eligible candidates.  Only tombstone when there are
+        >= 2 eligible candidates; the newest becomes the anchor (kept alive).
+        """
+        vers = self._versions[sym]
+        normal_vers = [v for v in vers if v.state == State.NORMAL]
+        if len(normal_vers) >= 2:
+            for v in normal_vers[:-1]:  # tombstone all except the newest (anchor)
+                v.state = State.TOMBSTONED
 
     def _get_latest_undeleted_version(self, sym) -> Tuple[Optional[int], Optional[Version]]:
         vers = self._versions[sym]
@@ -156,7 +170,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
     def delete_symbol(self, sym):
         assume(sym in self._visible_symbols)  # Older hypothesis don't have `consume()`
         self._lib.delete(sym)
-        self._prune_previous_versions(sym)
+        self._tombstone_all_versions(sym)
         self._visible_symbols.remove(sym)
 
     @invariant()
