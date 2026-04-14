@@ -234,4 +234,11 @@ void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
 
 void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
+void check_column_presence(
+        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
+        std::string_view clause_name
+);
+
+void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name);
+
 } // namespace arcticdb

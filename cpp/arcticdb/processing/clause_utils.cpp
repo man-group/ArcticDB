@@ -9,6 +9,7 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/collection_utils.hpp>
 
 namespace arcticdb {
@@ -515,6 +516,41 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
     for (const auto& column_name : column_names_to_keep) {
         stream_desc.add_scalar_field(columns_to_keep.at(column_name), column_name);
     }
+}
+
+static auto first_missing_column(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns) {
+    const auto& column_types = output_schema.column_types();
+    for (auto input_column_it = required_columns.begin(); input_column_it != required_columns.end();
+         ++input_column_it) {
+        if (!column_types.contains(*input_column_it) &&
+            !column_types.contains(stream::mangled_name(*input_column_it))) {
+            return input_column_it;
+        }
+    }
+    return required_columns.end();
+}
+
+void check_column_presence(
+        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
+        std::string_view clause_name
+) {
+    const auto first_missing = first_missing_column(output_schema, required_columns);
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+            first_missing == required_columns.end(),
+            "{}Clause requires column '{}' to exist in input data",
+            clause_name,
+            first_missing == required_columns.end() ? "" : *first_missing
+    );
+}
+
+void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name) {
+    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+            stream_descriptor.index().type() == IndexDescriptor::Type::TIMESTAMP &&
+                    stream_descriptor.index().field_count() >= 1 &&
+                    stream_descriptor.field(0).type() == make_scalar_type(DataType::NANOSECONDS_UTC64),
+            "{}Clause can only be applied to timeseries",
+            clause_name
+    );
 }
 
 } // namespace arcticdb
