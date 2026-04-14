@@ -157,41 +157,41 @@ def test_basic_modifications(lmdb_library, allow_arrow_input):
         lib._nvs._set_allow_arrow_input(allow_arrow_input)
     write_table = pa.table(
         {
-            "col": pa.array([1, 2], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([1, 2], pa.int64()),
         }
     )
     append_table = pa.table(
         {
-            "col": pa.array([3, 4], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([3, 4], pa.int64()),
         }
     )
     update_table = pa.table(
         {
-            "col": pa.array([5, 6], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([5, 6], pa.int64()),
         }
     )
     if allow_arrow_input:
-        lib.write(sym, write_table, index_column="ts")
-        lib.append(sym, append_table, index_column="ts")
-        lib.update(sym, update_table, index_column="ts")
+        lib.write(sym, write_table, index_column=True)
+        lib.append(sym, append_table, index_column=True)
+        lib.update(sym, update_table, index_column=True)
         received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         expected = pa.table(
             {
-                "col": pa.array([1, 5, 6, 4], pa.int64()),
                 "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+                "col": pa.array([1, 5, 6, 4], pa.int64()),
             }
         )
         assert expected.equals(received)
     else:
         with pytest.raises(ArcticUnsupportedDataTypeException):
-            lib.write(sym, write_table, index_column="ts")
+            lib.write(sym, write_table, index_column=True)
         with pytest.raises(Exception):
-            lib.append(sym, append_table, index_column="ts")
+            lib.append(sym, append_table, index_column=True)
         with pytest.raises(Exception):
-            lib.update(sym, update_table, upsert=True, index_column="ts")
+            lib.update(sym, update_table, upsert=True, index_column=True)
 
 
 @pytest.mark.parametrize("allow_arrow_input", [None, False, True])
@@ -202,41 +202,41 @@ def test_batch_modifications(lmdb_library, allow_arrow_input):
         lib._nvs._set_allow_arrow_input(allow_arrow_input)
     write_table = pa.table(
         {
-            "col": pa.array([1, 2], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([1, 2], pa.int64()),
         }
     )
     append_table = pa.table(
         {
-            "col": pa.array([3, 4], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([3, 4], pa.int64()),
         }
     )
     update_table = pa.table(
         {
-            "col": pa.array([5, 6], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([5, 6], pa.int64()),
         }
     )
     if allow_arrow_input:
-        lib.write_batch([WritePayload(sym, write_table, index_column="ts")])
-        lib.append_batch([WritePayload(sym, append_table, index_column="ts")])
-        lib.update_batch([UpdatePayload(sym, update_table, index_column="ts")])
+        lib.write_batch([WritePayload(sym, write_table, index_column=True)])
+        lib.append_batch([WritePayload(sym, append_table, index_column=True)])
+        lib.update_batch([UpdatePayload(sym, update_table, index_column=True)])
         received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         expected = pa.table(
             {
-                "col": pa.array([1, 5, 6, 4], pa.int64()),
                 "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+                "col": pa.array([1, 5, 6, 4], pa.int64()),
             }
         )
         assert expected.equals(received)
     else:
         with pytest.raises(ArcticUnsupportedDataTypeException):
-            lib.write_batch([WritePayload(sym, write_table, index_column="ts")])
+            lib.write_batch([WritePayload(sym, write_table, index_column=True)])
         with pytest.raises(Exception):
-            lib.append_batch([WritePayload(sym, append_table, index_column="ts")])
+            lib.append_batch([WritePayload(sym, append_table, index_column=True)])
         with pytest.raises(Exception):
-            lib.update_batch([WritePayload(sym, update_table, index_column="ts")], upsert=True)
+            lib.update_batch([WritePayload(sym, update_table, index_column=True)], upsert=True)
 
 
 @pytest.mark.parametrize("batch", [False, True])
@@ -274,31 +274,31 @@ def test_stage(lmdb_library, allow_arrow_input):
         lib._nvs._set_allow_arrow_input(allow_arrow_input)
     table_0 = pa.table(
         {
-            "col": pa.array([1, 2], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([1, 2], pa.int64()),
         }
     )
     table_1 = pa.table(
         {
-            "col": pa.array([3, 4], pa.int64()),
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([3, 4], pa.int64()),
         }
     )
     if allow_arrow_input:
-        lib.stage(sym, table_0, index_column="ts")
-        lib.stage(sym, table_1, index_column="ts")
+        lib.stage(sym, table_0, index_column=True)
+        lib.stage(sym, table_1, index_column=True)
         lib.finalize_staged_data(sym)
         received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         expected = pa.table(
             {
-                "col": pa.array([1, 2, 3, 4], pa.int64()),
                 "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+                "col": pa.array([1, 2, 3, 4], pa.int64()),
             }
         )
         assert expected.equals(received)
     else:
         with pytest.raises(ArcticUnsupportedDataTypeException):
-            lib.stage(sym, table_0, index_column="ts")
+            lib.stage(sym, table_0, index_column=True)
 
 
 arrow_string_formats = list(ArrowOutputStringFormat)

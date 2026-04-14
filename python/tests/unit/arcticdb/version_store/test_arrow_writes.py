@@ -99,7 +99,7 @@ def test_basic_write_strings(lmdb_version_store_arrow, type):
 
 @pytest.mark.skip(reason="Not implemented yet 9951777416")
 @pytest.mark.parametrize("type", [pa.timestamp("us"), pa.timestamp("ms"), pa.timestamp("s")])
-@pytest.mark.parametrize("index_column", [None, "ts"])
+@pytest.mark.parametrize("index_column", [False, True])
 def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, type, index_column):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_non_nanosecond_time_types"
@@ -141,8 +141,7 @@ def test_write_multiple_record_batches(lmdb_version_store_arrow, type):
     assert table.equals(received)
 
 
-@pytest.mark.parametrize("index_col_position", [0, 1])
-def test_write_with_index(lmdb_version_store_arrow, index_col_position):
+def test_write_with_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_index"
     table = pa.table(
@@ -152,9 +151,7 @@ def test_write_with_index(lmdb_version_store_arrow, index_col_position):
             "col1": pa.array(["hello", "bonjour"], pa.string()),
         }
     )
-    if index_col_position == 1:
-        table = table.select([1, 0, 2])
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table, index_column=True)
     received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     assert table.equals(received)
 
@@ -257,7 +254,7 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
     table = pa.Table.from_pandas(df)
     # from_pandas puts index columns on the end, put it back at the front
     table = table.select(["ts"] + [f"col{idx}" for idx in range(num_cols)])
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table, index_column=True)
     received_written_as_arrow = lib.read(sym).data
     index_written_as_arrow = lib_tool.read_index(sym)
 
@@ -401,30 +398,28 @@ def test_write_with_timezone(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
-@pytest.mark.xfail(reason="Index column position not alway correct yet, issue number 18042073623")
 def test_write_with_index_and_read_with_column_slicing(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_index_and_read_with_column_slicing"
     table = pa.table(
         {
-            "col1": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
-            "col2": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
-            "col3": pa.Array.from_pandas(pd.date_range("2025-01-05", periods=2), type=pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+            "col1": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
+            "col2": pa.Array.from_pandas(pd.date_range("2025-01-05", periods=2), type=pa.timestamp("ns")),
         }
     )
-    lib.write(sym, table, index_column="col3")
+    lib.write(sym, table, index_column=True)
     received = lib.read(sym, columns=["col1"]).data
-    expected = table.select([0, 2])
+    expected = table.select(["ts", "col1"])
     assert expected.equals(received)
 
 
-def test_write_non_existent_index_column(lmdb_version_store_arrow):
+def test_write_index_column_on_empty_table(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
-    sym = "test_write_non_existent_index_column"
-    table = pa.table({"col": pa.array([0, 1], pa.int64())})
-    with pytest.raises(SchemaException) as e:
-        lib.write(sym, table, index_column="blah")
-    assert "blah" in str(e.value)
+    sym = "test_write_index_column_on_empty_table"
+    table = pa.table({})
+    with pytest.raises(SchemaException, match="Cannot use index_column=True on a table with no columns"):
+        lib.write(sym, table, index_column=True)
 
 
 def test_write_non_timestamp_index_column(lmdb_version_store_arrow):
@@ -432,7 +427,7 @@ def test_write_non_timestamp_index_column(lmdb_version_store_arrow):
     sym = "test_write_non_timestamp_index_column"
     table = pa.table({"non-ts": pa.array([0, 1], pa.int64()), "col": pa.array([2, 3], pa.int64())})
     with pytest.raises(UserInputException) as e:
-        lib.write(sym, table, index_column="non-ts")
+        lib.write(sym, table, index_column=True)
     assert "int64" in str(e.value).lower()
 
 
@@ -509,14 +504,14 @@ def test_append_with_index(lmdb_version_store_arrow, existing_data):
                 "col": pa.array([0, 1], pa.int64()),
             }
         )
-        lib.write(sym, write_table, index_column="ts")
+        lib.write(sym, write_table, index_column=True)
     append_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([3, 4], pa.int64()),
         }
     )
-    lib.append(sym, append_table, index_column="ts")
+    lib.append(sym, append_table, index_column=True)
 
     received = lib.read(sym).data
     expected = pa.concat_tables([write_table, append_table]) if existing_data else append_table
@@ -533,7 +528,7 @@ def test_wrong_index_name(lmdb_version_store_arrow, method):
             "col": pa.array([0, 1], pa.int64()),
         }
     )
-    lib.write(sym, table_0, index_column="ts1")
+    lib.write(sym, table_0, index_column=True)
     table_1 = pa.table(
         {
             "ts2": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
@@ -541,7 +536,7 @@ def test_wrong_index_name(lmdb_version_store_arrow, method):
         }
     )
     with pytest.raises(StreamDescriptorMismatch):
-        getattr(lib, method)(sym, table_1, index_column="ts2")
+        getattr(lib, method)(sym, table_1, index_column=True)
 
 
 @pytest.mark.parametrize("existing_data", [True, False])
@@ -556,7 +551,7 @@ def test_update(lmdb_version_store_arrow, existing_data):
                 "col1": pa.array(["zero", "one", "two", "three"], pa.string()),
             }
         )
-        lib.write(sym, write_table, index_column="ts")
+        lib.write(sym, write_table, index_column=True)
     update_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
@@ -564,7 +559,7 @@ def test_update(lmdb_version_store_arrow, existing_data):
             "col1": pa.array(["four", "five"], pa.string()),
         }
     )
-    lib.update(sym, update_table, upsert=not existing_data, index_column="ts")
+    lib.update(sym, update_table, upsert=not existing_data, index_column=True)
 
     received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     if existing_data:
@@ -590,7 +585,7 @@ def test_update_mix_strings_and_large_strings(lmdb_version_store_arrow, first_ty
             "col": pa.array(["a", "bb", "ccc", "dddd"], first_type),
         }
     )
-    lib.write(sym, write_table, index_column="ts")
+    lib.write(sym, write_table, index_column=True)
     second_type = pa.large_string() if first_type == pa.string() else pa.string()
     update_table = pa.table(
         {
@@ -598,7 +593,7 @@ def test_update_mix_strings_and_large_strings(lmdb_version_store_arrow, first_ty
             "col": pa.array(["eeeee", "ffffff"], second_type),
         }
     )
-    lib.update(sym, update_table, index_column="ts")
+    lib.update(sym, update_table, index_column=True)
 
     received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     expected = pa.table(
@@ -628,7 +623,7 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
         }
     )
     lib.write(reference_sym, write_table.to_pandas().set_index("ts"))
-    lib.write(sym, write_table, index_column="ts")
+    lib.write(sym, write_table, index_column=True)
     update_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
@@ -636,7 +631,7 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
         }
     )
     lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
-    lib.update(sym, update_table, date_range=date_range, index_column="ts")
+    lib.update(sym, update_table, date_range=date_range, index_column=True)
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
@@ -693,7 +688,7 @@ def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, dat
         }
     )
     lib.write(reference_sym, write_table.to_pandas().set_index("ts"))
-    lib.write(sym, write_table, index_column="ts")
+    lib.write(sym, write_table, index_column=True)
     update_dates = pd.date_range("2025-01-03", periods=48, freq="h", tz=index_tz)
     update_table = pa.table(
         {
@@ -703,7 +698,7 @@ def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, dat
         }
     )
     lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
-    lib.update(sym, update_table, date_range=date_range, index_column="ts")
+    lib.update(sym, update_table, date_range=date_range, index_column=True)
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
@@ -735,17 +730,17 @@ def test_staging_without_sorting(version_store_factory, method):
         }
     )
     if method == "write_parallel":
-        lib.write(sym, table_0, parallel=True, index_column="ts")
-        lib.write(sym, table_1, parallel=True, index_column="ts")
+        lib.write(sym, table_0, parallel=True, index_column=True)
+        lib.write(sym, table_1, parallel=True, index_column=True)
     elif method == "write_incomplete":
-        lib.write(sym, table_0, incomplete=True, index_column="ts")
-        lib.write(sym, table_1, incomplete=True, index_column="ts")
+        lib.write(sym, table_0, incomplete=True, index_column=True)
+        lib.write(sym, table_1, incomplete=True, index_column=True)
     elif method == "append":
-        lib.append(sym, table_0, incomplete=True, index_column="ts")
-        lib.append(sym, table_1, incomplete=True, index_column="ts")
+        lib.append(sym, table_0, incomplete=True, index_column=True)
+        lib.append(sym, table_1, incomplete=True, index_column=True)
     elif method == "stage":
-        lib.stage(sym, table_0, index_column="ts")
-        lib.stage(sym, table_1, index_column="ts")
+        lib.stage(sym, table_0, index_column=True)
+        lib.stage(sym, table_1, index_column=True)
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
@@ -776,8 +771,8 @@ def test_staging_with_sorting(version_store_factory):
             "col2": pa.array([23, 24, 25], pa.uint32()),
         }
     )
-    lib.stage(sym, table_0, sort_on_index=True, index_column="ts")
-    lib.stage(sym, table_1, sort_on_index=True, index_column="ts")
+    lib.stage(sym, table_0, sort_on_index=True, index_column=True)
+    lib.stage(sym, table_1, sort_on_index=True, index_column=True)
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
@@ -806,8 +801,8 @@ def test_staging_with_sorting_strings(version_store_factory):
             "col": pa.array(["four", "six", "five"], pa.string()),
         }
     )
-    lib.stage(sym, table_0, sort_on_index=True, index_column="ts")
-    lib.stage(sym, table_1, sort_on_index=True, index_column="ts")
+    lib.stage(sym, table_0, sort_on_index=True, index_column=True)
+    lib.stage(sym, table_1, sort_on_index=True, index_column=True)
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
@@ -867,7 +862,7 @@ def test_batch_write(lmdb_version_store_arrow):
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
-    lib.batch_write(["sym0", "sym1", "sym2"], [table_0, df_1, table_2], index_column_vector=[None, None, "ts"])
+    lib.batch_write(["sym0", "sym1", "sym2"], [table_0, df_1, table_2], index_column_vector=[False, False, True])
     received_0 = lib.read("sym0").data
     assert table_0.equals(received_0)
     received_1 = lib.read("sym1", output_format="pandas").data
@@ -886,14 +881,14 @@ def test_batch_append(lmdb_version_store_arrow):
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
-    lib.batch_write(["sym0", "sym1"], [table_0, df_1], index_column_vector=[None, None, "ts"])
+    lib.batch_write(["sym0", "sym1"], [table_0, df_1], index_column_vector=[False, False, True])
     table_2 = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-04", periods=3), type=pa.timestamp("ns")),
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
-    lib.batch_append(["sym0", "sym1", "sym2"], [table_0, df_1, table_2], index_column_vector=[None, None, "ts"])
+    lib.batch_append(["sym0", "sym1", "sym2"], [table_0, df_1, table_2], index_column_vector=[False, False, True])
     received_0 = lib.read("sym0").data
     assert pa.concat_tables([table_0, table_0]).equals(received_0)
     received_1 = lib.read("sym1", output_format="pandas").data
@@ -932,7 +927,6 @@ num_supported_types = len(supported_types)
 @settings(deadline=None)
 @given(
     df_length=st.integers(3, 200_000),
-    index_position=st.integers(0, num_supported_types),
     # Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single record batch/
     # row slice/ column slice
     max_record_batches=st.integers(1, 100),
@@ -943,7 +937,6 @@ num_supported_types = len(supported_types)
 def test_arrow_writes_hypothesis(
     lmdb_version_store_big_map,
     df_length,
-    index_position,
     max_record_batches,
     max_row_slices,
     max_col_slices,
@@ -962,11 +955,8 @@ def test_arrow_writes_hypothesis(
     naughty_strings = read_big_list_of_naughty_strings()
     null_fraction = null_percentage / 100.0
     data = {}
-    for idx, supported_type in enumerate(supported_types):
-        if idx == index_position:
-            data["ts"] = pa.Array.from_pandas(
-                pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
-            )
+    data["ts"] = pa.Array.from_pandas(pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns"))
+    for supported_type in supported_types:
         if supported_type in {pa.string(), pa.large_string()}:
             values = rng.choice(naughty_strings, df_length).tolist()
         elif supported_type == pa.bool_():
@@ -976,10 +966,6 @@ def test_arrow_writes_hypothesis(
         null_mask = rng.random(df_length) < null_fraction
         values = [None if null_mask[i] else values[i] for i in range(df_length)]
         data[str(supported_type)] = pa.array(values, supported_type)
-    if index_position == num_supported_types:
-        data["ts"] = pa.Array.from_pandas(
-            pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
-        )
     original_table = pa.table(data)
     # original_table.to_batches with max_chunksize creates a zero copy view, take actually copies the data
     max_chunksize = max((df_length + max_record_batches) // max_record_batches, 1)
@@ -991,9 +977,9 @@ def test_arrow_writes_hypothesis(
             break
     table = pa.concat_tables(tables)
     assert table.equals(original_table)
-    lib.write(sym, table.slice(0, df_length // 3), index_column="ts")
-    lib.append(sym, table.slice((2 * df_length) // 3), index_column="ts")
-    lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column="ts")
+    lib.write(sym, table.slice(0, df_length // 3), index_column=True)
+    lib.append(sym, table.slice((2 * df_length) // 3), index_column=True)
+    lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column=True)
     received = lib.read(sym).data
     for i, name in enumerate(received.column_names):
         if pa.types.is_large_string(received.column(i).type):
@@ -1013,7 +999,7 @@ def test_write_arrow_read_arrow_convert_to_pandas(lmdb_version_store_arrow):
             "int_col": pa.array([1, 2, 3, 4, 5], pa.int64()),
         }
     )
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table, index_column=True)
     arrow_received = lib.read(sym).data
     pandas_received = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow(arrow_received, pandas_received)
@@ -1238,7 +1224,7 @@ def test_sparse_index_column_raises(lmdb_version_store_arrow):
         }
     )
     with pytest.raises(SchemaException):
-        lib.write(sym, table, index_column="ts")
+        lib.write(sym, table, index_column=True)
 
 
 def test_sparse_write_with_index(lmdb_version_store_arrow):
@@ -1252,7 +1238,7 @@ def test_sparse_write_with_index(lmdb_version_store_arrow):
             "large_string_col": pa.array([None, "a", None, "c", None], pa.large_string()),
         }
     )
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table, index_column=True)
     received = lib.read(
         sym,
         arrow_string_format_per_column={"string_col": pa.string(), "large_string_col": pa.large_string()},
@@ -1286,14 +1272,14 @@ def test_sparse_update(lmdb_version_store_arrow):
             "col": pa.array([1, 2, 3, 4], pa.int64()),
         }
     )
-    lib.write(sym, write_table, index_column="ts")
+    lib.write(sym, write_table, index_column=True)
     update_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([None, 30], pa.int64()),
         }
     )
-    lib.update(sym, update_table, index_column="ts")
+    lib.update(sym, update_table, index_column=True)
 
     received = lib.read(sym).data
     expected = pa.table(

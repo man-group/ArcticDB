@@ -82,10 +82,10 @@ class ArrowNumeric:
         return self.ac.create_library(self.lib_name_fresh)
 
     def time_write(self, rows, date_range):
-        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column=True)
 
     def peakmem_write(self, rows, date_range):
-        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column=True)
 
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
@@ -285,7 +285,7 @@ class ArrowStrings:
         for rows in num_rows:
             for unique_string_count in unique_string_counts:
                 table = self._generate_table(rows, self.num_cols, unique_string_count)
-                lib.write(self.symbol_name(rows, unique_string_count), table, index_column="ts")
+                lib.write(self.symbol_name(rows, unique_string_count), table, index_column=True)
 
     def teardown(self, rows, date_range, unique_string_count, arrow_string_format):
         for lib in self.ac.list_libraries():
@@ -314,14 +314,14 @@ class ArrowStrings:
     def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
-            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
-            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 

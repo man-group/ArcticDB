@@ -226,8 +226,6 @@ message NormalizationMetadata {
 
     message ExperimentalArrow {
         bool has_index = 1;
-        string index_column_name = 2;
-        uint64 index_column_position = 3;
     }
 
     oneof input_type {

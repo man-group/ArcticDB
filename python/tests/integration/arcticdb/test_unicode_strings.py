@@ -22,6 +22,13 @@ def create_dataframe(strings):
     return df
 
 
+def pandas_to_arrow_with_index_first(df):
+    base_schema = pa.Schema.from_pandas(df)
+    idx_col = df.index.name
+    fields = [base_schema.field(idx_col)] + [f for f in base_schema if f.name != idx_col]
+    return pa.Table.from_pandas(df, schema=pa.schema(fields))
+
+
 def test_fixed_width_blns(lmdb_version_store, any_arrow_string_format):
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)
@@ -49,8 +56,8 @@ def test_write_blns(lmdb_version_store, any_arrow_string_format):
     assert_frame_equal(df, vit.data)
     # Arrow
     lib._set_allow_arrow_input()
-    table = pa.Table.from_pandas(df)
-    lib.write(symbol, table, index_column="ts")
+    table = pandas_to_arrow_with_index_first(df)
+    lib.write(symbol, table, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     assert table.equals(received)
 
@@ -71,12 +78,12 @@ def test_append_blns(lmdb_version_store, any_arrow_string_format):
     assert_frame_equal(df, vit.data)
     # Arrow
     lib._set_allow_arrow_input()
-    table_first_half = pa.Table.from_pandas(df_first_half)
-    table_second_half = pa.Table.from_pandas(df_second_half)
-    lib.write(symbol, table_first_half, index_column="ts")
-    lib.append(symbol, table_second_half, index_column="ts")
+    table_first_half = pandas_to_arrow_with_index_first(df_first_half)
+    table_second_half = pandas_to_arrow_with_index_first(df_second_half)
+    lib.write(symbol, table_first_half, index_column=True)
+    lib.append(symbol, table_second_half, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
-    expected = pa.Table.from_pandas(df)
+    expected = pandas_to_arrow_with_index_first(df)
     assert expected.equals(received)
 
 
@@ -99,12 +106,12 @@ def test_update_blns(lmdb_version_store, any_arrow_string_format):
     assert_frame_equal(df, vit.data)
     # Arrow
     lib._set_allow_arrow_input()
-    table_removed_middle = pa.Table.from_pandas(df_removed_middle)
-    table_middle_half = pa.Table.from_pandas(df_middle_half)
-    lib.write(symbol, table_removed_middle, index_column="ts")
-    lib.update(symbol, table_middle_half, index_column="ts")
+    table_removed_middle = pandas_to_arrow_with_index_first(df_removed_middle)
+    table_middle_half = pandas_to_arrow_with_index_first(df_middle_half)
+    lib.write(symbol, table_removed_middle, index_column=True)
+    lib.update(symbol, table_middle_half, index_column=True)
     received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
-    expected = pa.Table.from_pandas(df)
+    expected = pandas_to_arrow_with_index_first(df)
     assert expected.equals(received)
 
 
@@ -128,8 +135,8 @@ def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
         assert_frame_equal(expected, res[sym].data)
     # Arrow
     lib._set_allow_arrow_input()
-    tables = [pa.Table.from_pandas(df) for df in dfs]
-    lib.batch_write(symbols, tables, index_column_vector=["ts"] * num_symbols)
+    tables = [pandas_to_arrow_with_index_first(df) for df in dfs]
+    lib.batch_write(symbols, tables, index_column_vector=[True] * num_symbols)
     res = lib.batch_read(symbols, query_builder=qbs, output_format=OutputFormat.PYARROW)
     expr = pa.compute.field("ints") > 50
     for idx, sym in enumerate(symbols):

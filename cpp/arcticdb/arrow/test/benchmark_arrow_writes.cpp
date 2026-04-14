@@ -19,7 +19,7 @@ using namespace arcticdb;
 static void BM_arrow_convert_single_record_batch_to_segment(benchmark::State& state) {
     const auto num_rows = state.range(0);
     const auto num_columns = state.range(1);
-    const auto index_column = state.range(2);
+    const bool has_index = state.range(2);
     const bool numeric_data = state.range(3);
     std::vector<std::pair<std::string, sparrow::array>> columns;
     columns.reserve(num_columns);
@@ -34,15 +34,8 @@ static void BM_arrow_convert_single_record_batch_to_segment(benchmark::State& st
     }
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(create_record_batch(columns));
-    if (index_column > 0) {
-        std::string index_name = fmt::format("col_{}", index_column);
-        for (auto _ : state) {
-            arrow_data_to_segment(record_batches, index_name);
-        }
-    } else {
-        for (auto _ : state) {
-            arrow_data_to_segment(record_batches);
-        }
+    for (auto _ : state) {
+        arrow_data_to_segment(record_batches, has_index);
     }
 }
 
@@ -78,23 +71,19 @@ static void BM_arrow_convert_multiple_record_batches_to_segment(benchmark::State
 BENCHMARK(BM_arrow_convert_single_record_batch_to_segment)
         // Numeric data
         // Short and wide
-        ->Args({10, 100'000, -1, true})
-        ->Args({10, 100'000, 0, true})
-        ->Args({10, 100'000, 50'000, true})
+        ->Args({10, 100'000, false, true})
+        ->Args({10, 100'000, true, true})
         // Long and thin
-        ->Args({10'000'000, 10, -1, true})
-        ->Args({10'000'000, 10, 0, true})
-        ->Args({10'000'000, 10, 5, true})
+        ->Args({10'000'000, 10, false, true})
+        ->Args({10'000'000, 10, true, true})
         // String data
         // Short and wide
-        ->Args({10, 100'000, -1, false})
-        ->Args({10, 100'000, 0, false})
-        ->Args({10, 100'000, 50'000, false})
+        ->Args({10, 100'000, false, false})
+        ->Args({10, 100'000, true, false})
 // Long and thin - Windows CI can't handle this
 #ifndef WIN32
-        ->Args({10'000'000, 10, -1, false})
-        ->Args({10'000'000, 10, 0, false})
-        ->Args({10'000'000, 10, 5, false})
+        ->Args({10'000'000, 10, false, false})
+        ->Args({10'000'000, 10, true, false})
 #endif
         ;
 
