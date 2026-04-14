@@ -183,8 +183,8 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
     assert_frame_equal_with_arrow(table, expected)
 
 
-@pytest.mark.xfail(reason="NaT values in datetime columns are not converted to Arrow nulls (monday ref: 11525537906)")
-def test_datetime_col_with_nats(lmdb_version_store_tiny_segment):
+@pytest.mark.parametrize("row_range", [None, (2, 3), (2, 5), (2, 6), (3, 5)])
+def test_datetime_col_with_nats(lmdb_version_store_tiny_segment, row_range):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
@@ -204,9 +204,26 @@ def test_datetime_col_with_nats(lmdb_version_store_tiny_segment):
         }
     )
     lib.write("arrow", df)
-    table = lib.read("arrow").data
-    expected = lib.read("arrow", output_format=OutputFormat.PANDAS).data
-    assert table.column("x").null_count == 4
+    table = lib.read("arrow", row_range=row_range).data
+    expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
+
+
+@pytest.mark.parametrize("row_range", [None, (1, 5), (2, 7), (3, 6)])
+def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, row_range):
+    # Dynamic schema: column "x" is absent in some segments, producing sparse timestamp data.
+    lib = lmdb_version_store_tiny_segment_dynamic
+    lib.set_output_format(OutputFormat.PYARROW)
+    df1 = pd.DataFrame({"y": [1, 2]})
+    df2 = pd.DataFrame({"x": pd.to_datetime(["2025-01-01", pd.NaT]), "y": [3, 4]})
+    df3 = pd.DataFrame({"x": pd.to_datetime([pd.NaT, "2025-01-02"]), "y": [5, 6]})
+    df4 = pd.DataFrame({"y": [7, 8]})
+    lib.write("arrow", df1)
+    lib.append("arrow", df2)
+    lib.append("arrow", df3)
+    lib.append("arrow", df4)
+    table = lib.read("arrow", row_range=row_range).data
+    expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
 
 

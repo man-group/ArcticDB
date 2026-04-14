@@ -13,6 +13,7 @@
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
+#include <arcticdb/util/constants.hpp>
 
 using namespace arcticdb;
 
@@ -153,3 +154,87 @@ BENCHMARK(BM_arrow_string_handler)
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 2, 1})
         ->Args({100'000, 100'000, 0, 2, 1});
+
+// ── Timestamp NaT handler benchmark ─────────────────────────────────────────
+
+// Args: {num_rows, nat_percentage, num_sparse, truncate_25pct}
+static void BM_arrow_timestamp_handler(benchmark::State& state) {
+    const auto num_rows = static_cast<size_t>(state.range(0));
+    const auto nat_pct = static_cast<int>(state.range(1));
+    const auto num_sparse = static_cast<size_t>(state.range(2));
+    const bool truncate = state.range(3) != 0;
+
+    auto read_options = ReadOptions{};
+    read_options.set_output_format(OutputFormat::ARROW);
+
+    auto handler = ArrowTimestampHandler{};
+    auto source_type_desc = make_scalar_type(DataType::NANOSECONDS_UTC64);
+    auto [dest_type_desc, block_config] = handler.output_type_and_block_config(source_type_desc, "ts", read_options);
+    auto dest_size = data_type_size(dest_type_desc);
+    auto sparsity = num_sparse == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
+
+    auto source_column = Column(source_type_desc, num_rows, AllocationType::DYNAMIC, sparsity);
+    const double sparsity_ratio = static_cast<double>(num_sparse) / static_cast<double>(num_rows);
+    for (size_t i = 0, num_set = 0; i < num_rows; ++i) {
+        auto expected_set = static_cast<size_t>(std::round((i + 1) * (1 - sparsity_ratio)));
+        if (num_set < expected_set) {
+            timestamp val =
+                    (i * 100 / num_rows < static_cast<size_t>(nat_pct)) ? NaT : static_cast<timestamp>(i * 1000);
+            source_column.set_scalar(i, val);
+            ++num_set;
+        }
+    }
+
+    auto field_wrapper = FieldWrapper(dest_type_desc, "ts");
+    auto mapping = ColumnMapping(
+            source_type_desc, dest_type_desc, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
+    );
+    if (truncate) {
+        mapping.set_truncate(ColumnTruncation(num_rows / 4, num_rows * 3 / 4));
+    }
+    auto handler_data = std::any{};
+    auto string_pool = std::make_shared<StringPool>();
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity, block_config);
+        allocate_chunked_column(dest_column, num_rows, num_rows);
+        state.ResumeTiming();
+        handler.convert_type(
+                source_column, dest_column, mapping, DecodePathData{}, handler_data, string_pool, read_options
+        );
+        benchmark::DoNotOptimize(dest_column);
+    }
+}
+
+BENCHMARK(BM_arrow_timestamp_handler)
+        // Dense, no NaTs
+        ->Args({100'000, 0, 0, 0})
+        ->Args({1'000'000, 0, 0, 0})
+        ->Args({10'000'000, 0, 0, 0})
+        // Dense, 25% NaTs
+        ->Args({100'000, 25, 0, 0})
+        ->Args({1'000'000, 25, 0, 0})
+        ->Args({10'000'000, 25, 0, 0})
+        // Dense, 50% NaTs
+        ->Args({100'000, 50, 0, 0})
+        ->Args({1'000'000, 50, 0, 0})
+        ->Args({10'000'000, 50, 0, 0})
+        // Dense, all NaTs
+        ->Args({100'000, 100, 0, 0})
+        ->Args({1'000'000, 100, 0, 0})
+        ->Args({10'000'000, 100, 0, 0})
+        // Half sparse, no NaTs
+        ->Args({100'000, 0, 50'000, 0})
+        ->Args({1'000'000, 0, 500'000, 0})
+        // Half sparse, 25% NaTs
+        ->Args({100'000, 25, 50'000, 0})
+        ->Args({1'000'000, 25, 500'000, 0})
+        // Fully sparse
+        ->Args({100'000, 0, 100'000, 0})
+        ->Args({1'000'000, 0, 1'000'000, 0})
+        // Truncated (25%-75% window), dense, 25% NaTs
+        ->Args({1'000'000, 25, 0, 1})
+        ->Args({10'000'000, 25, 0, 1})
+        // Truncated, half sparse, 25% NaTs
+        ->Args({1'000'000, 25, 500'000, 1});

@@ -8,6 +8,7 @@
 #include <arrow/arrow_handlers.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/util/string_utils.hpp>
@@ -520,6 +521,88 @@ std::pair<TypeDescriptor, DetachableBlockConfig> ArrowBoolHandler::
 void ArrowBoolHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
     // No-op: The validity bitmap extra buffer is populated with zeros upstream.
     // The packed data buffer does not need initialization since missing values are masked by the bitmap.
+}
+
+void ArrowTimestampHandler::handle_type(
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
+    util::check(field.has_ndarray(), "Timestamp handler expected array");
+    const auto& ndarray = field.ndarray();
+    const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+
+    Column decoded_data{
+            m.source_type_desc_,
+            bytes / get_type_size(m.source_type_desc_.data_type()),
+            AllocationType::DYNAMIC,
+            Sparsity::PERMITTED
+    };
+
+    data += decode_field(
+            m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
+    );
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
+
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
+}
+
+void ArrowTimestampHandler::convert_type(
+        const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&,
+        const std::shared_ptr<StringPool>&, const ReadOptions&
+) const {
+    auto* dest = dest_column.bytes_at(m.offset_bytes_, m.dest_bytes_);
+    const auto positions = get_positions_after_truncation(m);
+
+    const bool is_sparse = source_column.opt_sparse_map().has_value();
+    const auto first_idx = positions.first_idx_after_truncation.value_or(0);
+    const auto end_idx = positions.end_idx_after_truncation.value_or(m.num_rows_);
+    util::BitSet validity;
+    util::BitSet::bulk_insert_iterator inserter(validity);
+
+    if (is_sparse) {
+        using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+        for_each_enumerated_flattened<TimestampTag>(
+                source_column,
+                [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                    reinterpret_cast<timestamp*>(dest)[en.idx()] = en.value();
+                    if (en.value() != NaT) {
+                        inserter = en.idx() - first_idx;
+                    }
+                },
+                first_idx,
+                end_idx
+        );
+    } else {
+        const auto* src = reinterpret_cast<const timestamp*>(source_column.data().buffer().data());
+        memcpy(dest, src, m.num_rows_ * sizeof(timestamp));
+
+        for (size_t i = first_idx; i < end_idx; ++i) {
+            if (src[i] != NaT) {
+                inserter = i - first_idx;
+            }
+        }
+    }
+    inserter.flush();
+
+    validity.resize(end_idx - first_idx);
+
+    if (validity.count() != validity.size()) {
+        create_dense_bitmap(positions.extra_buffer_position, validity, dest_column, AllocationType::DETACHABLE);
+    }
+
+    handle_truncation(dest_column, m.truncate_);
+}
+
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowTimestampHandler::output_type_and_block_config(
+        const TypeDescriptor& input_type, std::string_view, const ReadOptions&
+) const {
+    return {input_type, detachable_block_config::Regular{0}};
+}
+
+void ArrowTimestampHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+    // No-op: The validity bitmap extra buffer is populated with zeros upstream.
+    // The data buffer does not need initialization since missing values are masked by the bitmap.
 }
 
 } // namespace arcticdb
