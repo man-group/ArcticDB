@@ -223,6 +223,11 @@ Installing `ccache` is optional but recommended — it is auto-detected and used
 and all vcpkg third-party dependency builds, giving significantly faster rebuilds after the first
 clean build (e.g. when switching worktrees or cloning fresh).
 
+The `linux-debug` and `linux-release` presets also enable thin archives (`ARCTICDB_THIN_ARCHIVES=ON`),
+which speeds up incremental builds by ~20s per touch-and-rebuild cycle. Thin archives store paths to
+`.o` files rather than copying data and are not portable, so this option is intentionally left off for
+conda presets used in wheel packaging.
+
 Setting up Windows
 ------------------
 We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v142 or newer) and tools
