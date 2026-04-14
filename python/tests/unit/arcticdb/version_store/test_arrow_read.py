@@ -207,6 +207,7 @@ def test_datetime_col_with_nats(lmdb_version_store_tiny_segment, row_range):
     table = lib.read("arrow", row_range=row_range).data
     expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
+    assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
 
 
 @pytest.mark.parametrize("row_range", [None, (1, 5), (2, 7), (3, 6)])
@@ -225,6 +226,7 @@ def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, 
     table = lib.read("arrow", row_range=row_range).data
     expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
+    assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
 
 
 def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):
