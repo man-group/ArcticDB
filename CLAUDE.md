@@ -35,8 +35,11 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 The vcpkg-based build requires certain system packages that may not be installed by default:
 
 ```bash
-sudo apt install pkg-config flex bison libsasl2-dev -y
+sudo apt install pkg-config flex bison libsasl2-dev ccache -y
 ```
+
+`ccache` is optional but strongly recommended — it is auto-detected and used for both ArcticDB
+and vcpkg third-party dependency builds, giving ~3–5× faster rebuilds after the first clean build.
 
 Initialize git submodules (required for vcpkg):
 

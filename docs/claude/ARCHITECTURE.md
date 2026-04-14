@@ -281,6 +281,17 @@ windows-cl-debug, windows-cl-release, macos-debug, macos-release
 | `ARCTICDB_USING_CONDA` | Use conda-forge dependencies instead of vcpkg |
 | `ARCTICDB_KEEP_VCPKG_SOURCES` | Retain vcpkg buildtrees after build |
 | `VCPKG_BINARY_SOURCES` | Control vcpkg binary caching (`clear` to disable) |
+| `CCACHE_DIR` | Override ccache storage directory (default: `~/.ccache`) |
+
+### Compiler caching (ccache)
+
+`ccache` is auto-detected on Linux vcpkg builds. When present it is applied to **both** ArcticDB
+source files (via `CMakeLists.txt`) and vcpkg third-party package builds (via
+`cpp/custom-triplets/x64-linux.cmake` + `cpp/CMake/ccache-toolchain.cmake`). A full clean
+rebuild populates the cache; subsequent clean rebuilds (e.g. in a new worktree) run ~3–5× faster.
+
+Conda and macOS builds use `sccache` instead (configured in `CMakePresets.json`); ccache is
+not activated for those presets.
 
 ---
 

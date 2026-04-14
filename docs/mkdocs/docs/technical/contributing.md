@@ -219,6 +219,10 @@ already have `mongod` available.
 | Ubuntu | 20.04, 22.04 | build-essential g++-11 libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev libcurl4-openssl-dev python3-dev |
 | Centos | 7 | devtoolset-11-gcc-c++ openssl-devel cyrus-sasl-devel devtoolset-11-libatomic-devel libcurl-devel python3-devel |
 
+Installing `ccache` is optional but recommended — it is auto-detected and used for both ArcticDB
+and all vcpkg third-party dependency builds, giving significantly faster rebuilds after the first
+clean build (e.g. when switching worktrees or cloning fresh).
+
 Setting up Windows
 ------------------
 We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v142 or newer) and tools
