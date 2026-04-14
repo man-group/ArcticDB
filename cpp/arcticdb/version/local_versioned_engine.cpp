@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/storage.hpp>
