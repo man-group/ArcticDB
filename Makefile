@@ -94,7 +94,7 @@ _CMAKE_INPUTS := cpp/CMakeLists.txt cpp/CMakePresets.json cpp/vcpkg.json \
 
 # .configure-stamp is our own sentinel file — cmake never touches it, so its
 # mtime is fully under our control and won't interfere with cmake's internal
-# check-build-system mechanism (which uses .configure-stamp and cmake.check_cache).
+# check-build-system mechanism (which uses CMakeFiles/cmake.check_cache).
 # cmake --build handles its own incremental reconfigure for files it tracks.
 #
 # CMakeUserPresets.json is evaluated via .SECONDEXPANSION ($$(wildcard ...)) so
