@@ -113,3 +113,14 @@ def test_add_to_snapshot(lmdb_version_store_v1, monkeypatch, env_var_set):
             lib.add_to_snapshot(snap, [sym_1], not_a_kwarg=True)
         msg = str(e.value)
         assert "add_to_snapshot" in msg and "not_a_kwarg" in msg
+
+
+@pytest.mark.parametrize("env_var_set", [True, False])
+def test_read_with_allow_secondary(lmdb_version_store_v1, monkeypatch, env_var_set):
+    # This was a valid argument with Arctic Python, so should always succeed
+    if env_var_set:
+        monkeypatch.setenv("ARCTICDB_DISABLE_KWARG_VALIDATION", "1")
+    lib = lmdb_version_store_v1
+    sym = "test_read_with_allow_secondary"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    lib.read(sym, allow_secondary=True)

@@ -2457,7 +2457,12 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-        self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        # allow_secondary does not do anything with arcticdb (and never has), but it was a valid argument to read with
+        # Arctic Python. Some users have code that is agnostic to whether ArcticDB or Arctic Python is the backend, so
+        # do not raise/log for this specific kwarg
+        self._validate_kwargs(
+            "read", self._valid_read_kwargs.union({"implement_read_index", "allow_secondary"}), kwargs
+        )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
