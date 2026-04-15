@@ -326,7 +326,7 @@ def test_read_by_timestamp_finds_snapshot_protected_version_when_live_version_ex
     # V0 is alive; V1 is deleted but snapshot-protected.
     versions = lib.list_versions(sym)
     assert len(versions) == 2
-    assert versions[0]["deleted"] is True   # V1 deleted
+    assert versions[0]["deleted"] is True  # V1 deleted
     assert versions[1]["deleted"] is False  # V0 alive
 
     # Reading by version_id still works (snapshot protection).
@@ -339,7 +339,7 @@ def test_read_by_timestamp_finds_snapshot_protected_version_when_live_version_ex
 
 
 def test_read_by_timestamp_returns_most_recent_snapshot_protected_version_when_newer_deleted_unprotected_exists(
-        lmdb_version_store_v1, sym
+    lmdb_version_store_v1, sym
 ):
     """
     Variant of test_read_by_timestamp_finds_snapshot_protected_version_when_live_version_exists.
@@ -374,7 +374,7 @@ def test_read_by_timestamp_returns_most_recent_snapshot_protected_version_when_n
     # V1 is tombstoned but snapshot-protected (appears as deleted=True).
     versions = lib.list_versions(sym)
     assert len(versions) == 2
-    assert versions[0]["deleted"] is True   # V1 deleted, snapshot-protected
+    assert versions[0]["deleted"] is True  # V1 deleted, snapshot-protected
     assert versions[1]["deleted"] is False  # V0 alive
 
     # V1 still accessible by version_id via snapshot.

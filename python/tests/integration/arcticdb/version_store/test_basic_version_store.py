@@ -1991,7 +1991,7 @@ def test_find_version(lmdb_version_store_v1):
         lib.write(sym, 0)
     lib.snapshot("snap_0")
 
-    # Version 1 is only available in snap_1
+    # Version 1 is in snap_1 and accessible via timestamp reads (it was current when written)
     with distinct_timestamps(lmdb_version_store_v1) as v1_time:
         lib.write(sym, 1)
     lib.snapshot("snap_1")
@@ -2027,8 +2027,10 @@ def test_find_version(lmdb_version_store_v1):
         lib._find_version(sym, as_of="snap_1000")
     # By timestamp
     assert lib._find_version(sym, as_of=v0_time.after).version == 0
-    assert lib._find_version(sym, as_of=v1_time.after).version == 0
-    assert lib._find_version(sym, as_of=v2_time.after).version == 0
+    assert lib._find_version(sym, as_of=v1_time.after).version == 1  # V1 was current; snapshot-protected
+    assert (
+        lib._find_version(sym, as_of=v2_time.after).version == 1
+    )  # V2 unprotected; V1 is most recent snapshot-protected
     assert lib._find_version(sym, as_of=v3_time.after).version == 3
 
 
