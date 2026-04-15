@@ -89,8 +89,9 @@ if(ARCTICDB_SANITIZER_FLAGS)
 endif()
 
 # Use mold linker if available on Linux (faster linking via async I/O; ~30% speedup over GNU ld)
-# Skipped when sanitizers are active, as Clang sanitizer builds require lld.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS)
+# Skipped when sanitizers are active (Clang sanitizer builds require lld).
+# Skipped when CMAKE_LINKER_TYPE is set — set that in CMakeUserPresets.json to use your own linker.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS AND NOT CMAKE_LINKER_TYPE)
     find_program(MOLD_PROGRAM mold)
     if(MOLD_PROGRAM)
         add_link_options(-fuse-ld=mold)
