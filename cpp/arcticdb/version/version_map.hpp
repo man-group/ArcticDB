@@ -1149,6 +1149,8 @@ class VersionMapImpl {
     ) const {
         const auto protection_secs = ConfigsMap::instance()->get_int("VersionStore.PrunePreviousProtectionSecs", 600);
         const timestamp cutoff = store->current_timestamp() - static_cast<timestamp>(protection_secs) * 1'000'000'000LL;
+        // protection_secs == 0 means "no protection window": all versions are eligible regardless of age.
+        const bool no_time_guard = (protection_secs == 0);
 
         const auto& first_key =
                 requested_first_key.has_value() ? requested_first_key : entry->get_first_index(false).first;
@@ -1162,7 +1164,7 @@ class VersionMapImpl {
         std::optional<AtomKey> boundary; // second-newest eligible — tombstone up to here
         for (const auto& k : entry->keys_) {
             if (is_index_key_type(k.type()) && !entry->is_tombstoned(k) && k.version_id() <= first_key->version_id() &&
-                k.creation_ts() < cutoff) {
+                (no_time_guard || k.creation_ts() < cutoff)) {
                 if (!anchor) {
                     anchor = k;
                 } else {

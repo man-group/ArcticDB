@@ -2108,18 +2108,21 @@ def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
     lib.write("a", 1)
     lib.snapshot("snap")
     lib.write("a", 2)
+    # With the anchor rule and sole pre-existing candidate, V0 is not yet pruned (no prune fires).
+    # A third write gives 2 eligible candidates, so V0 (in snap) is tombstoned, V1 becomes anchor.
+    lib.write("a", 3)
     versions = lib.list_versions()
-    # At this point version 0 of 'a' is pruned but is still in the snapshot.
-    assert len(versions) == 2
+    # V0 is pruned but still in the snapshot (tombstoned but visible as deleted).
+    assert len(versions) == 3
     deleted = [v for v in versions if v["deleted"]]
     not_deleted = [v for v in versions if not v["deleted"]]
     assert len(deleted) == 1
     assert deleted[0]["symbol"] == "a"
     assert deleted[0]["version"] == 0
 
-    assert not_deleted[0]["version"] == 1
+    assert not_deleted[0]["version"] == 2
 
-    assert lib.read("a").data == 2
+    assert lib.read("a").data == 3
 
 
 @pytest.mark.storage
@@ -2130,6 +2133,10 @@ def test_read_with_asof_version_for_snapshotted_version(basic_store_tombstone_an
     lib.write("a", 2)
     lib.write("b", 1)
     lib.write("b", 2)
+    # With the anchor rule, the sole pre-existing candidate is kept alive (no prune on first prune write).
+    # A third write provides 2 eligible candidates, enabling V0 to be tombstoned.
+    lib.write("a", 3)  # V2 of "a": V0(in snap) tombstoned, V1 is anchor
+    lib.write("b", 3)  # V2 of "b": V0 tombstoned (not in snapshot), V1 is anchor
 
     with pytest.raises(Exception):
         # This raises as the first version of b was not in a snapshot and is now pruned
@@ -2149,10 +2156,18 @@ def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, s
     lib.snapshot("snap")
     lib.write(sym, 3, prune_previous_version=True)
     tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+    # With the anchor rule only V0 is tombstoned here; V1 survives as anchor (need ≥2 eligible)
+    assert len(tombstoned_version_map) == 1
+    assert tombstoned_version_map[0] is False  # not in snapshot, physically deleted
+
+    # A second prune write gives 2 eligible candidates (V1 anchor + V2 latest);
+    # boundary=V1 → V1 tombstoned; V1 is in snapshot so its key is preserved.
+    lib.write(sym, 4, prune_previous_version=True)
+    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
     # v0 and v1
     assert len(tombstoned_version_map) == 2
-    assert tombstoned_version_map[0] is False
-    assert tombstoned_version_map[1] is True
+    assert tombstoned_version_map[0] is False  # not in snapshot, physically deleted
+    assert tombstoned_version_map[1] is True  # in snapshot, key still exists
 
     lib.write(sym, 3)
     lib.delete_version(sym, 2)

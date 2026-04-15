@@ -109,16 +109,16 @@ class VersionStoreComparison(RuleBasedStateMachine):
                 value.state = State.TOMBSTONED  # Delayed deletes
 
     def _prune_previous_versions(self, sym):
-        """Model for write(..., prune_previous_version=True): anchor rule.
+        """Model for write(..., prune_previous_version=True) on delayed_deletes stores.
 
-        The protection window is 0 in tests (session-scoped conftest), so all
-        NORMAL versions are eligible candidates.  Only tombstone when there are
-        >= 2 eligible candidates; the newest becomes the anchor (kept alive).
+        These fixtures use delayed_deletes=True, so get_prune_previous_boundary returns
+        the anchor (the newest eligible version) as the tombstone boundary, meaning ALL
+        previous NORMAL versions are tombstoned — including sole pre-existing candidates.
+        The newly-written version (appended after this call) becomes the new live version.
         """
         vers = self._versions[sym]
-        normal_vers = [v for v in vers if v.state == State.NORMAL]
-        if len(normal_vers) >= 2:
-            for v in normal_vers[:-1]:  # tombstone all except the newest (anchor)
+        for v in vers:
+            if v.state == State.NORMAL:
                 v.state = State.TOMBSTONED
 
     def _get_latest_undeleted_version(self, sym) -> Tuple[Optional[int], Optional[Version]]:
@@ -314,11 +314,9 @@ def test_single(lmdb_version_store_delayed_deletes_v1):
     VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v1
     state = VersionStoreComparison()
     # Copy and paste the reproduction script hypothesis generated below:
-    # print("Press enter to continue"); import sys; sys.stdin.readline()
     state.write_new_symbol(sym="0", write_mode=WriteMode.DATA)
     state.write_new_version_to_symbol(prune=True, sym="0", write_mode=WriteMode.META)
     state.snapshot(name="0", with_meta=False)
     state.delete_snapshot(name="0")
     state.write_new_version_to_symbol(prune=True, sym="0", write_mode=WriteMode.DATA)
-
     state.test_list_versions_all_and_read()

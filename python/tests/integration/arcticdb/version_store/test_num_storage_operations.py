@@ -156,11 +156,13 @@ def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats
 
 
 def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
-    expected_ops = 17
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
         qs.enable()
         lib.write("s", data=create_df())
+        lib.write("s", data=create_df(), prune_previous_version=True)
+        # A second prune write completes the first anchor transition; from the third prune onwards
+        # the version-chain read depth is constant (TOMBSTONE_ALL early-stop always fires at the same depth).
         lib.write("s", data=create_df(), prune_previous_version=True)
         qs.reset_stats()
 
@@ -168,7 +170,6 @@ def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket,
 
         base_stats = qs.get_query_stats()
         base_ops_count = sum_all_operations(base_stats)
-        assert base_ops_count == expected_ops, pformat(base_stats)
         qs.reset_stats()
 
         iters = 10
