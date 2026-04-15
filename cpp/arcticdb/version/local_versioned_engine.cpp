@@ -337,15 +337,27 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
 std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
         const StreamId& stream_id, timestamp as_of, const VersionQuery& version_query
 ) {
+    LoadStrategy load_strategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, as_of};
+    auto entry = version_map()->check_reload(store(), stream_id, load_strategy, __FUNCTION__);
 
-    auto index_key = load_index_key_from_time(store(), version_map(), stream_id, as_of);
-    if (!index_key && std::get<TimestampVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned) {
-        auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
-        auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
-        std::sort(std::begin(vector_index_keys), std::end(vector_index_keys), [](auto& k1, auto& k2) {
-            return k1.creation_ts() > k2.creation_ts();
-        });
-        index_key = get_index_key_from_time(as_of, vector_index_keys);
+    auto live_key = get_index_key_from_time(as_of, entry->get_indexes(false));
+    auto index_key = live_key;
+
+    if (std::get<TimestampVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned &&
+        (!entry->tombstones_.empty() || entry->tombstone_all_.has_value())) {
+        // A deleted version may be more recent than the live one at this timestamp.
+        // get_indexes(true) reuses the already-loaded entry — no extra I/O.
+        auto best_key = get_index_key_from_time(as_of, entry->get_indexes(true));
+        if (!live_key || (best_key && best_key->version_id() > live_key->version_id())) {
+            auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
+            auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
+            std::sort(std::begin(vector_index_keys), std::end(vector_index_keys), [](auto& k1, auto& k2) {
+                return k1.creation_ts() > k2.creation_ts();
+            });
+            auto snap_key = get_index_key_from_time(as_of, vector_index_keys);
+            if (snap_key && (!live_key || snap_key->version_id() > live_key->version_id()))
+                index_key = snap_key;
+        }
     }
 
     if (!index_key) {
