@@ -297,6 +297,149 @@ def test_read_symbol_with_ts_in_snapshot(store, request, sym):
     assert lib.read(sym, as_of=third_write_timestamps.after).version == 2
 
 
+def test_read_by_timestamp_finds_snapshot_protected_version_when_live_version_exists(lmdb_version_store_v1, sym):
+    """
+    Regression test for a pre-existing bug in get_version_at_time.
+
+    The snapshot fallback in get_version_at_time (local_versioned_engine.cpp) only fires when
+    load_index_key_from_time returns nullopt, i.e. when NO undeleted version exists before the
+    requested timestamp.  If an earlier live version exists it is returned instead of a newer
+    snapshot-protected-but-deleted version, violating time-travel semantics.
+
+    Scenario:
+      V0 written (alive)
+      V1 written, snapshot "snap" captures it
+      V1 deleted  -> V1 tombstoned, snap protects its data keys
+      read(as_of=ts_after_V1_write) should return V1 (was current at that time, in snapshot)
+      but currently returns V0 (the latest alive version before the timestamp).
+    """
+    lib = lmdb_version_store_v1
+
+    lib.write(sym, 0)  # V0 — remains alive throughout
+
+    with distinct_timestamps(lib) as ts_v1:
+        lib.write(sym, 1)  # V1
+
+    lib.snapshot("snap")
+    lib.delete_version(sym, 1)  # soft-delete V1; snap protects it
+
+    # V0 is alive; V1 is deleted but snapshot-protected.
+    versions = lib.list_versions(sym)
+    assert len(versions) == 2
+    assert versions[0]["deleted"] is True   # V1 deleted
+    assert versions[1]["deleted"] is False  # V0 alive
+
+    # Reading by version_id still works (snapshot protection).
+    assert lib.read(sym, as_of=1).data == 1
+
+    # Reading by timestamp at V1's creation time should return V1 (it was current then,
+    # and snap protects it).  Currently returns V0 because get_version_at_time only
+    # falls back to snapshot search when no live version is found at all.
+    assert lib.read(sym, as_of=ts_v1.after).data == 1  # BUG: currently returns V0 (data==0)
+
+
+def test_read_by_timestamp_returns_most_recent_snapshot_protected_version_when_newer_deleted_unprotected_exists(
+        lmdb_version_store_v1, sym
+):
+    """
+    Variant of test_read_by_timestamp_finds_snapshot_protected_version_when_live_version_exists.
+
+    When multiple deleted versions exist between the live version and the requested timestamp,
+    get_version_at_time must return the most recent *snapshot-protected* version, not the most
+    recent deleted one (which may carry no snapshot protection and whose data may be GC'd).
+
+    Scenario:
+      V0 written (alive)
+      V1 written, snapshot "snap" captures it, then V1 deleted  -> snap protects V1
+      V2 written (no snapshot), then V2 deleted                 -> V2 unprotected, data may be GC'd
+      read(as_of=ts_after_V2_write) should return V1 (most recent snapshot-protected version)
+      but currently returns V0 (the only live version).
+    """
+    lib = lmdb_version_store_v1
+
+    lib.write(sym, 0)  # V0 — remains alive throughout
+
+    with distinct_timestamps(lib) as ts_v1:
+        lib.write(sym, 1)  # V1
+
+    lib.snapshot("snap")
+    lib.delete_version(sym, 1)  # soft-delete V1; snap protects it
+
+    with distinct_timestamps(lib) as ts_v2:
+        lib.write(sym, 2)  # V2 — no snapshot protection
+
+    lib.delete_version(sym, 2)  # soft-delete V2; no snapshot, data may be GC'd
+
+    # V0 alive; V2 is tombstoned and unprotected (not in list_versions);
+    # V1 is tombstoned but snapshot-protected (appears as deleted=True).
+    versions = lib.list_versions(sym)
+    assert len(versions) == 2
+    assert versions[0]["deleted"] is True   # V1 deleted, snapshot-protected
+    assert versions[1]["deleted"] is False  # V0 alive
+
+    # V1 still accessible by version_id via snapshot.
+    assert lib.read(sym, as_of=1).data == 1
+
+    # At ts_v2.after, V2 was the current version but it is unprotected.
+    # V1 is the most recent snapshot-protected version at/before that timestamp.
+    # Currently returns V0 because get_version_at_time stops at the first live version found.
+    assert lib.read(sym, as_of=ts_v2.after).data == 1  # BUG: currently returns V0 (data==0)
+
+
+def test_read_by_timestamp_between_two_snapshots_returns_earlier_snapshot_version(lmdb_version_store_v1, sym):
+    """
+    Two snapshots s1 and s2 each protect a deleted version; an unprotected deleted version
+    sits between them.  A timestamp read between s1 and s2 should return s1's version.
+
+    The snapshot search calls get_index_key_from_time over keys from *all* snapshots sorted
+    descending by creation_ts.  s2's version (creation_ts > as_of) is skipped by the binary
+    search; s1's version (creation_ts <= as_of) is returned.  This test verifies that both
+    snapshot keys are present in the search and that the sort produces the correct result.
+
+    Scenario:
+      V0 written (alive)
+      V1 written -> s1 taken -> V1 deleted  (s1 protects V1)
+      V2 written -> V2 deleted              (no snapshot, V2 unprotected)
+      V3 written -> s2 taken -> V3 deleted  (s2 protects V3)
+      read(as_of=ts_after_V2) should return V1 (most recent snapshot-protected version <= ts)
+    """
+    lib = lmdb_version_store_v1
+
+    lib.write(sym, 0)  # V0 — remains alive throughout
+
+    lib.write(sym, 1)  # V1
+    lib.snapshot("s1")
+    lib.delete_version(sym, 1)  # s1 protects V1
+
+    with distinct_timestamps(lib) as ts_v2:
+        lib.write(sym, 2)  # V2 — no snapshot
+
+    lib.delete_version(sym, 2)  # V2 unprotected
+
+    lib.write(sym, 3)  # V3
+    lib.snapshot("s2")
+    lib.delete_version(sym, 3)  # s2 protects V3
+
+    # V0 alive; V1 and V3 deleted but snapshot-protected; V2 deleted and not visible.
+    versions = lib.list_versions(sym)
+    assert len(versions) == 3
+    assert versions[0]["version"] == 3  # V3 deleted, in s2
+    assert versions[0]["deleted"] is True
+    assert versions[1]["version"] == 1  # V1 deleted, in s1
+    assert versions[1]["deleted"] is True
+    assert versions[2]["version"] == 0  # V0 alive
+    assert versions[2]["deleted"] is False
+
+    # Version-id reads still work via snapshots.
+    assert lib.read(sym, as_of=1).data == 1
+    assert lib.read(sym, as_of=3).data == 3
+
+    # ts_v2.after is between V2 and V3.  V2 was current then but is unprotected.
+    # The snapshot search over {V1(s1), V3(s2)} sorted desc by creation_ts skips V3
+    # (creation_ts > ts_v2.after) and returns V1.
+    assert lib.read(sym, as_of=ts_v2.after).data == 1  # BUG: currently returns V0 (data==0)
+
+
 @pytest.mark.storage
 def test_add_to_snapshot_simple(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
