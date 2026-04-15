@@ -2158,6 +2158,7 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
     try {
         auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
         auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
+        segment_in_memory.unsparsify();
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());

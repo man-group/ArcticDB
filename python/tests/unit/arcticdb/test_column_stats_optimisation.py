@@ -1372,6 +1372,447 @@ def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
     assert get_table_data_read_count() == 2
 
 
+@pytest.mark.parametrize(
+    "query_expr,expected_reads",
+    [
+        # seg0: a=[1,2], b=[10,20], c=[2,3], d=[2,3], e=[2,2]
+        # seg1: a=[30,40], b=[3,4], c=[4,5], d=[41, 45], e=[42, 42]
+        pytest.param(lambda q: q["a"] < q["b"], 1, id="lt_pruning"),
+        pytest.param(lambda q: q["a"] < q["d"], 2, id="lt_no_pruning"),
+        pytest.param(lambda q: q["a"] <= q["b"], 1, id="lte_pruning"),
+        pytest.param(lambda q: q["a"] <= q["d"], 2, id="lte_no_pruning"),
+        pytest.param(lambda q: q["b"] > q["a"], 1, id="gt_pruning"),
+        pytest.param(lambda q: q["a"] > q["c"], 1, id="gt_pruning"),
+        pytest.param(lambda q: q["d"] > q["a"], 2, id="gt_no_pruning"),
+        pytest.param(lambda q: q["c"] >= q["a"], 1, id="gte_pruning"),
+        pytest.param(lambda q: q["a"] >= q["c"], 2, id="gte_no_pruning"),
+        pytest.param(lambda q: q["a"] == q["b"], 0, id="eq_prunes_both"),
+        pytest.param(lambda q: q["a"] == q["c"], 1, id="eq_prunes_one"),
+        pytest.param(lambda q: q["d"] == q["e"], 1, id="eq_prunes_one_collapsed"),
+        pytest.param(lambda q: q["d"] != q["e"], 1, id="neq_prunes_one"),
+        pytest.param(lambda q: q["d"] != q["d"], 0, id="neq_prunes_none"),
+    ],
+)
+def test_column_stats_cross_column_comparison(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+):
+    """Test that column stats pruning works for comparisons between two columns."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame(
+        {"a": [1, 2], "b": [10, 20], "c": [2, 3], "d": [2, 2], "e": [2, 2]},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"a": [30, 40], "b": [3, 4], "c": [4, 5], "d": [41, 41], "e": [42, 42]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}, "d": {"MINMAX"}, "e": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr",
+    [
+        pytest.param(lambda q: q["a"] < q["b"], id="a lt b"),
+        pytest.param(lambda q: q["b"] < q["a"], id="b lt a"),
+        pytest.param(lambda q: q["a"] <= q["b"], id="a lte b"),
+        pytest.param(lambda q: q["b"] <= q["a"], id="b lte a"),
+        pytest.param(lambda q: q["a"] > q["b"], id="a gt b"),
+        pytest.param(lambda q: q["b"] > q["a"], id="b gt a"),
+        pytest.param(lambda q: q["a"] >= q["b"], id="a gte b"),
+        pytest.param(lambda q: q["b"] >= q["a"], id="b gte a"),
+        pytest.param(lambda q: q["a"] == q["b"], id="a eq b"),
+        pytest.param(lambda q: q["b"] == q["a"], id="b eq a"),
+    ],
+)
+@pytest.mark.parametrize("a_nan", (True, False), ids=("a_nan", "a_non_nan"))
+@pytest.mark.parametrize("b_nan", (True, False), ids=("b_nan", "b_non_nan"))
+def test_column_stats_cross_column_comparison_nan(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, a_nan, b_nan
+):
+    """Test that column stats pruning works for comparisons between two columns with NaN."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"a": [1.0, 10.0], "b": [5.0, 15.0]}, index=pd.date_range("2000-01-01", periods=2))
+    a_vals = [np.nan, np.nan] if a_nan else [10.0, 20.0]
+    b_vals = [np.nan, np.nan] if b_nan else [15.0, 25.0]
+    df1 = pd.DataFrame({"a": a_vals, "b": b_vals}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+    expected_reads = 1 if (a_nan or b_nan) else 2
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr",
+    [
+        pytest.param(lambda q: q["a"] != q["b"], id="a neq b"),
+        pytest.param(lambda q: q["b"] != q["a"], id="b neq a"),
+    ],
+)
+@pytest.mark.parametrize("a_nan", (True, False), ids=("a_nan", "a_non_nan"))
+@pytest.mark.parametrize("b_nan", (True, False), ids=("b_nan", "b_non_nan"))
+def test_column_stats_cross_column_comparison_nan_neq(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, a_nan, b_nan
+):
+    """Test that column stats pruning works for NE comparisons between two columns with NaN."""
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame({"a": [1.0, 1.0], "b": [1.0, 1.0]}, index=pd.date_range("2000-01-01", periods=2))
+    a_vals = [np.nan, np.nan] if a_nan else [10.0, 20.0]
+    b_vals = [np.nan, np.nan] if b_nan else [15.0, 25.0]
+    df1 = pd.DataFrame({"a": a_vals, "b": b_vals}, index=pd.date_range("2000-01-03", periods=2))
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+    expected_reads = 1
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr,expected_reads",
+    [
+        # seg0: a=[NaT, NaT] b=[ts3, ts4]
+        # seg1: a=[ts5, ts6], b=[NaT, NaT]
+        # The ranges for a and b are disjoint across segments
+        pytest.param(lambda q: q["a"] < q["b"], 1, id="lt_nat_prunes_seg1"),
+        pytest.param(lambda q: q["a"] > q["b"], 1, id="gt_nat_prunes_seg0"),
+        pytest.param(lambda q: q["a"] == q["b"], 0, id="eq_nat_prunes_both"),
+        pytest.param(lambda q: q["a"] != q["b"], 2, id="neq_nat_no_pruning"),
+        pytest.param(lambda q: q["a"] <= q["b"], 1, id="lte_nat_prunes_seg1"),
+        pytest.param(lambda q: q["a"] >= q["b"], 1, id="gte_nat_prunes_seg0"),
+    ],
+)
+def test_column_stats_cross_column_comparison_nat(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+):
+    """Test that NaT is treated as a normal value (int64_min) for column-vs-column stats pruning.
+
+    ArcticDB treats NaT as int64_min in all comparisons (unlike Pandas which treats NaT as missing).
+    """
+    lib = in_memory_version_store
+
+    ts3 = pd.Timestamp("2000-01-03")
+    ts4 = pd.Timestamp("2000-01-04")
+    ts5 = pd.Timestamp("2000-01-05")
+    ts6 = pd.Timestamp("2000-01-06")
+
+    # seg0: a=[NaT, NaT], b=[ts3, ts4]
+    df0 = pd.DataFrame(
+        {"a": pd.Series([pd.NaT, pd.NaT]), "b": [ts3, ts4]},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    # seg1: a=[ts5, ts6], b=[NaT, NaT]
+    df1 = pd.DataFrame(
+        {"a": [ts5, ts6], "b": pd.Series([pd.NaT, pd.NaT])},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    lib.read(sym, query_builder=q)
+    table_data_reads = get_table_data_read_count()
+
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr,overlaps,expected_reads",
+    [
+        pytest.param(lambda q: q["a"] < q["b"], False, 2, id="lt_no_overlap"),
+        pytest.param(lambda q: q["a"] < q["b"], True, 2, id="lt_overlap"),
+        pytest.param(lambda q: q["a"] <= q["b"], False, 2, id="lte_no_overlap"),
+        pytest.param(lambda q: q["a"] <= q["b"], True, 2, id="lte_overlap"),
+        pytest.param(lambda q: q["a"] > q["b"], False, 0, id="gt_no_overlap"),
+        pytest.param(lambda q: q["a"] > q["b"], True, 1, id="gt_overlap"),
+        pytest.param(lambda q: q["a"] >= q["b"], False, 0, id="gte_no_overlap"),
+        pytest.param(lambda q: q["a"] >= q["b"], True, 1, id="gte_overlap"),
+        pytest.param(lambda q: q["a"] == q["b"], False, 0, id="eq_no_overlap"),
+        pytest.param(lambda q: q["a"] == q["b"], True, 1, id="eq_overlap"),
+        pytest.param(lambda q: q["a"] != q["b"], False, 2, id="neq_no_overlap"),
+        pytest.param(lambda q: q["a"] != q["b"], True, 2, id="neq_overlap"),
+    ],
+)
+def test_column_stats_cross_column_nat_range(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, overlaps, expected_reads
+):
+    """Test column-vs-column stats pruning when one segment has a=[NaT, Timestamp("1970-01-01")]."""
+    lib = in_memory_version_store
+
+    ts_epoch = pd.Timestamp("1970-01-01")
+
+    if overlaps:
+        # b range [1969-06-01, 1970-06-01] overlaps with a range [NaT, Timestamp("1970-01-01")]
+        b0_vals = [pd.Timestamp("1969-06-01"), pd.Timestamp("1970-06-01")]
+    else:
+        # b range [2000-01-01, 2001-01-01] is entirely above a range [NaT, Timestamp("1970-01-01")]
+        b0_vals = [pd.Timestamp("2000-01-01"), pd.Timestamp("2001-01-01")]
+
+    # seg0: a=[NaT, Timestamp("1970-01-01")], b varies
+    df0 = pd.DataFrame(
+        {"a": [pd.NaT, ts_epoch], "b": b0_vals},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    # seg1: a=[2000, 2001], b=[2002, 2003] — a less than b
+    df1 = pd.DataFrame(
+        {
+            "a": [pd.Timestamp("2000-01-01"), pd.Timestamp("2001-01-01")],
+            "b": [pd.Timestamp("2002-01-01"), pd.Timestamp("2003-01-01")],
+        },
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    lib.read(sym, query_builder=q)
+    table_data_reads = get_table_data_read_count()
+
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr,expected_reads",
+    [
+        pytest.param(lambda q: q["a"] < q["b"], 3, id="lt"),
+        pytest.param(lambda q: q["a"] <= q["b"], 4, id="lte"),
+        pytest.param(lambda q: q["a"] > q["b"], 2, id="gt"),
+        pytest.param(lambda q: q["a"] >= q["b"], 3, id="gte"),
+        pytest.param(lambda q: q["a"] == q["b"], 3, id="eq"),
+        pytest.param(lambda q: q["a"] != q["b"], 4, id="neq"),
+    ],
+)
+def test_column_stats_dynamic_schema_cross_column(
+    in_memory_version_store_dynamic_schema,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+    query_expr,
+    expected_reads,
+):
+    lib = in_memory_version_store_dynamic_schema
+
+    # seg0: a=uint8, b=missing, c=int64
+    df0 = pd.DataFrame(
+        {"a": np.array([200, 250], dtype=np.uint8), "c": np.array([1, 2], dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    # seg1: a=missing, b=int16, c=int64
+    df1 = pd.DataFrame(
+        {"b": np.array([-10, -5], dtype=np.int16), "c": np.array([3, 4], dtype=np.int64)},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+    # seg2: a=int32[50,60], b=int16[5,50], c=int64
+    df2 = pd.DataFrame(
+        {
+            "a": np.array([50, 60], dtype=np.int32),
+            "b": np.array([5, 50], dtype=np.int16),
+            "c": np.array([5, 6], dtype=np.int64),
+        },
+        index=pd.date_range("2000-01-05", periods=2),
+    )
+    # seg3: both a and b missing, c=int64
+    df3 = pd.DataFrame(
+        {"c": np.array([7, 8], dtype=np.int64)},
+        index=pd.date_range("2000-01-07", periods=2),
+    )
+    # seg4: a=float64[10.5,21.0], b=int32[21,200], c=int64
+    df4 = pd.DataFrame(
+        {
+            "a": np.array([10.5, 21.0], dtype=np.float64),
+            "b": np.array([21, 200], dtype=np.int32),
+            "c": np.array([9, 10], dtype=np.int64),
+        },
+        index=pd.date_range("2000-01-09", periods=2),
+    )
+    # seg5: a=int64[1,2], b=int32[100,200], c=int64
+    df5 = pd.DataFrame(
+        {
+            "a": np.array([1, 2], dtype=np.int64),
+            "b": np.array([100, 200], dtype=np.int32),
+            "c": np.array([11, 12], dtype=np.int64),
+        },
+        index=pd.date_range("2000-01-11", periods=2),
+    )
+    # seg6: a=int16[30,50], b=int64[40,60], c=int64
+    df6 = pd.DataFrame(
+        {
+            "a": np.array([30, 50], dtype=np.int16),
+            "b": np.array([40, 60], dtype=np.int64),
+            "c": np.array([13, 14], dtype=np.int64),
+        },
+        index=pd.date_range("2000-01-13", periods=2),
+    )
+
+    # seg7: a=missing, b=missing, c=int64
+    df7 = pd.DataFrame(
+        {
+            "c": np.array([13, 14], dtype=np.int64),
+        },
+        index=pd.date_range("2000-01-15", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    lib.append(sym, df3)
+    lib.append(sym, df4)
+    lib.append(sym, df5)
+    lib.append(sym, df6)
+    lib.append(sym, df7)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1, df2, df3, df4, df5, df6, df7])
+    # Rows where either column is missing (NaN) are not returned by ArcticDB
+    both_present = full_df.dropna(subset=["a", "b"])
+    expected = both_present[query_expr(both_present)]
+    assert_frame_equal(result, expected, check_dtype=False)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+def test_column_stats_dynamic_schema_cross_column_backfilled_values_int(
+    in_memory_version_store_dynamic_schema,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+):
+    """When we read with dynamic schema, we backfill missing columns with a default, like NaN or 0.
+    This test checks that we do not mis-interpret backfilled values as real values with query stats."""
+    lib = in_memory_version_store_dynamic_schema
+
+    # seg0: a=uint8, b=missing
+    df0 = pd.DataFrame(
+        {"a": np.array([200, 250], dtype=np.uint8)},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    # seg1: a=uint8, b=int16
+    df1 = pd.DataFrame(
+        {"a": np.array([200, 250], dtype=np.uint8), "b": np.array([0, 1], dtype=np.uint8)},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[q["b"] == 0]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    expected = df1[df1["b"] == 0]
+    assert_frame_equal(result, expected, check_dtype=False)
+    assert table_data_reads == 1
+
+
+def test_column_stats_dynamic_schema_cross_column_backfilled_values_float(
+    in_memory_version_store_dynamic_schema,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+):
+    """When we read with dynamic schema, we backfill missing columns with a default, like NaN or 0.
+    This test checks that we do not mis-interpret backfilled values as real values with query stats."""
+    lib = in_memory_version_store_dynamic_schema
+
+    # seg0: a=uint8, b=missing
+    df0 = pd.DataFrame(
+        {"a": np.array([2, 3], dtype=np.uint8)},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    # seg1: a=uint8, b=float64
+    df1 = pd.DataFrame(
+        {"a": np.array([20, 25], dtype=np.uint8), "b": np.array([np.nan, 1], dtype=np.float64)},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+    # seg2: a=uint8, b=float64
+    df2 = pd.DataFrame(
+        {"a": np.array([200, 250], dtype=np.uint8), "b": np.array([10.0, 20.0], dtype=np.float64)},
+        index=pd.date_range("2000-01-05", periods=2),
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    expr = lambda q: q[(q["b"] != 250) & (q["b"] != 200) & (q["b"] != 10.0) & (q["b"] != 1.0)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=expr(q)).data
+    table_data_reads = get_table_data_read_count()
+
+    total = pd.concat([df1, df2])
+    expected = expr(total)
+    assert_frame_equal(result, expected, check_dtype=False)
+    assert table_data_reads == 2
+
+
 def test_column_stats_empty_stats(in_memory_version_store, column_stats_filtering_enabled):
     lib = in_memory_version_store
 

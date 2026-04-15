@@ -8,7 +8,7 @@
 namespace arcticdb {
 
 SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments) {
-    SegmentInMemory merged;
+    SegmentInMemory merged(Sparsity::PERMITTED);
     merged.init_column_map();
     merged.descriptor().set_index(IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0});
 
