@@ -210,7 +210,7 @@ ArcticDB validates names for symbols, snapshots, and libraries. The rules are en
 - Must not be empty.
 - Maximum length of 254 characters.
 - Only printable ASCII characters (codes 32 through 126 inclusive) are allowed.
-- The characters `*`, `<`, and `>` are forbidden (they are problematic for S3-compatible storage).
+- The characters `*`, `<`, and `>` are forbidden.
 - Numeric symbol keys (integer identifiers) are not subject to these checks.
 
 **Library names** follow the same rules as above, with additional constraints. Library names may be dot-separated (e.g. `research.equities`), and each dot-separated part:
