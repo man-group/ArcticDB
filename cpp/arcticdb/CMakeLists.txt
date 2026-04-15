@@ -2,7 +2,7 @@ option(TEST "Build all tests." ON)
 option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
-option(ARCTICDB_THIN_ARCHIVES "Use thin archives for intermediate static libraries. Faster incremental builds but archives are not self-contained — do not use for installed/distributed builds." OFF)
+option(ARCTICDB_THIN_ARCHIVES "Use thin archives for intermediate static libraries. Faster incremental builds but archives are not self-contained — do not use if distributing link-time intermediate results like arcticdb_core_static.a." OFF)
 
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
@@ -870,7 +870,9 @@ endif()
 
 if(ARCTICDB_THIN_ARCHIVES)
     # Override archive creation to use thin archives (store paths, not data).
-    # Skip ranlib: mold reads all input objects directly and doesn't need the symbol index.
+    # Skip ranlib: the symbol index is unnecessary because arcticdb_core_static contributes
+    # nearly all its members to arcticdb_ext.so (mold reads all members directly; GNU ld
+    # selects them all via symbol resolution since almost every symbol is referenced).
     # Saves ~26s per incremental build (ar: 14s + ranlib: 12s → ar qcT: 3.5s + no ranlib).
     set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
     set(CMAKE_CXX_ARCHIVE_FINISH "true")
