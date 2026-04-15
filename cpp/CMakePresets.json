@@ -115,8 +115,7 @@
       "hidden": true,
       "generator": "Unix Makefiles",
       "cacheVariables": {
-        "CMAKE_MAKE_PROGRAM": "make",
-        "VCPKG_OVERLAY_TRIPLETS": "custom-triplets"
+        "CMAKE_MAKE_PROGRAM": "make"
       },
       "environment": {"cmakepreset_expected_host_system": "Linux"}
     },

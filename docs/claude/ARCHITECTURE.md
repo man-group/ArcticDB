@@ -285,10 +285,10 @@ windows-cl-debug, windows-cl-release, macos-debug, macos-release
 
 ### Compiler caching (ccache)
 
-`ccache` is auto-detected on Linux vcpkg builds. When present it is applied to **both** ArcticDB
-source files (via `CMakeLists.txt`) and vcpkg third-party package builds (via
-`cpp/custom-triplets/x64-linux.cmake` + `cpp/CMake/ccache-toolchain.cmake`). A full clean
-rebuild populates the cache; subsequent clean rebuilds (e.g. in a new worktree) run ~3–5× faster.
+`ccache` is auto-detected on Linux and applied to ArcticDB source files only (via
+`CMAKE_C/CXX_COMPILER_LAUNCHER` in `CMakeLists.txt`). vcpkg third-party dependencies are not
+cached via ccache — vcpkg has its own binary cache and dependencies are rarely rebuilt. A full
+clean build populates the cache; subsequent clean builds (e.g. in a new worktree) run ~3–5× faster.
 
 Conda and macOS builds use `sccache` instead (configured in `CMakePresets.json`); ccache is
 not activated for those presets.

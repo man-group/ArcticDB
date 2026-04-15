@@ -38,8 +38,8 @@ The vcpkg-based build requires certain system packages that may not be installed
 sudo apt install pkg-config flex bison libsasl2-dev ccache -y
 ```
 
-`ccache` is optional but strongly recommended — it is auto-detected and used for both ArcticDB
-and vcpkg third-party dependency builds, giving ~3–5× faster rebuilds after the first clean build.
+`ccache` is optional but strongly recommended — it is auto-detected and applied to ArcticDB source
+builds, giving ~3–5× faster rebuilds after the first clean build.
 
 Initialize git submodules (required for vcpkg):
 
