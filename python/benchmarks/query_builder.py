@@ -94,7 +94,9 @@ class QueryBuilderFunctions:
         result = self.lib.read(self.symbol, query_builder=q)
         assert not result.data.empty
 
-    def time_filtering_string_equality(self, *args):
+    def time_filtering_string_equality(self, lib_for_storage, num_rows, storage):
+        if num_rows == 1_000_000:
+            raise SkipNotImplemented("Too variable at 1M rows")
         q = QueryBuilder()
         q = q[q["id1"] == "id001"]
         result = self.lib.read(self.symbol, columns=["v3"], query_builder=q)
@@ -122,7 +124,9 @@ class QueryBuilderFunctions:
         result = self.lib.read(self.null_symbol, columns=["v3"], query_builder=q)
         assert not result.data.empty
 
-    def time_filtering_string_equality_with_nulls(self, *args):
+    def time_filtering_string_equality_with_nulls(self, lib_for_storage, num_rows, storage):
+        if num_rows == 1_000_000:
+            raise SkipNotImplemented("Too variable at 1M rows")
         q = QueryBuilder()
         q = q[q["id1"] == "id001"]
         result = self.lib.read(self.null_symbol, columns=["v3"], query_builder=q)
