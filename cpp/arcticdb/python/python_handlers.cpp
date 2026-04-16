@@ -181,7 +181,7 @@ void PythonStringHandler::handle_type(
         } else {
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
             column.buffer().add_external_block(
-                    dest_column.bytes_at(m.offset_bytes_, m.num_rows_ * sizeof(PyObject*)), bytes
+                    dest_column.bytes_at(m.offset_bytes_, bytes), bytes
             );
             return column;
         }

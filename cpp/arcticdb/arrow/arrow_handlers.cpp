@@ -532,12 +532,20 @@ void ArrowTimestampHandler::handle_type(
     const auto& ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
-    Column decoded_data{
-            m.source_type_desc_,
-            bytes / get_type_size(m.source_type_desc_.data_type()),
-            AllocationType::DYNAMIC,
-            Sparsity::PERMITTED
-    };
+    auto decoded_data = [&m, bytes, &dest_column]() -> Column {
+        const bool num_non_empty_rows = bytes / get_type_size(m.source_type_desc_.data_type());
+        const bool is_sparse = num_non_empty_rows < m.num_rows_;
+        if (is_sparse) {
+            return Column(m.source_type_desc_, num_non_empty_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+        } else {
+            Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
+            // Point to dest_column's buffer without owning it.
+            column.buffer().add_external_block(
+                    dest_column.bytes_at(m.offset_bytes_, bytes), bytes
+            );
+            return column;
+        }
+    }();
 
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
@@ -551,7 +559,7 @@ void ArrowTimestampHandler::convert_type(
         const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&,
         const std::shared_ptr<StringPool>&, const ReadOptions&
 ) const {
-    auto* dest = dest_column.bytes_at(m.offset_bytes_, m.dest_bytes_);
+    auto* dest = reinterpret_cast<timestamp*>(dest_column.bytes_at(m.offset_bytes_, m.dest_bytes_));
     const auto positions = get_positions_after_truncation(m);
 
     const bool is_sparse = source_column.opt_sparse_map().has_value();
@@ -565,7 +573,7 @@ void ArrowTimestampHandler::convert_type(
         for_each_enumerated_flattened<TimestampTag>(
                 source_column,
                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                    reinterpret_cast<timestamp*>(dest)[en.idx()] = en.value();
+                    dest[en.idx()] = en.value();
                     if (en.value() != NaT) {
                         inserter = en.idx() - first_idx;
                     }
@@ -573,17 +581,23 @@ void ArrowTimestampHandler::convert_type(
                 first_idx,
                 end_idx
         );
+        inserter.flush();
     } else {
         const auto* src = reinterpret_cast<const timestamp*>(source_column.data().buffer().data());
+        if (src != dest) {
+            // This is 3x faster than folding into the sparse case above and doing for_each_enumerated over source
         memcpy(dest, src, m.num_rows_ * sizeof(timestamp));
+        }
 
         for (size_t i = first_idx; i < end_idx; ++i) {
-            if (src[i] != NaT) {
+            // Will invert the validity map below, as we expect fewer values to actually be NaT.
+            if (dest[i] == NaT) {
                 inserter = i - first_idx;
             }
         }
+        inserter.flush();
+        validity.invert();
     }
-    inserter.flush();
 
     validity.resize(end_idx - first_idx);
 

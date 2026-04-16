@@ -229,6 +229,31 @@ def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, 
     assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
 
 
+def test_datetime_col_with_nats_and_sparse(lmdb_version_store_arrow):
+    # Arrow writes store nulls as sparse gaps. To get NaT sentinels (int64 min) alongside
+    # sparse data, we write the sentinel as a valid (non-null) timestamp value.
+    # On read, the handler must detect both sparse gaps AND NaT sentinels as nulls.
+    lib = lmdb_version_store_arrow
+    lib.set_output_format(OutputFormat.PYARROW)
+    nat_sentinel = np.iinfo(np.int64).min
+    values = np.array([
+        1735689600000000000,  # 2025-01-01
+        nat_sentinel,
+        0,
+        nat_sentinel,
+        1735776000000000000,  # 2025-01-02
+        0,
+    ], dtype=np.int64)
+    mask = np.array([False, False, True, False, False, True])
+    timestamps = pa.array(values, type=pa.timestamp("ns"), mask=mask)
+    table = pa.table({"x": timestamps, "y": pa.array([1, 2, 3, 4, 5, 6])})
+    lib.write("arrow", table)
+    result = lib.read("arrow").data
+    # Positions 1,3 have NaT sentinel → null. Positions 2,5 are Arrow nulls (sparse) → null.
+    expected_nulls = [False, True, True, True, False, True]
+    assert result.column("x").is_null().to_pylist() == expected_nulls
+
+
 def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):
     lib = lmdb_version_store_arrow
     df = pd.DataFrame(
