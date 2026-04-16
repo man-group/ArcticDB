@@ -10,6 +10,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
+
+# Use ccache if available and no compiler launcher is already configured (e.g. sccache via presets)
+if(NOT CMAKE_C_COMPILER_LAUNCHER AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        set(CMAKE_C_COMPILER_LAUNCHER "env;CCACHE_HARDLINK=1;${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "env;CCACHE_HARDLINK=1;${CCACHE_PROGRAM}")
+        message(STATUS "Using ccache: ${CCACHE_PROGRAM} (CCACHE_DIR=$ENV{CCACHE_DIR})")
+    endif()
+endif()
+
 project(arcticdb VERSION 0.0.1)
 
 enable_testing()
@@ -75,6 +86,17 @@ if(ARCTICDB_SANITIZER_FLAGS)
     add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
     add_link_options(${ARCTICDB_SANITIZER_FLAGS})
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
+endif()
+
+# Use mold linker if available on Linux (faster linking via async I/O; ~30% speedup over GNU ld)
+# Skipped when sanitizers are active (Clang sanitizer builds require lld).
+# Skipped when CMAKE_LINKER_TYPE is set — set that in CMakeUserPresets.json to use your own linker.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS AND NOT CMAKE_LINKER_TYPE)
+    find_program(MOLD_PROGRAM mold)
+    if(MOLD_PROGRAM)
+        add_link_options(-fuse-ld=mold)
+        message(STATUS "Using mold linker: ${MOLD_PROGRAM}")
+    endif()
 endif()
 
 if(${ARCTICDB_USING_CONDA})

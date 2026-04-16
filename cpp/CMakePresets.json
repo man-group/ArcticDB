@@ -121,7 +121,10 @@
     },
     {
       "name": "linux-debug",
-      "inherits": ["common_vcpkg", "linux"]
+      "inherits": ["common_vcpkg", "linux"],
+      "cacheVariables": {
+        "ARCTICDB_THIN_ARCHIVES": "ON"
+      }
     },
     {
       "name": "linux-conda-debug",

@@ -15,6 +15,10 @@ VENV_DIR         ?= ~/venvs
 VENV_NAME		 ?= dev-venv
 TMPDIR_OVERRIDE  ?=
 
+# ── Build directory paths ────────────────────────────────────────────────────
+_RELEASE_BUILD_DIR := cpp/out/$(RELEASE_PRESET)-build
+_DEBUG_BUILD_DIR   := cpp/out/$(DEBUG_PRESET)-build
+
 # ── Environment plumbing ─────────────────────────────────────────────────────
 # Prepend TMPDIR=... when TMPDIR_OVERRIDE is set
 _TMPDIR_ENV := $(if $(TMPDIR_OVERRIDE),TMPDIR=$(TMPDIR_OVERRIDE))
@@ -36,7 +40,7 @@ _VENV_PIP := $(VENV_DIR)/$(VENV_NAME)/bin/pip
 help: ## Show this help
 	@echo "ArcticDB Development Targets"
 	@echo ""
-	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
+	@grep -hE '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | \
 		awk -F ':.*## ' '{printf "  %-20s %s\n", $$1, $$2}'
 	@echo ""
 	@echo "Variables (set in Makefile.local or on command line):"
@@ -82,31 +86,55 @@ lint-check: ## Check formatting (no changes)
 	$(_VENV_PYTHON) build_tooling/format.py --check --type all
 
 # ── configure ────────────────────────────────────────────────────────────────
-configure: ## CMake configure (release)
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
+# Files whose changes should trigger a cmake reconfigure.
+# Makefile.local is optional; $(wildcard) at parse time is fine since the file
+# is either always present or always absent for a given developer's machine.
+_CMAKE_INPUTS := cpp/CMakeLists.txt cpp/CMakePresets.json cpp/vcpkg.json \
+                 $(wildcard Makefile.local)
 
-configure-debug: ## CMake configure (debug)
+# .configure-stamp is our own sentinel file — cmake never touches it, so its
+# mtime is fully under our control and won't interfere with cmake's internal
+# check-build-system mechanism (which uses CMakeFiles/cmake.check_cache).
+# cmake --build handles its own incremental reconfigure for files it tracks.
+#
+# CMakeUserPresets.json is evaluated via .SECONDEXPANSION ($$(wildcard ...)) so
+# that it is detected at rule-evaluation time rather than parse time — correctly
+# handling the case where a developer creates the file for the first time after
+# an initial build.
+.SECONDEXPANSION:
+$(_RELEASE_BUILD_DIR)/.configure-stamp: $(_CMAKE_INPUTS) $$(wildcard cpp/CMakeUserPresets.json)
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
+	@touch $@
+
+$(_DEBUG_BUILD_DIR)/.configure-stamp: $(_CMAKE_INPUTS) $$(wildcard cpp/CMakeUserPresets.json)
 	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(DEBUG_PRESET) cpp
+	@touch $@
+
+configure: ## CMake configure (release) — always reconfigures
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
+	@touch $(_RELEASE_BUILD_DIR)/.configure-stamp
+
+configure-debug: ## CMake configure (debug) — always reconfigures
+	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(DEBUG_PRESET) cpp
+	@touch $(_DEBUG_BUILD_DIR)/.configure-stamp
 
 # ── build ────────────────────────────────────────────────────────────────────
-build: configure ## Build arcticdb_ext (release) and symlink
-	cmake --build cpp/out/$(RELEASE_PRESET)-build -j $(CMAKE_JOBS) --target arcticdb_ext
+build: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build arcticdb_ext (release) and symlink
+	cmake --build $(_RELEASE_BUILD_DIR) -j $(CMAKE_JOBS) --target arcticdb_ext
 	$(MAKE) symlink
 
-build-debug: configure-debug ## Build arcticdb_ext (debug) and symlink
-	cmake --build cpp/out/$(DEBUG_PRESET)-build -j $(CMAKE_JOBS) --target arcticdb_ext
+build-debug: $(_DEBUG_BUILD_DIR)/.configure-stamp ## Build arcticdb_ext (debug) and symlink
+	cmake --build $(_DEBUG_BUILD_DIR) -j $(CMAKE_JOBS) --target arcticdb_ext
 	$(MAKE) symlink-debug
 
 # ── test-cpp ─────────────────────────────────────────────────────────────────
-test-cpp: ## Build and run C++ unit tests (release, FILTER= for gtest_filter)
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
-	cmake --build cpp/out/$(RELEASE_PRESET)-build -j $(CMAKE_JOBS) --target test_unit_arcticdb
-	cpp/out/$(RELEASE_PRESET)-build/arcticdb/test_unit_arcticdb $(if $(FILTER),--gtest_filter=$(FILTER))
+test-cpp: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build and run C++ unit tests (release, FILTER= for gtest_filter)
+	cmake --build $(_RELEASE_BUILD_DIR) -j $(CMAKE_JOBS) --target test_unit_arcticdb
+	$(_RELEASE_BUILD_DIR)/arcticdb/test_unit_arcticdb $(if $(FILTER),--gtest_filter=$(FILTER))
 
-test-cpp-debug: ## Build and run C++ unit tests (debug, FILTER= for gtest_filter)
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(DEBUG_PRESET) cpp
-	cmake --build cpp/out/$(DEBUG_PRESET)-build -j $(CMAKE_JOBS) --target test_unit_arcticdb
-	cpp/out/$(DEBUG_PRESET)-build/arcticdb/test_unit_arcticdb $(if $(FILTER),--gtest_filter=$(FILTER))
+test-cpp-debug: $(_DEBUG_BUILD_DIR)/.configure-stamp ## Build and run C++ unit tests (debug, FILTER= for gtest_filter)
+	cmake --build $(_DEBUG_BUILD_DIR) -j $(CMAKE_JOBS) --target test_unit_arcticdb
+	$(_DEBUG_BUILD_DIR)/arcticdb/test_unit_arcticdb $(if $(FILTER),--gtest_filter=$(FILTER))
 
 # ── symlink ──────────────────────────────────────────────────────────────────
 _EXT_SUFFIX := $(shell python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))")
@@ -141,10 +169,9 @@ wheel: ## Build a pip wheel
 		$(_VENV_PIP) wheel . --no-deps -w dist/
 
 # ── bench-cpp ────────────────────────────────────────────────────────────────
-bench-cpp: ## Build and run C++ benchmarks (release, FILTER= for benchmark_filter)
-	$(_TMPDIR_ENV) $(PROXY_CMD) cmake -DTEST=ON --preset $(RELEASE_PRESET) cpp
-	cmake --build cpp/out/$(RELEASE_PRESET)-build -j $(CMAKE_JOBS) --target benchmarks
-	cpp/out/$(RELEASE_PRESET)-build/arcticdb/benchmarks $(if $(FILTER),--benchmark_filter=$(FILTER))
+bench-cpp: $(_RELEASE_BUILD_DIR)/.configure-stamp ## Build and run C++ benchmarks (release, FILTER= for benchmark_filter)
+	cmake --build $(_RELEASE_BUILD_DIR) -j $(CMAKE_JOBS) --target benchmarks
+	$(_RELEASE_BUILD_DIR)/arcticdb/benchmarks $(if $(FILTER),--benchmark_filter=$(FILTER))
 
 # ── install-editable ─────────────────────────────────────────────────────────
 install-editable: ## Install arcticdb in editable mode
