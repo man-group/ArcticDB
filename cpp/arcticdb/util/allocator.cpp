@@ -267,12 +267,28 @@ std::pair<uint8_t*, entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::
 
 template<typename TracingPolicy, typename ClockType>
 void AllocatorImpl<TracingPolicy, ClockType>::trim() {
+    static uint64_t trim_count{0};
+    static uint64_t trim_did_work{0};
+    static uint64_t trim_total_us{0};
     /* malloc_trim is a glibc extension not available on Windows.It is possible
      * that we will end up with a larger memory footprint for not calling it, but
      * there are no windows alternatives.
      */
 #if defined(__linux__) && defined(__GLIBC__)
-    malloc_trim(0);
+    auto t0 = std::chrono::steady_clock::now();
+    if (trim_count % 100 == 99) {
+        malloc_stats();
+    }
+    trim_did_work += malloc_trim(0);
+    auto t1 = std::chrono::steady_clock::now();
+    trim_total_us += std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count();
+    ++trim_count;
+    if (trim_count % 100 == 0) {
+        malloc_stats();
+        log::version().warn("Trim count: {}", trim_count);
+        log::version().warn("Trim did work count: {}", trim_did_work);
+        log::version().warn("Average trim time: {}us", trim_total_us / trim_count);
+    }
 #endif
 }
 

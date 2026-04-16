@@ -1494,7 +1494,10 @@ class NativeVersionStore:
             per_symbol_arrow_string_format_per_column,
             **kwargs,
         )
+        t0 = time.time()
         read_results = self.version_store.batch_read(symbols, version_queries, read_queries, batch_read_options)
+        t1 = time.time()
+        # print(f"version_store.batch_read: {t1 - t0:.3f}s")
         versioned_items = []
         for i in range(len(read_results)):
             if isinstance(read_results[i], DataError):
@@ -2563,7 +2566,12 @@ class NativeVersionStore:
         )
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
-        return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
+        t0 = time.time()
+        res = self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options)
+        t1 = time.time()
+        # print(f"read_dataframe_version: {t1 - t0:.3f}s")
+        return ReadResult(*res)
+        # return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
     def _read_modify_write(
         self,
@@ -2597,6 +2605,7 @@ class NativeVersionStore:
     def _post_process_dataframe(
         self, read_result, read_query, read_options, output_format, implement_read_index=False, head=None, tail=None
     ):
+        t0 = time.time()
         # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
         if not isinstance(read_result.frame_data, ArrowOutputFrame):
             index_type = read_result.norm.df.common.WhichOneof("index_type")
@@ -2654,7 +2663,8 @@ class NativeVersionStore:
                 host=vitem.host,
                 timestamp=vitem.timestamp,
             )
-
+        t1 = time.time()
+        # print(f"_post_process_dataframe: {t1 - t0:.3f}s")
         return vitem
 
     def _compute_filter_start_end_row(self, read_result, read_query):

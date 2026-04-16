@@ -23,6 +23,7 @@ PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& 
 }
 
 py::tuple extract_numpy_arrays(PandasOutputFrame& pandas_output_frame) {
+//    auto t0 = std::chrono::steady_clock::now();
     auto frame = pandas_output_frame.release_frame();
     const size_t field_count = frame.fields().size();
     const size_t index_field_count = frame.descriptor().index().field_count();
@@ -40,9 +41,12 @@ py::tuple extract_numpy_arrays(PandasOutputFrame& pandas_output_frame) {
             column_names.emplace_back(frame.field(c).name());
         }
     }
-    return py::make_tuple(
+    auto res = py::make_tuple(
             std::move(arrays), std::move(column_names), std::move(index_column_names), frame.row_count(), frame.offset()
     );
+//    auto t1 = std::chrono::steady_clock::now();
+//    log::version().warn("extract_numpy_arrays C++: {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
+    return res;
 }
 
 } // namespace arcticdb::python_util
