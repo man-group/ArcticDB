@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import LibraryOptions
-from arcticdb_ext.exceptions import UserInputException, UnsortedDataException, SortingException
+from arcticdb_ext.exceptions import UserInputException, UnsortedDataException, UnsortedDataException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import (
     StageResult,
@@ -649,7 +649,7 @@ def test_delete_staged_data_on_failure_with_tokens_overlap(
         keys = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
         assert len(keys) == 1
     else:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             finalize(
                 arctic_api,
                 lib,

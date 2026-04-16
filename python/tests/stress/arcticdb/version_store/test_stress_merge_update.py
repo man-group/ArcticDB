@@ -5,7 +5,7 @@ from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data
 import arcticdb
 from arcticdb.version_store import VersionedItem
 import numpy as np
-from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, SortingException, StorageException
+from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, UnsortedDataException, StorageException
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import List, Optional

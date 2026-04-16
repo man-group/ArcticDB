@@ -14,7 +14,7 @@ from arcticdb.version_store import VersionedItem
 from arcticdb_ext.exceptions import SchemaException
 from arcticdb_ext.storage import KeyType
 import numpy as np
-from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, SortingException, StorageException
+from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, UnsortedDataException, StorageException
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
@@ -200,7 +200,7 @@ class TestMergeTimeseriesCommon:
             ),
         )
 
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
 
