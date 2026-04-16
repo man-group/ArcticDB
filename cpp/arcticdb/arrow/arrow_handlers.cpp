@@ -540,9 +540,7 @@ void ArrowTimestampHandler::handle_type(
         } else {
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
             // Point to dest_column's buffer without owning it.
-            column.buffer().add_external_block(
-                    dest_column.bytes_at(m.offset_bytes_, bytes), bytes
-            );
+            column.buffer().add_external_block(dest_column.bytes_at(m.offset_bytes_, bytes), bytes);
             return column;
         }
     }();
@@ -555,10 +553,9 @@ void ArrowTimestampHandler::handle_type(
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
-void ArrowTimestampHandler::convert_type(
-        const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&,
-        const std::shared_ptr<StringPool>&, const ReadOptions&
-) const {
+void ArrowTimestampHandler::
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>&, const ReadOptions&)
+                const {
     auto* dest = reinterpret_cast<timestamp*>(dest_column.bytes_at(m.offset_bytes_, m.dest_bytes_));
     const auto positions = get_positions_after_truncation(m);
 
@@ -608,9 +605,8 @@ void ArrowTimestampHandler::convert_type(
     handle_truncation(dest_column, m.truncate_);
 }
 
-std::pair<TypeDescriptor, DetachableBlockConfig> ArrowTimestampHandler::output_type_and_block_config(
-        const TypeDescriptor& input_type, std::string_view, const ReadOptions&
-) const {
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowTimestampHandler::
+        output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
     return {input_type, detachable_block_config::Regular{0}};
 }
 

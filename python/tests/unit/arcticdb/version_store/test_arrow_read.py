@@ -236,14 +236,17 @@ def test_datetime_col_with_nats_and_sparse(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     lib.set_output_format(OutputFormat.PYARROW)
     nat_sentinel = np.iinfo(np.int64).min
-    values = np.array([
-        1735689600000000000,  # 2025-01-01
-        nat_sentinel,
-        0,
-        nat_sentinel,
-        1735776000000000000,  # 2025-01-02
-        0,
-    ], dtype=np.int64)
+    values = np.array(
+        [
+            1735689600000000000,  # 2025-01-01
+            nat_sentinel,
+            0,
+            nat_sentinel,
+            1735776000000000000,  # 2025-01-02
+            0,
+        ],
+        dtype=np.int64,
+    )
     mask = np.array([False, False, True, False, False, True])
     timestamps = pa.array(values, type=pa.timestamp("ns"), mask=mask)
     table = pa.table({"x": timestamps, "y": pa.array([1, 2, 3, 4, 5, 6])})
