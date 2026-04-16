@@ -100,7 +100,36 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS AND NOT C
             add_link_options(-fuse-ld=mold)
             message(STATUS "Using mold linker: ${MOLD_PROGRAM}")
         else()
-            message(STATUS "Mold linker found but skipped: compiler does not support -fuse-ld=mold")
+            # GCC < 12 doesn't support -fuse-ld=mold but can use mold via a -B shim directory
+            # containing an `ld` symlink. mold --help prints "Usage: /real/path/to/mold ..." so
+            # we parse that to find the real binary even when MOLD_PROGRAM is a wrapper script.
+            execute_process(
+                COMMAND "${MOLD_PROGRAM}" --help
+                OUTPUT_VARIABLE _MOLD_HELP
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(_MOLD_HELP MATCHES "Usage: ([^ \n]+)")
+                get_filename_component(_MOLD_REAL_BIN_DIR "${CMAKE_MATCH_1}" DIRECTORY)
+            else()
+                get_filename_component(_MOLD_REAL_BIN_DIR "${MOLD_PROGRAM}" DIRECTORY)
+            endif()
+            set(_MOLD_SHIM_FOUND FALSE)
+            foreach(_MOLD_SHIM_CANDIDATE
+                "${_MOLD_REAL_BIN_DIR}/../libexec/mold"
+                "${_MOLD_REAL_BIN_DIR}/../lib/mold"
+            )
+                get_filename_component(_MOLD_SHIM_CANDIDATE "${_MOLD_SHIM_CANDIDATE}" ABSOLUTE)
+                if(EXISTS "${_MOLD_SHIM_CANDIDATE}/ld")
+                    add_link_options("-B${_MOLD_SHIM_CANDIDATE}")
+                    message(STATUS "Using mold linker via -B shim: ${_MOLD_SHIM_CANDIDATE}")
+                    set(_MOLD_SHIM_FOUND TRUE)
+                    break()
+                endif()
+            endforeach()
+            if(NOT _MOLD_SHIM_FOUND)
+                message(STATUS "Mold linker found but skipped: compiler does not support -fuse-ld=mold and no -B shim found")
+            endif()
         endif()
     endif()
 endif()
