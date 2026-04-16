@@ -273,7 +273,7 @@ class SegmentReslicerDenseStringStaticSchema : public ::testing::Test {
                     if constexpr (is_utf_type(type_info::data_type)) {
                         for (const auto& str : strings) {
                             auto str32 = util::utf8_to_u32(str);
-                            str32.resize(width, '\0\0\0\0');
+                            str32.resize(width, U'\0');
                             // The string pool uses string views even to represent UTF32
                             std::string_view strv{reinterpret_cast<const char*>(str32.data()), 4 * str32.size()};
                             col.push_back(string_pool->get(strv).offset());
