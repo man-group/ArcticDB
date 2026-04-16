@@ -447,7 +447,7 @@ class ColumnStatsManagement:
 class ColumnStatsWideFilter:
     """Benchmark the overhead of query builder filters that force decoding many extra columns.
 
-    Writes 10M rows with 1004 columns (4 benchmark + 500 int64 + 500 float) and create column stats on everything.
+    Writes 10M rows with 204 columns (4 benchmark + 100 int64 + 100 float) and create column stats on everything.
     The query builder ORs the main uint64 filter with a ``< 0`` condition on every extra column
     (all values are positive, so these never match). Without column stats, this forces a full table scan
     through all these columns.
@@ -466,7 +466,7 @@ class ColumnStatsWideFilter:
     param_names = ["column_stats_enabled", "storage"]
 
     NUM_ROWS = 10_000_000
-    NUM_EXTRA = 1000
+    NUM_EXTRA = 200
     ROWS_PER_CHUNK = 1_000_000
 
     def __init__(self):
@@ -541,7 +541,7 @@ class ColumnStatsWideFilter:
         n_int = self.NUM_EXTRA // 2
         n_float = self.NUM_EXTRA - n_int
 
-        # Build the QueryBuilder with 1001 OR'd conditions as a balanced tree.
+        # Build the QueryBuilder with 201 OR'd conditions as a balanced tree.
         # A left-leaning chain would exceed Python's recursion limit in the
         # recursive expression visitor in processing.py.
         q = QueryBuilder()
@@ -571,5 +571,5 @@ class ColumnStatsWideFilter:
         unset_config_int("ColumnStats.UseForQueries")
 
     def time_filter_wide(self, *args):
-        """Filter with 1001 OR'd conditions forcing decode of 1000 extra columns."""
+        """Filter with 201 OR'd conditions forcing decode of 200 extra columns."""
         self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=self.query)
