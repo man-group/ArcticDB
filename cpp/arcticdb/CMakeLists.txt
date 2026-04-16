@@ -103,11 +103,7 @@ add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
-# Libraries baked into the internal and external Linux images are found by searching various paths
-# On Windows, vcpkg will provide a "Config" which takes precedence
-if (WIN32)
-    find_package(Iconv)
-else ()
+if (NOT WIN32)
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
@@ -807,11 +803,7 @@ else()
     endif()
 endif()
 
-if (WIN32)
-    list (APPEND arcticdb_core_libraries
-            Iconv::Iconv
-            )
-else ()
+if (NOT WIN32)
 
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list (APPEND arcticdb_core_libraries stdc++fs)
