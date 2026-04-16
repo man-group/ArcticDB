@@ -1243,6 +1243,11 @@ def any_output_format(request) -> OutputFormat:
     return request.param
 
 
+@pytest.fixture(params=[OutputFormat.PYARROW, OutputFormat.POLARS])
+def arrow_output_format(request) -> OutputFormat:
+    return request.param
+
+
 @pytest.fixture(params=list(ArrowOutputStringFormat))
 def any_arrow_string_format(request) -> ArrowOutputStringFormat:
     return request.param

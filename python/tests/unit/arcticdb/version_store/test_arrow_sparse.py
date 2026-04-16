@@ -22,6 +22,7 @@ from arcticdb.options import LibraryOptions, OutputFormat
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
+from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format, undictionarify_table
 
 # In all tests in this file we test all string formats as part of a single table.
 # Since arrow writes do not support writing categorical columns we write `cat_str_col` as `large_string`
@@ -31,14 +32,6 @@ STRING_FORMAT_PER_COLUMN = {
     "large_str_col": pa.large_string(),
     "cat_str_col": pa.dictionary(pa.int32(), pa.large_string()),
 }
-
-
-def undictionarify_table(table):
-    for i, name in enumerate(table.column_names):
-        typ = table.column(i).type
-        if pa.types.is_dictionary(typ):
-            table = table.set_column(i, name, table.column(i).cast(typ.value_type))
-    return table
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -395,7 +388,7 @@ class TestSparseArrowQueryBuilder:
 
 @pytest.mark.parametrize("write_sparse", [True, False])
 @pytest.mark.parametrize("append_sparse", [True, False])
-def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_sparse):
+def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_sparse, arrow_output_format):
     lib = lmdb_version_store_arrow
     sym = "test_sparse_append_roundtrip"
     if write_sparse:
@@ -446,11 +439,15 @@ def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_
                 "cat_str_col": pa.array(str_data_2, pa.large_string()),
             }
         )
-    lib.write(sym, t1)
-    lib.append(sym, t2)
-    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+    lib.write(sym, to_format(t1, arrow_output_format))
+    lib.append(sym, to_format(t2, arrow_output_format))
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, per_column=STRING_FORMAT_PER_COLUMN),
+    ).data
     expected = pa.concat_tables([t1, t2])
-    assert expected.equals(undictionarify_table(received))
+    assert_arrow_equal(expected, undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
@@ -482,7 +479,9 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
         ),
     ],
 )
-def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_sparse, date_range):
+def test_sparse_update_roundtrip(
+    lmdb_version_store_arrow, write_sparse, update_sparse, date_range, arrow_output_format
+):
     lib = lmdb_version_store_arrow
     sym = "test_sparse_update_roundtrip"
     dates = pd.date_range("2025-01-01", periods=6)
@@ -539,8 +538,8 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
                 "cat_str_col": pa.array(update_str_data, pa.large_string()),
             }
         )
-    lib.write(sym, write_table, index_column=True)
-    lib.update(sym, update_table, index_column=True, date_range=date_range)
+    lib.write(sym, to_format(write_table, arrow_output_format), index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format), index_column=True, date_range=date_range)
 
     # Compute expected
     start = date_range[0] if date_range is not None else update_dates[0]
@@ -552,8 +551,12 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
     applied_update = update_table.filter(pa.array([start <= t <= end for t in update_ts]))
     expected = pa.concat_tables([write_before, applied_update, write_after])
 
-    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
-    assert expected.equals(undictionarify_table(received))
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, per_column=STRING_FORMAT_PER_COLUMN),
+    ).data
+    assert_arrow_equal(expected, undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
@@ -654,7 +657,9 @@ def test_sparse_dynamic_schema_combined(version_store_factory):
     ],
 )
 @pytest.mark.parametrize("row_range", [None, (2, 6)])
-def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, append_type, result_type, row_range):
+def test_sparse_dynamic_schema_type_upgrade(
+    version_store_factory, write_type, append_type, result_type, row_range, arrow_output_format
+):
     lib = version_store_factory(dynamic_schema=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib._set_allow_arrow_input()
@@ -667,8 +672,8 @@ def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, a
     t1 = pa.table({"col": make_array([1, 2, 3, 4], [False, True, False, True], write_type)})
     t2 = pa.table({"col": make_array([10, 20, 30, 40], [True, False, True, False], append_type)})
 
-    lib.write(sym, t1)
-    lib.append(sym, t2)
+    lib.write(sym, to_format(t1, arrow_output_format))
+    lib.append(sym, to_format(t2, arrow_output_format))
 
     expected = pa.table(
         {
@@ -680,9 +685,10 @@ def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, a
     if row_range is not None:
         expected = expected.slice(offset=row_range[0], length=row_range[1] - row_range[0])
 
-    received = lib.read(sym, row_range=row_range).data
-    assert received.schema.field("col").type == result_type
-    assert expected.equals(received)
+    received = lib.read(sym, row_range=row_range, output_format=arrow_output_format).data
+    received_arrow = to_format(received, OutputFormat.PYARROW)
+    assert received_arrow.schema.field("col").type == result_type
+    assert_arrow_equal(expected, received)
     received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
