@@ -533,7 +533,7 @@ void ArrowTimestampHandler::handle_type(
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
     auto decoded_data = [&m, bytes, &dest_column]() -> Column {
-        const bool num_non_empty_rows = bytes / get_type_size(m.source_type_desc_.data_type());
+        const auto num_non_empty_rows = bytes / get_type_size(m.source_type_desc_.data_type());
         const bool is_sparse = num_non_empty_rows < m.num_rows_;
         if (is_sparse) {
             return Column(m.source_type_desc_, num_non_empty_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED);
@@ -562,11 +562,11 @@ void ArrowTimestampHandler::
     const bool is_sparse = source_column.opt_sparse_map().has_value();
     const auto first_idx = positions.first_idx_after_truncation.value_or(0);
     const auto end_idx = positions.end_idx_after_truncation.value_or(m.num_rows_);
+    using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     util::BitSet validity;
     util::BitSet::bulk_insert_iterator inserter(validity);
 
     if (is_sparse) {
-        using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
         for_each_enumerated_flattened<TimestampTag>(
                 source_column,
                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
@@ -580,10 +580,15 @@ void ArrowTimestampHandler::
         );
         inserter.flush();
     } else {
-        const auto* src = reinterpret_cast<const timestamp*>(source_column.data().buffer().data());
-        if (src != dest) {
-            // This is 3x faster than folding into the sparse case above and doing for_each_enumerated over source
-        memcpy(dest, src, m.num_rows_ * sizeof(timestamp));
+        auto column_data = source_column.data();
+        auto* write_ptr = dest;
+        // 3x faster than folding this into the is_sparse case above and doing for_each_enumerated over source
+        while (auto block = column_data.next<TimestampTag>()) {
+            const auto row_count = block->row_count();
+            if (block->data() != write_ptr) {
+                memcpy(write_ptr, block->data(), row_count * sizeof(timestamp));
+            }
+            write_ptr += row_count;
         }
 
         for (size_t i = first_idx; i < end_idx; ++i) {

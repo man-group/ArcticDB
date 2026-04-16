@@ -184,9 +184,8 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
 
 
 @pytest.mark.parametrize("row_range", [None, (2, 3), (2, 5), (2, 6), (3, 5)])
-def test_datetime_col_with_nats(lmdb_version_store_tiny_segment, row_range):
-    lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.PYARROW)
+def test_datetime_col_with_nats(lmdb_version_store_arrow, row_range):
+    lib = lmdb_version_store_arrow
     df = pd.DataFrame(
         {
             "x": pd.to_datetime(

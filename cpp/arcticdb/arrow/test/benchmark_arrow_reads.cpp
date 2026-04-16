@@ -157,12 +157,14 @@ BENCHMARK(BM_arrow_string_handler)
 
 // ── Timestamp NaT handler benchmark ─────────────────────────────────────────
 
-// Args: {num_rows, nat_percentage, num_sparse, truncate_25pct}
+// Args: {num_rows, nat_percentage, num_sparse, truncate_25pct, num_source_chunks}
+// num_source_chunks: 0 or 1 = single block, >1 = multi-block source
 static void BM_arrow_timestamp_handler(benchmark::State& state) {
     const auto num_rows = static_cast<size_t>(state.range(0));
-    const auto nat_pct = static_cast<int>(state.range(1));
+    const auto nat_percentage = static_cast<size_t>(state.range(1));
     const auto num_sparse = static_cast<size_t>(state.range(2));
     const bool truncate = state.range(3) != 0;
+    const auto num_source_chunks = static_cast<size_t>(state.range(4));
 
     auto read_options = ReadOptions{};
     read_options.set_output_format(OutputFormat::ARROW);
@@ -173,17 +175,31 @@ static void BM_arrow_timestamp_handler(benchmark::State& state) {
     auto dest_size = data_type_size(dest_type_desc);
     auto sparsity = num_sparse == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
 
-    auto source_column = Column(source_type_desc, num_rows, AllocationType::DYNAMIC, sparsity);
-    const double sparsity_ratio = static_cast<double>(num_sparse) / static_cast<double>(num_rows);
-    for (size_t i = 0, num_set = 0; i < num_rows; ++i) {
-        auto expected_set = static_cast<size_t>(std::round((i + 1) * (1 - sparsity_ratio)));
-        if (num_set < expected_set) {
-            timestamp val =
-                    (i * 100 / num_rows < static_cast<size_t>(nat_pct)) ? NaT : static_cast<timestamp>(i * 1000);
-            source_column.set_scalar(i, val);
-            ++num_set;
-        }
+    std::vector<timestamp> values(num_rows);
+    for (size_t i = 0; i < num_rows; ++i) {
+        values[i] = (i % 100 < nat_percentage) ? NaT : static_cast<timestamp>(i * 1000);
     }
+
+    bool multi_block = num_source_chunks > 1;
+    auto source_column = [&]() {
+        if (multi_block) {
+            auto col = Column(source_type_desc, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+            allocate_and_fill_chunked_column<timestamp>(
+                    col, num_rows, num_rows / num_source_chunks, std::span<timestamp>(values)
+            );
+            return col;
+        }
+        auto col = Column(source_type_desc, num_rows, AllocationType::DYNAMIC, sparsity);
+        const double sparsity_ratio = static_cast<double>(num_sparse) / static_cast<double>(num_rows);
+        for (size_t i = 0, num_set = 0; i < num_rows; ++i) {
+            auto expected_set = static_cast<size_t>(std::round((i + 1) * (1 - sparsity_ratio)));
+            if (num_set < expected_set) {
+                col.set_scalar(i, values[i]);
+                ++num_set;
+            }
+        }
+        return col;
+    }();
 
     auto field_wrapper = FieldWrapper(dest_type_desc, "ts");
     auto mapping = ColumnMapping(
@@ -197,7 +213,7 @@ static void BM_arrow_timestamp_handler(benchmark::State& state) {
 
     for (auto _ : state) {
         state.PauseTiming();
-        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity, block_config);
+        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
         allocate_chunked_column(dest_column, num_rows, num_rows);
         state.ResumeTiming();
         handler.convert_type(
@@ -209,32 +225,35 @@ static void BM_arrow_timestamp_handler(benchmark::State& state) {
 
 BENCHMARK(BM_arrow_timestamp_handler)
         // Dense, no NaTs
-        ->Args({100'000, 0, 0, 0})
-        ->Args({1'000'000, 0, 0, 0})
-        ->Args({10'000'000, 0, 0, 0})
+        ->Args({100'000, 0, 0, 0, 0})
+        ->Args({1'000'000, 0, 0, 0, 0})
+        ->Args({10'000'000, 0, 0, 0, 0})
         // Dense, 25% NaTs
-        ->Args({100'000, 25, 0, 0})
-        ->Args({1'000'000, 25, 0, 0})
-        ->Args({10'000'000, 25, 0, 0})
+        ->Args({100'000, 25, 0, 0, 0})
+        ->Args({1'000'000, 25, 0, 0, 0})
+        ->Args({10'000'000, 25, 0, 0, 0})
         // Dense, 50% NaTs
-        ->Args({100'000, 50, 0, 0})
-        ->Args({1'000'000, 50, 0, 0})
-        ->Args({10'000'000, 50, 0, 0})
+        ->Args({100'000, 50, 0, 0, 0})
+        ->Args({1'000'000, 50, 0, 0, 0})
+        ->Args({10'000'000, 50, 0, 0, 0})
         // Dense, all NaTs
-        ->Args({100'000, 100, 0, 0})
-        ->Args({1'000'000, 100, 0, 0})
-        ->Args({10'000'000, 100, 0, 0})
+        ->Args({100'000, 100, 0, 0, 0})
+        ->Args({1'000'000, 100, 0, 0, 0})
+        ->Args({10'000'000, 100, 0, 0, 0})
         // Half sparse, no NaTs
-        ->Args({100'000, 0, 50'000, 0})
-        ->Args({1'000'000, 0, 500'000, 0})
+        ->Args({100'000, 0, 50'000, 0, 0})
+        ->Args({1'000'000, 0, 500'000, 0, 0})
         // Half sparse, 25% NaTs
-        ->Args({100'000, 25, 50'000, 0})
-        ->Args({1'000'000, 25, 500'000, 0})
+        ->Args({100'000, 25, 50'000, 0, 0})
+        ->Args({1'000'000, 25, 500'000, 0, 0})
         // Fully sparse
-        ->Args({100'000, 0, 100'000, 0})
-        ->Args({1'000'000, 0, 1'000'000, 0})
+        ->Args({100'000, 0, 100'000, 0, 0})
+        ->Args({1'000'000, 0, 1'000'000, 0, 0})
         // Truncated (25%-75% window), dense, 25% NaTs
-        ->Args({1'000'000, 25, 0, 1})
-        ->Args({10'000'000, 25, 0, 1})
+        ->Args({1'000'000, 25, 0, 1, 0})
+        ->Args({10'000'000, 25, 0, 1, 0})
         // Truncated, half sparse, 25% NaTs
-        ->Args({1'000'000, 25, 500'000, 1});
+        ->Args({1'000'000, 25, 500'000, 1, 0})
+        // Multi-block source (copy_frame_data_to_buffer path)
+        ->Args({1'000'000, 0, 0, 0, 10})
+        ->Args({1'000'000, 25, 0, 0, 10});
