@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticc.pb2.descriptors_pb2 import ColumnStatsHeader, ColumnStatsType
+from arcticc.pb2.column_stats_pb2 import ColumnStatsHeader, ColumnStatsType
 from google.protobuf.any_pb2 import Any as ProtobufAny
 
 from arcticdb_ext.exceptions import SchemaException, StorageException, UserInputException
@@ -803,8 +803,8 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     assert header.version == 1
     assert header_stat_count(header) == 2
     assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
-        (2, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
+        (2, ColumnStatsType.MIN_V1),
+        (2, ColumnStatsType.MAX_V1),
     }
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
     assert len(set(offsets)) == 2
@@ -815,7 +815,7 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     fields = lib_tool.read_descriptor(keys[0]).fields()
     for _, entry in header_all_entries(header):
         field_name = fields[entry.stats_seg_offset].name
-        if entry.type == ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1:
+        if entry.type == ColumnStatsType.MIN_V1:
             assert field_name == "v1_MIN(col_1)"
         else:
             assert field_name == "v1_MAX(col_1)"
@@ -827,10 +827,10 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     assert header.version == 1
     assert header_stat_count(header) == 4
     assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
-        (2, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
-        (3, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
-        (3, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
+        (2, ColumnStatsType.MIN_V1),
+        (2, ColumnStatsType.MAX_V1),
+        (3, ColumnStatsType.MIN_V1),
+        (3, ColumnStatsType.MAX_V1),
     }
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
     assert len(set(offsets)) == 4
@@ -840,20 +840,19 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
     header = read_column_stats_header(lib, sym)
 
     assert header.version == 1
-    assert (
-        len(header.ListFields()) == 2
-    )  # if you change the structure, consider whether you need to change header.version too
+    # if you change the structure, consider whether you need to change header.version too
+    assert len(header.ListFields()) == 2
     assert header_stat_count(header) == 2
     assert header_stat_pairs(header) == {
-        (3, ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1),
-        (3, ColumnStatsType.COLUMN_STATS_TYPE_MAX_V1),
+        (3, ColumnStatsType.MIN_V1),
+        (3, ColumnStatsType.MAX_V1),
     }
 
     keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
     fields = lib_tool.read_descriptor(keys[0]).fields()
     for _, entry in header_all_entries(header):
         field_name = fields[entry.stats_seg_offset].name
-        if entry.type == ColumnStatsType.COLUMN_STATS_TYPE_MIN_V1:
+        if entry.type == ColumnStatsType.MIN_V1:
             assert field_name == "v1_MIN(col_2)"
         else:
             assert field_name == "v1_MAX(col_2)"
@@ -867,6 +866,12 @@ def test_column_stats_duplicated_column_names(lmdb_version_store_tiny_segment, a
     df.columns = ["col_0", "col_1", "col_1"]
 
     lib.write(sym, df)
+    # Check we're testing the right thing
+    saved_col_names = lib.get_info(sym)["normalization_metadata"].df.common.col_names
+    assert len(saved_col_names) == 3
+    assert "col_0" in saved_col_names
+    assert "__col_col_1__1" in saved_col_names
+    assert "__col_col_1__2" in saved_col_names
 
     column_stats_dict = {"col_1": {"MINMAX"}}
     with pytest.raises(UserInputException):
@@ -949,10 +954,20 @@ def test_column_stats_none_key(lmdb_version_store_tiny_segment, any_output_forma
         lib.drop_column_stats(sym, column_stats_dict)
 
 
-@pytest.mark.parametrize("level_name", ("level", "__idx__level"), ids=("user_name", "mangled_name"))
-def test_column_stats_multiindex(lmdb_version_store_tiny_segment, any_output_format, level_name):
+@pytest.mark.parametrize(
+    "level_name, index_level_name, stored_col_name",
+    [
+        pytest.param("level", "level", "__idx__level", id="user_name"),
+        pytest.param("__idx__level", "level", "__idx__level", id="mangled_name"),
+        pytest.param("__fkidx__1", None, "__fkidx__1", id="unnamed_level"),
+    ],
+)
+def test_column_stats_multiindex(
+    lmdb_version_store_tiny_segment, any_output_format, level_name, index_level_name, stored_col_name
+):
     """Column stats on a multiindex DataFrame: stats on inner index levels and data columns.
-    The inner index level can be referenced by the user-facing name ("level") or the mangled name ("__idx__level")."""
+    The inner index level can be referenced by the user-facing name ("level"), the mangled name ("__idx__level"),
+    or the __fkidx__ name for unnamed index levels."""
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_multiindex"
@@ -964,25 +979,31 @@ def test_column_stats_multiindex(lmdb_version_store_tiny_segment, any_output_for
     dt4 = pd.Timestamp("2000-01-02T12:00")
     mi0 = pd.MultiIndex.from_arrays(
         [[dt1, dt2], [10, 20]],
-        names=["datetime", "level"],
+        names=["datetime", index_level_name],
     )
     df0 = pd.DataFrame({"val": [100, 200]}, index=mi0)
 
     mi1 = pd.MultiIndex.from_arrays(
         [[dt3, dt4], [30, 40]],
-        names=["datetime", "level"],
+        names=["datetime", index_level_name],
     )
     df1 = pd.DataFrame({"val": [300, 400]}, index=mi1)
 
     lib.write(sym, df0)
     lib.append(sym, df1)
 
+    # Check we're testing the right thing
+    saved_col_names = lib.get_info(sym)["normalization_metadata"].df.common.col_names
+    assert len(saved_col_names) == 2
+    assert stored_col_name in saved_col_names
+    assert "val" in saved_col_names
+
     full_df = pd.concat([df0, df1])
 
     # Create column stats on the inner index level and a data column
     column_stats_dict = {level_name: {"MINMAX"}, "val": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
-    assert lib.get_column_stats_info(sym) == {"__idx__level": {"MINMAX"}, "val": {"MINMAX"}}
+    assert lib.get_column_stats_info(sym) == {stored_col_name: {"MINMAX"}, "val": {"MINMAX"}}
 
     # Read and verify the stats
     stats = lib.read_column_stats(sym)
@@ -993,24 +1014,24 @@ def test_column_stats_multiindex(lmdb_version_store_tiny_segment, any_output_for
         inplace=True,
     )
     expected = expected.iloc[[0, 1]]
-    expected["v1_MIN(__idx__level)"] = [10, 30]
-    expected["v1_MAX(__idx__level)"] = [20, 40]
+    expected[f"v1_MIN({stored_col_name})"] = [10, 30]
+    expected[f"v1_MAX({stored_col_name})"] = [20, 40]
     expected["v1_MIN(val)"] = [100, 300]
     expected["v1_MAX(val)"] = [200, 400]
     assert_stats_equal(stats, expected)
 
     # QueryBuilder filter on the inner index level
     q = QueryBuilder()
-    q = q[q["__idx__level"] == 20]
+    q = q[q[stored_col_name] == 20]
     result = lib.read(sym, query_builder=q).data
-    expected_filtered = full_df.query("level == 20")
+    expected_filtered = full_df[full_df.index.get_level_values(1) == 20]
     pd.testing.assert_frame_equal(result, expected_filtered)
 
     # QueryBuilder filter on the data column
     q = QueryBuilder()
     q = q[q["val"] >= 300]
     result = lib.read(sym, query_builder=q).data
-    expected_filtered = full_df.query("val >= 300")
+    expected_filtered = full_df[full_df["val"] >= 300]
     pd.testing.assert_frame_equal(result, expected_filtered)
 
     # Drop stats for one column, verify the other remains
@@ -1018,7 +1039,7 @@ def test_column_stats_multiindex(lmdb_version_store_tiny_segment, any_output_for
     assert lib.get_column_stats_info(sym) == {"val": {"MINMAX"}}
 
     stats = lib.read_column_stats(sym)
-    expected.drop(columns=["v1_MIN(__idx__level)", "v1_MAX(__idx__level)"], inplace=True)
+    expected.drop(columns=[f"v1_MIN({stored_col_name})", f"v1_MAX({stored_col_name})"], inplace=True)
     assert_stats_equal(stats, expected)
 
     # Drop all remaining stats
@@ -1027,6 +1048,31 @@ def test_column_stats_multiindex(lmdb_version_store_tiny_segment, any_output_for
         lib.get_column_stats_info(sym)
     with pytest.raises(StorageException):
         lib.read_column_stats(sym)
+
+
+def test_column_stats_multiindex_same_name_as_data_col(lmdb_version_store_tiny_segment, any_output_format):
+    lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_multiindex"
+
+    dt1 = pd.Timestamp("2000-01-01")
+    dt2 = pd.Timestamp("2000-01-01T12:00")
+    mi0 = pd.MultiIndex.from_arrays(
+        [[dt1, dt2], [10, 20]],
+        names=["datetime", "level"],
+    )
+    df0 = pd.DataFrame({"level": [100, 200]}, index=mi0)
+
+    lib.write(sym, df0)
+    # Check we're testing the right thing
+    saved_col_names = lib.get_info(sym)["normalization_metadata"].df.common.col_names
+    assert len(saved_col_names) == 2
+    assert "__idx__level" in saved_col_names
+    assert "level" in saved_col_names
+
+    column_stats_dict = {"level": {"MINMAX"}}
+    with pytest.raises(UserInputException):
+        lib.create_column_stats(sym, column_stats_dict)
 
 
 def test_column_stats_multiindex_outer_level_not_possible(lmdb_version_store_tiny_segment, any_output_format):

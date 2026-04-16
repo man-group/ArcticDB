@@ -164,7 +164,7 @@ StatsVariantData compute_stats(
 }
 
 ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDescriptor& tsd) {
-    using namespace arcticc::pb2::descriptors_pb2;
+    using namespace arcticc::pb2::column_stats_pb2;
     if (segment.row_count() == 0) {
         return;
     }
@@ -175,6 +175,7 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
     util::check(metadata != nullptr, "Column stats segment has no metadata");
     bool unpacked = metadata->UnpackTo(&header);
     util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
+    validate_column_stats_header_version(header);
 
     std::unordered_map<size_t, std::pair<std::string, ColumnStatsType>> stats_at_column_index;
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
@@ -215,10 +216,10 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
 
             auto& stats = stats_row.stats_for_column[col_name];
             switch (stat_type) {
-            case COLUMN_STATS_TYPE_MIN_V1:
+            case MIN_V1:
                 stats.min = value;
                 break;
-            case COLUMN_STATS_TYPE_MAX_V1:
+            case MAX_V1:
                 stats.max = value;
                 break;
             default:

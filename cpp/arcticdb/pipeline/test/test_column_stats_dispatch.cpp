@@ -1467,8 +1467,8 @@ INSTANTIATE_TEST_SUITE_P(
 // Helper to build a column stats SegmentInMemory with the expected schema:
 //   col 0: "start_index" (NANOSECONDS_UTC64)
 //   col 1: "end_index"   (NANOSECONDS_UTC64)
-//   col 2: min of "price" (INT64)
-//   col 3: max of "price" (INT64)
+//   col 2: "v1_MIN(price)" (INT64)
+//   col 3: "v1_MAX(price)" (INT64)
 //
 // Each entry in |rows| is (start_index, end_index, min_price, max_price).
 // If a row's start_index is std::nullopt, that row has an absent start_index
@@ -1490,7 +1490,7 @@ TimeseriesDescriptor build_test_tsd() {
 }
 
 SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
-    using namespace arcticc::pb2::descriptors_pb2;
+    using namespace arcticc::pb2::column_stats_pb2;
 
     auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
     auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
@@ -1532,10 +1532,10 @@ SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
     auto& entry_list = (*header.mutable_stats_by_column())[price_data_col_offset];
     auto* min_entry = entry_list.add_entries();
     min_entry->set_stats_seg_offset(2); // col 2 in the stats segment
-    min_entry->set_type(COLUMN_STATS_TYPE_MIN_V1);
+    min_entry->set_type(MIN_V1);
     auto* max_entry = entry_list.add_entries();
     max_entry->set_stats_seg_offset(3); // col 3 in the stats segment
-    max_entry->set_type(COLUMN_STATS_TYPE_MAX_V1);
+    max_entry->set_type(MAX_V1);
 
     google::protobuf::Any any;
     any.PackFrom(header);

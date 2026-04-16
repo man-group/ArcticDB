@@ -3,6 +3,7 @@
 #include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
+#include <column_stats.pb.h>
 #include <ankerl/unordered_dense.h>
 #include <map>
 #include <set>
@@ -17,7 +18,7 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
 // Total universe of column stats we support - min and max are treated separately here
-using ColumnStatTypeInternal = arcticc::pb2::descriptors_pb2::ColumnStatsType;
+using ColumnStatTypeInternal = arcticc::pb2::column_stats_pb2::ColumnStatsType;
 
 static const char* const start_index_column_name = "start_index";
 static constexpr size_t start_index_column_offset = 0;
@@ -33,11 +34,13 @@ struct NameAndStatTypes {
     }
 };
 
+void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header);
+
 class ColumnStats {
   public:
     explicit ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats);
     explicit ColumnStats(
-            const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
+            const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
     );
 
     // Returns the segment column names of the dropped stats (e.g. "v1_MIN(col)", "v1_MAX(col)")

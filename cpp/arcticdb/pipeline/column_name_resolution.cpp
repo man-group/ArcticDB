@@ -54,7 +54,7 @@ std::vector<OffsetAndMangledName> find_offset_and_mangled_name(
             }
             res.emplace_back(i, field_name, field_name);
             column_names.erase(it);
-        } else if (found_column_names.count(field_name)) {
+        } else if (found_column_names.contains(field_name)) {
             // field_name was already matched and erased from column_names — duplicate in the descriptor
             duplicated_column_names.insert(field_name);
         } else {

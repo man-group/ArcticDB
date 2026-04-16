@@ -8,6 +8,7 @@
 
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <column_stats.pb.h>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -1984,7 +1985,7 @@ void create_column_stats_impl(
     }
 
     if (old_segment) {
-        arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader old_header;
         bool unpacked = old_segment->metadata()->UnpackTo(&old_header);
         util::check(
                 unpacked,
@@ -2035,7 +2036,7 @@ void create_column_stats_impl(
                 "Cannot create column stats, existing column stats row-groups do not match"
         );
         // Merge the ColumnStatsHeader metadata from old and new segments
-        arcticc::pb2::descriptors_pb2::ColumnStatsHeader old_header;
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader old_header;
         auto* old_metadata = old_segment->metadata();
         if (!old_metadata) {
             log::version().warn(
@@ -2044,9 +2045,12 @@ void create_column_stats_impl(
             store->update(column_stats_key, std::move(new_segment), update_opts).get();
             return;
         }
-        old_metadata->UnpackTo(&old_header);
-        arcticc::pb2::descriptors_pb2::ColumnStatsHeader new_header;
-        new_segment.metadata()->UnpackTo(&new_header);
+        bool unpacked = old_metadata->UnpackTo(&old_header);
+        util::check(unpacked, "Could not unpack column stats metadata from the old header?");
+        validate_column_stats_header_version(old_header);
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
+        unpacked = new_segment.metadata()->UnpackTo(&new_header);
+        util::check(unpacked, "Could not unpack column stats metadata from the new header?");
         auto next_offset = old_segment->descriptor().field_count();
         for (const auto& [data_col_offset, entry_list] : new_header.stats_by_column()) {
             auto& merged_entry_list = (*old_header.mutable_stats_by_column())[data_col_offset];
@@ -2101,7 +2105,7 @@ void drop_column_stats_impl(
     auto segment_in_memory = std::move(stats_try).value().second;
     auto tsd = std::move(tsd_try).value().second;
 
-    arcticc::pb2::descriptors_pb2::ColumnStatsHeader column_stats_header;
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader column_stats_header;
     auto* metadata = segment_in_memory.metadata();
     if (!metadata) {
         log::version().warn("Found Column Stats key without metadata? {}", column_stats_key);
@@ -2119,7 +2123,7 @@ void drop_column_stats_impl(
         store->remove_key(column_stats_key, remove_opts).get();
     } else {
         ankerl::unordered_dense::set<std::string> dropped_names_set(dropped_names.begin(), dropped_names.end());
-        arcticc::pb2::descriptors_pb2::ColumnStatsHeader new_header;
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
         new_header.set_version(column_stats_header.version());
         // Stats columns start at field index 2 (after start_index=0 and end_index=1)
         auto new_offset = static_cast<size_t>(index::Fields::end_index) + 1;
@@ -2176,7 +2180,7 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
         }
         auto tsd = store->read_timeseries_descriptor(versioned_item.key_).get().second;
 
-        arcticc::pb2::descriptors_pb2::ColumnStatsHeader column_stats_header;
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader column_stats_header;
         bool unpacked = metadata->UnpackTo(&column_stats_header);
         util::check(unpacked, "Failed to unpack column stats header while getting column stats info");
         return ColumnStats{column_stats_header, tsd};

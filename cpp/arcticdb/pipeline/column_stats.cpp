@@ -5,8 +5,6 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
-#include <semimap/semimap.h>
-
 namespace arcticdb {
 
 SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments) {
@@ -18,17 +16,17 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
     ankerl::unordered_dense::map<std::string, size_t> field_name_to_index;
     std::vector<TypeDescriptor> type_descriptors;
     std::vector<std::string> field_names;
-    std::vector<arcticc::pb2::descriptors_pb2::ColumnStatsType> stat_types;
+    std::vector<arcticc::pb2::column_stats_pb2::ColumnStatsType> stat_types;
     std::vector<size_t> data_col_offsets;
     for (auto& segment : segments) {
-        arcticc::pb2::descriptors_pb2::ColumnStatsHeader header;
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
         auto metadata = segment.metadata();
         util::check(metadata != nullptr, "Column stats segment has no metadata");
         bool unpacked = metadata->UnpackTo(&header);
         util::check(unpacked, "Could not unpack column stats metadata?");
 
         // Build reverse lookup: stats_seg_offset -> (data_col_offset, type)
-        ankerl::unordered_dense::map<uint32_t, std::pair<uint32_t, arcticc::pb2::descriptors_pb2::ColumnStatsType>>
+        ankerl::unordered_dense::map<uint32_t, std::pair<uint32_t, arcticc::pb2::column_stats_pb2::ColumnStatsType>>
                 offset_lookup;
         for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
             for (const auto& entry : entry_list.entries()) {
@@ -65,8 +63,8 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
         }
     }
 
-    arcticc::pb2::descriptors_pb2::ColumnStatsHeader merged_header;
-    merged_header.set_version(1); // see descriptors.proto for explanation of the versioning scheme
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader merged_header;
+    merged_header.set_version(1); // see column_stats.proto for explanation of the versioning scheme
     auto end_index_offset = static_cast<size_t>(index::Fields::end_index);
     size_t stat_idx = 0;
     for (const auto& [idx, type_descriptor] : folly::enumerate(type_descriptors)) {
@@ -93,36 +91,46 @@ SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& 
 }
 
 std::string type_to_operator_string(ColumnStatTypeInternal type) {
-    struct Tag {};
-    using TypeToOperatorStringMap = semi::static_map<ColumnStatTypeInternal, std::string, Tag>;
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_TYPE_MIN_V1) = "v1_MIN";
-    TypeToOperatorStringMap::get(ColumnStatTypeInternal::COLUMN_STATS_TYPE_MAX_V1) = "v1_MAX";
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            TypeToOperatorStringMap::contains(type), "Unknown column stat type requested"
-    );
-    return TypeToOperatorStringMap::get(type);
+    switch (type) {
+    case ColumnStatTypeInternal::MIN_V1:
+        return "v1_MIN";
+    case ColumnStatTypeInternal::MAX_V1:
+        return "v1_MAX";
+    default:
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type requested");
+    }
 }
 
 std::string type_to_name(ColumnStatType type) {
-    struct Tag {};
-    using TypeToNameMap = semi::static_map<ColumnStatType, std::string, Tag>;
-    TypeToNameMap::get(ColumnStatType::MINMAX) = "MINMAX";
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            TypeToNameMap::contains(type), "Unknown column stat type requested"
-    );
-    return TypeToNameMap::get(type);
+    switch (type) {
+    case ColumnStatType::MINMAX:
+        return "MINMAX";
+    default:
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type requested");
+    }
 }
 
 std::optional<ColumnStatType> name_to_type(const std::string& name) {
-    // Cannot use static_map here as keys come from user input
-    semi::map<std::string, ColumnStatType> name_to_type_map;
-    name_to_type_map.get("MINMAX") = ColumnStatType::MINMAX;
-    return name_to_type_map.contains(name) ? std::make_optional<ColumnStatType>(name_to_type_map.get(name))
-                                           : std::nullopt;
+    if (name == "MINMAX") {
+        return ColumnStatType::MINMAX;
+    }
+    return std::nullopt;
 }
 
 std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type) {
     return fmt::format("{}({})", type_to_operator_string(type), column);
+}
+
+void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header) {
+    auto version = header.version();
+    if (version > 1) {
+        log::version().warn(
+                "This client only understands column stats version 1 but has encountered version={}. Upgrade your "
+                "ArcticDB "
+                "installation.",
+                version
+        );
+    }
 }
 
 ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats) {
@@ -141,26 +149,20 @@ ColumnStats::ColumnStats(const std::unordered_map<std::string, std::unordered_se
 }
 
 ColumnStats::ColumnStats(
-        const arcticc::pb2::descriptors_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
+        const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header, const TimeseriesDescriptor& tsd
 ) {
-    using namespace arcticc::pb2::descriptors_pb2;
-    auto version = header.version();
-    compatibility::check<ErrorCode::E_UNRECOGNISED_COLUMN_STATS_VERSION>(
-            version == 1,
-            "This client only understands column stats version 1 but has encountered version={}. Upgrade your ArcticDB "
-            "installation.",
-            version
-    );
+    using namespace arcticc::pb2::column_stats_pb2;
+    validate_column_stats_header_version(header);
 
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
         for (const auto& entry : entry_list.entries()) {
             ColumnStatType external_type;
             switch (entry.type()) {
-            case COLUMN_STATS_TYPE_MIN_V1:
-            case COLUMN_STATS_TYPE_MAX_V1:
+            case MIN_V1:
+            case MAX_V1:
                 external_type = ColumnStatType::MINMAX;
                 break;
-            case COLUMN_STATS_TYPE_UNKNOWN:
+            case UNKNOWN:
             default:
                 log::version().warn(
                         "Unrecognised column stats type in header. Upgrade your ArcticDB installation. Skipping stat."
@@ -205,13 +207,12 @@ void ColumnStats::calculate_offsets(const TimeseriesDescriptor& tsd, utils::Miss
 
 namespace {
 std::unordered_set<ColumnStatTypeInternal> external_to_internal(ColumnStatType type) {
-    struct Tag {};
-    using Map = semi::static_map<ColumnStatType, std::unordered_set<ColumnStatTypeInternal>, Tag>;
-    Map::get(ColumnStatType::MINMAX) = std::unordered_set{
-            ColumnStatTypeInternal::COLUMN_STATS_TYPE_MIN_V1, ColumnStatTypeInternal::COLUMN_STATS_TYPE_MAX_V1
-    };
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(Map::contains(type), "Unknown column stat type");
-    return Map::get(type);
+    switch (type) {
+    case ColumnStatType::MINMAX:
+        return {ColumnStatTypeInternal::MIN_V1, ColumnStatTypeInternal::MAX_V1};
+    default:
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown column stat type");
+    }
 }
 } // namespace
 
@@ -288,12 +289,12 @@ std::optional<Clause> ColumnStats::clause() const {
                 index_generation_aggregators->emplace_back(MinMaxAggregator(
                         ColumnName(name_and_stat_types.mangled_name),
                         offset,
-                        ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_TYPE_MIN_V1
-                        )),
-                        ColumnName(to_segment_column_name(
-                                name_and_stat_types.mangled_name, ColumnStatTypeInternal::COLUMN_STATS_TYPE_MAX_V1
-                        ))
+                        ColumnName(
+                                to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MIN_V1)
+                        ),
+                        ColumnName(
+                                to_segment_column_name(name_and_stat_types.mangled_name, ColumnStatTypeInternal::MAX_V1)
+                        )
                 ));
                 break;
             default:

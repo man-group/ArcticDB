@@ -336,36 +336,3 @@ message SymbolListDescriptor
     bool enabled = 1;
 }
 
-enum ColumnStatsType {
-    // Older clients reading a new enum value written by a newer client will decode to this first
-    // element, so make sure they don't mis-interpret it as a statistic they understand.
-    // https://protobuf.dev/best-practices/dos-donts/#unspecified-enum
-    COLUMN_STATS_TYPE_UNKNOWN = 0;
-
-    // The version numbers here refer to the format of a given statistic. For example we might start
-    // off saving string min and max truncated to 8 bytes in a uint64_t, and later change to saving it truncated
-    // to a different length. That would necessitate a COLUMN_STATS_MIN_V2 so that old readers do not
-    // misinterpret the new statistics format.
-    COLUMN_STATS_TYPE_MIN_V1 = 1;
-    COLUMN_STATS_TYPE_MAX_V1 = 2;
-}
-
-message StatEntry {
-    uint32 stats_seg_offset = 1;  // offset in to fields in the KeyType::COLUMN_STATS's StreamDescriptor
-    ColumnStatsType type = 2;
-}
-
-message StatEntryList {
-    repeated StatEntry entries = 1;
-}
-
-// Stored in the user defined metadata for KeyType::COLUMN_STATS
-message ColumnStatsHeader {
-    // This version number refers to the format of this header structure.
-    // Increment the version number if the meaning of the fields changes, to help older clients
-    // avoid mis-interpreting data written by newer clients.
-    uint32 version = 1;
-    // key = data_col_offset (offset in to TimeseriesDescriptor#fields_ in the Index key)
-    map<uint32, StatEntryList> stats_by_column = 2;
-    // end of fields in version 1
-}
