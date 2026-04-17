@@ -25,6 +25,7 @@ from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
 def generic_compact_data_test(lib, sym, method_arg=None):
+    qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
     vit_before_compaction = lib.read(sym)
     expected = vit_before_compaction.data
@@ -64,6 +65,7 @@ def generic_compact_data_test(lib, sym, method_arg=None):
 
 
 def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
+    qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
     vit_before_compaction = lib.read(sym)
     expected = vit_before_compaction.data
