@@ -24,7 +24,7 @@ fi
 export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
-    $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v \
+    $catch python -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
@@ -35,7 +35,7 @@ if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     if [ "$exit_code" -eq 137 ]; then
         echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
         sleep 5
-        $catch python -m pytest --timeout=3600 -n 2 -v \
+        $catch python -m pytest --timeout=3600 --timeout_method=thread -n 2 -v \
             --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
             --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
             --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
@@ -46,7 +46,7 @@ else
     echo "Executing tests with additional pytest argiments:"
     echo "from user: $ARCTICDB_PYTEST_ARGS"
     echo "from automation: $PYTEST_ADD_TO_COMMAND_LINE"
-    $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v \
+    $catch python -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
@@ -57,7 +57,7 @@ else
     if [ "$exit_code" -eq 137 ]; then
         echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
         sleep 5
-        $catch python -m pytest --timeout=3600 -n 2 -v \
+        $catch python -m pytest --timeout=3600 --timeout_method=thread -n 2 -v \
             --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
             --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
             --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
