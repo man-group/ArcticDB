@@ -37,6 +37,7 @@ enum class OperationType : uint8_t {
     SUB,
     MUL,
     DIV,
+    POW,
     // Comparison
     EQ,
     NE,
@@ -70,6 +71,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(SUB)
         TO_STR(MUL)
         TO_STR(DIV)
+        TO_STR(POW)
         TO_STR(EQ)
         TO_STR(NE)
         TO_STR(LT)
@@ -103,6 +105,7 @@ struct PlusOperator;
 struct MinusOperator;
 struct TimesOperator;
 struct DivideOperator;
+struct PowOperator;
 struct MembershipOperator;
 
 namespace arithmetic_promoted_type::details {
@@ -353,6 +356,13 @@ struct DivideOperator {
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, DivideOperator>::type>
     V apply(T t, U u) {
         return static_cast<V>(t) / static_cast<V>(u);
+    }
+};
+
+struct PowOperator {
+    template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PowOperator>::type>
+    V apply(T t, U u) {
+        return static_cast<V>(std::pow(static_cast<V>(t), static_cast<V>(u)));
     }
 };
 
@@ -712,6 +722,19 @@ struct formatter<arcticdb::DivideOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::DivideOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "/");
+    }
+};
+
+template<>
+struct formatter<arcticdb::PowOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::PowOperator, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "**");
     }
 };
 

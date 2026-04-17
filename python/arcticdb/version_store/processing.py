@@ -126,6 +126,9 @@ class ExpressionNode:
     def __truediv__(self, right):
         return self._apply(right, _OperationType.DIV)
 
+    def __pow__(self, right):
+        return self._apply(right, _OperationType.POW)
+
     def __eq__(self, right):
         if is_supported_sequence(right):
             return self.isin(right)
@@ -185,6 +188,9 @@ class ExpressionNode:
 
     def __rtruediv__(self, left):
         return self._rapply(left, _OperationType.DIV)
+
+    def __rpow__(self, left):
+         return self._rapply(left, _OperationType.POW)
 
     def __rand__(self, left):
         if left is True:
