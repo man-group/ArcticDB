@@ -89,6 +89,7 @@ enum class OperationType : uint8_t {
     SUB,
     MUL,
     DIV,
+    POW,
     // Comparison
     EQ,
     NE,
@@ -122,6 +123,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(SUB)
         TO_STR(MUL)
         TO_STR(DIV)
+        TO_STR(POW)
         TO_STR(EQ)
         TO_STR(NE)
         TO_STR(LT)
@@ -155,6 +157,7 @@ struct PlusOperator;
 struct MinusOperator;
 struct TimesOperator;
 struct DivideOperator;
+struct PowOperator;
 struct MembershipOperator;
 
 namespace arithmetic_promoted_type::details {
@@ -559,6 +562,13 @@ struct GreaterThanEqualsOperator {
         if (!(*this)(lhs.max, rhs.min))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
+    };
+};
+
+struct PowOperator {
+    template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PowOperator>::type>
+    V apply(T t, U u) {
+        return static_cast<V>(std::pow(static_cast<V>(t), static_cast<V>(u)));
     }
 };
 
@@ -694,8 +704,8 @@ struct MembershipOperator {
     static constexpr bool is_signed_int = std::is_integral_v<U> && std::is_signed_v<U>;
 
   public:
-    /** This is tighter than the signatures of the special handling operator()s below to reject argument types smaller
-     * than uint64 going down the special handling via type promotion. */
+    /** This is tighter than the signatures of the special handling operator()s below to reject argument types
+     * smaller than uint64 going down the special handling via type promotion. */
     template<typename ColumnType, typename ValueSetBaseType>
     static constexpr bool needs_uint64_special_handling =
             (std::is_same_v<ColumnType, uint64_t> && is_signed_int<ValueSetBaseType>) ||
@@ -906,6 +916,19 @@ struct formatter<arcticdb::DivideOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::DivideOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "/");
+    }
+};
+
+template<>
+struct formatter<arcticdb::PowOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::PowOperator, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "**");
     }
 };
 
