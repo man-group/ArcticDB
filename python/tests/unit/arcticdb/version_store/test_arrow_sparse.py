@@ -15,6 +15,7 @@ from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.pandas import columns, data_frames
 
 import polars as pl
+from polars.testing import assert_frame_equal as polars_assert_frame_equal
 
 from arcticdb import concat
 from arcticdb.options import LibraryOptions, OutputFormat
@@ -679,15 +680,7 @@ def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, a
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
-def _assert_polars_equal(received, expected, sort_by=None, count_columns=None, sort_columns=False):
-    if sort_columns:
-        # ArcticDB and polars may return aggregated columns in different order
-        cols = sorted(received.columns)
-        received = received.select(cols)
-        expected = expected.select(cols)
-    if sort_by:
-        received = received.sort(sort_by)
-        expected = expected.sort(sort_by)
+def _assert_polars_equal_for_aggregation(received, expected, count_columns=None, check_row_order=True):
     if count_columns:
         # Polars groupby behaves differently to arcticdb groupby in two ways:
         # - Polars uses uint32 for counts where arcticdb uses uint64
@@ -696,23 +689,25 @@ def _assert_polars_equal(received, expected, sort_by=None, count_columns=None, s
             expected = expected.with_columns(
                 pl.when(pl.col(col) == 0).then(None).otherwise(pl.col(col)).cast(pl.UInt64).alias(col)
             )
-    assert received.equals(expected), (
-        f"DataFrames differ:\nreceived dtypes: {received.dtypes}\nexpected dtypes: {expected.dtypes}\n"
-        f"received:\n{received}\nexpected:\n{expected}"
+    # We use check_column_order=False because arcticdb and polars order aggregated columns differently.
+    # We use check_dtypes=False because sum in polars can have different dtype to arcticdb.
+    polars_assert_frame_equal(
+        received, expected, check_row_order=check_row_order, check_column_order=False, check_dtypes=False
     )
 
 
-def _check_query_result(lib, sym, q, expected, sort_by=None, count_columns=None, **read_kwargs):
+def _check_query_result(lib, sym, q, expected, count_columns=None, check_row_order=True, **read_kwargs):
     received = lib.read(sym, query_builder=q, **read_kwargs).data
-    _assert_polars_equal(received, expected, sort_by=sort_by, count_columns=count_columns, sort_columns=True)
+    _assert_polars_equal_for_aggregation(
+        received, expected, count_columns=count_columns, check_row_order=check_row_order
+    )
     received_pd = lib.read(sym, query_builder=q, output_format="PANDAS", **read_kwargs).data
-    if sort_by:
-        received_pd = received_pd.sort_index().reset_index()
-        expected_pyarrow = expected.sort(sort_by).to_arrow()
-    else:
-        received_pd = received_pd.reset_index()
-        expected_pyarrow = expected.to_arrow()
-    assert_frame_equal_with_arrow_for_sparse(expected_pyarrow, received_pd, check_dtype=False, check_like=True)
+    if not check_row_order:
+        expected = expected.sort(expected.columns[0])
+        received_pd = received_pd.sort_index()
+    assert_frame_equal_with_arrow_for_sparse(
+        expected.to_arrow(), received_pd.reset_index(), check_dtype=False, check_like=True
+    )
 
 
 class TestSparseArrowGroupBy:
@@ -742,7 +737,7 @@ class TestSparseArrowGroupBy:
         q = QueryBuilder().groupby(group_col).agg({agg_col: agg_op})
         expected = self.pldf.group_by(group_col).agg(getattr(pl.col(agg_col), agg_op)())
         count_columns = [agg_col] if agg_op == "count" else None
-        _check_query_result(self.lib, self.sym, q, expected, sort_by=group_col, count_columns=count_columns)
+        _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns, check_row_order=False)
 
     @pytest.mark.parametrize("group_col", ["group_str", "group_int"])
     def test_named_aggs(self, group_col):
@@ -756,7 +751,7 @@ class TestSparseArrowGroupBy:
         exprs = [getattr(pl.col(col), op)().alias(name) for name, (col, op) in agg_dict.items()]
         expected = self.pldf.group_by(group_col).agg(exprs)
         count_columns = [name for name, (_, op) in agg_dict.items() if op == "count"]
-        _check_query_result(self.lib, self.sym, q, expected, sort_by=group_col, count_columns=count_columns)
+        _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns, check_row_order=False)
 
 
 @pytest.mark.xfail(
@@ -765,6 +760,10 @@ class TestSparseArrowGroupBy:
 )
 class TestSparseArrowResample:
     sym = "test_sparse_resample"
+
+    # TODO: Also add testing for:
+    # - Aggregating string, datetime columns
+    # - Other resampling kwargs like offset, origin
 
     @pytest.fixture(autouse=True)
     def setup(self, version_store_factory):
@@ -815,10 +814,10 @@ class TestSparseArrowResample:
 
     def test_with_date_range(self):
         start, end = pd.Timestamp("2025-01-01 03:00"), pd.Timestamp("2025-01-01 08:00")
-        q = QueryBuilder().resample("3h").agg({"int_col": "sum"})
+        q = QueryBuilder().date_range((start, end)).resample("3h").agg({"int_col": "sum"})
         sliced = self.pldf.filter(pl.col("ts").is_between(start, end, closed="both"))
         expected = sliced.group_by_dynamic("ts", every="3h").agg(pl.col("int_col").sum())
-        _check_query_result(self.lib, self.sym, q, expected, date_range=(start, end))
+        _check_query_result(self.lib, self.sym, q, expected)
 
 
 class TestSparseArrowConcat:
@@ -873,7 +872,7 @@ class TestSparseArrowConcat:
         self.lib.write("sym2", t2)
         received = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect().data
         expected = pl.concat([pl.from_arrow(t1), pl.from_arrow(t2)])
-        _assert_polars_equal(received, expected)
+        polars_assert_frame_equal(received, expected)
 
     @pytest.mark.parametrize("join", ["inner", "outer"])
     @pytest.mark.parametrize(
@@ -898,7 +897,7 @@ class TestSparseArrowConcat:
         else:
             common = set(t1.column_names) & set(t2.column_names)
             expected = pl.concat([pl1.select(common), pl2.select(common)], how="vertical_relaxed")
-        _assert_polars_equal(received, expected)
+        polars_assert_frame_equal(received, expected)
 
     def test_concat_with_index(self):
         dates1 = pd.date_range("2025-01-01", periods=3, freq="h")
@@ -919,7 +918,7 @@ class TestSparseArrowConcat:
         self.lib.write("s2", t2, index_column="ts")
         received = concat(self.lib.read_batch(["s1", "s2"], lazy=True)).collect().data
         expected = pl.concat([pl.from_arrow(t1), pl.from_arrow(t2)])
-        _assert_polars_equal(received, expected)
+        polars_assert_frame_equal(received, expected)
 
     @pytest.mark.xfail(
         reason="Resample rejects sparse columns: sorted_aggregation.cpp 'Cannot aggregate column as it is sparse'",
@@ -947,4 +946,4 @@ class TestSparseArrowConcat:
         )
         combined = pl.concat([pl.from_arrow(t1), pl.from_arrow(t2)]).sort("ts")
         expected = combined.group_by_dynamic("ts", every="3h").agg(pl.col("val").sum())
-        _assert_polars_equal(received, expected, sort_by="ts")
+        polars_assert_frame_equal(received, expected)

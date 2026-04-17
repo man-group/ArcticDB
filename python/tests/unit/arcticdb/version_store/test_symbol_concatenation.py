@@ -800,18 +800,12 @@ class TestMixedArrowPandasConcat:
         self.lib = lmdb_library_factory(LibraryOptions())
         self.lib._nvs._set_allow_arrow_input()
 
-    def _write_arrow(self, sym, table, **kwargs):
-        self.lib.write(sym, table, **kwargs)
-
-    def _write_pandas(self, sym, df):
-        self.lib.write(sym, df)
-
     @pytest.mark.parametrize("arrow_first", [True, False])
     def test_no_index(self, arrow_first):
         arrow_table = pa.table({"a": [1, 2, 3], "b": [4.0, 5.0, 6.0]})
         pandas_df = pd.DataFrame({"a": [7, 8, 9], "b": [10.0, 11.0, 12.0]})
-        self._write_arrow("arrow_sym", arrow_table)
-        self._write_pandas("pandas_sym", pandas_df)
+        self.lib.write("arrow_sym", arrow_table)
+        self.lib.write("pandas_sym", pandas_df)
         symbols = ["arrow_sym", "pandas_sym"] if arrow_first else ["pandas_sym", "arrow_sym"]
         result = concat(self.lib.read_batch(symbols, lazy=True)).collect().data
         dfs = [arrow_table.to_pandas(), pandas_df] if arrow_first else [pandas_df, arrow_table.to_pandas()]
@@ -829,8 +823,8 @@ class TestMixedArrowPandasConcat:
             }
         )
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=pd.DatetimeIndex(dates2, name="ts"))
-        self._write_arrow("arrow_sym", arrow_table, index_column="ts")
-        self._write_pandas("pandas_sym", pandas_df)
+        self.lib.write("arrow_sym", arrow_table, index_column="ts")
+        self.lib.write("pandas_sym", pandas_df)
         symbols = ["arrow_sym", "pandas_sym"] if arrow_first else ["pandas_sym", "arrow_sym"]
         result = concat(self.lib.read_batch(symbols, lazy=True)).collect().data
         arrow_df = arrow_table.to_pandas().set_index("ts")
@@ -842,8 +836,8 @@ class TestMixedArrowPandasConcat:
     def test_different_columns(self, join):
         arrow_table = pa.table({"a": [1.0, 2.0], "b": [3.0, 4.0]})
         pandas_df = pd.DataFrame({"b": [5.0, 6.0], "c": [7.0, 8.0]})
-        self._write_arrow("arrow_sym", arrow_table)
-        self._write_pandas("pandas_sym", pandas_df)
+        self.lib.write("arrow_sym", arrow_table)
+        self.lib.write("pandas_sym", pandas_df)
         result = concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True), join).collect().data
         expected = pd.concat([arrow_table.to_pandas(), pandas_df], join=join, ignore_index=True)
         assert_frame_equal(result, expected, check_like=True)
@@ -857,8 +851,8 @@ class TestMixedArrowPandasConcat:
             }
         )
         pandas_df = pd.DataFrame({"val": [4, 5, 6]})
-        self._write_arrow("arrow_sym", arrow_table, index_column="ts")
-        self._write_pandas("pandas_sym", pandas_df)
+        self.lib.write("arrow_sym", arrow_table, index_column="ts")
+        self.lib.write("pandas_sym", pandas_df)
         with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
         with pytest.raises(SchemaException):
@@ -868,8 +862,8 @@ class TestMixedArrowPandasConcat:
         arrow_table = pa.table({"val": pa.array([1, 2, 3], pa.int64())})
         dates = pd.date_range("2025-01-01", periods=3, freq="h")
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=pd.DatetimeIndex(dates, name="ts"))
-        self._write_arrow("arrow_sym", arrow_table)
-        self._write_pandas("pandas_sym", pandas_df)
+        self.lib.write("arrow_sym", arrow_table)
+        self.lib.write("pandas_sym", pandas_df)
         with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
         with pytest.raises(SchemaException):
@@ -879,9 +873,33 @@ class TestMixedArrowPandasConcat:
         arrow_table = pa.table({"val": pa.array([1, 2, 3], pa.int64())})
         index = pd.MultiIndex.from_tuples([(1, "a"), (2, "b"), (3, "c")], names=["idx1", "idx2"])
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=index)
-        self._write_arrow("arrow_sym", arrow_table)
-        self._write_pandas("pandas_sym", pandas_df)
+        self.lib.write("arrow_sym", arrow_table)
+        self.lib.write("pandas_sym", pandas_df)
         with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
         with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["pandas_sym", "arrow_sym"], lazy=True)).collect()
+
+    def test_arrow_arrow_concat_no_index(self):
+        t1 = pa.table({"a": pa.array([1, 2, 3], pa.int64()), "b": pa.array([4.0, 5.0, 6.0], pa.float64())})
+        t2 = pa.table({"a": pa.array([7, 8, 9], pa.int64()), "b": pa.array([10.0, 11.0, 12.0], pa.float64())})
+        self.lib.write("sym1", t1)
+        self.lib.write("sym2", t2)
+        result = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect().data
+        expected = pd.concat([t1.to_pandas(), t2.to_pandas()], ignore_index=True)
+        assert_frame_equal(result, expected)
+
+    def test_arrow_arrow_concat_with_index(self):
+        dates1 = pd.date_range("2025-01-01", periods=3, freq="h")
+        dates2 = pd.date_range("2025-01-01T03:00:00", periods=3, freq="h")
+        t1 = pa.table(
+            {"ts": pa.Array.from_pandas(dates1, type=pa.timestamp("ns")), "val": pa.array([1, 2, 3], pa.int64())}
+        )
+        t2 = pa.table(
+            {"ts": pa.Array.from_pandas(dates2, type=pa.timestamp("ns")), "val": pa.array([4, 5, 6], pa.int64())}
+        )
+        self.lib.write("sym1", t1, index_column="ts")
+        self.lib.write("sym2", t2, index_column="ts")
+        result = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect().data
+        expected = pd.concat([t1.to_pandas().set_index("ts"), t2.to_pandas().set_index("ts")])
+        assert_frame_equal(result, expected)
