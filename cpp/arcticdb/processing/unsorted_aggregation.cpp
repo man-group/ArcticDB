@@ -11,6 +11,7 @@
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <column_stats.pb.h>
 
 #include <cmath>
 
@@ -48,8 +49,9 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             output_column_names.size()
     );
     SegmentInMemory seg;
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
     if (min_.has_value()) {
-        details::visit_type(min_->data_type(), [&output_column_names, &seg, this](auto col_tag) {
+        details::visit_type(min_->data_type(), [&output_column_names, &seg, &header, this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
             auto min_col = std::make_shared<Column>(make_scalar_type(min_->data_type()), Sparsity::PERMITTED);
             min_col->push_back<RawType>(min_->get<RawType>());
@@ -57,10 +59,23 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
             max_col->push_back<RawType>(max_->get<RawType>());
 
+            auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
+            auto* min_entry = entry_list.add_entries();
+            min_entry->set_stats_seg_offset(0);
+            min_entry->set_type(arcticc::pb2::column_stats_pb2::MIN_V1);
+            auto* max_entry = entry_list.add_entries();
+            max_entry->set_stats_seg_offset(1);
+            max_entry->set_type(arcticc::pb2::column_stats_pb2::MAX_V1);
+
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
         });
     }
+
+    google::protobuf::Any any;
+    bool packed = any.PackFrom(header);
+    util::check(packed, "Failed to pack header in to Any?");
+    seg.set_metadata(std::move(any));
     return seg;
 }
 

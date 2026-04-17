@@ -335,3 +335,4 @@ message SymbolListDescriptor
 {
     bool enabled = 1;
 }
+

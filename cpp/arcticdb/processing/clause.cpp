@@ -16,6 +16,8 @@
 #include <arcticdb/stream/merge.hpp>
 
 #include <arcticdb/processing/clause.hpp>
+
+#include <arcticdb/pipeline/column_name_resolution.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -1696,9 +1698,28 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_index_col);
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_index_col);
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader merged_header;
     for (const auto& agg_data : folly::enumerate(aggregators_data)) {
-        seg.concatenate(agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names()));
+        auto finalized = agg_data->finalize(column_stats_aggregators_->at(agg_data.index).get_output_column_names());
+        auto offset_base = seg.descriptor().field_count();
+        util::check(finalized.metadata(), "Expect finalized to have metadata, ColumnStatsGenerationClause::process");
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader sub_header;
+        bool unpacked = finalized.metadata()->UnpackTo(&sub_header);
+        util::check(unpacked, "Could not unpack meta to a ColumnStatsHeader in ColumnStatsGenerationClause#process");
+        for (const auto& [data_col_offset, entry_list] : sub_header.stats_by_column()) {
+            auto& merged_entry_list = (*merged_header.mutable_stats_by_column())[data_col_offset];
+            for (const auto& entry : entry_list.entries()) {
+                auto* new_entry = merged_entry_list.add_entries();
+                new_entry->set_stats_seg_offset(entry.stats_seg_offset() + offset_base);
+                new_entry->set_type(entry.type());
+            }
+        }
+        seg.concatenate(std::move(finalized));
     }
+    google::protobuf::Any any;
+    bool packed = any.PackFrom(merged_header);
+    util::check(packed, "Failed to pack merged_header into Any in ColumnStatsGenerationClause#process");
+    seg.set_metadata(std::move(any));
     seg.set_row_id(0);
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }

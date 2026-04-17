@@ -23,6 +23,8 @@ import attr
 import warnings
 import difflib
 from datetime import datetime
+
+from arcticdb_ext.exceptions import UserInputException
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
@@ -2384,7 +2386,14 @@ class NativeVersionStore:
         return version_query, read_options, read_query, output_format
 
     def _get_column_stats(self, column_stats):
-        return None if column_stats is None else _ColumnStats(column_stats)
+        if column_stats is None:
+            return None
+        for k, v in column_stats.items():
+            if k is None:
+                raise UserInputException("Found None key in provided column_stats")
+            if not isinstance(k, str):
+                raise UserInputException(f"Found non-str key in provided column_stats [{k}]")
+        return _ColumnStats(column_stats)
 
     def _postprocess_df_with_only_rowcount_idx(self, read_result, row_range):
         index_meta = read_result.norm.df.common.index
