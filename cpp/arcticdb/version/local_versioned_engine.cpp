@@ -433,6 +433,7 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
+    auto t0 = std::chrono::steady_clock::now();
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
@@ -443,8 +444,12 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
                 return get_version_identifier(stream_id, version_query, read_options, version);
             }
     );
-
+    auto t1 = std::chrono::steady_clock::now();
+    log::version().warn("serial: traverse version chain {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
+    auto t2 = std::chrono::steady_clock::now();
     auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+    auto t3 = std::chrono::steady_clock::now();
+    log::version().warn("read_frame_for_version with scheduling {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t3 - t2).count());
     auto& keys = root_result.frame_and_descriptor_.keys_;
     if (keys.empty()) {
         return {std::move(root_result), {}};
@@ -1381,7 +1386,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
     for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
         read_versions_futs.emplace_back(
                 std::move(opt_index_key_futs[idx])
-                        .thenValue([store = store(),
+                        .thenValueInline([store = store(),
                                     idx,
                                     &stream_ids,
                                     &version_queries,

@@ -189,7 +189,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_version_future(
 ) {
     if (version_data.count_ == 1) {
         return async::submit_io_task(CheckReloadTask{store, version_map, symbol, version_data.load_strategy_})
-                .thenValue([](std::shared_ptr<VersionMapEntry> version_map_entry) {
+                .thenValueInline([](std::shared_ptr<VersionMapEntry> version_map_entry) {
                     return VersionEntryOrSnapshot{std::move(version_map_entry)};
                 });
     } else {
@@ -201,7 +201,7 @@ folly::Future<VersionEntryOrSnapshot> set_up_version_future(
                             async::submit_io_task(
                                     CheckReloadTask{store, version_map, symbol, version_data.load_strategy_}
                             )
-                                    .thenValue([](std::shared_ptr<VersionMapEntry> version_map_entry) {
+                                    .thenValueInline([](std::shared_ptr<VersionMapEntry> version_map_entry) {
                                         return VersionEntryOrSnapshot{std::move(version_map_entry)};
                                     })
                     }
@@ -269,8 +269,7 @@ std::vector<folly::Future<std::optional<AtomKey>>> batch_get_versions_async(
         );
 
         output.push_back(std::move(version_entry_fut)
-                                 .via(&async::cpu_executor())
-                                 .thenValue([vq = version_query, sid = *symbol](auto version_or_snapshot) {
+                                 .thenValueInline([vq = version_query, sid = *symbol](auto version_or_snapshot) {
                                      return util::variant_match(
                                              version_or_snapshot,
                                              [&vq](const std::shared_ptr<VersionMapEntry>& version_map_entry) {

@@ -16,6 +16,7 @@
 namespace arcticdb {
 
 inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
+    auto t0 = std::chrono::steady_clock::now();
     if (handler_data) {
         apply_global_refcounts(*handler_data, ret.output_format);
     }
@@ -35,9 +36,12 @@ inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
     );
     auto multi_key_meta = python_util::pb_to_python(ret.multi_key_meta);
     auto node_results = python_util::node_results_to_python_list(std::move(ret.node_results));
-    return py::make_tuple(
+    auto res = py::make_tuple(
             ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, std::move(node_results)
     );
+    auto t1 = std::chrono::steady_clock::now();
+    log::version().warn("adapt_read_df {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
+    return res;
 };
 
 } // namespace arcticdb

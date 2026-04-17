@@ -958,6 +958,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     auto read_versions_or_errors =
             batch_read_internal(stream_ids, version_queries, read_queries, batch_read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
+    auto t0 = std::chrono::steady_clock::now();
     for (auto&& [idx, read_version_or_error] : folly::enumerate(read_versions_or_errors)) {
         util::variant_match(
                 read_version_or_error,
@@ -973,6 +974,8 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
                 [&res](DataError& data_error) { res.emplace_back(std::move(data_error)); }
         );
     }
+    auto t1 = std::chrono::steady_clock::now();
+    log::version().warn("create_python_read_results {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
     return res;
 }
 
@@ -1049,13 +1052,17 @@ ReadResult PythonVersionStore::read_dataframe_version(
 
     auto opt_version_and_frame =
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
-    return create_python_read_result(
+    auto t0 = std::chrono::steady_clock::now();
+    auto res = create_python_read_result(
             opt_version_and_frame.root_.versioned_item_,
             read_options.output_format(),
             std::move(opt_version_and_frame.root_.frame_and_descriptor_),
             std::nullopt,
             std::move(opt_version_and_frame.nodes_)
     );
+    auto t1 = std::chrono::steady_clock::now();
+    log::version().warn("serial: create_python_read_result {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
+    return res;
 }
 
 VersionedItem PythonVersionStore::read_modify_write(

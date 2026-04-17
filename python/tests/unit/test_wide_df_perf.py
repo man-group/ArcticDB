@@ -1,14 +1,18 @@
 from arcticdb import Arctic, LibraryOptions
+from arcticdb.config import set_log_level
 import numpy as np
 import pandas as pd
 import time
 
 rng = np.random.default_rng()
-URI = "lmdb:///tmp/script-test"
+# URI = "lmdb:///tmp/script-test"
+URI = "lmdb://lmdb"
 NUM_SYMBOLS = 20
 NUM_ROWS = 320
 NUM_COLUMNS = 35_000
 ITERATIONS = 1
+
+set_log_level(specific_log_levels={"schedule": "DEBUG"})
 
 
 def generate_sample_data():

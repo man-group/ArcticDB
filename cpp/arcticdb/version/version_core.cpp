@@ -2798,17 +2798,20 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<std::any> handler_data
 ) {
-    auto start_pipeline = [store, read_query, read_options, handler_data](VersionIdentifier&& resolved_version) {
+    auto t0 = std::make_shared<std::chrono::steady_clock::time_point>();
+    auto t1 = std::make_shared<std::chrono::steady_clock::time_point>();
+    auto start_pipeline = [store, read_query, read_options, handler_data, t0, t1](VersionIdentifier&& resolved_version) {
+        *t0 = std::chrono::steady_clock::now();
         auto res_versioned_item = generate_result_versioned_item(resolved_version);
-        return async::submit_io_task(
+        return async::submit_cpu_task(
                        SetupPipelineContextTask{store, std::move(resolved_version), read_query, read_options}
         )
-                .via(&async::cpu_executor())
-                .thenValue([store,
+                .thenValueInline([store,
                             read_query,
                             read_options,
                             res_versioned_item = std::move(res_versioned_item),
-                            handler_data](auto&& pipeline_context) mutable {
+                            handler_data,
+                            t0, t1](auto&& pipeline_context) mutable {
                     if (pipeline_context->multi_key_) {
                         if (read_query) {
                             check_can_perform_processing(pipeline_context, *read_query);
@@ -2831,7 +2834,8 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                         read_options,
                                         handler_data,
                                         read_query,
-                                        shared_data](auto&& frame) mutable {
+                                        shared_data,
+                                        t0, t1](auto&& frame) mutable {
                                 ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
                                 return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
                                         .via(&async::cpu_executor())
@@ -2839,9 +2843,10 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                                     pipeline_context,
                                                     frame,
                                                     read_query,
-                                                    shared_data](auto&&) mutable {
+                                                    shared_data,
+                                                    t0, t1](auto&&) mutable {
                                             set_row_id_if_index_only(*pipeline_context, frame, *read_query);
-                                            return ReadVersionOutput{
+                                            auto res = ReadVersionOutput{
                                                     std::move(res_versioned_item),
                                                     {frame,
                                                      timeseries_descriptor_from_pipeline_context(
@@ -2849,6 +2854,9 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                                      ),
                                                      {}}
                                             };
+                                            *t1 = std::chrono::steady_clock::now();
+                                            log::version().warn("read_frame_for_version running {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(*t1 - *t0).count());
+                                            return res;
                                         });
                             });
                 });

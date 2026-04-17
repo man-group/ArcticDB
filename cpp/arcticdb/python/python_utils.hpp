@@ -247,6 +247,7 @@ inline py::list node_results_to_python_list(std::vector<NodeReadResult>&& node_r
 }
 
 inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::any* const handler) {
+    auto t0 = std::chrono::steady_clock::now();
     auto ret = std::move(r);
     py::list lst;
     std::optional<OutputFormat> output_format = std::nullopt;
@@ -283,6 +284,8 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
     if (handler && output_format.has_value()) {
         apply_global_refcounts(*handler, *output_format);
     }
+    auto t1 = std::chrono::steady_clock::now();
+    log::version().warn("adapt_read_dfs {}ms", std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count());
     return lst;
 }
 
