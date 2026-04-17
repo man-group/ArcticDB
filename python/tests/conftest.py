@@ -7,6 +7,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
+import faulthandler
+import sys
 from typing import Callable, Generator, Iterable, Union
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import NativeVersionStore
@@ -105,6 +107,11 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
+# Timeout for faulthandler's C-level deadlock watchdog (seconds).
+# Disabled by default (0). CI sets this via ARCTICDB_FAULTHANDLER_TIMEOUT in
+# parallel_test.sh to catch GIL-holding deadlocks that pytest-timeout can't kill.
+_FAULTHANDLER_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_TIMEOUT", "0"))
+
 
 # Ensure pytest-xdist uses 'fork' start method on macOS
 @pytest.fixture(scope="session", autouse=True)
@@ -124,6 +131,30 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Arm faulthandler's C-level timer before each test.
+
+    Unlike pytest-timeout's thread method, dump_traceback_later() is
+    implemented entirely in C and does NOT need the GIL.  This means it
+    can kill the process and dump tracebacks even when C++ extension code
+    is holding the GIL indefinitely.
+    """
+    if _FAULTHANDLER_TIMEOUT > 0:
+        faulthandler.dump_traceback_later(
+            _FAULTHANDLER_TIMEOUT,
+            exit=True,
+            file=sys.stderr,
+        )
+    return None  # Let the default protocol run
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Cancel the faulthandler timer after each test completes."""
+    faulthandler.cancel_dump_traceback_later()
 
 
 if platform.system() == "Linux":

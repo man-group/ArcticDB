@@ -22,6 +22,12 @@ if [ "$VERSION_MAP_RELOAD_INTERVAL" != "-1" ]; then
 fi
 
 export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+# Enable faulthandler so SIGSEGV/SIGBUS dump tracebacks to stderr
+export PYTHONFAULTHANDLER=1
+# Arm a C-level watchdog that dumps all thread tracebacks and exits if a single
+# test hangs for this many seconds.  Fires even when C++ holds the GIL.
+# Must be shorter than --timeout (3600s) and the GH Actions step timeout (5400s).
+export ARCTICDB_FAULTHANDLER_TIMEOUT=3300
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
     $catch python -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
