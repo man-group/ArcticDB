@@ -4230,7 +4230,7 @@ class NativeVersionStore:
             If symbol doesn't exist and `upsert=False`
         UserInputException
             If strategy is not one of the supported strategies listed above
-        SortingException
+        UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
             If dynamic schema is used or if source's schema is incompatible with target's schema

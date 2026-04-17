@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pandas as pd
 import numpy as np
 import pytest
-from arcticdb_ext.exceptions import SortingException, InternalException
+from arcticdb_ext.exceptions import UnsortedDataException, InternalException
 from arcticdb.version_store import _store as store
 
 try:
@@ -59,7 +59,7 @@ def test_read_unsorted_date_range_dataframe(lmdb_version_store):
     lmdb_version_store.write(symbol, df)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "UNSORTED"
-    with pytest.raises(SortingException) as e_info:
+    with pytest.raises(UnsortedDataException) as e_info:
         data = lmdb_version_store.read(
             symbol, date_range=(DateRange(pd.Timestamp("2019-01-03"), pd.Timestamp("2019-01-06")))
         ).data
@@ -85,7 +85,7 @@ def test_batch_read_unsorted_date_range_dataframe(lmdb_version_store):
     info2 = lmdb_version_store.get_info(symbol2)
     assert info1["sorted"] == "UNSORTED"
     assert info2["sorted"] == "UNSORTED"
-    with pytest.raises(SortingException) as e_info:
+    with pytest.raises(UnsortedDataException) as e_info:
         batch_res = lmdb_version_store.batch_read(
             [symbol1, symbol2],
             date_ranges=[
@@ -127,7 +127,7 @@ def test_read_unsorted_date_range_dataframe_multi_index(lmdb_version_store):
     lmdb_version_store.write(symbol, df)
     info = lmdb_version_store.get_info(symbol)
     assert info["sorted"] == "UNSORTED"
-    with pytest.raises(SortingException) as e_info:
+    with pytest.raises(UnsortedDataException) as e_info:
         data = lmdb_version_store.read(
             symbol, date_range=(DateRange(pd.Timestamp("2019-01-03"), pd.Timestamp("2019-01-06")))
         ).data

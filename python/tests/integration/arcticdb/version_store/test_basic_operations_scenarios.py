@@ -20,12 +20,11 @@ from arcticdb.util.test_utils import DFGenerator, generate_random_series, set_se
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
-from arcticdb.exceptions import ArcticNativeException, SortingException
+from arcticdb.exceptions import ArcticNativeException, UnsortedDataException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
 
 from arcticdb_ext.exceptions import (
-    UnsortedDataException,
     InternalException,
     NormalizationException,
     UserInputException,
@@ -355,9 +354,9 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     assert len(lib.list_versions()) == 4 if dynamic_schema else 3
 
     # Validate that validate_index works as expected
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lib.append(symbol, df_not_sorted, validate_index=True)
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lib.append(symbol, df_not_sorted, validate_index=True, incomplete=True)
     result2 = lib.append(symbol, df_not_sorted, validate_index=False)
     assert result2.version == result.version + 1

@@ -20,7 +20,7 @@ from arcticdb.util.test import random_floats, random_strings_of_length
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.version_store.library import ReadRequest, StagedDataFinalizeMethod, WritePayload
-from arcticdb_ext.exceptions import SortingException
+from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb_ext.version_store import AtomKey, RefKey
 from packaging import version
 
@@ -181,10 +181,10 @@ def test_parallel_writes_and_appends_index_validation(ac_library, finalize_metho
     lib.write(sym, df_1, staged=True)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(sym, finalize_method)
     elif validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(sym, finalize_method, validate_index=True)
     else:
         lib.finalize_staged_data(sym, finalize_method, validate_index=False)
