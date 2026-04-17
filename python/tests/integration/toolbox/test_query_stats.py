@@ -764,3 +764,11 @@ def test_query_stats_in_mem_delete(in_memory_version_store, clear_query_stats):
     for key_type in ("SNAPSHOT", "SNAPSHOT_REF"):
         assert lists[key_type]["count"] == 2
         assert lists[key_type]["size_bytes"] == 0
+
+
+def test_query_stats_disabled_after_exception(clear_query_stats):
+    import arcticdb_ext.tools.query_stats as qs_ext
+    with pytest.raises(RuntimeError):
+        with qs.query_stats():
+            raise RuntimeError("boom")
+    assert not qs_ext.is_enabled()
