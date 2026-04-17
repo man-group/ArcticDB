@@ -14,7 +14,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import LibraryOptions
-from arcticdb_ext.exceptions import UserInputException, UnsortedDataException, UnsortedDataException
+from arcticdb_ext.exceptions import UserInputException, UnsortedDataException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import (
     StageResult,

@@ -28,7 +28,6 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.library import Library
-from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb_ext.storage import KeyType
 
 from arcticdb import util, LibraryOptions

@@ -25,7 +25,6 @@ from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
 
 from arcticdb_ext.exceptions import (
-    UnsortedDataException,
     InternalException,
     NormalizationException,
     UserInputException,
