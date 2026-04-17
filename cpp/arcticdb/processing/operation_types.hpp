@@ -175,62 +175,80 @@ struct binary_operation_promoted_type {
                             double>,
                     // Otherwise, both types are integers
                     std::conditional_t<
-                            std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
-                            // Both types are unsigned
+                            std::is_same_v<Func, PowOperator>,
+                            // Pow operator special handling for integer types
                             std::conditional_t<
-                                    std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, TimesOperator>,
-                                    /* Plus and Times operators can overflow if using max_width, so promote to a wider
-                                     * unsigned type e.g. 255*255 (both uint8_t's) = 65025, requiring uint16_t to hold
-                                     * the result */
-                                    arithmetic_promoted_type::details::unsigned_width_t<2 * max_width>,
+                                    std::is_unsigned_v<RHS>,
+                                    // Exponent is unsigned
                                     std::conditional_t<
-                                            std::is_same_v<Func, MinusOperator>,
-                                            /* The result of Minus with two unsigned types can be negative
-                                             * Can also underflow if using max_width, so promote to a wider signed type
-                                             * e.g. 0 - 255 (both uint8_t's) = -255, requiring int16_t to hold the
-                                             * result */
-                                            arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                                            // IsIn/IsNotIn operators, just use the type of the widest input
-                                            arithmetic_promoted_type::details::unsigned_width_t<max_width>>>,
+                                            std::is_unsigned_v<LHS>,
+                                            // uint ^ uint -> uint64
+                                            uint64_t,
+                                            // int ^ uint -> int64
+                                            int64_t>,
+                                    // Exponent is signed -> always double
+                                    // (negative exponent produces fractional results)
+                                    // uint ^ int -> double
+                                    // int ^ int -> double
+                                    double>,
+                            // Non-pow integer operations
                             std::conditional_t<
-                                    std::is_signed_v<LHS> && std::is_signed_v<RHS>,
-                                    // Both types are signed integers (as we are in the "else" of the floating point
-                                    // checks)
+                                    std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
+                                    // Both types are unsigned
                                     std::conditional_t<
-                                            std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> ||
-                                                    std::is_same_v<Func, TimesOperator>,
-                                            /* Plus, Minus, and Times operators can overflow if using max_width, so
-                                             * promote to a wider signed type e.g. -100*100 (both int8_t's) = -10000,
-                                             * requiring int16_t to hold the result */
-                                            arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                                            // IsIn/IsNotIn operators, just use the type of the widest input
-                                            arithmetic_promoted_type::details::signed_width_t<max_width>>,
-                                    // We have one signed and one unsigned type
-                                    std::conditional_t<
-                                            std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> ||
-                                                    std::is_same_v<Func, TimesOperator>,
-                                            // Plus, Minus, and Times operators can overflow if using max_width, so
-                                            // promote to a wider signed type
-                                            arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                                            // IsIn/IsNotIn Operator
+                                            std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, TimesOperator>,
+                                            /* Plus and Times operators can overflow if using max_width, so promote to a wider
+                                             * unsigned type e.g. 255*255 (both uint8_t's) = 65025, requiring uint16_t to hold
+                                             * the result */
+                                            arithmetic_promoted_type::details::unsigned_width_t<2 * max_width>,
                                             std::conditional_t<
-                                                    (std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) ||
-                                                            (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
-                                                    // If the signed type is strictly larger than the unsigned type,
-                                                    // then promote to the signed type
-                                                    arithmetic_promoted_type::details::signed_width_t<max_width>,
-                                                    // Otherwise, check if the unsigned one is the widest type we
-                                                    // support
+                                                    std::is_same_v<Func, MinusOperator>,
+                                                    /* The result of Minus with two unsigned types can be negative
+                                                     * Can also underflow if using max_width, so promote to a wider signed type
+                                                     * e.g. 0 - 255 (both uint8_t's) = -255, requiring int16_t to hold the
+                                                     * result */
+                                                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
+                                                    // IsIn/IsNotIn operators, just use the type of the widest input
+                                                    arithmetic_promoted_type::details::unsigned_width_t<max_width>>>,
+                                    std::conditional_t<
+                                            std::is_signed_v<LHS> && std::is_signed_v<RHS>,
+                                            // Both types are signed integers (as we are in the "else" of the floating point
+                                            // checks)
+                                            std::conditional_t<
+                                                    std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> ||
+                                                            std::is_same_v<Func, TimesOperator>,
+                                                    /* Plus, Minus, and Times operators can overflow if using max_width, so
+                                                     * promote to a wider signed type e.g. -100*100 (both int8_t's) = -10000,
+                                                     * requiring int16_t to hold the result */
+                                                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
+                                                    // IsIn/IsNotIn operators, just use the type of the widest input
+                                                    arithmetic_promoted_type::details::signed_width_t<max_width>>,
+                                            // We have one signed and one unsigned type
+                                            std::conditional_t<
+                                                    std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> ||
+                                                            std::is_same_v<Func, TimesOperator>,
+                                                    // Plus, Minus, and Times operators can overflow if using max_width, so
+                                                    // promote to a wider signed type
+                                                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
+                                                    // IsIn/IsNotIn Operator
                                                     std::conditional_t<
-                                                            std::is_same_v<LHS, uint64_t> ||
-                                                                    std::is_same_v<RHS, uint64_t>,
-                                                            // Retains ValueSetBaseType in binary_membership(), which
-                                                            // handles mixed int64/uint64 operations gracefully
-                                                            RHS,
-                                                            // There should be a signed type wider than the unsigned
-                                                            // type, so both can be exactly represented
-                                                            arithmetic_promoted_type::details::signed_width_t<
-                                                                    2 * max_width>>>>>>>>;
+                                                            (std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) ||
+                                                                    (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
+                                                            // If the signed type is strictly larger than the unsigned type,
+                                                            // then promote to the signed type
+                                                            arithmetic_promoted_type::details::signed_width_t<max_width>,
+                                                            // Otherwise, check if the unsigned one is the widest type we
+                                                            // support
+                                                            std::conditional_t<
+                                                                    std::is_same_v<LHS, uint64_t> ||
+                                                                            std::is_same_v<RHS, uint64_t>,
+                                                                    // Retains ValueSetBaseType in binary_membership(), which
+                                                                    // handles mixed int64/uint64 operations gracefully
+                                                                    RHS,
+                                                                    // There should be a signed type wider than the unsigned
+                                                                    // type, so both can be exactly represented
+                                                                    arithmetic_promoted_type::details::signed_width_t<
+                                                                            2 * max_width>>>>>>>>>;
 };
 
 template<class LHS, class RHS>
