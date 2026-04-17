@@ -17,7 +17,7 @@ import dateutil
 
 from arcticdb import OutputFormat
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
@@ -309,7 +309,11 @@ def test_querybuilder_date_range_then_row_range(
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 def test_querybuilder_date_range_then_filter(
-    lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
+    lmdb_version_store_tiny_segment,
+    batch,
+    use_date_range_clause,
+    any_output_format,
+    column_stats_filtering_enabled_and_disabled,
 ):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -318,6 +322,7 @@ def test_querybuilder_date_range_then_filter(
         {"col1": np.arange(10), "col2": np.arange(100, 110)}, index=pd.date_range("2000-01-01", periods=10)
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
 
     date_range = (pd.Timestamp("2000-01-04"), pd.Timestamp("2000-01-07"))
 
@@ -340,7 +345,9 @@ def test_querybuilder_date_range_then_filter(
     assert_frame_equal(expected, received)
 
 
-def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_date_range_then_filter_then_resample(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
     # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
     def round(t, freq):
@@ -357,6 +364,7 @@ def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_ti
         index=pd.date_range("2000-01-01", periods=100, freq="h"),
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"filter_col": {"MINMAX"}, "agg_col": {"MINMAX"}})
 
     date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
     q = QueryBuilder()
@@ -566,13 +574,18 @@ def test_querybuilder_row_range_then_row_range(
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 def test_querybuilder_row_range_then_filter(
-    lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
+    lmdb_version_store_tiny_segment,
+    batch,
+    use_row_range_clause,
+    any_output_format,
+    column_stats_filtering_enabled_and_disabled,
 ):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
 
     row_range = (3, 7)
 
@@ -707,12 +720,15 @@ def test_querybuilder_row_range_then_resample(
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_querybuilder_filter_then_date_range(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_filter_then_date_range(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_date_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["col"].isin(2, 3, 7)]
     q = q.date_range((pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-08")))
@@ -723,12 +739,15 @@ def test_querybuilder_filter_then_date_range(lmdb_version_store_tiny_segment, an
 
 
 @pytest.mark.parametrize("n", range(-7, 8))
-def test_querybuilder_filter_then_head(lmdb_version_store_tiny_segment, n, any_output_format):
+def test_querybuilder_filter_then_head(
+    lmdb_version_store_tiny_segment, n, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_head"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["col"].isin(4, 5, 6, 8, 10)]
     q = q.head(n)
@@ -740,12 +759,15 @@ def test_querybuilder_filter_then_head(lmdb_version_store_tiny_segment, n, any_o
 
 
 @pytest.mark.parametrize("n", range(-7, 8))
-def test_querybuilder_filter_then_tail(lmdb_version_store_tiny_segment, n, any_output_format):
+def test_querybuilder_filter_then_tail(
+    lmdb_version_store_tiny_segment, n, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_head"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["col"].isin(4, 5, 6, 8, 10)]
     q = q.tail(n)
@@ -756,12 +778,15 @@ def test_querybuilder_filter_then_tail(lmdb_version_store_tiny_segment, n, any_o
     assert_frame_equal(expected, received)
 
 
-def test_querybuilder_filter_then_row_range(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_filter_then_row_range(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_row_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["col"].isin(4, 5, 6, 8, 10)]
     q = q.row_range((1, 4))
@@ -772,12 +797,15 @@ def test_querybuilder_filter_then_row_range(lmdb_version_store_tiny_segment, any
     assert_frame_equal(expected, received)
 
 
-def test_querybuilder_filter_then_filter(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_filter_then_filter(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["col1"].isin(2, 3, 7)]
@@ -788,7 +816,9 @@ def test_querybuilder_filter_then_filter(lmdb_version_store_tiny_segment, any_ou
     assert_frame_equal(expected, received)
 
 
-def test_querybuilder_filter_then_project(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_filter_then_project(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_project"
@@ -796,6 +826,7 @@ def test_querybuilder_filter_then_project(lmdb_version_store_tiny_segment, any_o
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["col1"].isin(2, 3, 7)]
@@ -825,7 +856,9 @@ def test_querybuilder_filter_then_groupby(lmdb_version_store_tiny_segment_dynami
     assert_frame_equal(expected, received)
 
 
-def test_querybuilder_filter_then_resample(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_filter_then_resample(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_resample"
@@ -833,6 +866,7 @@ def test_querybuilder_filter_then_resample(lmdb_version_store_tiny_segment, any_
     idx = np.array(idx, dtype="datetime64[ns]")
     df = pd.DataFrame({"col": np.arange(6)}, index=idx)
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[(q["col"] != 1) & (q["col"] != 5)]
@@ -879,7 +913,9 @@ def test_querybuilder_project_then_row_range(lmdb_version_store_tiny_segment, an
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_querybuilder_project_then_filter(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_project_then_filter(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_filter"
@@ -887,6 +923,7 @@ def test_querybuilder_project_then_filter(lmdb_version_store_tiny_segment, any_o
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col1": {"MINMAX"}, "col2": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
@@ -961,7 +998,9 @@ def test_querybuilder_project_then_resample(lmdb_version_store_tiny_segment, any
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_querybuilder_groupby_then_filter(lmdb_version_store_tiny_segment_dynamic_strings, any_output_format):
+def test_querybuilder_groupby_then_filter(
+    lmdb_version_store_tiny_segment_dynamic_strings, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_groupby_then_filter"
@@ -970,6 +1009,7 @@ def test_querybuilder_groupby_then_filter(lmdb_version_store_tiny_segment_dynami
         index=np.arange(10),
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col2": {"MINMAX"}})
     q = QueryBuilder()
     q = q.groupby("col1").agg({"col2": "sum"})
     q = q[(q["col1"] != "b") & (q["col2"] != 9)]
@@ -1055,7 +1095,9 @@ def test_querybuilder_resample_then_row_range(lmdb_version_store_tiny_segment, a
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_querybuilder_resample_then_filter(lmdb_version_store_tiny_segment, any_output_format):
+def test_querybuilder_resample_then_filter(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_filter"
@@ -1063,6 +1105,7 @@ def test_querybuilder_resample_then_filter(lmdb_version_store_tiny_segment, any_
     idx = np.array(idx, dtype="datetime64[ns]")
     df = pd.DataFrame({"col": np.arange(6)}, index=idx)
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"col": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q.resample("us").agg({"col": "sum"})
@@ -1217,8 +1260,8 @@ def test_to_strings():
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_output_format):
-    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+def test_column_select_projected_column(in_memory_store_factory, dynamic_schema, any_output_format):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     lib.write(sym, pd.DataFrame({"a": [1, 2], "b": ["a", "b"], "c": [5, 6]}))
@@ -1230,12 +1273,12 @@ def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_ou
     qs.reset_stats()
     expected = pd.DataFrame({"new_column": [3, 4]})
     assert_frame_equal(expected, result)
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_schema, any_output_format):
-    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+def test_column_select_projected_column_and_filter_it(in_memory_store_factory, dynamic_schema, any_output_format):
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     lib.write(sym, pd.DataFrame({"b": ["a", "b"], "c": [5, 6], "a": [1, 2]}))
@@ -1248,15 +1291,15 @@ def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_
     qs.reset_stats()
     expected = pd.DataFrame({"new_column": [4]})
     assert_frame_equal(expected, result)
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("column_to_read", ["b", "c"])
 def test_filter_synthetic_column_and_select_on_disk_column(
-    s3_store_factory, dynamic_schema, column_to_read, any_output_format
+    in_memory_store_factory, dynamic_schema, column_to_read, any_output_format
 ):
-    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+    lib = in_memory_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     df = pd.DataFrame({"a": [1, 2], "b": [7, 8], "c": [5, 6]})
@@ -1276,4 +1319,4 @@ def test_filter_synthetic_column_and_select_on_disk_column(
         # Column c is in the second column slice. This means that we must read the first column slice to perform the
         # filter and then read the second column slice to return the requested column
         data_keys_count = 2
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == data_keys_count
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == data_keys_count

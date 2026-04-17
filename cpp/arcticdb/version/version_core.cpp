@@ -8,6 +8,7 @@
 
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <column_stats.pb.h>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -19,6 +20,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
+#include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/name_validation.hpp>
@@ -634,7 +636,7 @@ VersionedItem update_impl(
 
 folly::Future<ReadVersionOutput> read_multi_key(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
-        std::any& handler_data, AtomKey&& key
+        std::shared_ptr<std::any> handler_data, AtomKey&& key
 ) {
     std::vector<AtomKey> keys;
     keys.reserve(index_key_seg.row_count());
@@ -1241,23 +1243,8 @@ FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const Ve
 }
 
 std::optional<index::IndexSegmentReader> get_index_segment_reader(
-        Store& store, const std::shared_ptr<PipelineContext>& pipeline_context, const VersionedItem& version_info
+        const std::shared_ptr<PipelineContext>& pipeline_context, std::pair<VariantKey, SegmentInMemory>&& index_key_seg
 ) {
-    std::pair<VariantKey, SegmentInMemory> index_key_seg = [&]() {
-        try {
-            return store.read_sync(version_info.key_);
-        } catch (const std::exception& ex) {
-            ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", version_info.key_, ex.what());
-            throw storage::NoDataFoundException(fmt::format(
-                    "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
-                    version_info.version(),
-                    version_info.symbol(),
-                    version_info.key_,
-                    ex.what()
-            ));
-        }
-    }();
-
     if (variant_key_type(index_key_seg.first) == KeyType::MULTI_KEY) {
         pipeline_context->multi_key_ = std::move(index_key_seg.second);
         return std::nullopt;
@@ -1338,9 +1325,14 @@ void check_can_perform_processing(
 }
 
 static void read_indexed_keys_to_pipeline(
-        const std::shared_ptr<PipelineContext>& pipeline_context, index::IndexSegmentReader&& index_segment_reader,
-        ReadQuery& read_query, const ReadOptions& read_options
+        const std::shared_ptr<PipelineContext>& pipeline_context, ReadQuery& read_query,
+        const ReadOptions& read_options, IndexInformation& index_information
 ) {
+    auto maybe_reader = get_index_segment_reader(pipeline_context, std::move(index_information.index_));
+    if (!maybe_reader)
+        return;
+
+    auto index_segment_reader = std::move(*maybe_reader);
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_can_read_index_only_if_required(index_segment_reader, read_query);
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
@@ -1355,6 +1347,12 @@ static void read_indexed_keys_to_pipeline(
             read_query, pipeline_context, dynamic_schema, bucketize_dynamic
     );
 
+    if (index_information.column_stats_.has_value()) {
+        auto column_stats_filter =
+                create_column_stats_filter(std::move(*index_information.column_stats_), tsd, read_query.clauses_);
+        queries.push_back(std::move(column_stats_filter));
+    }
+
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
@@ -1368,10 +1366,10 @@ static void read_indexed_keys_to_pipeline(
     check_can_perform_processing(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
-            "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows",
+            "read_indexed_keys_to_pipeline: Symbol {} found {} keys with {} total rows",
+            pipeline_context->stream_id_,
             pipeline_context->slice_and_keys_.size(),
-            pipeline_context->total_rows_,
-            pipeline_context->stream_id_
+            pipeline_context->total_rows_
     );
 }
 
@@ -1792,13 +1790,13 @@ struct CopyToBufferTask : async::BaseTask {
     FrameSlice frame_slice_;
     uint32_t required_fields_count_;
     DecodePathData shared_data_;
-    std::any& handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     const ReadOptions read_options_;
     std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment, SegmentInMemory target_segment, FrameSlice frame_slice,
-            uint32_t required_fields_count, DecodePathData shared_data, std::any& handler_data,
+            uint32_t required_fields_count, DecodePathData shared_data, std::shared_ptr<std::any> handler_data,
             const ReadOptions& read_options, std::shared_ptr<PipelineContext> pipeline_context
     ) :
         source_segment_(std::move(source_segment)),
@@ -1828,7 +1826,7 @@ struct CopyToBufferTask : async::BaseTask {
                         idx,
                         frame_slice_.row_range,
                         shared_data_,
-                        handler_data_,
+                        *handler_data_,
                         read_options_,
                         {}
                 );
@@ -1854,7 +1852,7 @@ struct CopyToBufferTask : async::BaseTask {
                         idx,
                         frame_slice_.row_range,
                         shared_data_,
-                        handler_data_,
+                        *handler_data_,
                         read_options_,
                         default_value
                 );
@@ -1866,7 +1864,7 @@ struct CopyToBufferTask : async::BaseTask {
 
 folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        SegmentInMemory frame, std::any& handler_data, const ReadOptions& read_options
+        SegmentInMemory frame, std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
 ) {
     const auto required_fields_count =
             pipelines::index::required_fields_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
@@ -1891,7 +1889,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
 
 folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
@@ -1910,6 +1908,21 @@ folly::Future<SegmentInMemory> prepare_output_frame(
             .thenValue([frame](auto&&) { return frame; });
 }
 
+IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key) {
+    try {
+        auto column_stats = std::nullopt;
+        return IndexInformation{store->read_sync(key), column_stats};
+    } catch (const std::exception& ex) {
+        throw storage::NoDataFoundException(fmt::format(
+                "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                key.version_id(),
+                key.id(),
+                key,
+                ex.what()
+        ));
+    }
+}
+
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
     // Note that we use the creation timestamp and content hash of the related index key
     // This gives a strong paper-trail if archaeology is required
@@ -1925,70 +1938,134 @@ void create_column_stats_impl(
         const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
+    auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+    auto index_future = store->read(versioned_item.key_);
+
+    using OptionalSeg = std::optional<SegmentInMemory>;
+    auto column_stats_future = store->read(column_stats_key)
+                                       .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalSeg {
+                                           return std::move(key_seg.second);
+                                       });
+
+    auto [index_try, column_stats_try] =
+            folly::collectAll(std::move(index_future), std::move(column_stats_future)).get();
+
+    if (index_try.hasException()) {
+        throw storage::NoDataFoundException(fmt::format(
+                "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                versioned_item.key_.version_id(),
+                versioned_item.key_.id(),
+                versioned_item.key_,
+                index_try.exception().what()
+        ));
+    }
+
+    IndexInformation index_info(std::move(index_try).value(), std::nullopt);
+
+    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+            variant_key_type(index_info.index_.first) != KeyType::MULTI_KEY,
+            "Column stats generation not supported with recursively normalized symbols"
+    );
+    const auto& tsd = index_info.index_.second.index_descriptor();
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
+            tsd.proto().normalization().input_type_case() !=
+                    arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase::kMsgPackFrame,
+            "Cannot create column stats on pickled data"
+    );
+
+    // column_stats contains a user-specified map of string col names to stats. Map these to offsets in to the TSD's
+    // fields.
+    column_stats.calculate_offsets(tsd);
+
+    std::optional<SegmentInMemory> old_segment;
+    if (column_stats_try.hasException()) {
+        // Old column stats key doesn't exist
+    } else {
+        old_segment = std::move(column_stats_try).value();
+    }
+
+    if (old_segment) {
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader old_header;
+        bool unpacked = old_segment->metadata()->UnpackTo(&old_header);
+        util::check(
+                unpacked,
+                "Could not unpack metadata of old_header in create_column_stats_impl? key={}",
+                column_stats_key
+        );
+        ColumnStats old_column_stats(old_header, tsd);
+        // No need to redo work for any stats that already exist
+        column_stats.drop(old_column_stats, false);
+        // If all the column stats we are being asked to create already exist, there's no work to do
+        if (column_stats.empty()) {
+            return;
+        }
+    }
+
     auto clause = column_stats.clause();
     if (!clause.has_value()) {
         log::version().warn("Cannot create empty column stats");
         return;
     }
-    auto read_query = std::make_shared<ReadQuery>(
-            std::vector<std::shared_ptr<Clause>>{std::make_shared<Clause>(std::move(*clause))}
-    );
-
-    auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
-    std::optional<SegmentInMemory> old_segment;
-    try {
-        old_segment = store->read(column_stats_key).get().second;
-        ColumnStats old_column_stats{old_segment->fields()};
-        // No need to redo work for any stats that already exist
-        column_stats.drop(old_column_stats, false);
-        // If all the column stats we are being asked to create already exist, there's no work to do
-        if (column_stats.segment_column_names().empty()) {
-            return;
-        }
-    } catch (...) {
-        // Old segment doesn't exist
-    }
 
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
-    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item);
-    if (maybe_isr.has_value()) {
-        read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), *read_query, read_options);
-    }
-
-    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
-            !pipeline_context->multi_key_, "Column stats generation not supported with multi-indexed symbols"
-    );
-    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA>(
-            !pipeline_context->is_pickled(), "Cannot create column stats on pickled data"
-    );
+    auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
+    read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
     auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
             !segs.empty(), "Cannot create column stats for nonexistent columns"
     );
 
-    // Convert SliceAndKey vector into SegmentInMemory vector
     std::vector<SegmentInMemory> segments_in_memory;
     for (auto& seg : segs) {
         segments_in_memory.emplace_back(seg.release_segment(store));
     }
     SegmentInMemory new_segment = merge_column_stats_segments(segments_in_memory);
+    util::check(new_segment.metadata(), "new_segment should always have metadata");
     new_segment.descriptor().set_id(versioned_item.key_.id());
 
     storage::UpdateOpts update_opts;
     update_opts.upsert_ = true;
     if (!old_segment.has_value()) {
-        // Old segment doesn't exist, just write new one
         store->update(column_stats_key, std::move(new_segment), update_opts).get();
-        return;
     } else {
         // Check that the start and end index columns match
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 new_segment.column(0) == old_segment->column(0) && new_segment.column(1) == old_segment->column(1),
                 "Cannot create column stats, existing column stats row-groups do not match"
         );
+        // Merge the ColumnStatsHeader metadata from old and new segments
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader old_header;
+        auto* old_metadata = old_segment->metadata();
+        if (!old_metadata) {
+            log::version().warn(
+                    "Found existing Column Stats key without metadata? Just creating new stats... {}", column_stats_key
+            );
+            store->update(column_stats_key, std::move(new_segment), update_opts).get();
+            return;
+        }
+        bool unpacked = old_metadata->UnpackTo(&old_header);
+        util::check(unpacked, "Could not unpack column stats metadata from the old header?");
+        validate_column_stats_header_version(old_header);
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
+        unpacked = new_segment.metadata()->UnpackTo(&new_header);
+        util::check(unpacked, "Could not unpack column stats metadata from the new header?");
+        auto next_offset = old_segment->descriptor().field_count();
+        for (const auto& [data_col_offset, entry_list] : new_header.stats_by_column()) {
+            auto& merged_entry_list = (*old_header.mutable_stats_by_column())[data_col_offset];
+            for (const auto& entry : entry_list.entries()) {
+                auto* merged_entry = merged_entry_list.add_entries();
+                merged_entry->set_type(entry.type());
+                merged_entry->set_stats_seg_offset(next_offset++);
+            }
+        }
+        // Add new stat columns to the old segment
         old_segment->concatenate(std::move(new_segment));
+        google::protobuf::Any any;
+        any.PackFrom(old_header);
+        old_segment->reset_metadata();
+        old_segment->set_metadata(std::move(any));
         store->update(column_stats_key, std::move(*old_segment), update_opts).get();
     }
 }
@@ -2003,33 +2080,75 @@ void drop_column_stats_impl(
     if (!column_stats_to_drop.has_value()) {
         // Drop all column stats
         store->remove_key(column_stats_key, remove_opts).get();
+        return;
+    }
+
+    storage::ReadKeyOpts read_opts;
+    read_opts.dont_warn_about_missing_key = true;
+    auto stats_future = store->read(column_stats_key, read_opts);
+    auto tsd_future = store->read_timeseries_descriptor(versioned_item.key_, read_opts);
+    auto [stats_try, tsd_try] = folly::collectAll(std::move(stats_future), std::move(tsd_future)).get();
+
+    if (stats_try.hasException()) {
+        log::version().warn("No column stats exist to drop: {}", stats_try.exception().what());
+        return;
+    }
+    if (tsd_try.hasException()) {
+        log::version().warn(
+                "Could not find index key associated with stats - cannot drop: key={} error={}",
+                versioned_item.key_,
+                tsd_try.exception().what()
+        );
+        return;
+    }
+
+    auto segment_in_memory = std::move(stats_try).value().second;
+    auto tsd = std::move(tsd_try).value().second;
+
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader column_stats_header;
+    auto* metadata = segment_in_memory.metadata();
+    if (!metadata) {
+        log::version().warn("Found Column Stats key without metadata? {}", column_stats_key);
+        return;
+    }
+    bool unpacked = metadata->UnpackTo(&column_stats_header);
+    util::check(unpacked, "Failed to unpack column stats header while dropping column stats");
+    ColumnStats column_stats{column_stats_header, tsd};
+    // Ignore missing columns since dropping a non-existent column is a no-op
+    ColumnStats to_drop = *column_stats_to_drop;
+    to_drop.calculate_offsets(tsd, utils::MissingColumnsBehavior::IGNORE_MISSING);
+    auto dropped_names = column_stats.drop(to_drop);
+    if (column_stats.empty()) {
+        // Drop all column stats
+        store->remove_key(column_stats_key, remove_opts).get();
     } else {
-        SegmentInMemory segment_in_memory;
-        try {
-            segment_in_memory = store->read(column_stats_key).get().second;
-        } catch (const std::exception& e) {
-            log::version().warn("No column stats exist to drop: {}", e.what());
-            return;
-        }
-        ColumnStats column_stats{segment_in_memory.fields()};
-        column_stats.drop(*column_stats_to_drop);
-        auto columns_to_keep = column_stats.segment_column_names();
-        if (columns_to_keep.empty()) {
-            // Drop all column stats
-            store->remove_key(column_stats_key, remove_opts).get();
-        } else {
-            auto old_fields = segment_in_memory.fields().clone();
-            for (const auto& field : old_fields) {
-                auto column_name = field.name();
-                if (!columns_to_keep.contains(std::string{column_name}) && column_name != start_index_column_name &&
-                    column_name != end_index_column_name) {
-                    segment_in_memory.drop_column(column_name);
+        ankerl::unordered_dense::set<std::string> dropped_names_set(dropped_names.begin(), dropped_names.end());
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
+        new_header.set_version(column_stats_header.version());
+        // Stats columns start at field index 2 (after start_index=0 and end_index=1)
+        auto new_offset = static_cast<size_t>(index::Fields::end_index) + 1;
+        for (const auto& [data_col_offset, entry_list] : column_stats_header.stats_by_column()) {
+            for (const auto& entry : entry_list.entries()) {
+                auto field_name = std::string{segment_in_memory.descriptor().field(entry.stats_seg_offset()).name()};
+                if (dropped_names_set.count(field_name) == 0) {
+                    auto& new_entry_list = (*new_header.mutable_stats_by_column())[data_col_offset];
+                    auto* new_entry = new_entry_list.add_entries();
+                    new_entry->set_type(entry.type());
+                    new_entry->set_stats_seg_offset(new_offset++);
                 }
             }
-            storage::UpdateOpts update_opts;
-            update_opts.upsert_ = true;
-            store->update(column_stats_key, std::move(segment_in_memory), update_opts).get();
         }
+        google::protobuf::Any any;
+        any.PackFrom(new_header);
+        segment_in_memory.reset_metadata();
+        segment_in_memory.set_metadata(std::move(any));
+
+        for (const auto& name : dropped_names) {
+            segment_in_memory.drop_column(name);
+        }
+        storage::UpdateOpts update_opts;
+        update_opts.upsert_ = true;
+        store->update(column_stats_key, std::move(segment_in_memory), update_opts).get();
     }
 }
 
@@ -2052,9 +2171,19 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
-        auto stream_descriptor =
-                std::get<StreamDescriptor>(store->read_metadata_and_descriptor(column_stats_key).get());
-        return ColumnStats(stream_descriptor.fields());
+        storage::ReadKeyOpts read_opts;
+        read_opts.dont_warn_about_missing_key = true;
+        auto metadata = store->read_metadata(column_stats_key, read_opts).get().second;
+        if (!metadata) {
+            log::version().warn("Found Column Stats key without metadata? {}", column_stats_key);
+            return ColumnStats{{}};
+        }
+        auto tsd = store->read_timeseries_descriptor(versioned_item.key_).get().second;
+
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader column_stats_header;
+        bool unpacked = metadata->UnpackTo(&column_stats_header);
+        util::check(unpacked, "Failed to unpack column stats header while getting column stats info");
+        return ColumnStats{column_stats_header, tsd};
     } catch (const std::exception& e) {
         storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
     }
@@ -2063,14 +2192,14 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
 folly::Future<SegmentInMemory> do_direct_read_or_process(
         const std::shared_ptr<Store>& store, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const DecodePathData& shared_data, std::any& handler_data
+        const DecodePathData& shared_data, std::shared_ptr<std::any> handler_data
 ) {
     const bool direct_read = read_query->clauses_.empty();
     if (!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
-                .thenValue([store, pipeline_context, read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
+                .thenValue([store, pipeline_context, read_options, handler_data](std::vector<SliceAndKey>&& segs) {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
                 });
     } else {
@@ -2209,10 +2338,9 @@ static void read_indexed_keys_for_compaction(
 ) {
     const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if (append_to_existing) {
-        auto maybe_isr = get_index_segment_reader(*store, pipeline_context, *update_info.previous_index_key_);
-        if (maybe_isr.has_value()) {
-            read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), read_query, read_options);
-        }
+        const auto& key = *(update_info.previous_index_key_);
+        IndexInformation index_info = read_index_key_without_column_stats(store, key);
+        read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, index_info);
     }
 }
 
@@ -2507,12 +2635,11 @@ PredefragmentationInfo get_pre_defragmentation_info(
     pipeline_context->version_id_ = update_info.next_version_id_;
 
     auto read_query = std::make_shared<ReadQuery>();
-    auto maybe_isr = get_index_segment_reader(*store, pipeline_context, *update_info.previous_index_key_);
-    if (maybe_isr.has_value()) {
-        read_indexed_keys_to_pipeline(
-                pipeline_context, std::move(*maybe_isr), *read_query, defragmentation_read_options_generator(options)
-        );
-    }
+    const auto& key = *(update_info.previous_index_key_);
+    IndexInformation index_info = read_index_key_without_column_stats(store, key);
+    read_indexed_keys_to_pipeline(
+            pipeline_context, *read_query, defragmentation_read_options_generator(options), index_info
+    );
 
     using CompactionStartInfo = std::pair<size_t, size_t>; // row, segment_append_after
     std::vector<CompactionStartInfo> first_col_segment_idx;
@@ -2637,6 +2764,55 @@ VersionedItem defragment_symbol_data_impl(
     );
 }
 
+static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const ReadQuery& read_query
+) {
+    auto index_future = store->read(versioned_item.key_);
+
+    using OptionalKeySeg = std::optional<SegmentInMemory>;
+    const bool need_column_stats = should_try_column_stats_read(read_query);
+    folly::Future<OptionalKeySeg> column_stats_future = folly::makeFuture<OptionalKeySeg>(std::nullopt);
+    if (need_column_stats) {
+        auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+        column_stats_future =
+                store->read(column_stats_key)
+                        .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalKeySeg {
+                            return std::move(key_seg.second);
+                        });
+    }
+
+    return folly::collectAll(std::move(index_future), std::move(column_stats_future))
+            .via(&async::io_executor())
+            .thenValue([vi = versioned_item](auto&& results) -> VersionIdentifier {
+                auto& [index_try, column_stats_try] = results;
+
+                if (index_try.hasException()) {
+                    ARCTICDB_DEBUG(
+                            log::version(),
+                            "Key not found from versioned item {}: {}",
+                            vi.key_,
+                            index_try.exception().what()
+                    );
+                    throw storage::NoDataFoundException(fmt::format(
+                            "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                            vi.version(),
+                            vi.symbol(),
+                            vi.key_,
+                            index_try.exception().what()
+                    ));
+                }
+
+                if (column_stats_try.hasException()) {
+                    log::version().debug("Column stats key not found");
+                    return std::make_shared<IndexInformation>(std::move(index_try).value(), std::nullopt);
+                }
+
+                return std::make_shared<IndexInformation>(
+                        std::move(index_try).value(), std::move(column_stats_try).value()
+                );
+            });
+}
+
 void set_row_id_if_index_only(
         const PipelineContext& pipeline_context, SegmentInMemory& frame, const ReadQuery& read_query
 ) {
@@ -2647,7 +2823,7 @@ void set_row_id_if_index_only(
 }
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
+        const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
         const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
@@ -2657,19 +2833,25 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     util::variant_match(
             version_info,
             [&](const StreamId& stream_id) { pipeline_context->stream_id_ = stream_id; },
-            [&](const VersionedItem& versioned_item) {
-                pipeline_context->stream_id_ = versioned_item.key_.id();
-                auto maybe_isr = get_index_segment_reader(*store, pipeline_context, versioned_item.key_);
-                if (maybe_isr.has_value()) {
-                    read_indexed_keys_to_pipeline(pipeline_context, std::move(*maybe_isr), read_query, read_options);
-                }
+            [&](const VersionedItem&) {
+                util::raise_rte("setup_pipeline_context should not receive a bare VersionedItem; "
+                                "callers must resolve to IndexInformation first");
             },
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
                 pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
                 // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
                 // dataframe, hence the clone
-                index::IndexSegmentReader isr(preloaded_index_query->index_seg_.clone());
-                read_indexed_keys_to_pipeline(pipeline_context, std::move(isr), read_query, read_options);
+                auto missing_stats_seg = std::nullopt; // TODO aseaton support column stats with preloaded index reads,
+                                                       // for Polars plugin Monday: 11526152128
+                IndexInformation cloned_index{
+                        {preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
+                        missing_stats_seg
+                };
+                read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, cloned_index);
+            },
+            [&](const std::shared_ptr<IndexInformation>& index_info) {
+                pipeline_context->stream_id_ = to_atom(index_info->index_.first).id();
+                read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, *index_info);
             }
     );
 
@@ -2723,61 +2905,80 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
             [](const VersionedItem& versioned_item) { return versioned_item; },
             [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
                 return VersionedItem(preloaded_index_query->index_key_);
+            },
+            [](const std::shared_ptr<IndexInformation>& index_info) {
+                return VersionedItem(to_atom(index_info->index_.first));
             }
     );
 }
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
 ) {
-    return async::submit_io_task(SetupPipelineContextTask{store, version_info, read_query, read_options})
-            .via(&async::cpu_executor())
-            .thenValue([store, read_query, read_options, version_info, &handler_data](auto&& pipeline_context) {
-                auto res_versioned_item = generate_result_versioned_item(version_info);
-                if (pipeline_context->multi_key_) {
-                    if (read_query) {
-                        check_can_perform_processing(pipeline_context, *read_query);
-                    }
-                    return read_multi_key(
-                            store,
+    auto start_pipeline = [store, read_query, read_options, handler_data](VersionIdentifier&& resolved_version) {
+        auto res_versioned_item = generate_result_versioned_item(resolved_version);
+        return async::submit_io_task(
+                       SetupPipelineContextTask{store, std::move(resolved_version), read_query, read_options}
+        )
+                .via(&async::cpu_executor())
+                .thenValue([store,
+                            read_query,
                             read_options,
-                            *pipeline_context->multi_key_,
-                            handler_data,
-                            std::move(res_versioned_item.key_)
-                    );
-                }
-                ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-                DecodePathData shared_data;
-                return do_direct_read_or_process(
-                               store, read_query, read_options, pipeline_context, shared_data, handler_data
-                )
-                        .thenValue([res_versioned_item = std::move(res_versioned_item),
-                                    pipeline_context,
-                                    read_options,
-                                    &handler_data,
-                                    read_query,
-                                    shared_data](auto&& frame) mutable {
-                            ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-                            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
-                                    .via(&async::cpu_executor())
-                                    .thenValue([res_versioned_item,
-                                                pipeline_context,
-                                                frame,
-                                                read_query,
-                                                shared_data](auto&&) mutable {
-                                        set_row_id_if_index_only(*pipeline_context, frame, *read_query);
-                                        return ReadVersionOutput{
-                                                std::move(res_versioned_item),
-                                                {frame,
-                                                 timeseries_descriptor_from_pipeline_context(
-                                                         pipeline_context, {}, pipeline_context->bucketize_dynamic_
-                                                 ),
-                                                 {}}
-                                        };
-                                    });
-                        });
-            });
+                            res_versioned_item = std::move(res_versioned_item),
+                            handler_data](auto&& pipeline_context) mutable {
+                    if (pipeline_context->multi_key_) {
+                        if (read_query) {
+                            check_can_perform_processing(pipeline_context, *read_query);
+                        }
+                        return read_multi_key(
+                                store,
+                                read_options,
+                                *pipeline_context->multi_key_,
+                                handler_data,
+                                std::move(res_versioned_item.key_)
+                        );
+                    }
+                    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+                    DecodePathData shared_data;
+                    return do_direct_read_or_process(
+                                   store, read_query, read_options, pipeline_context, shared_data, handler_data
+                    )
+                            .thenValue([res_versioned_item = std::move(res_versioned_item),
+                                        pipeline_context,
+                                        read_options,
+                                        handler_data,
+                                        read_query,
+                                        shared_data](auto&& frame) mutable {
+                                ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
+                                return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+                                        .via(&async::cpu_executor())
+                                        .thenValue([res_versioned_item,
+                                                    pipeline_context,
+                                                    frame,
+                                                    read_query,
+                                                    shared_data](auto&&) mutable {
+                                            set_row_id_if_index_only(*pipeline_context, frame, *read_query);
+                                            return ReadVersionOutput{
+                                                    std::move(res_versioned_item),
+                                                    {frame,
+                                                     timeseries_descriptor_from_pipeline_context(
+                                                             pipeline_context, {}, pipeline_context->bucketize_dynamic_
+                                                     ),
+                                                     {}}
+                                            };
+                                        });
+                            });
+                });
+    };
+
+    if (std::holds_alternative<VersionedItem>(version_info)) {
+        const auto& vi = std::get<VersionedItem>(version_info);
+        return fetch_index_and_column_stats(store, vi, *read_query).thenValue(std::move(start_pipeline));
+    }
+
+    return start_pipeline(VersionIdentifier{version_info});
 }
 
 folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
@@ -2862,8 +3063,12 @@ folly::Future<VersionedItem> merge_update_impl(
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
     read_query->clauses_.push_back(std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source)));
+    VersionIdentifier resolved = version_info;
+    if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
+        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
+    }
     std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store, version_info, *read_query, read_options);
+            setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
     // TODO: Rely on modify_schema for this https://man312219.monday.com/boards/7852509418/pulses/10997979275
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             columns_match(pipeline_context->descriptor(), source_descriptor),
@@ -2932,7 +3137,10 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
-    std::shared_ptr<PipelineContext> pipeline_context = setup_pipeline_context(store, versioned_item, *read_query, {});
+    VersionIdentifier resolved =
+            std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, versioned_item.key_));
+    std::shared_ptr<PipelineContext> pipeline_context =
+            setup_pipeline_context(store, std::move(resolved), *read_query, {});
     return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
             .thenValue(
                     [pipeline_context = std::move(pipeline_context),
@@ -2988,9 +3196,9 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                         pipeline_context->slice_and_keys_.clear();
                         const size_t row_count = slices_and_keys.back().slice().row_range.second -
                                                  slices_and_keys.front().slice().row_range.first;
-                        const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                        TimeseriesDescriptor tsd = make_timeseries_descriptor(
                                 row_count,
-                                pipeline_context->descriptor(),
+                                std::move(*pipeline_context->desc_),
                                 std::move(*pipeline_context->norm_meta_),
                                 pipeline_context->user_meta_
                                         ? std::make_optional(std::move(*pipeline_context->user_meta_))
@@ -2999,6 +3207,12 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
                                 std::nullopt,
                                 write_options.bucketize_dynamic
                         );
+                        // String columns always compacted to dynamic UTF-8
+                        for (auto& field : tsd.mutable_fields()) {
+                            if (is_sequence_type(field.type().data_type())) {
+                                field.type_.data_type_ = DataType::UTF_DYNAMIC64;
+                            }
+                        }
                         return index::write_index(
                                 index_type_from_descriptor(pipeline_context->descriptor()),
                                 tsd,
@@ -3015,8 +3229,12 @@ folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
-    auto res_versioned_item = generate_result_versioned_item(version_info);
+    VersionIdentifier resolved = version_info;
+    if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
+        resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
+    }
+    auto res_versioned_item = generate_result_versioned_item(resolved);
+    auto pipeline_context = setup_pipeline_context(store, std::move(resolved), *read_query, read_options);
 
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !pipeline_context->multi_key_, "Multi-symbol joins not supported with recursively normalized data"

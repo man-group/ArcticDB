@@ -10,6 +10,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
+
+# Use ccache if available and no compiler launcher is already configured (e.g. sccache via presets)
+if(NOT CMAKE_C_COMPILER_LAUNCHER AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(CCACHE_PROGRAM ccache)
+    if(CCACHE_PROGRAM)
+        set(CMAKE_C_COMPILER_LAUNCHER "env;CCACHE_HARDLINK=1;${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "env;CCACHE_HARDLINK=1;${CCACHE_PROGRAM}")
+        message(STATUS "Using ccache: ${CCACHE_PROGRAM} (CCACHE_DIR=$ENV{CCACHE_DIR})")
+    endif()
+endif()
+
 project(arcticdb VERSION 0.0.1)
 
 enable_testing()
@@ -75,6 +86,52 @@ if(ARCTICDB_SANITIZER_FLAGS)
     add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
     add_link_options(${ARCTICDB_SANITIZER_FLAGS})
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
+endif()
+
+# Use mold linker if available on Linux (faster linking via async I/O; ~30% speedup over GNU ld)
+# Skipped when sanitizers are active (Clang sanitizer builds require lld).
+# Skipped when CMAKE_LINKER_TYPE is set — set that in CMakeUserPresets.json to use your own linker.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS AND NOT CMAKE_LINKER_TYPE)
+    find_program(MOLD_PROGRAM mold)
+    if(MOLD_PROGRAM)
+        include(CheckLinkerFlag)
+        check_linker_flag(CXX "-fuse-ld=mold" CXX_SUPPORTS_FUSE_LD_MOLD)
+        if(CXX_SUPPORTS_FUSE_LD_MOLD)
+            add_link_options(-fuse-ld=mold)
+            message(STATUS "Using mold linker: ${MOLD_PROGRAM}")
+        else()
+            # GCC < 12 doesn't support -fuse-ld=mold but can use mold via a -B shim directory
+            # containing an `ld` symlink. mold --help prints "Usage: /real/path/to/mold ..." so
+            # we parse that to find the real binary even when MOLD_PROGRAM is a wrapper script.
+            execute_process(
+                COMMAND "${MOLD_PROGRAM}" --help
+                OUTPUT_VARIABLE _MOLD_HELP
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(_MOLD_HELP MATCHES "Usage: ([^ \n]+)")
+                get_filename_component(_MOLD_REAL_BIN_DIR "${CMAKE_MATCH_1}" DIRECTORY)
+            else()
+                get_filename_component(_MOLD_REAL_BIN_DIR "${MOLD_PROGRAM}" DIRECTORY)
+            endif()
+            set(_MOLD_SHIM_FOUND FALSE)
+            foreach(_MOLD_SHIM_CANDIDATE
+                "${_MOLD_REAL_BIN_DIR}/../libexec/mold"
+                "${_MOLD_REAL_BIN_DIR}/../lib/mold"
+            )
+                get_filename_component(_MOLD_SHIM_CANDIDATE "${_MOLD_SHIM_CANDIDATE}" ABSOLUTE)
+                if(EXISTS "${_MOLD_SHIM_CANDIDATE}/ld")
+                    add_link_options("-B${_MOLD_SHIM_CANDIDATE}")
+                    message(STATUS "Using mold linker via -B shim: ${_MOLD_SHIM_CANDIDATE}")
+                    set(_MOLD_SHIM_FOUND TRUE)
+                    break()
+                endif()
+            endforeach()
+            if(NOT _MOLD_SHIM_FOUND)
+                message(STATUS "Mold linker found but skipped: compiler does not support -fuse-ld=mold and no -B shim found")
+            endif()
+        endif()
+    endif()
 endif()
 
 if(${ARCTICDB_USING_CONDA})

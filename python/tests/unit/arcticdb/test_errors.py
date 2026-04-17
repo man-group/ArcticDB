@@ -14,7 +14,6 @@ specific_exception_types = [
     MissingDataException,
     SchemaException,
     StorageException,
-    SortingException,
     UnsortedDataException,
     UserInputException,
 ]

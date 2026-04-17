@@ -2,6 +2,7 @@ option(TEST "Build all tests." ON)
 option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
+option(ARCTICDB_THIN_ARCHIVES "Use thin archives for intermediate static libraries. Faster incremental builds but archives are not self-contained — do not use if distributing link-time intermediate results like arcticdb_core_static.a." OFF)
 
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
@@ -254,7 +255,10 @@ set(arcticdb_srcs
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
+        pipeline/column_name_resolution.hpp
         pipeline/column_stats.hpp
+        pipeline/column_stats_filter.hpp
+        pipeline/column_stats_dispatch.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -478,7 +482,10 @@ set(arcticdb_srcs
         entity/types_proto.cpp
         log/log.cpp
         pipeline/column_mapping.cpp
+        pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
+        pipeline/column_stats_filter.cpp
+        pipeline/column_stats_dispatch.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
@@ -863,6 +870,18 @@ if(NOT ${ARCTICDB_USING_CONDA})
     target_include_directories(arcticdb_core_object PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
 endif()
 
+if(ARCTICDB_THIN_ARCHIVES)
+    # Override archive creation to use thin archives (store paths, not data).
+    # Skip ranlib: the symbol index is unnecessary because arcticdb_core_static contributes
+    # nearly all its members to arcticdb_ext.so (mold reads all members directly; GNU ld
+    # selects them all via symbol resolution since almost every symbol is referenced).
+    # Saves ~26s per incremental build (ar: 14s + ranlib: 12s → ar qcT: 3.5s + no ranlib).
+    set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_FINISH "true")
+    set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_C_ARCHIVE_FINISH   "true")
+endif()
+
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
 # Disable default api so both UTF-8 and UTF-32 can be supported
@@ -900,7 +919,6 @@ set(arcticdb_python_srcs
         python/adapt_read_dataframe.hpp)
 
 add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
-
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_python")
     target_precompile_headers(
@@ -1023,7 +1041,7 @@ if(${TEST})
             column_store/test/test_column_data_random_accessor.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
-             column_store/test/test_segment_reslicer.cpp
+            column_store/test/test_segment_reslicer.cpp
             column_store/test/test_statistics.cpp
             entity/test/test_atom_key.cpp
             entity/test/test_key_serialization.cpp
@@ -1037,6 +1055,9 @@ if(${TEST})
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
             pipeline/test/test_value.cpp
+            pipeline/test/test_column_stats_data.cpp
+            pipeline/test/test_column_stats_dispatch.cpp
+            pipeline/test/test_column_stats_isin.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp

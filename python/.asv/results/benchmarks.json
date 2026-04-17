@@ -1388,173 +1388,543 @@
         "version": "897174943e95686578befc161ffa75dd3b93b60e28885ef4005962198f3d2697",
         "warmup_time": -1
     },
-    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all": {
-        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_all(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_all",
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "1",
-                "10"
-            ]
-        ],
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "331c9abb4f84b01dd28765b77a88e069ec6d6b70617a12dd5aa9c3e14ca6a6ad"
-    },
-    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_filter_two_aggregations": {
-        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_filter_two_aggregations(self, times_bigger):\n        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_filter_two_aggregations",
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "1",
-                "10"
-            ]
-        ],
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "ae73602827d4d1b739e519e8ca6a847c5938a5744ebf371ca78511b0be1bf16f"
-    },
-    "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_isin_filter": {
-        "code": "class BIBenchmarks:\n    def peakmem_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_isin_filter(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_groupby_city_count_isin_filter",
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "1",
-                "10"
-            ]
-        ],
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "e708975c50d2b70ebdff11efa45f9fd15ceee9861301d5552f1e8ebe2cb4d1bd"
-    },
-    "bi_benchmarks.BIBenchmarks.peakmem_query_readall": {
-        "code": "class BIBenchmarks:\n    def peakmem_query_readall(self, times_bigger):\n        self.lib.read(f\"{self.symbol}{times_bigger}\")\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "bi_benchmarks.BIBenchmarks.peakmem_query_readall",
-        "param_names": [
-            "param1"
-        ],
-        "params": [
-            [
-                "1",
-                "10"
-            ]
-        ],
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "3407eb183cf3c02afbeaf04e6c31bf6b5aaf615458cd8e2ad46a21b4d2af80e2"
-    },
-    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all": {
-        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_all(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "column_stats.ColumnStatsCreate.time_create_column_stats": {
+        "code": "class ColumnStatsCreate:\n    def time_create_column_stats(self, *args):\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        # Drop stats so time_ measures creation from scratch\n        self.nvs.drop_column_stats(self.symbol)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsCreate.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsCreate.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
-        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_all",
-        "number": 2,
+        "name": "column_stats.ColumnStatsCreate.time_create_column_stats",
+        "number": 1,
         "param_names": [
-            "param1"
+            "num_rows",
+            "storage"
         ],
         "params": [
             [
-                "1",
-                "10"
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
+        "setup_cache_key": "column_stats:369",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "bf5e390b01e356685500d464be897fe7cb51531dcd92fccedec980f97f361e3c",
+        "version": "c51e2ca01ec0f6d1877864ce47df2839c806106a3f0008eb023ef306fc5859ef",
         "warmup_time": 0
     },
-    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_filter_two_aggregations": {
-        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_filter_two_aggregations(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "column_stats.ColumnStatsDynamicSchema.time_filter_sometimes_missing_column": {
+        "code": "class ColumnStatsDynamicSchema:\n    def time_filter_sometimes_missing_column(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"sometimes_missing_col\"] < self.sometimes_missing_low]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + [\"sometimes_missing_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"dynamic_schema\"\n    \n        # sometimes_missing_col has values 0..(5*ROWS_PER_CHUNK - 1) across the 5 odd chunks\n        total_sometimes_missing_rows = self.NUM_ROWS // 2\n        self.sometimes_missing_low = total_sometimes_missing_rows // 10\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(dynamic_schema=True))\n            lib_for_storage[storage] = lib\n    \n            sym = \"dynamic_schema\"\n            rows_per_chunk = self.ROWS_PER_CHUNK\n            sometimes_missing_counter = 0\n    \n            for chunk_idx in range(self.NUM_CHUNKS):\n                offset = chunk_idx * rows_per_chunk\n                timestamps = pd.date_range(\n                    start=pd.Timestamp(\"2020-01-01\") + pd.Timedelta(seconds=offset),\n                    periods=rows_per_chunk,\n                    freq=\"s\",\n                )\n                datetime_start = pd.Timestamp(\"2000-01-01\")\n                data = {\n                    \"uint64_col\": np.arange(offset, offset + rows_per_chunk, dtype=np.uint64),\n                    \"float_col\": np.linspace(chunk_idx * 100.0, (chunk_idx + 1) * 100.0, rows_per_chunk),\n                    \"bool_col\": np.zeros(rows_per_chunk, dtype=bool),\n                    \"datetime_col\": pd.date_range(\n                        start=datetime_start + pd.Timedelta(seconds=offset),\n                        periods=rows_per_chunk,\n                        freq=\"s\",\n                    ),\n                }\n                # Odd-numbered chunks include sometimes_missing_col with monotonically increasing values\n                if chunk_idx % 2 == 1:\n                    data[\"sometimes_missing_col\"] = np.arange(\n                        sometimes_missing_counter, sometimes_missing_counter + rows_per_chunk, dtype=np.uint64\n                    )\n                    sometimes_missing_counter += rows_per_chunk\n    \n                df = pd.DataFrame(data)\n                _add_extra_columns(df, rows_per_chunk, ordered=True)\n                df.index = timestamps\n                df.index.name = \"ts\"\n    \n                lib.append(sym, df)\n                self.logger.info(f\"Wrote chunk {chunk_idx} for {sym}\")\n    \n            lib._nvs.create_column_stats(sym, {\"sometimes_missing_col\": {\"MINMAX\"}, **COLUMN_STATS})\n            self.logger.info(f\"Created column stats for {sym}\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
-        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_filter_two_aggregations",
-        "number": 2,
+        "name": "column_stats.ColumnStatsDynamicSchema.time_filter_sometimes_missing_column",
+        "number": 0,
         "param_names": [
-            "param1"
+            "column_stats_enabled",
+            "storage"
         ],
         "params": [
             [
-                "1",
-                "10"
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:278",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e0bd464c72351dcd285e0786572502d94664b47b402a8e95b9f340a32ab3e0c3",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsManagement.time_drop_column_stats": {
+        "code": "class ColumnStatsManagement:\n    def time_drop_column_stats(self, *args):\n        self.nvs.drop_column_stats(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsManagement.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsManagement.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsManagement.time_drop_column_stats",
+        "number": 1,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
+        "setup_cache_key": "column_stats:413",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "ceeb3b3e6049c66cb2ecabbb16485e4555cefc7920697c7a34de08993be14af0",
+        "version": "f7b8086b0d2fab81473eca52142c0cd835608f3888f51f851ccb69fdce77bbc1",
         "warmup_time": 0
     },
-    "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_isin_filter": {
-        "code": "class BIBenchmarks:\n    def time_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:\n        return self.query_groupby_city_count_isin_filter(times_bigger)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "column_stats.ColumnStatsManagement.time_get_column_stats_info": {
+        "code": "class ColumnStatsManagement:\n    def time_get_column_stats_info(self, *args):\n        self.nvs.get_column_stats_info(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsManagement.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsManagement.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
-        "name": "bi_benchmarks.BIBenchmarks.time_query_groupby_city_count_isin_filter",
-        "number": 2,
+        "name": "column_stats.ColumnStatsManagement.time_get_column_stats_info",
+        "number": 1,
         "param_names": [
-            "param1"
+            "num_rows",
+            "storage"
         ],
         "params": [
             [
-                "1",
-                "10"
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
+        "setup_cache_key": "column_stats:413",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "fa74284d1e48fd396138a5f50c53d92829194b7be1f0caa8f441f8820db4157c",
+        "version": "44a4a1153711f89d882106fc441a74b6863335873662091f49e8594995b34f54",
         "warmup_time": 0
     },
-    "bi_benchmarks.BIBenchmarks.time_query_readall": {
-        "code": "class BIBenchmarks:\n    def time_query_readall(self, times_bigger):\n        self.lib.read(f\"{self.symbol}{times_bigger}\")\n\n    def setup(self, num_rows):\n        self.ac = Arctic(f\"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB\")\n        self.lib = self.ac.get_library(self.lib_name)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "column_stats.ColumnStatsManagement.time_read_column_stats": {
+        "code": "class ColumnStatsManagement:\n    def time_read_column_stats(self, *args):\n        self.nvs.read_column_stats(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsManagement.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsManagement.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
-        "name": "bi_benchmarks.BIBenchmarks.time_query_readall",
-        "number": 2,
+        "name": "column_stats.ColumnStatsManagement.time_read_column_stats",
+        "number": 1,
         "param_names": [
-            "param1"
+            "num_rows",
+            "storage"
         ],
         "params": [
             [
-                "1",
-                "10"
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
             ]
         ],
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "bi_benchmarks:68",
-        "timeout": 6000,
+        "setup_cache_key": "column_stats:413",
+        "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "3cd2c7d90725498da459157638eb15b5a3fcc68aa91684951717ed5ab1c8ca63",
+        "version": "9caa2c6bf8e784be62da33ef74b0296b37b7980e99494920dd8b61643fdab7fa",
         "warmup_time": 0
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_bool": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_bool(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"bool_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_bool",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "191f87da766de9c93e59f255863048c358389c34a8a0e0ea31c53dfd898a4188",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_combined_and": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_combined_and(self, *args):\n        q = QueryBuilder()\n        q = q[(q[\"uint64_col\"] > self.uint64_high) & (q[\"float_col\"] > 900.0)]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_combined_and",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "fa1fc5ea4db837cb23331754ee26d89ec6610b0b91c1c650408295b8d91505e3",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_combined_or": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_combined_or(self, *args):\n        q = QueryBuilder()\n        q = q[(q[\"uint64_col\"] < self.uint64_low) | (q[\"float_col\"] > 900.0)]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_combined_or",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "9c1111a849bc8dd29844dc604fb3a3b6d55fde0a1b2cc9af368e0f40a14a8260",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_datetime": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_datetime(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"datetime_col\"] > self.datetime_high]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_datetime",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "b7cf502b8f91d478e6c064cbbef084f3c2e41313959de803995addfdccb7ec4e",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_float": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_float(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"float_col\"] > 900.0]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_float",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "22eb19847216c619598f6f2fb2cf0bf75c90c56167f9f886eb6ca72aeacb2ef2",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_uint64": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_uint64(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] < self.uint64_low]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_uint64",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ed8244e1ca94ddceb188e53cd13478f446b7d003ad460671129f7187e9ccfcb1",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_with_date_range": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_with_date_range(self, *args):\n        \"\"\"date_range narrows to 50% of rows, then filter selects the top 10% of uint64 values.\n    \n        Tests whether stats provide additional pruning on top of index-based date range filtering.\n        \"\"\"\n        if not self.data_ordered:\n            raise SkipNotImplemented\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] > self.uint64_high]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, date_range=self.date_range_half, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_with_date_range",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "de545c49bc16d23a1283821fc14babda3bbb1f1a31efe0aa04b928f44c53bd51",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_zero_match": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_zero_match(self, *args):\n        \"\"\"Filter that matches no rows, best case for column stats.\"\"\"\n        if not self.data_ordered:\n            raise SkipNotImplemented\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] > self.zero_match_threshold]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_zero_match",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "7f9b9b54b4df4043d99211995d4be46b8167f8305d8b4b3fa57b59f3e13c2d5a",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_isin_uint64": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_isin_uint64(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"].isin(self.isin_values)]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_isin_uint64",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "c496d3b5d577ed288d82bbfe2408e02b240af32b61820abfcea2ca2f2d759ba8",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_isnotin_uint64": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_isnotin_uint64(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"].isnotin(self.isin_values)]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_isnotin_uint64",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "118060e82bbb522a9ec88311f72527e89fac5f019147e02ec8e0fd0fd938d9c6",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsWideFilter.time_filter_wide": {
+        "code": "class ColumnStatsWideFilter:\n    def time_filter_wide(self, *args):\n        \"\"\"Filter with 1001 OR'd conditions forcing decode of 1000 extra columns.\"\"\"\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=self.query)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"wide_filter\"\n    \n        n_int = self.NUM_EXTRA // 2\n        n_float = self.NUM_EXTRA - n_int\n    \n        # Build the QueryBuilder with 1001 OR'd conditions as a balanced tree.\n        # A left-leaning chain would exceed Python's recursion limit in the\n        # recursive expression visitor in processing.py.\n        q = QueryBuilder()\n        uint64_low = self.NUM_ROWS // 10\n        conditions = [q[\"uint64_col\"] < uint64_low]\n        for i in range(n_int):\n            conditions.append(q[f\"extra_int64_{i}\"] < np.int64(0))\n        for i in range(n_float):\n            conditions.append(q[f\"extra_float_{i}\"] < 0.0)\n        while len(conditions) > 1:\n            next_level = []\n            for j in range(0, len(conditions), 2):\n                if j + 1 < len(conditions):\n                    next_level.append(conditions[j] | conditions[j + 1])\n                else:\n                    next_level.append(conditions[j])\n            conditions = next_level\n        q = q[conditions[0]]\n        self.query = q\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            sym = \"wide_filter\"\n            n_int = self.NUM_EXTRA // 2\n            n_float = self.NUM_EXTRA - n_int\n    \n            for chunk_idx in range(self.NUM_ROWS // self.ROWS_PER_CHUNK):\n                n = self.ROWS_PER_CHUNK\n                offset = chunk_idx * n\n                timestamps = pd.date_range(\n                    start=pd.Timestamp(\"2020-01-01\") + pd.Timedelta(seconds=offset),\n                    periods=n,\n                    freq=\"s\",\n                )\n                datetime_start = pd.Timestamp(\"2000-01-01\")\n                data = {\n                    \"uint64_col\": np.arange(offset, offset + n, dtype=np.uint64),\n                    \"float_col\": np.linspace(\n                        offset * 1000.0 / self.NUM_ROWS,\n                        (offset + n) * 1000.0 / self.NUM_ROWS,\n                        n,\n                    ),\n                    \"bool_col\": np.array([i + offset >= self.NUM_ROWS // 2 for i in range(n)], dtype=bool),\n                    \"datetime_col\": pd.date_range(\n                        start=datetime_start + pd.Timedelta(seconds=offset),\n                        periods=n,\n                        freq=\"s\",\n                    ),\n                }\n                base_int = np.arange(offset + 1, offset + n + 1, dtype=np.int64)\n                base_float = np.linspace(1.0, 1000.0, n)\n                for i in range(n_int):\n                    data[f\"extra_int64_{i}\"] = base_int + i\n                for i in range(n_float):\n                    data[f\"extra_float_{i}\"] = base_float + i * 0.1\n    \n                df = pd.DataFrame(data)\n                df.index = timestamps\n                df.index.name = \"ts\"\n    \n                lib.append(sym, df)\n                self.logger.info(f\"Wrote chunk {chunk_idx} for {sym}\")\n    \n            # Create stats on all columns (benchmark + extra) so column stats can prune\n            all_stats = dict(COLUMN_STATS)\n            for i in range(n_int):\n                all_stats[f\"extra_int64_{i}\"] = {\"MINMAX\"}\n            for i in range(n_float):\n                all_stats[f\"extra_float_{i}\"] = {\"MINMAX\"}\n            lib._nvs.create_column_stats(sym, all_stats)\n            self.logger.info(f\"Created column stats for {sym}\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsWideFilter.time_filter_wide",
+        "number": 0,
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:475",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "8164e364b520bda248fbd8afe5bbd4995e2f929fa2f2bf8524ee3c65e0ea3c4b",
+        "warmup_time": 0.5
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
         "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
@@ -2150,7 +2520,7 @@
         "warmup_time": 0
     },
     "query_builder.QueryBuilderFunctions.peakmem_filtering_numeric": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, *args):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 10.0]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, *args):\n        self._filtering_numeric()\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_filtering_numeric",
         "param_names": [
             "num_rows",
@@ -2166,14 +2536,60 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b9f803274f2a3faa5ea7e421370c808397f3198f12d1cc06bf034b28a353784d"
+        "version": "302d5ba0eadbf723dbc5751aaa67e7d6b1ca3d0b764b3158e1673e17fdba0d13"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_filtering_string_equality": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_string_equality(self, *args):\n        self._filtering_string_equality(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_filtering_string_equality",
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b122f93c1dd9ed7b2c516cd2b013305b988593dc6353e8cd6d938ad6bf0dfe0b"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_filtering_string_equality_with_nulls": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_string_equality_with_nulls(self, *args):\n        self._filtering_string_equality(self.null_symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_filtering_string_equality_with_nulls",
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "47a1120ca0fd6c2cac466ee7ba5fb52a06644a726a0d39f353ecb63d82e39ca9"
     },
     "query_builder.QueryBuilderFunctions.peakmem_filtering_string_isin": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_string_isin(self, lib_for_storage, num_rows, storage):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_string_isin(self, lib_for_storage, num_rows, storage):\n        # Selects about 1% of the rows\n        self._filtering_string_isin(num_rows, self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_filtering_string_isin",
         "param_names": [
             "num_rows",
@@ -2189,14 +2605,60 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "4a453d4ce8e5ecf76b202279fab7c38a66974cdb108a66037dcc8d04741f5f79"
+        "version": "4ff73d0115feefe1b2386e7b69ab589cf712e96d85c3daebf31e943ac7e89d20"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_filtering_string_isin_with_nulls": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_string_isin_with_nulls(self, lib_for_storage, num_rows, storage):\n        self._filtering_string_isin(num_rows, self.null_symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_filtering_string_isin_with_nulls",
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b677a0cbb6268efaa33e2a636358c9e64c5bf4a5fce48a0dc331ba8615b98078"
+    },
+    "query_builder.QueryBuilderFunctions.peakmem_groupby_count": {
+        "code": "class QueryBuilderFunctions:\n    def peakmem_groupby_count(self, *args):\n        self._groupby_read(\"id1\", {\"v1\": \"count\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "name": "query_builder.QueryBuilderFunctions.peakmem_groupby_count",
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "a2a7c0946bfdae33ed4d0089c818ab1879f0f92d28b9ff44069b69ea74207875"
     },
     "query_builder.QueryBuilderFunctions.peakmem_projection": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_projection(self, *args):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        self.lib.read(self.symbol, columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_projection(self, *args):\n        self._projection()\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_projection",
         "param_names": [
             "num_rows",
@@ -2212,14 +2674,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9e614afe71db7792c672ae0a860437217a0a4f87293318363ed90190e7033259"
+        "version": "8c124cea40dc1a1fed7f980efe62c93f31cd1c3d55a9ba50d398c3917b4c07aa"
     },
     "query_builder.QueryBuilderFunctions.peakmem_query_1": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_query_1(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_1(self, *args):\n        self._groupby_read(\"id1\", {\"v1\": \"sum\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_query_1",
         "param_names": [
             "num_rows",
@@ -2235,14 +2697,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e414dd1e883e4d39957fdf690dbd35e54830167af27a5379c23c1e8451a184dd"
+        "version": "bee18ca26e1de739ef6185f741fde50a8502ec307d751dbb9541b51ee7dd0f13"
     },
     "query_builder.QueryBuilderFunctions.peakmem_query_3": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_query_3(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_3(self, *args):\n        self._groupby_read(\"id3\", {\"v1\": \"sum\", \"v3\": \"sum\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_query_3",
         "param_names": [
             "num_rows",
@@ -2258,14 +2720,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "fdb6378d8f4151d61530ee4e0f3db7dd1dbf01aa09d60e4c5bbc647bc7ae31e7"
+        "version": "dcb135d3b4fcac9a4334b4bb0d34ffcf0b34be6f7960a88beffbf157f33613b9"
     },
     "query_builder.QueryBuilderFunctions.peakmem_query_4": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_query_4(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_4(self, *args):\n        self._groupby_read(\"id6\", {\"v1\": \"sum\", \"v2\": \"sum\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_query_4",
         "param_names": [
             "num_rows",
@@ -2281,14 +2743,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "810cdde366536268b1dac926c600c95ce25db177c9a6daf79a9c1a2220d5bddf"
+        "version": "7769afd2701e51adf25394ce54d8535eb17497f65e19fa21ec67f3743c718b9f"
     },
     "query_builder.QueryBuilderFunctions.peakmem_query_adv_query_2": {
-        "code": "class QueryBuilderFunctions:\n    def peakmem_query_adv_query_2(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def peakmem_query_adv_query_2(self, *args):\n        self._groupby_read(\"id3\", {\"v1\": \"max\", \"v2\": \"min\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_query_adv_query_2",
         "param_names": [
             "num_rows",
@@ -2304,14 +2766,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "dca72a263e021b08204f3ef8deb8f78e355189494cf7178f270c95f1f569a1cd"
+        "version": "7da53a3b5fd2e393d8e4f06497727b84b2e42ed202dccfe52fd96fbabfee743b"
     },
     "query_builder.QueryBuilderFunctions.time_filtering_numeric": {
-        "code": "class QueryBuilderFunctions:\n    def time_filtering_numeric(self, *args):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 1.0]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_filtering_numeric(self, *args):\n        self._filtering_numeric()\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_filtering_numeric",
         "number": 0,
@@ -2329,17 +2791,73 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "9c9e9cd8492f587c0ffc69bc7367905281a11229bea0b1f7042214de7895f436",
-        "warmup_time": 0.2
+        "version": "ad48a01856f2da41557818fc56a8f7357c41e27c1db24a93110cf5aad5eee6ee",
+        "warmup_time": 1.0
+    },
+    "query_builder.QueryBuilderFunctions.time_filtering_string_equality": {
+        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_equality(self, lib_for_storage, num_rows, storage):\n        if num_rows == 1_000_000:\n            raise SkipNotImplemented(\"Too variable at 1M rows\")\n        self._filtering_string_equality(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_filtering_string_equality",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 3,
+        "sample_time": 2,
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "10142ecf0862c4acad24ac1b7c69fc685979a81db2ec59e6f68b9e26331cfcc7",
+        "warmup_time": 1.0
+    },
+    "query_builder.QueryBuilderFunctions.time_filtering_string_equality_with_nulls": {
+        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_equality_with_nulls(self, lib_for_storage, num_rows, storage):\n        if num_rows == 1_000_000:\n            raise SkipNotImplemented(\"Too variable at 1M rows\")\n        self._filtering_string_equality(self.null_symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_filtering_string_equality_with_nulls",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 3,
+        "sample_time": 2,
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "619d10624ffbb387731069b39eb280087b3f37c79d25e8f6b91b07f352a19693",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_filtering_string_isin": {
-        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_isin(self, lib_for_storage, num_rows, storage):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_isin(self, lib_for_storage, num_rows, storage):\n        # Selects about 1% of the rows\n        self._filtering_string_isin(num_rows, self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_filtering_string_isin",
         "number": 0,
@@ -2357,17 +2875,45 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "e3264e4f0b655d3b381488fe3d0906362671d2e640b3ca0c729a644d237e0bb1",
-        "warmup_time": 0.2
+        "version": "08e65cc3f91c71cacc009def173a0dd8a4c8bd77c9877f42c1af627462f39aeb",
+        "warmup_time": 1.0
+    },
+    "query_builder.QueryBuilderFunctions.time_filtering_string_isin_with_nulls": {
+        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_isin_with_nulls(self, lib_for_storage, num_rows, storage):\n        self._filtering_string_isin(num_rows, self.null_symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_filtering_string_isin_with_nulls",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 3,
+        "sample_time": 2,
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "86a04b8d56c80862d8095c070a78ca87ea8c56afe822d566fad2d696fb64b60b",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_filtering_string_regex_match": {
-        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, *args):\n        pattern = r\"^id\\d\\d\\d$\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, *args):\n        pattern = r\"^id\\d\\d\\d$\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        result = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q)\n        assert not result.data.empty\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_filtering_string_regex_match",
         "number": 0,
@@ -2385,17 +2931,45 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "57afa0ac498853e31288aced64f87c946d84a2db67af6058f77bc8bd6cd6ec32",
-        "warmup_time": 0.2
+        "version": "26522c68b98e2d6690c9cb871bf657e53225bf5619259d591e94fe182c6c04d2",
+        "warmup_time": 1.0
+    },
+    "query_builder.QueryBuilderFunctions.time_groupby_count": {
+        "code": "class QueryBuilderFunctions:\n    def time_groupby_count(self, *args):\n        self._groupby_read(\"id1\", {\"v1\": \"count\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "query_builder.QueryBuilderFunctions.time_groupby_count",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "storages"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 3,
+        "sample_time": 2,
+        "setup_cache_key": "query_builder:48",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0209ddb3a9a464d1924ea4ec71980ca1420fa874285c8523494a8ad3dc6f7091",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_projection": {
-        "code": "class QueryBuilderFunctions:\n    def time_projection(self, *args):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        self.lib.read(self.symbol, columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_projection(self, *args):\n        self._projection()\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_projection",
         "number": 0,
@@ -2413,17 +2987,17 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "60d5bdab793a5bfc17913dd4f0af6224f86247b49afc9a064384b640c66f460f",
-        "warmup_time": 0.2
+        "version": "006ba72a8c50dfe63e723abda298da419cdce0c6e917afb539b2211b1f3e9d7e",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_1": {
-        "code": "class QueryBuilderFunctions:\n    def time_query_1(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_query_1(self, *args):\n        self._groupby_read(\"id1\", {\"v1\": \"sum\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_query_1",
         "number": 0,
@@ -2441,17 +3015,17 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "ba8983e5c8df1cc9b61131f42ac04147af2bbca98b230f208b048dd1a6a80070",
-        "warmup_time": 0.2
+        "version": "876f9c619a7c028acf44726be0601185ba9e1f2b76bea98f169606a5c25b1c01",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_3": {
-        "code": "class QueryBuilderFunctions:\n    def time_query_3(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_query_3(self, *args):\n        self._groupby_read(\"id3\", {\"v1\": \"sum\", \"v3\": \"sum\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_query_3",
         "number": 0,
@@ -2469,17 +3043,17 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "90510c3d0cf383bd728b23b90b4c30ed14423d81d410c8ebb477e52793733fde",
-        "warmup_time": 0.2
+        "version": "cd31f6ac9473e179004b87e58b74566dd7a09387439976566506f4c01a4a1670",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_4": {
-        "code": "class QueryBuilderFunctions:\n    def time_query_4(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_query_4(self, *args):\n        self._groupby_read(\"id6\", {\"v1\": \"sum\", \"v2\": \"sum\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_query_4",
         "number": 0,
@@ -2497,17 +3071,17 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "32c12c7f850640e929401b67cc7be03231a37994a4dffdea7dc228e8765c7293",
-        "warmup_time": 0.2
+        "version": "8d4dc166a95e21a1382a3fc613bc36bb6d21b27aefcacb3dd9c724ddead5d6aa",
+        "warmup_time": 1.0
     },
     "query_builder.QueryBuilderFunctions.time_query_adv_query_2": {
-        "code": "class QueryBuilderFunctions:\n    def time_query_adv_query_2(self, *args):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        self.lib.read(self.symbol, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "code": "class QueryBuilderFunctions:\n    def time_query_adv_query_2(self, *args):\n        self._groupby_read(\"id3\", {\"v1\": \"max\", \"v2\": \"min\"})\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,
         "name": "query_builder.QueryBuilderFunctions.time_query_adv_query_2",
         "number": 0,
@@ -2525,14 +3099,14 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "rounds": 2,
+        "rounds": 3,
         "sample_time": 2,
-        "setup_cache_key": "query_builder:42",
+        "setup_cache_key": "query_builder:48",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "8f0f2114a5f0bb59e2c5857dfa305d134a8464c4270722fff6758ed44488a257",
-        "warmup_time": 0.2
+        "version": "5e9c435effa2cdc08dad7d29eda9bb37073df9dc7c67043576e41233cd2fb5dd",
+        "warmup_time": 1.0
     },
     "recursive_normalizer.LMDBRecursiveNormalizerRead.peakmem_read_batch_nested_dict": {
         "code": "class LMDBRecursiveNormalizerRead:\n    def peakmem_read_batch_nested_dict(self, num_dict_entry, num_symbols):\n        self.lib.read_batch([get_symbol_name(num_dict_entry, i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entry, num_symbols):\n        self.lib = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI).get_library(\"lib\")\n\n    def setup_cache(self):\n        ac = Arctic(LMDBRecursiveNormalizerRead.ARCTIC_URI)\n        if \"lib\" in ac:\n            ac.delete_library(\"lib\")\n    \n        lib = ac.create_library(\"lib\")\n    \n        max_num_symbols = max(self.params[1])\n        for num_dict_entry in self.params[0]:\n            data = get_data(num_dict_entry)\n            for symbol_idx in range(max_num_symbols):\n                symbol_name = get_symbol_name(num_dict_entry, symbol_idx)\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)",

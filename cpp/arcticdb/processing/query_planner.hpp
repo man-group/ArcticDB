@@ -25,4 +25,8 @@ using ClauseVariant = std::variant<
 
 std::vector<ClauseVariant> plan_query(std::vector<ClauseVariant>&& clauses);
 
+ExpressionContext and_filter_expression_contexts(
+        const std::vector<std::shared_ptr<ExpressionContext>>& expression_contexts
+);
+
 } // namespace arcticdb

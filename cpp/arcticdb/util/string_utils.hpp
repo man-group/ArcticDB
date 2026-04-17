@@ -83,6 +83,8 @@ std::string safe_decode(const std::string& value);
 // string is UTF-32, this converts that view into a UTF-8 string
 std::string utf32_to_u8(std::string_view strv);
 
+std::u32string utf8_to_u32(std::string_view strv);
+
 struct TransparentStringHash {
     using is_transparent = void; // enable heterogeneous overloads
     using is_avalanching = void; // mark class as high quality avalanching hash

@@ -82,6 +82,8 @@ Represents: (a > 5) AND (b < 10)
 
 Expressions are evaluated via `compute()` on `ExpressionContext` which holds the expression tree.
 
+`ExpressionContext` (`expression_context.hpp`) also supports `merge_from()` to combine multiple contexts (used when AND-ing together filter clause expressions for column stats evaluation). `ConstantMap::contains()` checks whether a name is present.
+
 ## Operation Dispatch
 
 ### Location
@@ -101,6 +103,26 @@ Dispatches operations based on data types at runtime.
 | Logical | `AND`, `OR`, `NOT` |
 | Aggregation | `SUM`, `MEAN`, `MIN`, `MAX`, `COUNT`, `FIRST`, `LAST` |
 | String | `ISIN`, `ISNOTIN`, `STARTSWITH`, `ENDSWITH` |
+
+### Column Stats Evaluation
+
+The comparison operator structs (`LessThanOperator`, `GreaterThanOperator`, `EqualsOperator`, etc.) in `operation_types.hpp` have `ValueRange<T>` overloads that return `StatsComparison` instead of `bool`. These determine whether a min/max range satisfies a comparison against a constant value, using three-valued logic:
+
+| Value | Meaning |
+|-------|---------|
+| `ALL_MATCH` | Every row in the segment must satisfy the predicate |
+| `NONE_MATCH` | No row can satisfy — segment can be skipped |
+| `UNKNOWN` | Some rows may match — segment must be fetched |
+
+`ValueRange<T>` holds `min` and `max` fields. The `FlippedComparator` trait (in `column_stats_dispatch.hpp`) handles reversed operand order (e.g. `5 < col` becomes `col > 5`).
+
+#### Membership Operators (isin / isnotin)
+
+`stats_membership_comparator()` in `column_stats_dispatch.cpp` evaluates a segment's min/max stats against a `ValueSet`. It uses the `ValueSet`'s cached `min_value()` / `max_value()` (computed lazily via `std::call_once`, filtering out NaN values) for a fast range disjointness check. If the ranges overlap and the result is ambiguous, it falls back to iterating individual set elements against the segment's `ValueRange`. The `isnotin` result is the logical inverse of `isin`. `visit_binary_membership_stats()` applies this per row-slice across the stats vector.
+
+`Value::is_nan()` supports the NaN handling: segments where both min and max are NaN are treated as all-NaN and produce `NONE_MATCH` for `isin`.
+
+See [PIPELINE.md - Column Stats Filtering](PIPELINE.md#column-stats-filtering) for the full read-path integration.
 
 ### Type Dispatch
 
@@ -205,6 +227,8 @@ Build filters using `ExpressionNode` with `ExpressionNodeType::BINARY_OP` and co
 | `processing_unit.hpp` | Processing unit structure |
 | `component_manager.hpp` | Component lifecycle |
 | `aggregation_utils.cpp` | Aggregation helpers |
+| `operation_types.hpp` | Operator structs, `StatsComparison`, `ValueRange` |
+| `query_planner.cpp` | `plan_query()`, `and_filter_expression_contexts()` |
 
 ## Python Integration
 

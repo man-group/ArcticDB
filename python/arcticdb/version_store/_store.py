@@ -23,6 +23,8 @@ import attr
 import warnings
 import difflib
 from datetime import datetime
+
+from arcticdb_ext.exceptions import UserInputException
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
@@ -106,7 +108,6 @@ from packaging.version import Version
 import arcticdb_ext as ae
 
 from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
-from arcticdb.util.utils import strtobool
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -693,20 +694,11 @@ class NativeVersionStore:
                 invalid_args.append(arg)
         if invalid_args:
             # Log formatting gets confused by curly braces in input string, hence the conversion to a list
-            base_msg = (
-                f"{method} received unrecognized keyword argument(s) {invalid_args}. "
-                f"Supported keyword arguments are {sorted(list(valid_kwargs))}. "
-                f"If you want to explicitly opt out of the validation exception, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to a truthy value (e.g. '1'). "
-            )
-            if strtobool(os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", "1")):
-                msg = (
-                    base_msg
-                    + "This warning will be changed to an exception in a future version of ArcticDB. "
-                    + "If you want to preview the future behavior, set the environment variable ARCTICDB_DISABLE_KWARG_VALIDATION to 0. "
-                )
+            msg = f"{method} received invalid kwargs {invalid_args}. Supported kwargs are {sorted(list(valid_kwargs))}"
+            if os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", None) == "1":
                 log.warning(msg)
             else:
-                raise ArcticNativeException(base_msg)
+                raise ArcticNativeException(msg)
 
     def stage(
         self,
@@ -2384,7 +2376,14 @@ class NativeVersionStore:
         return version_query, read_options, read_query, output_format
 
     def _get_column_stats(self, column_stats):
-        return None if column_stats is None else _ColumnStats(column_stats)
+        if column_stats is None:
+            return None
+        for k, v in column_stats.items():
+            if k is None:
+                raise UserInputException("Found None key in provided column_stats")
+            if not isinstance(k, str):
+                raise UserInputException(f"Found non-str key in provided column_stats [{k}]")
+        return _ColumnStats(column_stats)
 
     def _postprocess_df_with_only_rowcount_idx(self, read_result, row_range):
         index_meta = read_result.norm.df.common.index
@@ -2467,7 +2466,12 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
-        self._validate_kwargs("read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        # allow_secondary does not do anything with arcticdb (and never has), but it was a valid argument to read with
+        # Arctic Python. Some users have code that is agnostic to whether ArcticDB or Arctic Python is the backend, so
+        # do not raise/log for this specific kwarg
+        self._validate_kwargs(
+            "read", self._valid_read_kwargs.union({"implement_read_index", "allow_secondary"}), kwargs
+        )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -3974,11 +3978,11 @@ class NativeVersionStore:
 
         The metadata from the version being compacted is maintained with the newly created version.
 
+        Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
+
         !!! warning
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
-
-            String columns are not yet supported.
 
             Dynamic schema is not yet supported.
 
@@ -4008,8 +4012,8 @@ class NativeVersionStore:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
-            schema enabled, or the data is sparse
+            If the existing data is recursively normalized, the library has dynamic schema enabled, or the data is
+            sparse
 
         Examples
         --------
@@ -4226,7 +4230,7 @@ class NativeVersionStore:
             If symbol doesn't exist and `upsert=False`
         UserInputException
             If strategy is not one of the supported strategies listed above
-        SortingException
+        UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
             If dynamic schema is used or if source's schema is incompatible with target's schema

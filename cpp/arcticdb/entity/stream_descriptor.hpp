@@ -171,12 +171,7 @@ struct StreamDescriptor {
     [[nodiscard]] bool empty() const { return fields().empty(); }
 
     [[nodiscard]] std::optional<std::size_t> find_field(std::string_view view) const {
-        auto it = std::find_if(begin(), end(), [&](const auto& field) { return field.name() == view; });
-
-        if (it == end())
-            return std::nullopt;
-
-        return std::distance(begin(), it);
+        return fields().find_field(view);
     }
 
     friend bool operator==(const StreamDescriptor& left, const StreamDescriptor& right) {

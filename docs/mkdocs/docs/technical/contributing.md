@@ -219,6 +219,16 @@ already have `mongod` available.
 | Ubuntu | 20.04, 22.04 | build-essential g++-11 libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev libcurl4-openssl-dev python3-dev |
 | Centos | 7 | devtoolset-11-gcc-c++ openssl-devel cyrus-sasl-devel devtoolset-11-libatomic-devel libcurl-devel python3-devel |
 
+Installing `ccache` is optional but recommended — it is auto-detected and applied to ArcticDB
+source builds, giving significantly faster rebuilds after the first clean build (e.g. when
+switching worktrees or cloning fresh). vcpkg dependencies are not ccached as vcpkg maintains its
+own binary cache.
+
+The `linux-debug` and `linux-release` presets also enable thin archives (`ARCTICDB_THIN_ARCHIVES=ON`),
+which speeds up incremental builds by ~20s per touch-and-rebuild cycle. Thin archives store paths to
+`.o` files rather than copying data and are not portable, so this option is intentionally left off for
+conda presets used in wheel packaging.
+
 Setting up Windows
 ------------------
 We recommend using Visual Studio 2022 (or later) to install the compiler (MSVC v142 or newer) and tools

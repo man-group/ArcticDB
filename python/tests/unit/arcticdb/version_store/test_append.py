@@ -12,7 +12,7 @@ from pandas._libs.tslibs.offsets import BDay
 import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException, SchemaException
+from arcticdb_ext.exceptions import InternalException, NormalizationException, UnsortedDataException, SchemaException
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.config import set_log_level
@@ -317,7 +317,7 @@ def test_append_not_sorted_exception(lmdb_version_store):
     df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df2.index.is_monotonic_increasing == False
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
 
@@ -355,7 +355,7 @@ def test_append_existing_not_sorted_exception(lmdb_version_store):
     df2 = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df2.index.is_monotonic_increasing == True
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
 
@@ -409,7 +409,7 @@ def test_append_not_sorted_multi_index_exception(lmdb_version_store):
     assert df2.index.is_monotonic_increasing == False
     assert isinstance(df.index, MultiIndex) == True
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.append(symbol, df2, validate_index=True)
 
 

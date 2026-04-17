@@ -51,12 +51,15 @@ def test_filter_column_not_present(lmdb_version_store_v1, any_output_format):
         _ = lib.read(symbol, query_builder=q)
 
 
-def test_filter_column_attribute_syntax(lmdb_version_store_v1, any_output_format):
+def test_filter_column_attribute_syntax(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_column_attribute_syntax"
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]})
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q.a < np.uint8(1)]
     expected = df[df["a"] < np.uint8(1)]
@@ -92,7 +95,7 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment, any_outp
         lib.read(symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
 
 
-def test_filter_explicit_index(lmdb_version_store_v1, any_output_format):
+def test_filter_explicit_index(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
@@ -101,6 +104,7 @@ def test_filter_explicit_index(lmdb_version_store_v1, any_output_format):
     pandas_query = "a < 1"
     symbol = "test_filter_explicit_index"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
@@ -156,52 +160,59 @@ def test_filter_bool_nonbool_comparison(lmdb_version_store_v1, any_output_format
         lib.read(symbol, query_builder=q)
 
 
-def test_filter_bool_column(lmdb_version_store_v1, any_output_format):
+def test_filter_bool_column(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["a"]]
     expected = df[df["a"]]
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_bool_column_not(lmdb_version_store_v1, any_output_format):
+def test_filter_bool_column_not(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column_not"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     q = QueryBuilder()
     q = q[~q["a"]]
     expected = df[~df["a"]]
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_bool_column_binary_boolean(lmdb_version_store_v1, any_output_format):
+def test_filter_bool_column_binary_boolean(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column_binary_boolean"
     df = pd.DataFrame({"a": [True, True, False, False], "b": [True, False, True, False]}, index=np.arange(4))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["a"] & q["b"]]
     expected = df[df["a"] & df["b"]]
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_bool_column_comparison(lmdb_version_store_v1, any_output_format):
+def test_filter_bool_column_comparison(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column_comparison"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     comparators = ["==", "!=", "<", "<=", ">", ">="]
     for comparator in comparators:
         for bool_value in [True, False]:
-            pandas_query = f"a {comparator} {bool_value}"
             q = QueryBuilder()
             if comparator == "==":
                 q = q[q["a"] == bool_value]
@@ -224,12 +235,13 @@ def test_filter_bool_column_comparison(lmdb_version_store_v1, any_output_format)
             generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format):
+def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_simple"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     pd_ts = pd.Timestamp("2000-01-05")
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
@@ -238,12 +250,131 @@ def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format):
         generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format):
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("flipped", (True, False))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_datetime_col_against_numeric_value(
+    dtype, flipped, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    value = dtype(pd.Timestamp(1).value)
+    q = QueryBuilder()
+    if flipped:
+        q = q[getattr(value, function)(q["a"])]
+    else:
+        q = q[getattr(q["a"], function)(value)]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("flipped", (True, False))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_numeric_col_against_datetime_value(
+    dtype, flipped, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    value = pd.Timestamp(1)
+    q = QueryBuilder()
+    if flipped:
+        q = q[getattr(value, function)(q["a"])]
+    else:
+        q = q[getattr(q["a"], function)(value)]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_datetime_against_numeric_isin(
+    function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)([dtype(pd.Timestamp(1).value)])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("isin", "isnotin"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_numeric_against_datetime_isin(
+    function, dtype, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [0, 1]}, dtype=dtype)
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)([pd.Timestamp(1)])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_datetime_col_against_numeric_col(
+    dtype, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)], "b": np.array([0, 1], dtype=dtype)})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)(q["b"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("function", ("__lt__", "__le__", "__eq__", "__ne__", "__gt__", "__ge__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_filter_numeric_col_against_datetime_col(
+    dtype, function, lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": np.array([0, 1], dtype=dtype), "b": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
+    q = QueryBuilder()
+    q = q[getattr(q["a"], function)(q["b"])]
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_isin"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     pd_ts = pd.Timestamp("2000-01-05")
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
@@ -252,7 +383,9 @@ def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format):
         generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_datetime_timedelta(lmdb_version_store_v1, any_output_format):
+def test_filter_datetime_timedelta(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_timedelta"
@@ -264,6 +397,7 @@ def test_filter_datetime_timedelta(lmdb_version_store_v1, any_output_format):
             q = QueryBuilder()
             q = q[(q["a"] + td) < ts]
             lib.write(symbol, df)
+            lib.create_column_stats(symbol, {"a": {"MINMAX"}})
             expected = df[(df["a"] + td) < ts]
             received = lib.read(symbol, query_builder=q).data
             if not np.array_equal(expected, received) and (not expected.empty and not received.empty):
@@ -276,12 +410,15 @@ def test_filter_datetime_timedelta(lmdb_version_store_v1, any_output_format):
             assert True
 
 
-def test_filter_datetime_timezone_aware(lmdb_version_store_v1, any_output_format):
+def test_filter_datetime_timezone_aware(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_timezone_aware"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10, tz=timezone("Europe/Amsterdam"))})
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     pd_ts = pd.Timestamp("2000-01-05", tz=timezone("GMT"))
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
@@ -351,7 +488,9 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
         lib.read(sym, query_builder=q)
 
 
-def test_filter_datetime_nanoseconds(lmdb_version_store_v1, any_output_format):
+def test_filter_datetime_nanoseconds(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_filter_datetime_nanoseconds"
@@ -363,6 +502,7 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1, any_output_format):
     df = pd.DataFrame(data=[timestamp_0, timestamp_1, timestamp_2], columns=["col"])
 
     lib.write(sym, df)
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
 
     # Try to read all rows
     qb_all = QueryBuilder()
@@ -393,7 +533,9 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1, any_output_format):
     assert_frame_equal(second_and_third_row_result, df.iloc[[1, 2]].reset_index(drop=True))
 
 
-def test_filter_isin_clashing_sets(lmdb_version_store_v1, any_output_format):
+def test_filter_isin_clashing_sets(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_isin_clashing_sets"
@@ -401,6 +543,7 @@ def test_filter_isin_clashing_sets(lmdb_version_store_v1, any_output_format):
     b_unique_val = 200000
     df = pd.DataFrame({"a": [-1, a_unique_val, -1], "b": [-1, -1, b_unique_val]}, index=np.arange(3))
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
     q = QueryBuilder()
     vals1 = np.arange(10000, dtype=np.uint64)
     np.put(vals1, 5000, a_unique_val)
@@ -422,12 +565,18 @@ def test_filter_isin_clashing_sets(lmdb_version_store_v1, any_output_format):
     ],
 )
 def test_filter_numeric_isin_hashing_overflows(
-    lmdb_version_store_v1, df_col, isin_vals, expected_col, any_output_format
+    lmdb_version_store_v1,
+    df_col,
+    isin_vals,
+    expected_col,
+    any_output_format,
+    column_stats_filtering_enabled_and_disabled,
 ):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": df_col})
     lib.write("test_filter_numeric_isin_hashing_overflows", df)
+    lib.create_column_stats("test_filter_numeric_isin_hashing_overflows", {"a": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["a"].isin(isin_vals)]
@@ -437,11 +586,14 @@ def test_filter_numeric_isin_hashing_overflows(
     assert_frame_equal(expected, result)
 
 
-def test_filter_numeric_isin_unsigned(lmdb_version_store_v1, any_output_format):
+def test_filter_numeric_isin_unsigned(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [0, 1, 2**64 - 1]})
     lib.write("test_filter_numeric_isin_unsigned", df)
+    lib.create_column_stats("test_filter_numeric_isin_unsigned", {"a": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["a"].isin([0, 1, 2])]
@@ -458,11 +610,14 @@ def test_filter_numeric_isnotin_mixed_types_exception():
         q = q[q["a"].isnotin(vals)]
 
 
-def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store_v1, any_output_format):
+def test_filter_numeric_isnotin_hashing_overflow(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [256]})
     lib.write("test_filter_numeric_isnotin_hashing_overflow", df)
+    lib.create_column_stats("test_filter_numeric_isnotin_hashing_overflow", {"a": {"MINMAX"}})
 
     q = QueryBuilder()
     isnotin_vals = np.array([], np.uint8)
@@ -472,6 +627,30 @@ def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store_v1, any_outp
     assert_frame_equal(df, result)
 
 
+def test_filter_isin_with_nan_in_set(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """Our isin handling doesn't match Pandas, which returns NaN rows from isin([np.nan])."""
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_with_nan_in_set"
+    df = pd.DataFrame({"a": [1.0, np.nan, 3.0]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["a"].isin([np.nan, 3.0])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [3.0]})
+    assert_frame_equal(expected, result)
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin([np.nan, 3.0])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [1.0, np.nan]})
+    assert_frame_equal(expected, result)
+
+
 _uint64_max = np.iinfo(np.uint64).max
 
 
@@ -479,7 +658,7 @@ _uint64_max = np.iinfo(np.uint64).max
 @pytest.mark.parametrize("signed_type", (np.int8, np.int16, np.int32, np.int64))
 @pytest.mark.parametrize("uint64_in", ("df", "vals") if PANDAS_VERSION >= Version("1.2") else ("vals",))
 def test_filter_numeric_membership_mixing_int64_and_uint64(
-    lmdb_version_store_v1, op, signed_type, uint64_in, any_output_format
+    lmdb_version_store_v1, op, signed_type, uint64_in, any_output_format, column_stats_filtering_enabled_and_disabled
 ):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -490,6 +669,7 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(
     else:
         df, vals = pd.DataFrame({"a": [signed]}), [_uint64_max]
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["a"].isin(vals) if op == "in" else q["a"].isnotin(vals)]
@@ -497,12 +677,16 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1, any_output_format):
+def test_filter_nones_and_nans_retained_in_string_column(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_filter_nones_and_nans_retained_in_string_column"
     df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
+    # Cannot create stats for string column yet
+    lib.create_column_stats(sym, {"filter_column": {"MINMAX"}})
     q = QueryBuilder()
     q = q[q["filter_column"] == 1]
     q.optimise_for_memory()
@@ -579,7 +763,9 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1, any_
     generic_filter_test_strings(lib, base_symbol, q, expected)
 
 
-def test_filter_explicit_type_promotion(lmdb_version_store_v1, any_output_format):
+def test_filter_explicit_type_promotion(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
@@ -595,6 +781,17 @@ def test_filter_explicit_type_promotion(lmdb_version_store_v1, any_output_format
     )
     symbol = "test_filter_explicit_type_promotion"
     lib.write(symbol, df)
+    lib.create_column_stats(
+        symbol,
+        {
+            "uint8": {"MINMAX"},
+            "uint16": {"MINMAX"},
+            "uint32": {"MINMAX"},
+            "int8": {"MINMAX"},
+            "int16": {"MINMAX"},
+            "int32": {"MINMAX"},
+        },
+    )
     # Plus
     q = QueryBuilder()
     q = q[
@@ -663,12 +860,15 @@ def test_filter_explicit_type_promotion(lmdb_version_store_v1, any_output_format
     assert np.array_equal(lib.read(symbol, query_builder=q).data, df.loc[[1]])
 
 
-def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segment, any_output_format):
+def test_filter_column_slicing_different_segments(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": np.arange(0, 10), "b": np.arange(10, 20), "c": np.arange(20, 30)}, index=np.arange(10))
     symbol = "test_filter_column_slicing_different_segments"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
     # Filter on column c (in second column slice), but only display column a (in first column slice)
     q = QueryBuilder()
     q = q[q["c"] == 22]
@@ -693,7 +893,7 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     assert np.array_equal(expected, received)
 
 
-def test_filter_with_multi_index(lmdb_version_store_v1, any_output_format):
+def test_filter_with_multi_index(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_with_multi_index"
@@ -705,6 +905,7 @@ def test_filter_with_multi_index(lmdb_version_store_v1, any_output_format):
         data={"a": np.arange(10, 14)}, index=pd.MultiIndex.from_arrays([arr1, arr2], names=["datetime", "level"])
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     q = QueryBuilder()
     q = q[(q["a"] == 11) | (q["a"] == 13)]
     expected = df[(df["a"] == 11) | (df["a"] == 13)]
@@ -729,7 +930,9 @@ def test_filter_on_multi_index(lmdb_version_store_v1, any_output_format):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_complex_expression(lmdb_version_store_tiny_segment, any_output_format):
+def test_filter_complex_expression(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_complex_expression"
@@ -742,6 +945,7 @@ def test_filter_complex_expression(lmdb_version_store_tiny_segment, any_output_f
         index=np.arange(10),
     )
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
     q = QueryBuilder()
     q = q[(((q["a"] * q["b"]) / 5) < (0.7 * q["c"])) & (q["b"] != 12)]
     expected = df[(((df["a"] * df["b"]) / 5) < (0.7 * df["c"])) & (df["b"] != 12)]
@@ -1136,7 +1340,9 @@ def test_filter_string_number_set_membership(lmdb_version_store_v1, any_output_f
 
 # float32 comparisons are excluded from the hypothesis tests due to a bug in Pandas, so cover these here instead
 # https://github.com/pandas-dev/pandas/issues/59524
-def test_float32_binary_comparison(lmdb_version_store_v1, any_output_format):
+def test_float32_binary_comparison(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_float32_binary_comparison"
@@ -1155,6 +1361,21 @@ def test_float32_binary_comparison(lmdb_version_store_v1, any_output_format):
         }
     )
     lib.write(symbol, df)
+    lib.create_column_stats(
+        symbol,
+        {
+            "uint8": {"MINMAX"},
+            "uint16": {"MINMAX"},
+            "uint32": {"MINMAX"},
+            "uint64": {"MINMAX"},
+            "int8": {"MINMAX"},
+            "int16": {"MINMAX"},
+            "int32": {"MINMAX"},
+            "int64": {"MINMAX"},
+            "float32": {"MINMAX"},
+            "float64": {"MINMAX"},
+        },
+    )
     for op in ["<", "<=", ">", ">=", "==", "!="]:
         for other_col in [
             "uint8",
@@ -1269,7 +1490,9 @@ def test_filter_date_range_none_none(lmdb_version_store_v1, any_output_format):
 ##################################
 
 
-def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic, any_output_format):
+def test_numeric_filter_dynamic_schema(
+    lmdb_version_store_tiny_segment_dynamic, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_tiny_segment_dynamic
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_numeric_filter_dynamic_schema"
@@ -1277,6 +1500,7 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic, 
     expected, slices = make_dynamic(df)
     for df_slice in slices:
         lib.append(symbol, df_slice, write_if_missing=True)
+    lib.create_column_stats(symbol, {"int8": {"MINMAX"}})
     val = 0
     q = QueryBuilder()
     q = q[q["int8"] < val]
@@ -1301,7 +1525,9 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1,
         vit = lib.read(symbol, query_builder=q)
 
 
-def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1, any_output_format):
+def test_filter_column_present_in_some_segments(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_column_not_present_dynamic"
@@ -1310,6 +1536,7 @@ def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schem
 
     df = pd.DataFrame({"b": [1, 10]}, dtype="int64")
     lib.append(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
 
     q = QueryBuilder()
     q = q[q["b"] < 5]
@@ -1590,3 +1817,29 @@ def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynami
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     assert not expected.empty
+
+
+@pytest.mark.xfail(reason="Filtering does not have special handling for NaT. Monday: 11688915824")
+def test_column_stats_select_nat_values(in_memory_version_store, column_stats_filtering_enabled_and_disabled):
+    lib = in_memory_version_store
+
+    ts = pd.date_range("2000-01-01", periods=2)
+    df0 = pd.DataFrame({"col": [pd.Timestamp("2020-01-01"), pd.NaT]}, index=ts)
+    df1 = pd.DataFrame(
+        {"col": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-06-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    sym = "sym"
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["col"] == pd.NaT]
+    result = lib.read(sym, query_builder=q).data
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[full_df["col"] == pd.NaT]
+    assert_frame_equal(expected, result)

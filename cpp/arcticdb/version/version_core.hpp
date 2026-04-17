@@ -23,6 +23,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
+#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <string>
 
@@ -71,6 +72,8 @@ VersionedItem delete_range_impl(
         const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
 );
 
+IndexInformation read_index_key_without_column_stats(const std::shared_ptr<Store>& store, const AtomKey& key);
+
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 
 void create_column_stats_impl(
@@ -89,7 +92,7 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
 
 folly::Future<ReadVersionOutput> read_multi_key(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 );
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
@@ -143,7 +146,8 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
 );
 
 folly::Future<SymbolProcessingResult> read_and_process(
@@ -181,7 +185,7 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
 
 folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 );
 
 folly::Future<VersionedItem> read_modify_write_impl(
@@ -203,7 +207,7 @@ folly::Future<std::optional<VersionedItem>> compact_data_impl(
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, ReadQuery& read_query,
+        const std::shared_ptr<Store>& store, VersionIdentifier version_info, ReadQuery& read_query,
         const ReadOptions& read_options
 );
 } // namespace arcticdb::version_store
