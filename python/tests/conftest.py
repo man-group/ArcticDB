@@ -306,14 +306,128 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
         yield f
 
 
-@pytest.fixture
-def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
-    yield lmdb_storage.create_arctic().create_library(lib_name)
+# region ---- LMDB Fixture Caching (NativeVersionStore + Library pools) ----
+#
+# Creating an LMDB environment is expensive on Windows (~0.4s per test).
+# These pools reuse NativeVersionStore and Library objects across tests by
+# calling clear() (instant dbi_drop) instead of creating new LMDB envs.
+
+
+def _reset_store_state(store):
+    """Reset mutable Python-side state on a NativeVersionStore so it behaves like a fresh instance."""
+    store._allow_arrow_input = False
+    store._test_convert_arrow_back_to_pandas = False
+    store.set_output_format(OutputFormat.PANDAS)
+
+
+class _VersionStorePool:
+    """Session-scoped pool of NativeVersionStore objects keyed by config."""
+
+    def __init__(self, storage: LmdbStorageFixture):
+        self._storage = storage
+        self._factory = storage.create_version_store_factory("_pool_default")
+        self._available: dict = {}  # config_key -> list[NativeVersionStore]
+        self._counter = 0
+
+    def checkout(self, col_per_group=None, row_per_segment=None, lmdb_config=None, **kwargs):
+        if col_per_group is not None and "column_group_size" not in kwargs:
+            kwargs["column_group_size"] = col_per_group
+        if row_per_segment is not None and "segment_row_size" not in kwargs:
+            kwargs["segment_row_size"] = row_per_segment
+        key = self._make_key(kwargs, lmdb_config)
+        if key in self._available and self._available[key]:
+            store = self._available[key].pop()
+            store.version_store.clear()
+            _reset_store_state(store)
+            return key, store
+        self._counter += 1
+        call_kwargs = dict(kwargs)
+        call_kwargs["name"] = f"_pool_{self._counter}"
+        if lmdb_config is not None:
+            call_kwargs["lmdb_config"] = lmdb_config
+        store = self._factory(**call_kwargs)
+        return key, store
+
+    def checkin(self, key, store):
+        self._available.setdefault(key, []).append(store)
+
+    @staticmethod
+    def _make_key(kwargs, lmdb_config):
+        filtered = tuple(sorted((k, v) for k, v in kwargs.items() if k not in ("name", "reuse_name")))
+        lmdb_part = tuple(sorted(lmdb_config.items())) if lmdb_config else ()
+        return (filtered, lmdb_part)
+
+
+class _LibraryPool:
+    """Session-scoped pool of Library objects keyed by LibraryOptions."""
+
+    def __init__(self, storage: LmdbStorageFixture):
+        self._arctic = storage.create_arctic()
+        self._available: dict = {}  # options_key -> list[Library]
+        self._counter = 0
+
+    def checkout(self, library_options=None):
+        key = self._make_key(library_options)
+        if key in self._available and self._available[key]:
+            lib = self._available[key].pop()
+            lib._nvs.version_store.clear()
+            _reset_store_state(lib._nvs)
+            return key, lib
+        self._counter += 1
+        name = f"_libpool_{self._counter}"
+        lib = self._arctic.create_library(name, library_options=library_options)
+        return key, lib
+
+    def checkin(self, key, lib):
+        self._available.setdefault(key, []).append(lib)
+
+    @staticmethod
+    def _make_key(library_options):
+        if library_options is None:
+            return ()
+        return (
+            library_options.dynamic_schema,
+            library_options.dedup,
+            library_options.rows_per_segment,
+            library_options.columns_per_segment,
+            library_options.encoding_version,
+            library_options.recursive_normalizers,
+        )
+
+
+@pytest.fixture(scope="session")
+def _lmdb_pool_storage(tmp_path_factory):
+    check_local_storage_enabled()
+    tmp_path = tmp_path_factory.mktemp("lmdb_pool")
+    with LmdbStorageFixture(tmp_path) as f:
+        yield f
+
+
+@pytest.fixture(scope="session")
+def _version_store_pool(_lmdb_pool_storage):
+    return _VersionStorePool(_lmdb_pool_storage)
+
+
+@pytest.fixture(scope="session")
+def _library_pool(_lmdb_pool_storage):
+    return _LibraryPool(_lmdb_pool_storage)
+
+
+# endregion
 
 
 @pytest.fixture
-def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, None, None]:
-    yield lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+def lmdb_library(_library_pool) -> Generator[Library, None, None]:
+    key, lib = _library_pool.checkout()
+    yield lib
+    _library_pool.checkin(key, lib)
+
+
+@pytest.fixture
+def lmdb_library_dynamic_schema(_library_pool) -> Generator[Library, None, None]:
+    key, lib = _library_pool.checkout(library_options=LibraryOptions(dynamic_schema=True))
+    yield lib
+    _library_pool.checkin(key, lib)
 
 
 @pytest.fixture(
@@ -325,11 +439,18 @@ def lmdb_library_static_dynamic(request):
 
 
 @pytest.fixture
-def lmdb_library_factory(lmdb_storage, lib_name):
-    def f(library_options: LibraryOptions = LibraryOptions()):
-        return lmdb_storage.create_arctic().create_library(lib_name, library_options=library_options)
+def lmdb_library_factory(_library_pool):
+    checked_out = []
 
-    return f
+    def f(library_options: LibraryOptions = LibraryOptions()):
+        key, lib = _library_pool.checkout(library_options=library_options)
+        checked_out.append((key, lib))
+        return lib
+
+    yield f
+
+    for key, lib in checked_out:
+        _library_pool.checkin(key, lib)
 
 
 @pytest.fixture
@@ -873,12 +994,20 @@ def _store_factory(lib_name, bucket, delete_bucket=True) -> Generator[Callable[.
 
 
 @pytest.fixture
-def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    # Do not delete LMDB library on windows
-    # Otherwise there will be no storage space left for unit tests
-    # very peculiar behavior for LMDB, not investigated yet
-    # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or (MACOS and ARM64)))
+def version_store_factory(_version_store_pool) -> Generator[Callable[..., NativeVersionStore], None, None]:
+    checked_out = []
+
+    def factory(col_per_group=None, row_per_segment=None, lmdb_config=None, **kwargs):
+        key, store = _version_store_pool.checkout(
+            col_per_group=col_per_group, row_per_segment=row_per_segment, lmdb_config=lmdb_config, **kwargs
+        )
+        checked_out.append((key, store))
+        return store
+
+    yield factory
+
+    for key, store in checked_out:
+        _version_store_pool.checkin(key, store)
 
 
 @pytest.fixture
