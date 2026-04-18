@@ -143,6 +143,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS AND NOT C
     endif()
 endif()
 
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    # Using mold so I can get away with this.
+    add_link_options(-Wl,--gdb-index)
+    message(STATUS "Using --gdb-index")
+endif()
+
 if(${ARCTICDB_USING_CONDA})
     # Required to be able to include headers from glog since glog 0.7
     # See: https://github.com/google/glog/pull/1030
@@ -241,12 +247,12 @@ else()
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
     endif()
-    set(CMAKE_CXX_FLAGS_DEBUG "-ggdb")
+    set(CMAKE_CXX_FLAGS_DEBUG "-ggdb -gz=zstd")
     if(DEFINED ENV{ARCTICDB_CODE_COVERAGE_BUILD})
         set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} --coverage -g -O0")
     endif()
     set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb -gz=zstd")
 endif()
 
 if(DEFINED ENV{CMAKE_BUILD_TYPE})

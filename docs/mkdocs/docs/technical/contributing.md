@@ -62,6 +62,7 @@ MY_PYTHON=/opt/python/cp39-cp39/bin/python3  # change if outside docker containe
 $MY_PYTHON -m pip install -U pip setuptools wheel grpcio-tools
 ARCTIC_CMAKE_PRESET=skip $MY_PYTHON setup.py develop
 # Change the below Python_EXECUTABLE value to build against a different Python version
+export VCPKG_MAX_CONCURRENCY=2
 cmake -DPython_EXECUTABLE=$MY_PYTHON -DTEST=off --preset linux-debug cpp
 pushd cpp
 cmake --build --preset linux-debug
@@ -121,7 +122,7 @@ See: https://github.com/man-group/ArcticDB/pull/449**
 For instance:
 
  - for debug build on Linux with mamba and conda-forge, use:
- 
+
   ```bash
   export ARCTICDB_USING_CONDA=1
   cmake -DTEST=off --preset linux-conda-debug cpp
@@ -413,7 +414,7 @@ If possible, a version number should also be added such that future changes in t
 ### API
 
 Any changes to the API (including when exceptions are thrown and the type of the exception) must be weighed up against the change breaking behaviour for existing users.
-Please make this as clear to reviewers as possible by ensuring **API changes are clearly described in the PR description**. 
+Please make this as clear to reviewers as possible by ensuring **API changes are clearly described in the PR description**.
 If the change is breaking, please also ensure that that is appropriately highlighted in the PR description as well.
 This is particularly true of the `NativeVersionStore` API, as this has many users inside Man Group.
 
