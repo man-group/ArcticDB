@@ -24,10 +24,30 @@ fi
 export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
 # Enable faulthandler so SIGSEGV/SIGBUS dump tracebacks to stderr
 export PYTHONFAULTHANDLER=1
-# Arm a C-level watchdog that dumps all thread tracebacks and exits if a single
-# test hangs for this many seconds.  Fires even when C++ holds the GIL.
-# Must be shorter than --timeout (3600s) and the GH Actions step timeout (5400s).
+# Arm a C-level per-test watchdog that dumps tracebacks and kills the worker
+# if a test hangs with the GIL held (where pytest-timeout's thread method can't fire).
+# Crash tracebacks are written to per-PID files in ARCTICDB_FAULTHANDLER_DIR
+# (xdist worker stderr is piped through execnet and never reaches CI logs).
 export ARCTICDB_FAULTHANDLER_TIMEOUT=3300
+export ARCTICDB_FAULTHANDLER_DIR="$TEST_OUTPUT_DIR/faulthandler"
+
+print_faulthandler_crashes() {
+    if [ -d "$ARCTICDB_FAULTHANDLER_DIR" ] && ls "$ARCTICDB_FAULTHANDLER_DIR"/crash_*.log 1>/dev/null 2>&1; then
+        echo ""
+        echo "======================== faulthandler crash dumps ========================"
+        for f in "$ARCTICDB_FAULTHANDLER_DIR"/crash_*.log; do
+            echo "--- $f ---"
+            cat "$f"
+            echo ""
+        done
+        echo "========================================================================="
+    fi
+}
+
+# Disable set -e around pytest so we can capture the exit code,
+# print faulthandler crash dumps, and optionally retry on OOM.
+set +e
+
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
     $catch python -m pytest --timeout=3600 --timeout_method=thread $PYTEST_XDIST_MODE -v \
@@ -36,7 +56,8 @@ if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
         $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
 
-    exit_code=$?
+    exit_code=${PIPESTATUS[0]}
+    print_faulthandler_crashes
     # Retry with reduced parallelism if OOM‑killed
     if [ "$exit_code" -eq 137 ]; then
         echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
@@ -46,6 +67,8 @@ if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
             --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
             --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
             $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
+        exit_code=${PIPESTATUS[0]}
+        print_faulthandler_crashes
     fi
 
 else
@@ -59,6 +82,7 @@ else
         $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS 2>&1
 
     exit_code=$?
+    print_faulthandler_crashes
     # Retry with reduced parallelism if OOM‑killed
     if [ "$exit_code" -eq 137 ]; then
         echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
@@ -68,5 +92,9 @@ else
             --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
             --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
             $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS 2>&1
+        exit_code=$?
+        print_faulthandler_crashes
     fi
 fi
+
+exit $exit_code

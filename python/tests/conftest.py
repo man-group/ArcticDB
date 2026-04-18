@@ -108,9 +108,17 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
 # Timeout for faulthandler's C-level deadlock watchdog (seconds).
-# Disabled by default (0). CI sets this via ARCTICDB_FAULTHANDLER_TIMEOUT in
-# parallel_test.sh to catch GIL-holding deadlocks that pytest-timeout can't kill.
+# Must be shorter than pytest-timeout (3600s) and the GH Actions step timeout
+# (90min = 5400s) so it fires first and gives us a traceback.
+# Disabled by default (0) — enabled in CI via parallel_test.sh.
 _FAULTHANDLER_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_TIMEOUT", "0"))
+# Directory for faulthandler crash files.  xdist workers have stderr piped
+# through execnet, so writing to sys.stderr won't reach the CI log.  We write
+# to a file instead, and parallel_test.sh prints any crash files after pytest.
+_FAULTHANDLER_DIR = os.environ.get(
+    "ARCTICDB_FAULTHANDLER_DIR",
+    os.path.join(os.environ.get("TEST_OUTPUT_DIR", "/tmp"), "faulthandler"),
+)
 
 
 # Ensure pytest-xdist uses 'fork' start method on macOS
@@ -133,6 +141,9 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
 
 
+_faulthandler_file = None  # kept open so faulthandler can write to the fd
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_protocol(item, nextitem):
     """Arm faulthandler's C-level timer before each test.
@@ -141,12 +152,26 @@ def pytest_runtest_protocol(item, nextitem):
     implemented entirely in C and does NOT need the GIL.  This means it
     can kill the process and dump tracebacks even when C++ extension code
     is holding the GIL indefinitely.
+
+    We write to a per-PID file because xdist worker stderr is piped through
+    execnet and never reaches the CI log.  parallel_test.sh prints these
+    files after pytest exits.
     """
+    global _faulthandler_file
     if _FAULTHANDLER_TIMEOUT > 0:
+        os.makedirs(_FAULTHANDLER_DIR, exist_ok=True)
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        # Close previous file if any (rearms for the new test)
+        if _faulthandler_file is not None:
+            _faulthandler_file.close()
+        _faulthandler_file = open(crash_path, "w")
+        # Write the test id so the crash file is self-describing
+        _faulthandler_file.write(f"Faulthandler timeout ({_FAULTHANDLER_TIMEOUT}s) for: {item.nodeid}\n")
+        _faulthandler_file.flush()
         faulthandler.dump_traceback_later(
             _FAULTHANDLER_TIMEOUT,
             exit=True,
-            file=sys.stderr,
+            file=_faulthandler_file,
         )
     return None  # Let the default protocol run
 
@@ -154,7 +179,17 @@ def pytest_runtest_protocol(item, nextitem):
 @pytest.hookimpl(trylast=True)
 def pytest_runtest_teardown(item, nextitem):
     """Cancel the faulthandler timer after each test completes."""
+    global _faulthandler_file
     faulthandler.cancel_dump_traceback_later()
+    if _faulthandler_file is not None:
+        _faulthandler_file.close()
+        _faulthandler_file = None
+        # Remove the crash file for tests that completed normally
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        try:
+            os.unlink(crash_path)
+        except OSError:
+            pass
 
 
 if platform.system() == "Linux":
