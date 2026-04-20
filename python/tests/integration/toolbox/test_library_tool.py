@@ -283,7 +283,9 @@ def test_overwrite_append_data(lmdb_version_store_v1):
         next_key = lib_tool.read_timeseries_descriptor(append_ref).next_key
         while next_key is not None and lib_tool.key_exists(next_key):
             key_str = str(next_key)
-            assert key_str not in seen_keys, f"Cycle detected in append data linked list: {key_str} already visited. Chain so far: {[str(k) for k in append_data_keys]}"
+            assert (
+                key_str not in seen_keys
+            ), f"Cycle detected in append data linked list: {key_str} already visited. Chain so far: {[str(k) for k in append_data_keys]}"
             seen_keys.add(key_str)
             append_data_keys.append(next_key)
             next_key = lib_tool.read_timeseries_descriptor(next_key).next_key
