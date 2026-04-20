@@ -36,8 +36,14 @@ pytestmark = pytest.mark.pipeline
     ),
     val=numeric_type_strategies(),
 )
+
 def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
+    # Guards for POW: avoid overflow and NaN from negative-base-fractional-exponent
+    assume(df["b"].abs().max() < 50)
+    assume(abs(val) < 50)
+    assume((df["a"] >= 0).all())
+    assume(val >= 0)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_binary_operation"
@@ -46,7 +52,7 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_form
     # only do these operations once to save time
     # Have to cast all Pandas values to doubles before computing, otherwise it gets the types wrong and over/underflows
     # a lot: https://github.com/pandas-dev/pandas/issues/59524
-    for op in ["+", "-", "*", "/"]:
+    for op in ["+", "-", "*", "/", "**"]:
         for comp in ["col op col", "col op val", "val op col"]:
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
@@ -65,6 +71,9 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_form
             elif op == "/":
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
+            elif op == "**":
+                q = q.apply("c", qb_lhs ** qb_rhs)
+                df["c"] = pandas_lhs ** pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
                 assert_frame_equal(df, received, check_dtype=False)
@@ -123,8 +132,14 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, any_output_forma
     ),
     val=numeric_type_strategies(),
 )
+
 def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
     assume(len(df) >= 3)
+    # Guards for POW: avoid overflow and NaN from negative-base-fractional-exponent
+    assume(df["b"].abs().max() < 50)
+    assume(abs(val) < 50)
+    assume((df["a"] >= 0).all())
+    assume(val >= 0)
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_binary_operation_dynamic"
@@ -139,7 +154,7 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
     df = pd.concat(slices)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
-    for op in ["+", "-", "*", "/"]:
+    for op in ["+", "-", "*", "/", "**"]:
         for comp in ["col op col", "col op val", "val op col"]:
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
@@ -158,6 +173,9 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
             elif op == "/":
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
+            elif op == "**":
+                q = q.apply("c", qb_lhs ** qb_rhs)
+                df["c"] = pandas_lhs ** pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
                 assert_frame_equal(df, received, check_dtype=False)

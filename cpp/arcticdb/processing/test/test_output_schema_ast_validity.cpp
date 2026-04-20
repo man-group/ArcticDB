@@ -179,6 +179,96 @@ TEST_F(AstParsingOutputTypesTest, FilterIsInStringColStringValueSet) {
     ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
+TEST_F(AstParsingOutputTypesTest, ProjectionPowUintUintCols) {
+    // uint ^ uint -> uint64
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("uint8"), ColumnName("uint8"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::UINT64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowIntUintCols) {
+    // int ^ uint -> int64
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("int32"), ColumnName("uint8"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::INT64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowUintIntCols) {
+    // uint ^ int -> double (negative exponent can produce fractional results)
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("uint8"), ColumnName("int32"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"uint8", "int32"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::FLOAT64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowIntIntCols) {
+    // int ^ int -> double (negative exponent can produce fractional results)
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("int32"), ColumnName("int32"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"int32"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::FLOAT64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColVal) {
+    // uint8 ^ uint16 value -> uint64 (unsigned base, unsigned exponent)
+    auto value = std::make_shared<Value>(construct_value<uint16_t>(3));
+    ec.add_value("3", value);
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("uint8"), ValueName("3"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::UINT64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColStringCol) {
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("int32"), ColumnName("string"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"int32", "string"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColBitset) {
+    ec.add_expression_node("bitset", bitset_node());
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("int32"), ExpressionName("bitset"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColValueSet) {
+    std::unordered_set<uint8_t> raw_set{1, 2, 3};
+    auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<uint8_t>>(std::move(raw_set)));
+    ec.add_value_set("value_set", value_set);
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ColumnName("uint8"), ValueSetName("value_set"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
 TEST_F(AstParsingOutputTypesTest, FilterIsInNumericColEmptyValueSet) {
     std::vector<std::string> raw_set;
     auto value_set = std::make_shared<ValueSet>(std::move(raw_set));
