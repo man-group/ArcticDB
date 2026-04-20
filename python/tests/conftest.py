@@ -89,7 +89,7 @@ from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
 import arcticdb.toolbox.query_stats as query_stats
-from arcticdb.options import OutputFormat, ArrowOutputStringFormat
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat, RuntimeOptions
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
@@ -328,6 +328,21 @@ def _reset_store_state(store):
     store._custom_normalizer = get_custom_normalizer(False)
 
 
+def _scrub_instance_shadows(obj):
+    """Remove instance attributes that shadow class methods.
+
+    When pytest's monkeypatch undoes ``setattr(instance, "method", mock)``, it
+    restores the original via ``setattr(instance, "method", old_class_method)``
+    instead of ``delattr``.  This leaves a stale *instance* attribute that shadows
+    any future class-level patch on the same name.  Scrubbing these avoids
+    cross-test contamination in pooled fixtures.
+    """
+    for attr in list(obj.__dict__):
+        class_val = getattr(obj.__class__, attr, None)
+        if class_val is not None and callable(class_val):
+            delattr(obj, attr)
+
+
 class _VersionStorePool:
     """Session-scoped pool of NativeVersionStore objects keyed by config.
 
@@ -357,6 +372,7 @@ class _VersionStorePool:
             self._total_pooled -= 1
             store.version_store.clear()
             _reset_store_state(store)
+            _scrub_instance_shadows(store)
             return key, store
         self._counter += 1
         call_kwargs = dict(kwargs)
@@ -397,6 +413,7 @@ class _LibraryPool:
             self._total_pooled -= 1
             lib._nvs.version_store.clear()
             _reset_store_state(lib._nvs)
+            _scrub_instance_shadows(lib)
             return key, lib
         self._counter += 1
         name = f"_libpool_{self._counter}"
