@@ -121,7 +121,7 @@ def _make_mock_read_result(sort_order, index_name="__index__", fake_name=True, i
 
 def test_descending_sort_order_sets_sorted_desc():
     """When sort_order is DESCENDING the Polars column should have SORTED_DESC."""
-    data = pl.DataFrame({"__index__": pl.date_range(pd.Timestamp("2024-01-01"), periods=5, interval="1h", eager=True)})
+    data = pl.DataFrame({"__index__": pd.date_range("2024-01-01", periods=5, freq="h")})
     read_result = _make_mock_read_result(SortedValue.DESCENDING)
 
     result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, read_result)
@@ -132,7 +132,7 @@ def test_descending_sort_order_sets_sorted_desc():
 
 def test_unknown_sort_order_does_not_set_sorted_flag():
     """When sort_order is UNKNOWN no sorted flag should be applied even with a physical index."""
-    data = pl.DataFrame({"__index__": pl.date_range(pd.Timestamp("2024-01-01"), periods=5, interval="1h", eager=True)})
+    data = pl.DataFrame({"__index__": pd.date_range("2024-01-01", periods=5, freq="h")})
     read_result = _make_mock_read_result(SortedValue.UNKNOWN)
 
     result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, read_result)
