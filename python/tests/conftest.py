@@ -318,6 +318,9 @@ def _reset_store_state(store):
     store._allow_arrow_input = False
     store._test_convert_arrow_back_to_pandas = False
     store.set_output_format(OutputFormat.PANDAS)
+    store.set_arrow_string_format_default(ArrowOutputStringFormat.LARGE_STRING)
+    # Re-create the normalizer in case a test replaced it (e.g. with a MagicMock)
+    store._init_norm_failure_handler()
 
 
 class _VersionStorePool:
