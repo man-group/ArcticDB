@@ -323,8 +323,11 @@ def _reset_store_state(store):
     store._runtime_options = RuntimeOptions()
     # Re-create the normalizer in case a test replaced it (e.g. with a MagicMock)
     store._init_norm_failure_handler()
-    # Reset custom normalizer: clear any test-registered normalizers and recreate.
-    clear_registered_normalizers()
+    # Refresh custom normalizer from the global registry.  We do NOT clear the
+    # registry here because a test fixture may have already registered a
+    # normalizer before the pool checkout (fixture ordering is left-to-right).
+    # Individual fixtures (e.g. custom_thing_with_registered_normalizer) are
+    # responsible for cleaning up the global registry in their own teardown.
     store._custom_normalizer = get_custom_normalizer(False)
 
 
