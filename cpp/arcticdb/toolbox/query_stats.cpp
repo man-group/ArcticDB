@@ -60,6 +60,20 @@ std::string task_type_to_string(TaskType task_type) {
         return "Memory_DeleteObject";
     case TaskType::Memory_HeadObject:
         return "Memory_HeadObject";
+    case TaskType::LMDB_ListObjects:
+        return "LMDB_ListObjects";
+    case TaskType::LMDB_PutObject:
+        return "LMDB_PutObject";
+    case TaskType::LMDB_GetObject:
+        return "LMDB_GetObject";
+    case TaskType::LMDB_DeleteObjects:
+        return "LMDB_DeleteObjects";
+    case TaskType::LMDB_HeadObject:
+        return "LMDB_HeadObject";
+    case TaskType::LMDB_DbiGet:
+        return "LMDB_DbiGet";
+    case TaskType::LMDB_SegmentFromBytes:
+        return "LMDB_SegmentFromBytes";
     default:
         log::version().warn("Unknown task type {}", static_cast<int>(task_type));
         return "Unknown";

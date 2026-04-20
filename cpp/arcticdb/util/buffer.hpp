@@ -174,7 +174,16 @@ struct Buffer : public BaseBuffer<Buffer, true> {
 
     inline void ensure(size_t bytes) {
         if (const size_t total_size = bytes + preamble_bytes_; total_size > capacity_) {
-            resize(total_size);
+            // Grow geometrically (at least 1.5x) rather than to the exact request. Callers
+            // like FieldCollection::add_field append one field at a time, so `ensure` is
+            // invoked with monotonically increasing `bytes`. Sizing to exactly `total_size`
+            // would trigger a fresh realloc + memcpy of body_bytes_ on every call, making N
+            // appends cost O(N^2) in copy work (~35k fields on a wide schema = 35k reallocs).
+            // With 1.5x growth, realloc happens O(log N) times and amortized append is O(1),
+            // matching the std::vector strategy. The max() with `total_size` guarantees we
+            // still satisfy the request if capacity_ is 0 or the jump exceeds 1.5x.
+            const size_t new_alloc = std::max(total_size, capacity_ + (capacity_ / 2));
+            resize(new_alloc);
         } else {
             ARCTICDB_TRACE(
                     log::version(),
