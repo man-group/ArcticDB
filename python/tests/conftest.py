@@ -321,22 +321,32 @@ def _reset_store_state(store):
 
 
 class _VersionStorePool:
-    """Session-scoped pool of NativeVersionStore objects keyed by config."""
+    """Session-scoped pool of NativeVersionStore objects keyed by config.
+
+    On Windows, LMDB pre-allocates the full map_size on disk (no sparse files),
+    so we cap the total number of pooled instances to avoid exhausting disk space.
+    Instances with custom lmdb_config (non-default map_size) are never pooled.
+    """
+
+    _MAX_POOLED = 10  # Max total instances kept in the pool
 
     def __init__(self, storage: LmdbStorageFixture):
         self._storage = storage
         self._factory = storage.create_version_store_factory("_pool_default")
         self._available: dict = {}  # config_key -> list[NativeVersionStore]
         self._counter = 0
+        self._total_pooled = 0
 
     def checkout(self, col_per_group=None, row_per_segment=None, lmdb_config=None, **kwargs):
         if col_per_group is not None and "column_group_size" not in kwargs:
             kwargs["column_group_size"] = col_per_group
         if row_per_segment is not None and "segment_row_size" not in kwargs:
             kwargs["segment_row_size"] = row_per_segment
+        poolable = lmdb_config is None
         key = self._make_key(kwargs, lmdb_config)
-        if key in self._available and self._available[key]:
+        if poolable and key in self._available and self._available[key]:
             store = self._available[key].pop()
+            self._total_pooled -= 1
             store.version_store.clear()
             _reset_store_state(store)
             return key, store
@@ -348,8 +358,11 @@ class _VersionStorePool:
         store = self._factory(**call_kwargs)
         return key, store
 
-    def checkin(self, key, store):
-        self._available.setdefault(key, []).append(store)
+    def checkin(self, key, store, *, poolable=True):
+        if poolable and self._total_pooled < self._MAX_POOLED:
+            self._available.setdefault(key, []).append(store)
+            self._total_pooled += 1
+        # else: instance is discarded — GC will close the LMDB env
 
     @staticmethod
     def _make_key(kwargs, lmdb_config):
@@ -361,15 +374,19 @@ class _VersionStorePool:
 class _LibraryPool:
     """Session-scoped pool of Library objects keyed by LibraryOptions."""
 
+    _MAX_POOLED = 5  # Max total instances kept in the pool
+
     def __init__(self, storage: LmdbStorageFixture):
         self._arctic = storage.create_arctic()
         self._available: dict = {}  # options_key -> list[Library]
         self._counter = 0
+        self._total_pooled = 0
 
     def checkout(self, library_options=None):
         key = self._make_key(library_options)
         if key in self._available and self._available[key]:
             lib = self._available[key].pop()
+            self._total_pooled -= 1
             lib._nvs.version_store.clear()
             _reset_store_state(lib._nvs)
             return key, lib
@@ -379,7 +396,9 @@ class _LibraryPool:
         return key, lib
 
     def checkin(self, key, lib):
-        self._available.setdefault(key, []).append(lib)
+        if self._total_pooled < self._MAX_POOLED:
+            self._available.setdefault(key, []).append(lib)
+            self._total_pooled += 1
 
     @staticmethod
     def _make_key(library_options):
@@ -998,16 +1017,17 @@ def version_store_factory(_version_store_pool) -> Generator[Callable[..., Native
     checked_out = []
 
     def factory(col_per_group=None, row_per_segment=None, lmdb_config=None, **kwargs):
+        poolable = lmdb_config is None
         key, store = _version_store_pool.checkout(
             col_per_group=col_per_group, row_per_segment=row_per_segment, lmdb_config=lmdb_config, **kwargs
         )
-        checked_out.append((key, store))
+        checked_out.append((key, store, poolable))
         return store
 
     yield factory
 
-    for key, store in checked_out:
-        _version_store_pool.checkin(key, store)
+    for key, store, poolable in checked_out:
+        _version_store_pool.checkin(key, store, poolable=poolable)
 
 
 @pytest.fixture
