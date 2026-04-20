@@ -7,18 +7,22 @@
  */
 
 #pragma once
+
 #include <cstddef>
-namespace pybind11 {
-class array;
-}
-namespace py = pybind11;
 
 namespace arcticdb {
 class SegmentInMemory;
 }
 
+namespace pybind11 {
+class array;
+}
+
 namespace arcticdb::detail {
 
-py::array array_at(const SegmentInMemory& frame, size_t col_pos);
+/**
+ * Python-specific column utility: converts a column in SegmentInMemory to a NumPy array
+ */
+pybind11::array array_at(const SegmentInMemory& frame, size_t col_pos);
 
 } // namespace arcticdb::detail
