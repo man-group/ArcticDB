@@ -622,7 +622,7 @@ jobs:
         uses: ./.github/actions/enable_logging
 
       - name: Run test
-        timeout-minutes: 90
+        timeout-minutes: ${{ env.real_tests_storage_type != 'no' && 300 || 90 }}
         run: |
           # find ssl directory where cacerts are (for Azure)
           openssl version -d 
