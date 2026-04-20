@@ -93,6 +93,7 @@ from arcticdb.options import OutputFormat, ArrowOutputStringFormat
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
+    get_custom_normalizer,
 )
 from arcticdb.util.test import config_context, config_context_multi
 
@@ -317,10 +318,14 @@ def _reset_store_state(store):
     """Reset mutable Python-side state on a NativeVersionStore so it behaves like a fresh instance."""
     store._allow_arrow_input = False
     store._test_convert_arrow_back_to_pandas = False
-    store.set_output_format(OutputFormat.PANDAS)
-    store.set_arrow_string_format_default(ArrowOutputStringFormat.LARGE_STRING)
+    # Give the store its own RuntimeOptions with defaults, breaking any shared reference
+    # (e.g. all Libraries from the same Arctic instance share one RuntimeOptions object).
+    store._runtime_options = RuntimeOptions()
     # Re-create the normalizer in case a test replaced it (e.g. with a MagicMock)
     store._init_norm_failure_handler()
+    # Reset custom normalizer: clear any test-registered normalizers and recreate.
+    clear_registered_normalizers()
+    store._custom_normalizer = get_custom_normalizer(False)
 
 
 class _VersionStorePool:
@@ -396,6 +401,9 @@ class _LibraryPool:
         self._counter += 1
         name = f"_libpool_{self._counter}"
         lib = self._arctic.create_library(name, library_options=library_options)
+        # Break shared RuntimeOptions reference from the Arctic instance so
+        # tests that change the output format on one library don't affect others.
+        lib._nvs._runtime_options = RuntimeOptions()
         return key, lib
 
     def checkin(self, key, lib):
