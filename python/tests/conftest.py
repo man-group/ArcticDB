@@ -374,6 +374,12 @@ class _VersionStorePool:
             store = self._available[key].pop()
             self._total_pooled -= 1
             store.version_store.clear()
+            # clear() uses LMDB's dbi_drop which should empty every named
+            # database.  In practice, APPEND_DATA keys sometimes survive
+            # (possibly an LMDB transaction ordering issue), so remove any
+            # leftover staged data explicitly.
+            for sym in store.version_store.get_incomplete_symbols():
+                store.version_store.remove_incomplete(sym)
             _reset_store_state(store)
             _scrub_instance_shadows(store)
             return key, store
@@ -420,6 +426,8 @@ class _LibraryPool:
             lib = self._available[key].pop()
             self._total_pooled -= 1
             lib._nvs.version_store.clear()
+            for sym in lib._nvs.version_store.get_incomplete_symbols():
+                lib._nvs.version_store.remove_incomplete(sym)
             _reset_store_state(lib._nvs)
             _scrub_instance_shadows(lib)
             return key, lib
