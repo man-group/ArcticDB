@@ -338,6 +338,13 @@ class AsyncStore : public Store {
         return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
     }
 
+    std::pair<VariantKey, TimeseriesDescriptor> read_timeseries_descriptor_sync(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts
+    ) override {
+        auto key_seg = read_sync_dispatch(key, library_, opts);
+        return DecodeTimeseriesDescriptorTask{}(std::move(key_seg));
+    }
+
     folly::Future<bool> key_exists(entity::VariantKey&& key) {
         return async::submit_io_task(KeyExistsTask{std::move(key), library_});
     }

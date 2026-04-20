@@ -550,6 +550,11 @@ class InMemoryStore : public Store {
         );
     }
 
+    std::pair<VariantKey, arcticdb::TimeseriesDescriptor>
+    read_timeseries_descriptor_sync(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+        return read_timeseries_descriptor(key, opts).get();
+    }
+
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator&) override {}
 
     std::string name() const override { return "InMemoryStore"; }

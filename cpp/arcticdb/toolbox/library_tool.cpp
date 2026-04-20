@@ -62,7 +62,7 @@ StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key) {
 }
 
 TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key) {
-    return store()->read_timeseries_descriptor(key).get().second;
+    return store()->read_timeseries_descriptor_sync(key).second;
 }
 
 void LibraryTool::write(VariantKey key, const Segment& segment) {
