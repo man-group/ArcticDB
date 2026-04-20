@@ -88,6 +88,45 @@ def test_project_value_set():
         QueryBuilder().apply("new_col", [0, 1, 2])
 
 
+def test_pow_type_coercion(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+
+    data_frame = pd.DataFrame(
+        {
+            "UINT_BASE": np.arange(1, 11, dtype=np.uint16),
+            "UINT_EXP": np.arange(1, 11, dtype=np.uint16),
+            "INT_BASE": np.arange(1, 11, dtype=np.int32),
+            "INT_EXP": np.arange(1, 11, dtype=np.int32),
+        },
+        index=np.arange(10),
+    )
+
+    lib.write("pow_test", data_frame)
+
+    qb = QueryBuilder()
+    qb = qb.apply("UINT_POW_UINT", qb["UINT_BASE"] ** qb["UINT_EXP"])
+    qb = qb.apply("UINT_POW_INT", qb["UINT_BASE"] ** qb["INT_EXP"])
+    qb = qb.apply("INT_POW_UINT", qb["INT_BASE"] ** qb["UINT_EXP"])
+    qb = qb.apply("INT_POW_INT", qb["INT_BASE"] ** qb["INT_EXP"])
+
+    read_data_frame = lib.read("pow_test", query_builder=qb).data
+
+    data_frame["UINT_POW_UINT"] = data_frame["UINT_BASE"].astype(np.uint64) ** data_frame["UINT_EXP"].astype(np.uint64)
+    data_frame["UINT_POW_INT"] = data_frame["UINT_BASE"].astype(np.float64) ** data_frame["INT_EXP"].astype(np.float64)
+    data_frame["INT_POW_UINT"] = data_frame["INT_BASE"].astype(np.int64) ** data_frame["UINT_EXP"].astype(np.int64)
+    data_frame["INT_POW_INT"] = data_frame["INT_BASE"].astype(np.float64) ** data_frame["INT_EXP"].astype(np.float64)
+
+    expected = data_frame.astype(
+        {
+            "UINT_POW_UINT": "uint64",
+            "UINT_POW_INT": "float64",
+            "INT_POW_UINT": "int64",
+            "INT_POW_INT": "float64",
+        }
+    )
+    assert_frame_equal(expected, read_data_frame)
+
 def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -108,6 +147,176 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output
 
     df["ADJUSTED"] = df["ASK"] * df["VOL_ACC"] + 7
     assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
+
+###############################################
+# POW OPERATOR TESTS                          #
+###############################################
+
+
+def test_project_pow_uint_uint(lmdb_version_store_v1, any_output_format):
+    # uint ^ uint -> uint64
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df = pd.DataFrame(
+        {
+            "BASE": np.arange(1, 11, dtype=np.uint16),
+            "EXP": np.arange(1, 11, dtype=np.uint8),
+        },
+        index=np.arange(10),
+    )
+    lib.write("pow_uint_uint", df)
+
+    q = QueryBuilder()
+    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
+    data = lib.read("pow_uint_uint", query_builder=q).data
+
+    df["RESULT"] = df["BASE"].astype(np.uint64) ** df["EXP"].astype(np.uint64)
+    assert_frame_equal(df.astype({"RESULT": "uint64"}), data)
+
+
+def test_project_pow_int_uint(lmdb_version_store_v1, any_output_format):
+    # int ^ uint -> int64
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df = pd.DataFrame(
+        {
+            "BASE": np.arange(-5, 5, dtype=np.int32),
+            "EXP": np.arange(1, 11, dtype=np.uint16),
+        },
+        index=np.arange(10),
+    )
+    lib.write("pow_int_uint", df)
+
+    q = QueryBuilder()
+    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
+    data = lib.read("pow_int_uint", query_builder=q).data
+
+    df["RESULT"] = df["BASE"].astype(np.int64) ** df["EXP"].astype(np.int64)
+    assert_frame_equal(df.astype({"RESULT": "int64"}), data)
+
+
+def test_project_pow_uint_int(lmdb_version_store_v1, any_output_format):
+    # uint ^ int -> double (negative exponent can produce fractional results)
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df = pd.DataFrame(
+        {
+            "BASE": np.arange(1, 11, dtype=np.uint16),
+            "EXP": np.arange(-5, 5, dtype=np.int32),
+        },
+        index=np.arange(10),
+    )
+    lib.write("pow_uint_int", df)
+
+    q = QueryBuilder()
+    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
+    data = lib.read("pow_uint_int", query_builder=q).data
+
+    df["RESULT"] = df["BASE"].astype(np.float64) ** df["EXP"].astype(np.float64)
+    assert_frame_equal(df.astype({"RESULT": "float64"}), data)
+
+
+def test_project_pow_int_int(lmdb_version_store_v1, any_output_format):
+    # int ^ int -> double (negative exponent can produce fractional results)
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df = pd.DataFrame(
+        {
+            "BASE": np.arange(-5, 5, dtype=np.int32),
+            "EXP": np.arange(-5, 5, dtype=np.int16),
+        },
+        index=np.arange(10),
+    )
+    lib.write("pow_int_int", df)
+
+    q = QueryBuilder()
+    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
+    data = lib.read("pow_int_int", query_builder=q).data
+
+    df["RESULT"] = df["BASE"].astype(np.float64) ** df["EXP"].astype(np.float64)
+    assert_frame_equal(df.astype({"RESULT": "float64"}), data)
+
+
+def test_project_pow_col_value(lmdb_version_store_v1, any_output_format):
+    # Column ^ scalar value, exercising all four promotion combinations
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df = pd.DataFrame(
+        {
+            "UINT_COL": np.arange(1, 11, dtype=np.uint16),
+            "INT_COL": np.arange(-5, 5, dtype=np.int32),
+        },
+        index=np.arange(10),
+    )
+    lib.write("pow_col_value", df)
+
+    q = QueryBuilder()
+    q = q.apply("UINT_POW_UINT_VAL", q["UINT_COL"] ** np.uint8(3))
+    q = q.apply("UINT_POW_INT_VAL", q["UINT_COL"] ** np.int8(2))
+    q = q.apply("INT_POW_UINT_VAL", q["INT_COL"] ** np.uint8(3))
+    q = q.apply("INT_POW_INT_VAL", q["INT_COL"] ** np.int8(2))
+    data = lib.read("pow_col_value", query_builder=q).data
+
+    df["UINT_POW_UINT_VAL"] = df["UINT_COL"].astype(np.uint64) ** np.uint64(3)
+    df["UINT_POW_INT_VAL"] = df["UINT_COL"].astype(np.float64) ** np.float64(2)
+    df["INT_POW_UINT_VAL"] = df["INT_COL"].astype(np.int64) ** np.int64(3)
+    df["INT_POW_INT_VAL"] = df["INT_COL"].astype(np.float64) ** np.float64(2)
+
+    expected = df.astype(
+        {
+            "UINT_POW_UINT_VAL": "uint64",
+            "UINT_POW_INT_VAL": "float64",
+            "INT_POW_UINT_VAL": "int64",
+            "INT_POW_INT_VAL": "float64",
+        }
+    )
+    assert_frame_equal(expected, data)
+
+
+def test_project_pow_string_raises(lmdb_version_store_v1, any_output_format):
+    # Pow with string operand should raise UserInputException (matching other arithmetic ops)
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_pow_string_raises"
+    lib.write(symbol, pd.DataFrame({"num": [1, 2, 3], "s": ["a", "b", "c"]}))
+
+    q = QueryBuilder()
+    q = q.apply("result", q["num"] ** q["s"])
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    q = QueryBuilder()
+    q = q.apply("result", q["s"] ** q["num"])
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_project_pow_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
+    # Pow under dynamic schema, analogous to test_project_dynamic
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_pow_dynamic"
+
+    df = pd.DataFrame(
+        {
+            "BASE": np.arange(1, 11, dtype=np.uint16),
+            "EXP": np.arange(1, 11, dtype=np.uint8),
+        },
+        index=np.arange(10),
+    )
+
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(symbol, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
+    vit = lib.read(symbol, query_builder=q)
+
+    expected["RESULT"] = expected["BASE"].astype(np.uint64) ** expected["EXP"].astype(np.uint64)
+    received = regularize_dataframe(vit.data)
+    expected = regularize_dataframe(expected)
+    assert_frame_equal(expected, received)
 
 
 ##################################
