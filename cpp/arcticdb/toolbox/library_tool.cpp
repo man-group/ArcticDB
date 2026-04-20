@@ -41,38 +41,8 @@ py::tuple LibraryTool::segment_in_memory_to_read_result(SegmentInMemory& segment
     const auto& atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
 
-    auto& frame = frame_and_descriptor.frame_;
-    if (!frame.empty()) {
-        auto pipeline_context = std::make_shared<pipelines::PipelineContext>(frame.descriptor());
-        pipelines::SliceAndKey sk{pipelines::FrameSlice{frame}, atom_key};
-        pipeline_context->slice_and_keys_.emplace_back(std::move(sk));
-        util::BitSet bitset(1);
-        bitset.flip();
-        pipeline_context->fetch_index_ = std::move(bitset);
-        pipeline_context->ensure_vectors();
-        pipelines::generate_filtered_field_descriptors(pipeline_context, {});
-        pipeline_context->begin()->set_string_pool(frame.string_pool_ptr());
-        auto descriptor = std::make_shared<StreamDescriptor>(frame.descriptor());
-        pipeline_context->begin()->set_descriptor(std::move(descriptor));
-
-        auto slice_map = std::make_shared<pipelines::FrameSliceMap>(pipeline_context, false);
-        DecodePathData shared_data;
-        std::shared_ptr<std::any> handler_data_ptr(std::shared_ptr<std::any>{}, &handler_data);
-        for (size_t idx = 0; idx < frame.descriptor().fields().size(); ++idx) {
-            const auto& frame_field = frame.field(idx);
-            if (slice_map->columns_.contains(frame_field.name()) && is_sequence_type(frame_field.type().data_type())) {
-                pipelines::
-                        ReduceColumnTask(frame, idx, slice_map, pipeline_context, shared_data, handler_data_ptr, ReadOptions{})(
-                        );
-            }
-        }
-        pipelines::apply_type_handlers(frame, handler_data, output_format);
-    }
-
     return adapt_read_df(
-            pipelines::create_python_read_result(
-                    VersionedItem{atom_key}, output_format, std::move(frame_and_descriptor)
-            ),
+            pipelines::read_result_from_single_frame_sync(frame_and_descriptor, atom_key, handler_data, output_format),
             &handler_data
     );
 }

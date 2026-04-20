@@ -89,6 +89,11 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
         std::shared_ptr<std::any> handler_data
 );
 
+void reduce_and_fix_columns_sync(
+        std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
+);
+
 StreamDescriptor get_filtered_descriptor(
         const StreamDescriptor& desc, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
