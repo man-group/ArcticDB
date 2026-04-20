@@ -550,8 +550,9 @@ class InMemoryStore : public Store {
         );
     }
 
-    folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>>
-    read_timeseries_descriptor(const entity::VariantKey& key, storage::ReadKeyOpts opts) override {
+    folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>> read_timeseries_descriptor(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts
+    ) override {
         return folly::makeFuture(read_timeseries_descriptor_sync(key, opts));
     }
 
