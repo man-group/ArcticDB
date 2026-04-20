@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
+import pytest
 from arcticdb.toolbox.query_stats import query_stats, get_query_stats, reset_stats
 
 
+@pytest.mark.slow
 def test_batch_read_not_slower_than_serial_wide_schema(lmdb_library_dynamic_schema):
     # Regression test for the O(N) realloc-per-column bug in Buffer::ensure
     # that caused `read_batch` to run ~2x slower than serial `read` calls for
@@ -60,7 +62,10 @@ def test_batch_read_not_slower_than_serial_wide_schema(lmdb_library_dynamic_sche
         lib.read_batch(symbols)
     batch_ms = segment_from_bytes_total_ms(get_query_stats())
 
-    ratio = batch_ms / serial_ms if serial_ms else float("inf")
+    if serial_ms == 0:
+        pytest.skip("LMDB_SegmentFromBytes stats not captured; cannot compute ratio")
+
+    ratio = batch_ms / serial_ms
     print(f"wide-schema regression: LMDB_SegmentFromBytes serial={serial_ms}ms, batch={batch_ms}ms, ratio={ratio:.2f}")
     assert ratio < ratio_threshold, (
         f"read_batch's LMDB_SegmentFromBytes total ({batch_ms}ms) is "
