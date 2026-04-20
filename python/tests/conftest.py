@@ -404,7 +404,12 @@ class _LibraryPool:
     _MAX_POOLED = 5  # Max total instances kept in the pool
 
     def __init__(self, storage: LmdbStorageFixture):
-        self._arctic = storage.create_arctic()
+        # Explicitly cap map_size so pooled libraries don't use the C++ LMDB
+        # default of 400 GiB per environment.  With 5 libraries kept open for
+        # the whole session that would be 2 TiB of virtual address space,
+        # enough to cause "Cannot allocate memory" on constrained CI runners.
+        self._arctic = Arctic(f"{storage.arctic_uri}?map_size=128MB")
+        storage.arctic_instances.append(self._arctic)
         self._available: dict = {}  # options_key -> list[Library]
         self._counter = 0
         self._total_pooled = 0
