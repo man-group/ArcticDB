@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 import pytest
 import polars as pl
+from types import SimpleNamespace
+
+from arcticdb_ext.version_store import SortedValue
+from arcticdb.version_store._store import NativeVersionStore
 
 
 def test_sorted_flag_on_datetime_index(lmdb_library):
@@ -103,3 +107,35 @@ def test_value_columns_not_sorted(lmdb_library):
     assert result["__index__"].flags["SORTED_ASC"] is True
     assert result["sorted_val"].flags["SORTED_ASC"] is False
     assert result["another"].flags["SORTED_ASC"] is False
+
+
+def _make_mock_read_result(sort_order, index_name="__index__", fake_name=True, is_physically_stored=True):
+    """Build a minimal mock ReadResult with the given sort_order and index normalization metadata."""
+    index = SimpleNamespace(name=index_name, fake_name=fake_name, is_physically_stored=is_physically_stored)
+    common = SimpleNamespace(_index_type="index", index=index)
+    common.WhichOneof = lambda field: "index" if field == "index_type" else None
+    norm = SimpleNamespace(df=SimpleNamespace(common=common))
+    norm.WhichOneof = lambda field: "df" if field == "input_type" else None
+    return SimpleNamespace(sort_order=sort_order, norm=norm)
+
+
+def test_descending_sort_order_sets_sorted_desc():
+    """When sort_order is DESCENDING the Polars column should have SORTED_DESC."""
+    data = pl.DataFrame({"__index__": pl.date_range(pd.Timestamp("2024-01-01"), periods=5, interval="1h", eager=True)})
+    read_result = _make_mock_read_result(SortedValue.DESCENDING)
+
+    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, read_result)
+
+    assert result["__index__"].flags["SORTED_DESC"] is True
+    assert result["__index__"].flags["SORTED_ASC"] is False
+
+
+def test_unknown_sort_order_does_not_set_sorted_flag():
+    """When sort_order is UNKNOWN no sorted flag should be applied even with a physical index."""
+    data = pl.DataFrame({"__index__": pl.date_range(pd.Timestamp("2024-01-01"), periods=5, interval="1h", eager=True)})
+    read_result = _make_mock_read_result(SortedValue.UNKNOWN)
+
+    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, read_result)
+
+    assert result["__index__"].flags["SORTED_ASC"] is False
+    assert result["__index__"].flags["SORTED_DESC"] is False

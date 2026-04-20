@@ -445,7 +445,7 @@ def test_segment_in_memory_to_read_result(lmdb_version_store_v1, sym):
     read_result = lib_tool.segment_in_memory_to_read_result(segment_in_memory)
 
     assert isinstance(read_result, tuple)
-    assert len(read_result) == 6
+    assert len(read_result) == 7
 
     expected_df = lib_tool.read_to_dataframe(tdata_key)
     assert_frame_equal(expected_df, denormalize_dataframe(read_result))

@@ -350,6 +350,7 @@ def _get_index_col_from_norm(norm):
     elif input_type in ("df", "series"):
         common = norm.df.common if input_type == "df" else norm.series.common
         index_type = common.WhichOneof("index_type")
+        # multi_index intentionally excluded: multi-level sorting semantics are more complex
         if index_type == "index" and common.index.is_physically_stored:
             if common.index.fake_name:
                 return "__index__"
@@ -2784,7 +2785,7 @@ class NativeVersionStore:
         if pl is None or not isinstance(data, pl.DataFrame):
             return data
 
-        sorted_val = read_result.sorted
+        sorted_val = read_result.sort_order
         if sorted_val not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
             return data
 
@@ -2795,7 +2796,6 @@ class NativeVersionStore:
 
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
         data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format)
-        # Currently, the sorted flag applies only to the index
         data = self._apply_polars_sorted_flag_to_index(data, read_result)
 
         if isinstance(read_result.version, list):
