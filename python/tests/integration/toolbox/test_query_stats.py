@@ -14,6 +14,7 @@ OP_NAMES = {
         "get": "S3_GetObject",
         "delete": "S3_DeleteObjects",
         "head": "S3_HeadObject",
+        "read_sub_ops": set(),
     },
     "lmdb": {
         "list": "LMDB_ListObjects",
@@ -21,6 +22,7 @@ OP_NAMES = {
         "get": "LMDB_GetObject",
         "delete": "LMDB_DeleteObjects",
         "head": "LMDB_HeadObject",
+        "read_sub_ops": {"LMDB_DbiGet", "LMDB_SegmentFromBytes"},
     },
 }
 
@@ -332,7 +334,7 @@ def test_query_stats_read_write(version_store, op, clear_query_stats):
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
 
-    assert {op["get"], op["put"]} == storage_operations.keys()
+    assert {op["get"], op["put"]} | op["read_sub_ops"] == storage_operations.keys()
 
     expected_get_keys = {"TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
     expected_put_keys = {"SYMBOL_LIST", "TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
@@ -414,7 +416,7 @@ def test_query_stats_metadata(version_store, op, clear_query_stats):
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
 
-    assert {op["get"], op["put"]} == storage_operations.keys()
+    assert {op["get"], op["put"]} | op["read_sub_ops"] == storage_operations.keys()
 
     expected_get_keys = {"TABLE_INDEX", "VERSION", "VERSION_REF"}
     expected_put_keys = {"SYMBOL_LIST", "TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
@@ -517,7 +519,7 @@ def test_query_stats_batch(version_store, op, clear_query_stats):
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
 
-    assert {op["get"], op["put"]} == storage_operations.keys()
+    assert {op["get"], op["put"]} | op["read_sub_ops"] == storage_operations.keys()
 
     expected_get_keys = {"TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
     expected_put_keys = {"SYMBOL_LIST", "TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
@@ -647,7 +649,7 @@ def test_query_stats_staged_data(version_store, op, clear_query_stats, sym):
     assert "storage_operations" in stats
     storage_operations = stats["storage_operations"]
 
-    expected_operations = {op["put"], op["delete"], op["get"], op["list"]}
+    expected_operations = {op["put"], op["delete"], op["get"], op["list"]} | op["read_sub_ops"]
     assert expected_operations == storage_operations.keys()
 
     assert "APPEND_DATA" in storage_operations[op["delete"]]
@@ -702,7 +704,7 @@ def test_query_stats_create_library(storage_fixture, op, clear_query_stats, lib_
 
     stats = qs.get_query_stats()
 
-    assert stats["storage_operations"].keys() == {op["get"], op["head"], op["put"]}
+    assert stats["storage_operations"].keys() == {op["get"], op["head"], op["put"]} | op["read_sub_ops"]
     assert stats["storage_operations"][op["get"]].keys() == {"LIBRARY_CONFIG"}
     assert stats["storage_operations"][op["get"]]["LIBRARY_CONFIG"]["count"] == 1
     assert stats["storage_operations"][op["head"]].keys() == {"LIBRARY_CONFIG"}
@@ -724,7 +726,7 @@ def test_query_stats_get_library_exists(storage_fixture, op, clear_query_stats, 
         ac.get_library(lib_name)
 
     stats = qs.get_query_stats()
-    assert stats["storage_operations"].keys() == {op["get"]}
+    assert stats["storage_operations"].keys() == {op["get"]} | op["read_sub_ops"]
     assert stats["storage_operations"][op["get"]].keys() == {"LIBRARY_CONFIG"}
     assert stats["storage_operations"][op["get"]]["LIBRARY_CONFIG"]["count"] == 1
 
@@ -740,7 +742,7 @@ def test_query_stats_get_library_create_if_missing(storage_fixture, op, clear_qu
 
     stats = qs.get_query_stats()
 
-    assert stats["storage_operations"].keys() == {op["get"], op["head"], op["put"]}
+    assert stats["storage_operations"].keys() == {op["get"], op["head"], op["put"]} | op["read_sub_ops"]
     assert stats["storage_operations"][op["get"]].keys() == {"LIBRARY_CONFIG"}
     assert stats["storage_operations"][op["get"]]["LIBRARY_CONFIG"]["count"] == 2
     assert stats["storage_operations"][op["head"]].keys() == {"LIBRARY_CONFIG"}
