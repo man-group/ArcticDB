@@ -28,7 +28,7 @@ export PYTHONFAULTHANDLER=1
 # if a test hangs with the GIL held (where pytest-timeout's thread method can't fire).
 # Crash tracebacks are written to per-PID files in ARCTICDB_FAULTHANDLER_DIR
 # (xdist worker stderr is piped through execnet and never reaches CI logs).
-export ARCTICDB_FAULTHANDLER_TIMEOUT=3300
+export ARCTICDB_FAULTHANDLER_TIMEOUT=1600
 export ARCTICDB_FAULTHANDLER_DIR="$TEST_OUTPUT_DIR/faulthandler"
 
 print_faulthandler_crashes() {
