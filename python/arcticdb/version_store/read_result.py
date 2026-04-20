@@ -11,17 +11,17 @@ from arcticdb.version_store._normalization import FrameData
 
 
 class NodeReadResult:
-    def __init__(self, sym, frame_data, norm, sorted=SortedValue.UNKNOWN):
+    def __init__(self, sym, frame_data, norm, sort_order=SortedValue.UNKNOWN):
         self.sym = sym
         self.frame_data = (
             FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
         )
         self.norm = norm
-        self.sorted = SortedValue(sorted) if isinstance(sorted, int) else sorted
+        self.sort_order = SortedValue(sort_order) if isinstance(sort_order, int) else sort_order
 
 
 class ReadResult:
-    def __init__(self, version, frame_data, norm, udm, mmeta, node_read_results, sorted=SortedValue.UNKNOWN):
+    def __init__(self, version, frame_data, norm, udm, mmeta, node_read_results, sort_order=SortedValue.UNKNOWN):
         self.version = version
         self.frame_data = (
             FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
@@ -29,7 +29,7 @@ class ReadResult:
         self.norm = norm
         self.udm = udm
         self.mmeta = mmeta
-        self.sorted = SortedValue(sorted) if isinstance(sorted, int) else sorted
+        self.sort_order = SortedValue(sort_order) if isinstance(sort_order, int) else sort_order
         self.node_read_results = (
             [NodeReadResult(*node_read_result) for node_read_result in node_read_results]
             if node_read_results is not None
