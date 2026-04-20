@@ -731,17 +731,16 @@ class TestSparseArrowGroupBy:
         self.lib = version_store_factory(segment_row_size=3)
         self.lib.set_output_format(OutputFormat.POLARS)
         self.lib._set_allow_arrow_input()
-        self.table = pa.table(
+        self.pldf = pl.DataFrame(
             {
-                "group_str": pa.array(["a", "a", "b", "b", "b", "a", "all_null", "all_null"], pa.large_string()),
-                "group_int": pa.array([1, 1, 2, 2, 2, 1, 3, 3], pa.int64()),
-                "int_col": pa.array([10, None, 30, None, 50, None, None, None], pa.int64()),
-                "float_col": pa.array([None, 2.0, None, 4.0, None, 6.0, None, None], pa.float64()),
-                "bool_col": pa.array([True, None, False, None, True, None, None, None], pa.bool_()),
+                "group_str": ["a", "a", "b", "b", "b", "a", "all_null", "all_null"],
+                "group_int": [1, 1, 2, 2, 2, 1, 3, 3],
+                "int_col": [10, None, 30, None, 50, None, None, None],
+                "float_col": [None, 2.0, None, 4.0, None, 6.0, None, None],
+                "bool_col": [True, None, False, None, True, None, None, None],
             }
         )
-        self.lib.write(self.sym, self.table)
-        self.pldf = pl.from_arrow(self.table)
+        self.lib.write(self.sym, self.pldf)
 
     @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "count"])
     @pytest.mark.parametrize("group_col", ["group_str", "group_int"])
@@ -783,19 +782,16 @@ class TestSparseArrowResample:
         self.lib = version_store_factory(segment_row_size=4)
         self.lib.set_output_format(OutputFormat.POLARS)
         self.lib._set_allow_arrow_input()
-        dates = pd.date_range("2025-01-01", periods=12, freq="h")
         # Bucket 2 (hours 6-8) is fully null for both columns when resampled at 3h
-        self.table = pa.table(
+        self.pldf = pl.DataFrame(
             {
-                "ts": pa.Array.from_pandas(dates, type=pa.timestamp("ns")),
-                "int_col": pa.array([1, None, 3, None, 5, None, None, None, None, None, 11, None], pa.int64()),
-                "float_col": pa.array(
-                    [None, 2.0, None, 4.0, None, 6.0, None, None, None, 10.0, None, 12.0], pa.float64()
-                ),
-            }
+                "ts": pd.date_range("2025-01-01", periods=12, freq="h"),
+                "int_col": [1, None, 3, None, 5, None, None, None, None, None, 11, None],
+                "float_col": [None, 2.0, None, 4.0, None, 6.0, None, None, None, 10.0, None, 12.0],
+            },
+            schema_overrides={"ts": pl.Datetime("ns")},
         )
-        self.lib.write(self.sym, self.table, index_column="ts")
-        self.pldf = pl.from_arrow(self.table).sort("ts")
+        self.lib.write(self.sym, self.pldf, index_column=True)
 
     @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "first", "last", "count"])
     @pytest.mark.parametrize("agg_col", ["int_col", "float_col"])
@@ -844,38 +840,16 @@ class TestSparseArrowConcat:
         "t1,t2",
         [
             (
-                pa.table(
-                    {
-                        "int_col": pa.array([1, None, 3], pa.int64()),
-                        "float_col": pa.array([None, 2.0, None], pa.float64()),
-                    }
-                ),
-                pa.table(
-                    {
-                        "int_col": pa.array([None, 5, None], pa.int64()),
-                        "float_col": pa.array([4.0, None, 6.0], pa.float64()),
-                    }
-                ),
+                pl.DataFrame({"int_col": [1, None, 3], "float_col": [None, 2.0, None]}),
+                pl.DataFrame({"int_col": [None, 5, None], "float_col": [4.0, None, 6.0]}),
             ),
             (
-                pa.table(
-                    {"a": pa.array([None, None, None], pa.int64()), "b": pa.array([1.0, None, 3.0], pa.float64())}
-                ),
-                pa.table({"a": pa.array([4, None, 6], pa.int64()), "b": pa.array([None, None, None], pa.float64())}),
+                pl.DataFrame({"a": [None, None, None], "b": [1.0, None, 3.0]}, schema_overrides={"a": pl.Int64}),
+                pl.DataFrame({"a": [4, None, 6], "b": [None, None, None]}, schema_overrides={"b": pl.Float64}),
             ),
             (
-                pa.table(
-                    {
-                        "bool_col": pa.array([True, None, False], pa.bool_()),
-                        "str_col": pa.array([None, "b", None], pa.large_string()),
-                    }
-                ),
-                pa.table(
-                    {
-                        "bool_col": pa.array([None, True, None], pa.bool_()),
-                        "str_col": pa.array(["d", None, "f"], pa.large_string()),
-                    }
-                ),
+                pl.DataFrame({"bool_col": [True, None, False], "str_col": [None, "b", None]}),
+                pl.DataFrame({"bool_col": [None, True, None], "str_col": ["d", None, "f"]}),
             ),
         ],
         ids=["int_float", "all_sparse", "bool_string"],
@@ -884,53 +858,45 @@ class TestSparseArrowConcat:
         self.lib.write("sym1", t1)
         self.lib.write("sym2", t2)
         received = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect().data
-        expected = pl.concat([pl.from_arrow(t1), pl.from_arrow(t2)])
+        expected = pl.concat([t1, t2])
         polars_assert_frame_equal(received, expected)
 
     @pytest.mark.parametrize("join", ["inner", "outer"])
     @pytest.mark.parametrize(
         "type1,type2",
         [
-            pytest.param(pa.float64(), pa.float64(), id="same_type"),
-            pytest.param(pa.int32(), pa.int64(), id="int32_and_int64"),
-            pytest.param(pa.int16(), pa.float32(), id="int16_and_float32"),
-            pytest.param(pa.int64(), pa.float32(), id="int64_and_float32"),
+            pytest.param(pl.Float64, pl.Float64, id="same_type"),
+            pytest.param(pl.Int32, pl.Int64, id="int32_and_int64"),
+            pytest.param(pl.Int16, pl.Float32, id="int16_and_float32"),
+            pytest.param(pl.Int64, pl.Float32, id="int64_and_float32"),
         ],
     )
     def test_different_columns(self, join, type1, type2):
-        t1 = pa.table({"a": pa.array([1, None], pa.int64()), "b": pa.array([None, 2], type1)})
-        t2 = pa.table({"b": pa.array([3, None], type2), "c": pa.array([None, 4], pa.int64())})
+        t1 = pl.DataFrame({"a": [1, None], "b": [None, 2]}, schema_overrides={"b": type1})
+        t2 = pl.DataFrame({"b": [3, None], "c": [None, 4]}, schema_overrides={"b": type2})
         self.lib.write("s1", t1)
         self.lib.write("s2", t2)
         received = concat(self.lib.read_batch(["s1", "s2"], lazy=True), join).collect().data
-        pl1 = pl.from_arrow(t1)
-        pl2 = pl.from_arrow(t2)
         if join == "outer":
-            expected = pl.concat([pl1, pl2], how="diagonal_relaxed")
+            expected = pl.concat([t1, t2], how="diagonal_relaxed")
         else:
-            common = set(t1.column_names) & set(t2.column_names)
-            expected = pl.concat([pl1.select(common), pl2.select(common)], how="vertical_relaxed")
+            common = set(t1.columns) & set(t2.columns)
+            expected = pl.concat([t1.select(common), t2.select(common)], how="vertical_relaxed")
         polars_assert_frame_equal(received, expected)
 
     def test_concat_with_index(self):
-        dates1 = pd.date_range("2025-01-01", periods=3, freq="h")
-        dates2 = pd.date_range("2025-01-01T03:00:00", periods=3, freq="h")
-        t1 = pa.table(
-            {
-                "ts": pa.Array.from_pandas(dates1, type=pa.timestamp("ns")),
-                "val": pa.array([1, None, 3], pa.int64()),
-            }
+        t1 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01", periods=3, freq="h"), "val": [1, None, 3]},
+            schema_overrides={"ts": pl.Datetime("ns")},
         )
-        t2 = pa.table(
-            {
-                "ts": pa.Array.from_pandas(dates2, type=pa.timestamp("ns")),
-                "val": pa.array([None, 5, None], pa.int64()),
-            }
+        t2 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01T03:00:00", periods=3, freq="h"), "val": [None, 5, None]},
+            schema_overrides={"ts": pl.Datetime("ns")},
         )
-        self.lib.write("s1", t1, index_column="ts")
-        self.lib.write("s2", t2, index_column="ts")
+        self.lib.write("s1", t1, index_column=True)
+        self.lib.write("s2", t2, index_column=True)
         received = concat(self.lib.read_batch(["s1", "s2"], lazy=True)).collect().data
-        expected = pl.concat([pl.from_arrow(t1), pl.from_arrow(t2)])
+        expected = pl.concat([t1, t2])
         polars_assert_frame_equal(received, expected)
 
     @pytest.mark.xfail(
@@ -938,25 +904,19 @@ class TestSparseArrowConcat:
         raises=Exception,
     )
     def test_concat_with_resample(self):
-        dates1 = pd.date_range("2025-01-01", periods=6, freq="h")
-        dates2 = pd.date_range("2025-01-01T06:00:00", periods=6, freq="h")
-        t1 = pa.table(
-            {
-                "ts": pa.Array.from_pandas(dates1, type=pa.timestamp("ns")),
-                "val": pa.array([1, None, 3, None, 5, None], pa.int64()),
-            }
+        t1 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01", periods=6, freq="h"), "val": [1, None, 3, None, 5, None]},
+            schema_overrides={"ts": pl.Datetime("ns")},
         )
-        t2 = pa.table(
-            {
-                "ts": pa.Array.from_pandas(dates2, type=pa.timestamp("ns")),
-                "val": pa.array([None, 8, None, 10, None, 12], pa.int64()),
-            }
+        t2 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01T06:00:00", periods=6, freq="h"), "val": [None, 8, None, 10, None, 12]},
+            schema_overrides={"ts": pl.Datetime("ns")},
         )
-        self.lib.write("r1", t1, index_column="ts")
-        self.lib.write("r2", t2, index_column="ts")
+        self.lib.write("r1", t1, index_column=True)
+        self.lib.write("r2", t2, index_column=True)
         received = (
             concat(self.lib.read_batch(["r1", "r2"], lazy=True)).resample("3h").agg({"val": "sum"}).collect().data
         )
-        combined = pl.concat([pl.from_arrow(t1), pl.from_arrow(t2)]).sort("ts")
+        combined = pl.concat([t1, t2]).sort("ts")
         expected = combined.group_by_dynamic("ts", every="3h").agg(pl.col("val").sum())
         polars_assert_frame_equal(received, expected)
