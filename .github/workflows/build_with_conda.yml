@@ -14,8 +14,6 @@ on:
     branches:
       - master
 
-  pull_request:
-
   workflow_dispatch:
     inputs:
       disable_cpp_tests:         {required: false, type: boolean, default: false,  description: Disable C++ tests}
