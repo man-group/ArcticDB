@@ -15,6 +15,7 @@ OP_NAMES = {
         "delete": "S3_DeleteObjects",
         "head": "S3_HeadObject",
         "read_sub_ops": set(),
+        "batched_deletes": True,
     },
     "lmdb": {
         "list": "LMDB_ListObjects",
@@ -23,6 +24,7 @@ OP_NAMES = {
         "delete": "LMDB_DeleteObjects",
         "head": "LMDB_HeadObject",
         "read_sub_ops": {"LMDB_DbiGet", "LMDB_SegmentFromBytes"},
+        "batched_deletes": False,
     },
 }
 
@@ -541,7 +543,9 @@ def test_query_stats_batch(version_store, op, clear_query_stats):
     assert put_object_stats["VERSION"]["count"] == 4
     assert put_object_stats["VERSION_REF"]["count"] == 4
 
-    for op_stats in storage_operations.values():
+    for op_name, op_stats in storage_operations.items():
+        if op_name in op["read_sub_ops"]:
+            continue
         for key_stat in op_stats.values():
             assert key_stat["count"] > 0
             assert key_stat["size_bytes"] > 0
@@ -654,7 +658,10 @@ def test_query_stats_staged_data(version_store, op, clear_query_stats, sym):
 
     assert "APPEND_DATA" in storage_operations[op["delete"]]
     delete_append_stats = storage_operations[op["delete"]]["APPEND_DATA"]
-    assert delete_append_stats["count"] == 1
+    # S3 batch-deletes multiple keys in one API call (count=1);
+    # LMDB deletes each key individually (count=2).
+    expected_delete_count = 1 if op["batched_deletes"] else 2
+    assert delete_append_stats["count"] == expected_delete_count
     assert delete_append_stats["size_bytes"] == 0
     assert delete_append_stats["total_time_ms"] < 8000
 
