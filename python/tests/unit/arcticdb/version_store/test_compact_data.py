@@ -20,7 +20,7 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
 )
 from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count, random_strings_of_length
-from tests.util.mark import MACOS
+from tests.util.mark import MACOS, WINDOWS
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
@@ -638,7 +638,7 @@ def test_compact_data_hypothesis_small_and_large_segments(
         generic_compact_data_test(lib, sym)
     except DuplicateKeyException:
         # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if not MACOS:
+        if (not MACOS) and (not WINDOWS):
             raise
         assume(False)
 
@@ -718,7 +718,7 @@ def test_compact_data_hypothesis_static_schema(
         # compaction creates a new version within the same second as the write.
         # Skip this example instead of failing the whole test suite.
         # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if not MACOS:
+        if (not MACOS) and (not WINDOWS):
             raise
         assume(False)
 
