@@ -199,8 +199,6 @@ def test_write_multiple_record_batches_indexed(in_memory_version_store_arrow):
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
 def test_write_sliced(in_memory_version_store_tiny_segment_arrow, num_rows, num_cols, arrow_output_format):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_write_sliced"
     table = pa.table(
         {
@@ -235,8 +233,6 @@ def test_write_sliced(in_memory_version_store_tiny_segment_arrow, num_rows, num_
 )
 def test_write_bools_sliced(in_memory_version_store_tiny_segment_arrow, data):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_write_bools_sliced"
     table = pa.table({"col": pa.array(data)})
     lib.write(sym, table)
@@ -248,8 +244,6 @@ def test_write_bools_sliced(in_memory_version_store_tiny_segment_arrow, data):
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
 def test_write_sliced_with_index(in_memory_version_store_tiny_segment_arrow, num_rows, num_cols):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     lib_tool = lib.library_tool()
     sym = "test_write_sliced_with_index"
     df = pd.DataFrame(
@@ -376,8 +370,6 @@ def test_write_view_strings(in_memory_version_store_arrow, type):
 def test_write_owned_and_non_owned_buffers(in_memory_version_store_tiny_segment_arrow):
     # This test is about our ChunkedBuffer holding mixes of owned and non-owned blocks, not Arrow views
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
     sym = "test_write_owned_and_non_owned_buffers"
     rb0 = pa.RecordBatch.from_arrays([pa.array([0, 1, 2], pa.int32())], names=["col"])
     rb1 = pa.RecordBatch.from_arrays([pa.array([3, 4, 5], pa.int32())], names=["col"])

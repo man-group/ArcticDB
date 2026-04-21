@@ -43,7 +43,6 @@ def test_basic_with_index(lmdb_version_store_arrow):
 
 def test_basic_small_slices(in_memory_version_store_tiny_segment_arrow):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame({"x": np.arange(10)})
     lib.write("arrow", df)
     table = lib.read("arrow").data
@@ -52,7 +51,6 @@ def test_basic_small_slices(in_memory_version_store_tiny_segment_arrow):
 
 def test_basic_small_slices_with_index(in_memory_version_store_tiny_segment_arrow):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lib.write("arrow", df)
     table = lib.read("arrow").data
@@ -149,7 +147,6 @@ def test_strings_basic(in_memory_version_store_arrow, dynamic_strings, any_arrow
 @pytest.mark.parametrize("row_range", [None, (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6)])
 def test_strings_with_nones_and_nans(in_memory_version_store_tiny_segment_arrow, row_range, any_arrow_string_format):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     # in_memory_version_store_tiny_segment_arrow has 2 rows per segment
     # This column is constructed so that every 2-element permutation of strings, Nones, and NaNs are tested
@@ -186,7 +183,6 @@ def test_strings_with_nones_and_nans(in_memory_version_store_tiny_segment_arrow,
 @pytest.mark.xfail(reason="NaT values in datetime columns are not converted to Arrow nulls (monday ref: 11525537906)")
 def test_datetime_col_with_nats(in_memory_version_store_tiny_segment_arrow):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         {
             "x": pd.to_datetime(
@@ -264,7 +260,6 @@ def test_strings_multiple_segments_and_columns(
     in_memory_version_store_tiny_segment_arrow, dynamic_strings, any_arrow_string_format
 ):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     df = pd.DataFrame(
         {
@@ -331,7 +326,6 @@ def test_date_range_corner_cases(in_memory_store_factory, date_range_start, date
 )
 def test_date_range_between_index_values(in_memory_version_store_tiny_segment_arrow):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         data={
             "col1": np.arange(2),
@@ -672,7 +666,6 @@ def test_with_querybuilder(in_memory_version_store_arrow):
 
 def test_arrow_layout(in_memory_version_store_tiny_segment_arrow):
     lib = in_memory_version_store_tiny_segment_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     lib_tool = lib.library_tool()
     num_rows = 100
     df = pd.DataFrame(
@@ -1025,7 +1018,6 @@ def test_arrow_dynamic_schema_filtered_column(in_memory_version_store_dynamic_sc
 
 def test_project_dynamic_schema(in_memory_version_store_dynamic_schema_arrow):
     lib = in_memory_version_store_dynamic_schema_arrow
-    lib.set_output_format(OutputFormat.PYARROW)
     sym = "sym"
     table_1 = pa.table({"a": pa.array([1, 2])})
     table_2 = pa.table({"a": pa.array([3, 4]), "b": pa.array([1, 2])})
