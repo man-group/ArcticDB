@@ -47,8 +47,8 @@ def expected_output_type(arctic_output_format, library_output_format, output_for
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
 @pytest.mark.parametrize("library_output_format", all_output_format_args)
 @pytest.mark.parametrize("output_format_override", all_output_format_args)
-def test_read_arctic(lmdb_storage, lib_name, arctic_output_format, library_output_format, output_format_override):
-    ac = lmdb_storage.create_arctic(output_format=arctic_output_format)
+def test_read_arctic(mem_storage, lib_name, arctic_output_format, library_output_format, output_format_override):
+    ac = mem_storage.create_arctic(output_format=arctic_output_format)
     lib = ac.create_library(lib_name, output_format=library_output_format)
     sym = "sym"
     df = sample_dataframe()
@@ -74,8 +74,8 @@ def test_head(lmdb_storage, lib_name, arctic_output_format, output_format_overri
 
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
 @pytest.mark.parametrize("output_format_override", no_str_output_format_args)
-def test_tail(lmdb_storage, lib_name, arctic_output_format, output_format_override):
-    ac = lmdb_storage.create_arctic(output_format=arctic_output_format)
+def test_tail(mem_storage, lib_name, arctic_output_format, output_format_override):
+    ac = mem_storage.create_arctic(output_format=arctic_output_format)
     lib = ac.create_library(lib_name)
     sym = "sym"
     df = sample_dataframe()
@@ -88,8 +88,8 @@ def test_tail(lmdb_storage, lib_name, arctic_output_format, output_format_overri
 
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
 @pytest.mark.parametrize("output_format_override", no_str_output_format_args)
-def test_lazy_read(lmdb_storage, lib_name, arctic_output_format, output_format_override):
-    ac = lmdb_storage.create_arctic(output_format=arctic_output_format)
+def test_lazy_read(mem_storage, lib_name, arctic_output_format, output_format_override):
+    ac = mem_storage.create_arctic(output_format=arctic_output_format)
     lib = ac.create_library(lib_name)
     sym = "sym"
     df = sample_dataframe()
@@ -108,8 +108,8 @@ def test_lazy_read(lmdb_storage, lib_name, arctic_output_format, output_format_o
 
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
 @pytest.mark.parametrize("output_format_override", no_str_output_format_args)
-def test_read_batch(lmdb_storage, lib_name, arctic_output_format, output_format_override):
-    ac = lmdb_storage.create_arctic(output_format=arctic_output_format)
+def test_read_batch(mem_storage, lib_name, arctic_output_format, output_format_override):
+    ac = mem_storage.create_arctic(output_format=arctic_output_format)
     lib = ac.create_library(lib_name)
     syms = ["sym", "sym_1", "sym_2"]
     syms_to_read = ["sym", "missing", "sym_1", "sym_2", "other_missing"]
@@ -132,8 +132,8 @@ def test_read_batch(lmdb_storage, lib_name, arctic_output_format, output_format_
 
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
 @pytest.mark.parametrize("output_format_override", no_str_output_format_args)
-def test_read_batch_and_join(lmdb_storage, lib_name, arctic_output_format, output_format_override):
-    ac = lmdb_storage.create_arctic(output_format=arctic_output_format)
+def test_read_batch_and_join(mem_storage, lib_name, arctic_output_format, output_format_override):
+    ac = mem_storage.create_arctic(output_format=arctic_output_format)
     lib = ac.create_library(lib_name)
     syms = ["sym", "sym_1", "sym_2"]
     expected_dfs = []
@@ -195,8 +195,8 @@ def test_basic_modifications(lmdb_library, allow_arrow_input):
 
 
 @pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_batch_modifications(lmdb_library, allow_arrow_input):
-    lib = lmdb_library
+def test_batch_modifications(mem_library, allow_arrow_input):
+    lib = mem_library
     sym = "test_batch_modifications"
     if allow_arrow_input is not None:
         lib._nvs._set_allow_arrow_input(allow_arrow_input)
@@ -241,8 +241,8 @@ def test_batch_modifications(lmdb_library, allow_arrow_input):
 
 @pytest.mark.parametrize("batch", [False, True])
 @pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_write_pickle(lmdb_library, batch, allow_arrow_input):
-    lib = lmdb_library
+def test_write_pickle(mem_library, batch, allow_arrow_input):
+    lib = mem_library
     sym = "test_write_pickle"
     if allow_arrow_input is not None:
         lib._nvs._set_allow_arrow_input(allow_arrow_input)
@@ -267,8 +267,8 @@ def test_write_pickle(lmdb_library, batch, allow_arrow_input):
 
 
 @pytest.mark.parametrize("allow_arrow_input", [None, False, True])
-def test_stage(lmdb_library, allow_arrow_input):
-    lib = lmdb_library
+def test_stage(mem_library, allow_arrow_input):
+    lib = mem_library
     sym = "test_stage"
     if allow_arrow_input is not None:
         lib._nvs._set_allow_arrow_input(allow_arrow_input)
@@ -310,9 +310,9 @@ arrow_string_formats_with_none = arrow_string_formats + [None]
 @pytest.mark.parametrize("read_str_format_default", arrow_string_formats_with_none)
 @pytest.mark.parametrize("read_str_format_per_column", arrow_string_formats_with_none)
 def test_read_arctic_strings(
-    lmdb_storage, lib_name, arctic_str_format, library_str_format, read_str_format_default, read_str_format_per_column
+    mem_storage, lib_name, arctic_str_format, library_str_format, read_str_format_default, read_str_format_per_column
 ):
-    ac = lmdb_storage.create_arctic(output_format=OutputFormat.PYARROW, arrow_string_format_default=arctic_str_format)
+    ac = mem_storage.create_arctic(output_format=OutputFormat.PYARROW, arrow_string_format_default=arctic_str_format)
     lib = ac.create_library(lib_name, arrow_string_format_default=library_str_format)
     sym = "sym"
     df = pd.DataFrame({"col": ["some", "strings", "in", "this", "column"]})
@@ -342,8 +342,8 @@ def test_read_arctic_strings(
 
 @pytest.mark.parametrize("lazy", [True, False])
 @pytest.mark.parametrize("batch_default", [ArrowOutputStringFormat.SMALL_STRING, None])
-def test_read_batch_strings(lmdb_storage, lib_name, lazy, batch_default):
-    ac = lmdb_storage.create_arctic(output_format=OutputFormat.PYARROW)
+def test_read_batch_strings(mem_storage, lib_name, lazy, batch_default):
+    ac = mem_storage.create_arctic(output_format=OutputFormat.PYARROW)
     lib = ac.create_library(lib_name)
     sym_1, sym_2 = "sym_1", "sym_2"
     df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
@@ -377,8 +377,8 @@ def test_read_batch_strings(lmdb_storage, lib_name, lazy, batch_default):
 
 @pytest.mark.parametrize("default", [None, ArrowOutputStringFormat.SMALL_STRING])
 @pytest.mark.parametrize("per_column", [None, ArrowOutputStringFormat.CATEGORICAL])
-def test_read_batch_and_join_strings(lmdb_storage, lib_name, default, per_column):
-    ac = lmdb_storage.create_arctic(output_format=OutputFormat.PYARROW)
+def test_read_batch_and_join_strings(mem_storage, lib_name, default, per_column):
+    ac = mem_storage.create_arctic(output_format=OutputFormat.PYARROW)
     lib = ac.create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
     sym_1, sym_2 = "sym_1", "sym_2"
     df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
