@@ -7,8 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-import faulthandler
-import sys
 from typing import Callable, Generator, Iterable, Union
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import NativeVersionStore
@@ -32,7 +30,6 @@ from tempfile import mkdtemp
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.storage_fixtures.azure import AzureContainer, AzureStorageFixtureFactory, AzuriteStorageFixtureFactory
-from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import (
     BaseGCPStorageFixtureFactory,
     BaseS3StorageFixtureFactory,
@@ -89,11 +86,10 @@ from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
 import arcticdb.toolbox.query_stats as query_stats
-from arcticdb.options import OutputFormat, ArrowOutputStringFormat, RuntimeOptions
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
-    get_custom_normalizer,
 )
 from arcticdb.util.test import config_context, config_context_multi
 
@@ -107,19 +103,6 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
-
-# Timeout for faulthandler's C-level deadlock watchdog (seconds).
-# Must be shorter than pytest-timeout (3600s) and the GH Actions step timeout
-# (90min = 5400s) so it fires first and gives us a traceback.
-# Disabled by default (0) — enabled in CI via parallel_test.sh.
-_FAULTHANDLER_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_TIMEOUT", "0"))
-# Directory for faulthandler crash files.  xdist workers have stderr piped
-# through execnet, so writing to sys.stderr won't reach the CI log.  We write
-# to a file instead, and parallel_test.sh prints any crash files after pytest.
-_FAULTHANDLER_DIR = os.environ.get(
-    "ARCTICDB_FAULTHANDLER_DIR",
-    os.path.join(os.environ.get("TEST_OUTPUT_DIR", "/tmp"), "faulthandler"),
-)
 
 
 # Ensure pytest-xdist uses 'fork' start method on macOS
@@ -140,57 +123,6 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
-
-
-_faulthandler_file = None  # kept open so faulthandler can write to the fd
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_runtest_protocol(item, nextitem):
-    """Arm faulthandler's C-level timer before each test.
-
-    Unlike pytest-timeout's thread method, dump_traceback_later() is
-    implemented entirely in C and does NOT need the GIL.  This means it
-    can kill the process and dump tracebacks even when C++ extension code
-    is holding the GIL indefinitely.
-
-    We write to a per-PID file because xdist worker stderr is piped through
-    execnet and never reaches the CI log.  parallel_test.sh prints these
-    files after pytest exits.
-    """
-    global _faulthandler_file
-    if _FAULTHANDLER_TIMEOUT > 0:
-        os.makedirs(_FAULTHANDLER_DIR, exist_ok=True)
-        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
-        # Close previous file if any (rearms for the new test)
-        if _faulthandler_file is not None:
-            _faulthandler_file.close()
-        _faulthandler_file = open(crash_path, "w")
-        # Write the test id so the crash file is self-describing
-        _faulthandler_file.write(f"Faulthandler timeout ({_FAULTHANDLER_TIMEOUT}s) for: {item.nodeid}\n")
-        _faulthandler_file.flush()
-        faulthandler.dump_traceback_later(
-            _FAULTHANDLER_TIMEOUT,
-            exit=True,
-            file=_faulthandler_file,
-        )
-    return None  # Let the default protocol run
-
-
-@pytest.hookimpl(trylast=True)
-def pytest_runtest_teardown(item, nextitem):
-    """Cancel the faulthandler timer after each test completes."""
-    global _faulthandler_file
-    faulthandler.cancel_dump_traceback_later()
-    if _faulthandler_file is not None:
-        _faulthandler_file.close()
-        _faulthandler_file = None
-        # Remove the crash file for tests that completed normally
-        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
-        try:
-            os.unlink(crash_path)
-        except OSError:
-            pass
 
 
 if platform.system() == "Linux":
@@ -278,11 +210,6 @@ def encoding_version(request):
     return request.param
 
 
-def check_local_storage_enabled():
-    if not LOCAL_STORAGE_TESTS_ENABLED:
-        pytest.skip("Local storage not enabled")
-
-
 # endregion
 # region ======================================= Storage Fixtures =======================================
 
@@ -293,204 +220,25 @@ def mem_library(mem_storage, lib_name) -> Generator[Library, None, None]:
 
 
 @pytest.fixture(scope="session")
-def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
-    check_local_storage_enabled()
-    tmp_path = tmp_path_factory.mktemp("lmdb")
-    with LmdbStorageFixture(tmp_path) as f:
+def lmdb_shared_storage() -> Generator[InMemoryStorageFixture, None, None]:
+    with InMemoryStorageFixture() as f:
         yield f
 
 
 @pytest.fixture(scope="function")
-def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
-    check_local_storage_enabled()
-    with LmdbStorageFixture(tmp_path) as f:
+def lmdb_storage() -> Generator[InMemoryStorageFixture, None, None]:
+    with InMemoryStorageFixture() as f:
         yield f
 
 
-# region ---- LMDB Fixture Caching (NativeVersionStore + Library pools) ----
-#
-# Creating an LMDB environment is expensive on Windows (~0.4s per test).
-# These pools reuse NativeVersionStore and Library objects across tests by
-# calling clear() (instant dbi_drop) instead of creating new LMDB envs.
-
-
-def _reset_store_state(store):
-    """Reset mutable Python-side state on a NativeVersionStore so it behaves like a fresh instance."""
-    store._allow_arrow_input = False
-    store._test_convert_arrow_back_to_pandas = False
-    # Give the store its own RuntimeOptions with defaults, breaking any shared reference
-    # (e.g. all Libraries from the same Arctic instance share one RuntimeOptions object).
-    store._runtime_options = RuntimeOptions()
-    # Re-create the normalizer in case a test replaced it (e.g. with a MagicMock)
-    store._init_norm_failure_handler()
-    # Refresh custom normalizer from the global registry.  We do NOT clear the
-    # registry here because a test fixture may have already registered a
-    # normalizer before the pool checkout (fixture ordering is left-to-right).
-    # Individual fixtures (e.g. custom_thing_with_registered_normalizer) are
-    # responsible for cleaning up the global registry in their own teardown.
-    store._custom_normalizer = get_custom_normalizer(False)
-
-
-def _scrub_instance_shadows(obj):
-    """Remove instance attributes that shadow class methods.
-
-    When pytest's monkeypatch undoes ``setattr(instance, "method", mock)``, it
-    restores the original via ``setattr(instance, "method", old_class_method)``
-    instead of ``delattr``.  This leaves a stale *instance* attribute that shadows
-    any future class-level patch on the same name.  Scrubbing these avoids
-    cross-test contamination in pooled fixtures.
-    """
-    for attr in list(obj.__dict__):
-        class_val = getattr(obj.__class__, attr, None)
-        if class_val is not None and callable(class_val):
-            delattr(obj, attr)
-
-
-class _VersionStorePool:
-    """Session-scoped pool of NativeVersionStore objects keyed by config.
-
-    On Windows, LMDB pre-allocates the full map_size on disk (no sparse files),
-    so we cap the total number of pooled instances to avoid exhausting disk space.
-    Instances with custom lmdb_config (non-default map_size) are never pooled.
-    """
-
-    _MAX_POOLED = 10  # Max total instances kept in the pool
-
-    def __init__(self, storage: LmdbStorageFixture):
-        self._storage = storage
-        self._factory = storage.create_version_store_factory("_pool_default")
-        self._available: dict = {}  # config_key -> list[NativeVersionStore]
-        self._counter = 0
-        self._total_pooled = 0
-
-    def checkout(self, col_per_group=None, row_per_segment=None, lmdb_config=None, **kwargs):
-        if col_per_group is not None and "column_group_size" not in kwargs:
-            kwargs["column_group_size"] = col_per_group
-        if row_per_segment is not None and "segment_row_size" not in kwargs:
-            kwargs["segment_row_size"] = row_per_segment
-        poolable = lmdb_config is None
-        key = self._make_key(kwargs, lmdb_config)
-        if poolable and key in self._available and self._available[key]:
-            store = self._available[key].pop()
-            self._total_pooled -= 1
-            store.version_store.clear()
-            # clear() uses LMDB's dbi_drop which should empty every named
-            # database.  In practice, APPEND_DATA keys sometimes survive
-            # (possibly an LMDB transaction ordering issue), so remove any
-            # leftover staged data explicitly.
-            for sym in store.version_store.get_incomplete_symbols():
-                store.version_store.remove_incomplete(sym)
-            _reset_store_state(store)
-            _scrub_instance_shadows(store)
-            return key, store
-        self._counter += 1
-        call_kwargs = dict(kwargs)
-        call_kwargs["name"] = f"_pool_{self._counter}"
-        if lmdb_config is not None:
-            call_kwargs["lmdb_config"] = lmdb_config
-        store = self._factory(**call_kwargs)
-        return key, store
-
-    def checkin(self, key, store, *, poolable=True):
-        if poolable and self._total_pooled < self._MAX_POOLED:
-            self._available.setdefault(key, []).append(store)
-            self._total_pooled += 1
-        # else: instance is discarded — GC will close the LMDB env
-
-    @staticmethod
-    def _make_key(kwargs, lmdb_config):
-        filtered = tuple(sorted((k, v) for k, v in kwargs.items() if k not in ("name", "reuse_name")))
-        lmdb_part = tuple(sorted(lmdb_config.items())) if lmdb_config else ()
-        return (filtered, lmdb_part)
-
-
-class _LibraryPool:
-    """Session-scoped pool of Library objects keyed by LibraryOptions."""
-
-    _MAX_POOLED = 5  # Max total instances kept in the pool
-
-    def __init__(self, storage: LmdbStorageFixture):
-        # Explicitly cap map_size so pooled libraries don't use the C++ LMDB
-        # default of 400 GiB per environment.  With 5 libraries kept open for
-        # the whole session that would be 2 TiB of virtual address space,
-        # enough to cause "Cannot allocate memory" on constrained CI runners.
-        self._arctic = Arctic(f"{storage.arctic_uri}?map_size=128MB")
-        storage.arctic_instances.append(self._arctic)
-        self._available: dict = {}  # options_key -> list[Library]
-        self._counter = 0
-        self._total_pooled = 0
-
-    def checkout(self, library_options=None):
-        key = self._make_key(library_options)
-        if key in self._available and self._available[key]:
-            lib = self._available[key].pop()
-            self._total_pooled -= 1
-            lib._nvs.version_store.clear()
-            for sym in lib._nvs.version_store.get_incomplete_symbols():
-                lib._nvs.version_store.remove_incomplete(sym)
-            _reset_store_state(lib._nvs)
-            _scrub_instance_shadows(lib)
-            return key, lib
-        self._counter += 1
-        name = f"_libpool_{self._counter}"
-        lib = self._arctic.create_library(name, library_options=library_options)
-        # Break shared RuntimeOptions reference from the Arctic instance so
-        # tests that change the output format on one library don't affect others.
-        lib._nvs._runtime_options = RuntimeOptions()
-        return key, lib
-
-    def checkin(self, key, lib):
-        if self._total_pooled < self._MAX_POOLED:
-            self._available.setdefault(key, []).append(lib)
-            self._total_pooled += 1
-
-    @staticmethod
-    def _make_key(library_options):
-        if library_options is None:
-            return ()
-        return (
-            library_options.dynamic_schema,
-            library_options.dedup,
-            library_options.rows_per_segment,
-            library_options.columns_per_segment,
-            library_options.encoding_version,
-            library_options.recursive_normalizers,
-        )
-
-
-@pytest.fixture(scope="session")
-def _lmdb_pool_storage(tmp_path_factory):
-    check_local_storage_enabled()
-    tmp_path = tmp_path_factory.mktemp("lmdb_pool")
-    with LmdbStorageFixture(tmp_path) as f:
-        yield f
-
-
-@pytest.fixture(scope="session")
-def _version_store_pool(_lmdb_pool_storage):
-    return _VersionStorePool(_lmdb_pool_storage)
-
-
-@pytest.fixture(scope="session")
-def _library_pool(_lmdb_pool_storage):
-    return _LibraryPool(_lmdb_pool_storage)
-
-
-# endregion
+@pytest.fixture
+def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
+    yield lmdb_storage.create_arctic().create_library(lib_name)
 
 
 @pytest.fixture
-def lmdb_library(_library_pool) -> Generator[Library, None, None]:
-    key, lib = _library_pool.checkout()
-    yield lib
-    _library_pool.checkin(key, lib)
-
-
-@pytest.fixture
-def lmdb_library_dynamic_schema(_library_pool) -> Generator[Library, None, None]:
-    key, lib = _library_pool.checkout(library_options=LibraryOptions(dynamic_schema=True))
-    yield lib
-    _library_pool.checkin(key, lib)
+def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, None, None]:
+    yield lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
 
 
 @pytest.fixture(
@@ -502,18 +250,11 @@ def lmdb_library_static_dynamic(request):
 
 
 @pytest.fixture
-def lmdb_library_factory(_library_pool):
-    checked_out = []
-
+def lmdb_library_factory(lmdb_storage, lib_name):
     def f(library_options: LibraryOptions = LibraryOptions()):
-        key, lib = _library_pool.checkout(library_options=library_options)
-        checked_out.append((key, lib))
-        return lib
+        return lmdb_storage.create_arctic().create_library(lib_name, library_options=library_options)
 
-    yield f
-
-    for key, lib in checked_out:
-        _library_pool.checkin(key, lib)
+    return f
 
 
 @pytest.fixture
@@ -1029,9 +770,7 @@ def basic_arctic_client(request, encoding_version) -> Arctic:
 
 @pytest.fixture
 def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
-    storage_fixture: LmdbStorageFixture = lmdb_storage
-    storage_fixture.arctic_uri = storage_fixture.arctic_uri + "?map_size=100GB"
-    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V2)
+    ac = lmdb_storage.create_arctic(encoding_version=EncodingVersion.V2)
     return ac
 
 
@@ -1057,21 +796,8 @@ def _store_factory(lib_name, bucket, delete_bucket=True) -> Generator[Callable[.
 
 
 @pytest.fixture
-def version_store_factory(_version_store_pool) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    checked_out = []
-
-    def factory(col_per_group=None, row_per_segment=None, lmdb_config=None, **kwargs):
-        poolable = lmdb_config is None
-        key, store = _version_store_pool.checkout(
-            col_per_group=col_per_group, row_per_segment=row_per_segment, lmdb_config=lmdb_config, **kwargs
-        )
-        checked_out.append((key, store, poolable))
-        return store
-
-    yield factory
-
-    for key, store, poolable in checked_out:
-        _version_store_pool.checkin(key, store, poolable=poolable)
+def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
+    yield from _store_factory(lib_name, lmdb_storage)
 
 
 @pytest.fixture
