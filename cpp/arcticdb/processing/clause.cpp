@@ -2018,7 +2018,7 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
         const SegmentInMemory& segment = *(*proc.segments_)[i];
         const RowRange& row_range = *(*proc.row_ranges_)[i];
         const ColRange& col_range = *(*proc.col_ranges_)[i];
-        stream::PartialKey partial_key = create_partial_key(segment);
+        stream::PartialKey partial_key = create_partial_key(segment, row_range);
         data_segments_to_write.push_back(
                 std::make_shared<folly::Future<SliceAndKey>>(store_->compress_and_schedule_async_write(
                         std::make_tuple(std::move(partial_key), segment, FrameSlice(col_range, row_range)), dedup_map_
@@ -2028,14 +2028,14 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
     return component_manager_->add_entities(std::move(data_segments_to_write));
 }
 
-stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment) const {
+stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const {
     if (segment.descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
         return stream::PartialKey{
                 .key_type = KeyType::TABLE_DATA,
                 .version_id = index_partial_key_.version_id,
                 .stream_id = index_partial_key_.id,
-                .start_index = 0,
-                .end_index = 0
+                .start_index = static_cast<timestamp>(row_range.first),
+                .end_index = static_cast<timestamp>(row_range.second)
         };
     } else if (segment.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP) {
         const timestamp start_ts = std::get<timestamp>(stream::TimeseriesIndex::start_value_for_segment(segment));

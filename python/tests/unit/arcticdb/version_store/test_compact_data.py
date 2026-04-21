@@ -575,17 +575,14 @@ def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
     assert len(data_keys) == 2
     # These aren't in any particular order
-    fields_0 = [field.name for field in lib_tool.read_descriptor(data_keys[0]).fields()]
-    fields_1 = [field.name for field in lib_tool.read_descriptor(data_keys[1]).fields()]
+    data_key_0 = [key for key in data_keys if key.start_index == 0][0]
+    data_key_1 = [key for key in data_keys if key.start_index == 10][0]
+    fields_0 = [field.name for field in lib_tool.read_descriptor(data_key_0).fields()]
+    fields_1 = [field.name for field in lib_tool.read_descriptor(data_key_1).fields()]
     assert len(fields_0) == 2
     assert len(fields_1) == 2
-    assert "present_in_all" in fields_0
-    assert "present_in_all" in fields_1
-    if "present_in_first" in fields_0:
-        assert "present_in_last" in fields_1
-    else:
-        assert "present_in_first" in fields_1
-        assert "present_in_last" in fields_0
+    assert fields_0 == ["present_in_all", "present_in_first"]
+    assert fields_1 == ["present_in_all", "present_in_last"]
 
 
 # Like the test above, but with type promotion as well to force use of the iteration code-path, rather than the memcpy
