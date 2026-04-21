@@ -79,6 +79,9 @@ class ColumnReslicer {
     std::vector<std::optional<Column>> reslice_columns(std::vector<StringPool>& string_pools);
 
   private:
+    // Note that both of these methods care about sparsity only when calling initialise_output_columns
+    // Once the output buffers have been allocated, dense and sparse inputs and outputs work in the same way, as every
+    // value from the input must be copied to an element of the output.
     std::vector<std::optional<Column>> reslice_by_memcpy();
     std::vector<std::optional<Column>> reslice_by_iteration(std::vector<StringPool>& string_pools);
     std::vector<std::optional<Column>> initialise_output_columns() const;
