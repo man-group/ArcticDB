@@ -48,8 +48,6 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneStatic) {
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
     ASSERT_EQ(col.row_count(), total_rows);
-    // This happens for the whole segment later in the real flow
-    col.set_row_data(total_rows - 1);
     ASSERT_FALSE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<bool> expected_values{false, false, true, true, true, false, true, true, false, false, false, true};
@@ -111,8 +109,6 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
     ASSERT_EQ(col.row_count(), value_count);
-    // This happens for the whole segment later in the real flow
-    col.set_row_data(total_rows - 1);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::optional<bool>> expected_values{
@@ -187,8 +183,6 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
     ASSERT_EQ(col.row_count(), value_count);
-    // This happens for the whole segment later in the real flow
-    col.set_row_data(total_rows - 1);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::optional<bool>> expected_values{
@@ -252,8 +246,6 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     ASSERT_TRUE(res.front().has_value());
     auto& col = *res.front();
     ASSERT_EQ(col.row_count(), value_count);
-    // This happens for the whole segment later in the real flow
-    col.set_row_data(total_rows - 1);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::optional<bool>> expected_values{
@@ -316,9 +308,6 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, SplitInTwoStatic) {
     auto& col_1 = *res.back();
     ASSERT_EQ(col_0.row_count(), rows_in_first_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
-    // This happens for the whole segment later in the real flow
-    col_0.set_row_data(rows_in_first_slice - 1);
-    col_1.set_row_data(max_rows_per_slice - 1);
     ASSERT_FALSE(col_0.is_sparse());
     ASSERT_FALSE(col_1.is_sparse());
     std::vector<RawType> expected_values = []() {
@@ -383,9 +372,6 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineThreeIntoTwoStatic)
     auto& col_1 = *res.back();
     ASSERT_EQ(col_0.row_count(), max_rows_per_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
-    // This happens for the whole segment later in the real flow
-    col_0.set_row_data(max_rows_per_slice - 1);
-    col_1.set_row_data(max_rows_per_slice - 1);
     ASSERT_FALSE(col_0.is_sparse());
     ASSERT_FALSE(col_1.is_sparse());
     std::vector<RawType> expected_values = []() {
@@ -450,9 +436,6 @@ TEST(ColumnReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     auto& col_1 = *res.back();
     ASSERT_EQ(col_0.row_count(), max_rows_per_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
-    // This happens for the whole segment later in the real flow
-    col_0.set_row_data(max_rows_per_slice - 1);
-    col_1.set_row_data(max_rows_per_slice - 1);
     ASSERT_FALSE(col_0.is_sparse());
     ASSERT_FALSE(col_1.is_sparse());
     for (size_t idx = 0; idx < input_data.size(); ++idx) {
@@ -545,8 +528,6 @@ TEST_F(ColumnReslicerDenseStringStaticSchema, CombineIntoOne) {
     ASSERT_EQ(col.type(), utf8_td);
     const auto& string_pool = string_pools.front();
     ASSERT_EQ(col.row_count(), total_rows);
-    // This happens for the whole segment later in the real flow
-    col.set_row_data(total_rows - 1);
     ASSERT_FALSE(col.is_sparse());
     std::vector<std::string> expected_values{
             "hello",
@@ -616,9 +597,6 @@ TEST_P(ColumnReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     const auto& string_pool_1 = string_pools.back();
     ASSERT_EQ(col_0.row_count(), rows_in_first_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
-    // This happens for the whole segment later in the real flow
-    col_0.set_row_data(rows_in_first_slice - 1);
-    col_1.set_row_data(max_rows_per_slice - 1);
     ASSERT_FALSE(col_0.is_sparse());
     ASSERT_FALSE(col_1.is_sparse());
     std::unordered_map<std::string, RawType> expected_offsets_0{{"hello", 0}, {"gutentag", 9}};

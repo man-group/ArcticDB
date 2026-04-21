@@ -87,7 +87,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
         }
     }
     for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
-        res.at(idx).set_row_data(reslicing_info.rows_in_slice(idx) - 1);
+        res.at(idx).set_row_id(reslicing_info.rows_in_slice(idx) - 1);
         res.at(idx).set_string_pool(std::make_shared<StringPool>(std::move(string_pools.at(idx))));
     }
     return res;

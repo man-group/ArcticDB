@@ -8,6 +8,8 @@
 
 #include <arcticdb/util/string_utils.hpp>
 
+#include <folly/container/Enumerate.h>
+
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_reslicer.hpp>
 
@@ -66,6 +68,11 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_columns(std::vector<S
             return reslice_by_iteration(string_pools);
         }
     }();
+    for (auto&& [idx, col] : folly::enumerate(res)) {
+        if (col.has_value()) {
+            col->set_row_data(reslicing_info_.rows_in_slice(idx) - 1);
+        }
+    }
     // This was a destructive process, reset the class so that it can be safely reused
     cols_or_row_counts_.clear();
     type_.reset();

@@ -466,9 +466,7 @@ def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
 @pytest.mark.parametrize(
     "second_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
 )
-def test_compact_data_dynamic_schema_changing_types(
-    in_memory_store_factory, first_type, second_type, any_output_format
-):
+def test_compact_data_dynamic_schema_changing_types(in_memory_store_factory, first_type, second_type):
     if (first_type == "uint64" and second_type.startswith("int")) or (
         second_type == "uint64" and first_type.startswith("int")
     ):
@@ -480,6 +478,30 @@ def test_compact_data_dynamic_schema_changing_types(
     lib.write(sym, df0)
     lib.append(sym, df1)
     generic_compact_data_test(lib, sym)
+
+
+def test_compact_data_dynamic_schema_changing_types_three_slices(in_memory_store_factory):
+    # See comment in test_compact_data_output_column_missing_from_slice_constant_types as to why this input slicing is
+    # interesting
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10, prune_previous_version=True)
+    sym = "test_compact_data_dynamic_schema_changing_types_three_slices"
+    df0 = pd.DataFrame({"col": np.arange(5, dtype=np.int64)})
+    df1 = pd.DataFrame({"col": np.arange(5, 15, dtype=np.int8)})
+    df2 = pd.DataFrame({"col": np.arange(15, 20, dtype=np.int8)})
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    generic_compact_data_test(lib, sym)
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 2
+    # These aren't in any particular order
+    types_0 = [field.type for field in lib_tool.read_descriptor(data_keys[0]).fields()]
+    types_1 = [field.type for field in lib_tool.read_descriptor(data_keys[1]).fields()]
+    assert len(types_0) == 1
+    assert len(types_1) == 1
+    assert "INT64" in str(types_0)
+    assert "INT64" in str(types_1)
 
 
 @pytest.mark.parametrize(
@@ -535,7 +557,8 @@ def test_compact_data_dynamic_schema_missing_columns(in_memory_store_factory, in
 
 
 def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_store_factory):
-    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
+    # Prune previous as we're going to look at the data segment descriptors post-compaction
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10, prune_previous_version=True)
     sym = "test_compact_data_output_column_missing_from_slice_constant_types"
     # This configuration tests the right thing because:
     # - we start with row-slices of 5, 10, and 5 rows respectively
@@ -548,6 +571,21 @@ def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_
     lib.append(sym, pd.DataFrame({"present_in_all": np.arange(5, 15)}))
     lib.append(sym, pd.DataFrame({"present_in_all": np.arange(15, 20), "present_in_last": np.arange(15, 20)}))
     generic_compact_data_test(lib, sym)
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 2
+    # These aren't in any particular order
+    fields_0 = [field.name for field in lib_tool.read_descriptor(data_keys[0]).fields()]
+    fields_1 = [field.name for field in lib_tool.read_descriptor(data_keys[1]).fields()]
+    assert len(fields_0) == 2
+    assert len(fields_1) == 2
+    assert "present_in_all" in fields_0
+    assert "present_in_all" in fields_1
+    if "present_in_first" in fields_0:
+        assert "present_in_last" in fields_1
+    else:
+        assert "present_in_first" in fields_1
+        assert "present_in_last" in fields_0
 
 
 # Like the test above, but with type promotion as well to force use of the iteration code-path, rather than the memcpy
