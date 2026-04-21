@@ -2018,7 +2018,7 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
         const SegmentInMemory& segment = *(*proc.segments_)[i];
         const RowRange& row_range = *(*proc.row_ranges_)[i];
         const ColRange& col_range = *(*proc.col_ranges_)[i];
-        stream::PartialKey partial_key = create_partial_key(segment);
+        stream::PartialKey partial_key = create_partial_key(segment, row_range);
         data_segments_to_write.push_back(
                 std::make_shared<folly::Future<SliceAndKey>>(store_->compress_and_schedule_async_write(
                         std::make_tuple(std::move(partial_key), segment, FrameSlice(col_range, row_range)), dedup_map_
@@ -2028,14 +2028,14 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
     return component_manager_->add_entities(std::move(data_segments_to_write));
 }
 
-stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment) const {
+stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const {
     if (segment.descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
         return stream::PartialKey{
                 .key_type = KeyType::TABLE_DATA,
                 .version_id = index_partial_key_.version_id,
                 .stream_id = index_partial_key_.id,
-                .start_index = 0,
-                .end_index = 0
+                .start_index = static_cast<timestamp>(row_range.first),
+                .end_index = static_cast<timestamp>(row_range.second)
         };
     } else if (segment.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP) {
         const timestamp start_ts = std::get<timestamp>(stream::TimeseriesIndex::start_value_for_segment(segment));
@@ -2727,11 +2727,11 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
     std::vector<std::vector<size_t>> res;
     std::vector<size_t> current;
     auto row_range = retained_processing_row_ranges.cbegin();
-    ColRange col_range = ranges_and_keys.front().col_range();
+    // Use first element of col_range rather than full col range equality so that it works with dynamic schema where
+    // number of columns in each row slice can be different
+    auto col_range_start = ranges_and_keys.front().col_range().first;
     for (const auto& [idx, range_and_key] : folly::enumerate(ranges_and_keys)) {
-        // Use first element of col_range rather than equality so that it works with dynamic schema where number of
-        // columns in each row slice can be different
-        if (range_and_key.col_range().first == col_range.first) {
+        if (range_and_key.col_range().first == col_range_start) {
             if (row_range->contains(range_and_key.row_range().first)) {
                 current.emplace_back(idx);
             } else {
@@ -2743,7 +2743,7 @@ std::vector<std::vector<size_t>> CompactDataClause::structure_for_processing(std
             // Moving to the next column slice
             res.emplace_back(std::move(current));
             current = std::vector<size_t>{idx};
-            col_range = range_and_key.col_range();
+            col_range_start = range_and_key.col_range().first;
             row_range = retained_processing_row_ranges.cbegin();
         }
     }
@@ -2764,11 +2764,12 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, entity_ids
     );
-    ColRange col_range = *proc.col_ranges_->front();
+    auto col_range_start = proc.col_ranges_->front()->first;
     log::version().debug(
-            "CompactDataClause processing {} segments in Col{} with row ranges spanning [{:d}, {:d}]",
+            "CompactDataClause processing {} segments with starting column {} and with row ranges spanning [{:d}, "
+            "{:d}]",
             input_segment_count,
-            col_range,
+            col_range_start,
             proc.row_ranges_->front()->first,
             proc.row_ranges_->back()->second
     );
@@ -2780,8 +2781,11 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     std::vector<std::shared_ptr<RowRange>> row_ranges;
     std::vector<std::shared_ptr<ColRange>> col_ranges;
     auto row_range_start = proc.row_ranges_->front()->first;
+    const auto index_field_count = segment_ptrs.front()->descriptor().index().field_count();
     for (const auto& segment : segment_ptrs) {
-        col_ranges.emplace_back(std::make_shared<ColRange>(col_range));
+        col_ranges.emplace_back(std::make_shared<ColRange>(
+                col_range_start, col_range_start + segment->num_columns() - index_field_count
+        ));
         row_ranges.emplace_back(std::make_shared<RowRange>(row_range_start, row_range_start + segment->row_count()));
         row_range_start += segment->row_count();
     }
@@ -2789,10 +2793,11 @@ std::vector<EntityId> CompactDataClause::process(std::vector<EntityId>&& entity_
     proc.set_row_ranges(std::move(row_ranges));
     proc.set_col_ranges(std::move(col_ranges));
     log::version().debug(
-            "CompactDataClause compacted {} segments into {} segments in Col{} with row ranges spanning [{:d}, {:d}]",
+            "CompactDataClause compacted {} segments into {} segments with starting column {} and with row ranges "
+            "spanning [{:d}, {:d}]",
             input_segment_count,
             proc.segments_->size(),
-            col_range,
+            col_range_start,
             proc.row_ranges_->front()->first,
             proc.row_ranges_->back()->second
     );

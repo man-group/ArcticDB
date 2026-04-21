@@ -842,7 +842,7 @@ struct WriteClause {
     [[nodiscard]] std::string to_string() const;
 
   private:
-    stream::PartialKey create_partial_key(const SegmentInMemory& segment) const;
+    stream::PartialKey create_partial_key(const SegmentInMemory& segment, const RowRange& row_range) const;
 };
 
 /// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is

@@ -6,176 +6,15 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/util/string_utils.hpp>
-
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
+
+#include <arcticdb/column_store/column_reslicer.hpp>
+#include <arcticdb/util/string_utils.hpp>
 
 namespace arcticdb {
 
 SegmentReslicer::SegmentReslicer(uint64_t max_rows_per_segment) : max_rows_per_segment_(max_rows_per_segment) {
     util::check(max_rows_per_segment_ > 0, "SegmentReslicer max rows per segment must be >0");
-}
-
-// The strings part of ColumnWithStrings aren't needed here, but it's simpler than creating a Column for non-string
-// types and a ColumnWithStrings for string types
-std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_numeric_static_schema_columns(
-        std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info
-) {
-    std::vector<std::optional<Column>> res;
-    res.reserve(slicing_info.num_segments);
-    const auto& type = cols_with_strings.front()->column_->type();
-    const auto type_size = get_type_size(type.data_type());
-    for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
-        res.emplace_back(std::make_optional<Column>(
-                type, slicing_info.rows_in_slice(idx), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-        ));
-    }
-    auto output_col = res.begin();
-    auto dest_ptr = output_col->value().buffer().data();
-    uint64_t output_col_capacity = type_size * output_col->value().row_count();
-    for (auto& input_col_with_strings : cols_with_strings) {
-        const auto& input_blocks = input_col_with_strings->column_->buffer().blocks();
-        for (const auto& block : input_blocks) {
-            auto src_ptr = block->data();
-            uint64_t remaining_bytes = block->physical_bytes();
-            while (remaining_bytes > 0) {
-                auto bytes_to_copy = std::min(remaining_bytes, output_col_capacity);
-                memcpy(dest_ptr, src_ptr, bytes_to_copy);
-                src_ptr += bytes_to_copy;
-                dest_ptr += bytes_to_copy;
-                remaining_bytes -= bytes_to_copy;
-                output_col_capacity -= bytes_to_copy;
-                if (output_col_capacity == 0) {
-                    ++output_col;
-                    if (output_col != res.end()) {
-                        dest_ptr = output_col->value().buffer().data();
-                        output_col_capacity = type_size * output_col->value().row_count();
-                    }
-                }
-            }
-        }
-        ARCTICDB_DEBUG_CHECK(
-                ErrorCode::E_ASSERTION_FAILURE,
-                input_col_with_strings->column_.use_count() == 1,
-                "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
-                input_col_with_strings->column_.use_count()
-        );
-        input_col_with_strings.reset();
-    }
-    return res;
-}
-
-std::vector<std::optional<Column>> SegmentReslicer::reslice_dense_string_static_schema_columns(
-        std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info,
-        std::vector<StringPool>& string_pools
-) {
-    std::vector<std::optional<Column>> res;
-    res.reserve(slicing_info.num_segments);
-    // Regardless of input column types, compact into dynamic-width UTF-8
-    // Anything else is a nightmare, as even with static schema, you can have a mixture of dynamic and fixed width
-    // strings in the same column across different segments, or fixed-width columns where the width differs from segment
-    // to segment
-    const auto type = make_scalar_type(DataType::UTF_DYNAMIC64);
-    for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
-        res.emplace_back(std::make_optional<Column>(
-                type, slicing_info.rows_in_slice(idx), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-        ));
-    }
-    auto output_col = res.begin();
-    auto output_data = output_col->value().data();
-    auto string_pool = string_pools.begin();
-    details::visit_type(type.data_type(), [&](auto output_tag) {
-        using output_type_info = ScalarTypeInfo<decltype(output_tag)>;
-        // This is true by construction, just to prevent generation of invalid/useless code generation
-        if constexpr (output_type_info::data_type == DataType::UTF_DYNAMIC64) {
-            auto output_it = output_data.begin<typename output_type_info::TDT>();
-            auto output_end_it = output_data.end<typename output_type_info::TDT>();
-            for (auto& input_col_with_strings : cols_with_strings) {
-                details::visit_type(input_col_with_strings->column_->type().data_type(), [&](auto input_tag) {
-                    using input_type_info = ScalarTypeInfo<decltype(input_tag)>;
-                    // This is true by construction, just to prevent generation of invalid/useless code generation
-                    if constexpr (is_sequence_type(input_type_info::data_type)) {
-                        auto input_data = input_col_with_strings->column_->data();
-                        auto input_end_it = input_data.cend<typename input_type_info::TDT>();
-                        for (auto input_it = input_data.cbegin<typename input_type_info::TDT>();
-                             input_it != input_end_it;
-                             ++input_it, ++output_it) {
-                            if (output_it == output_end_it) {
-                                ++output_col;
-                                output_data = output_col->value().data();
-                                output_it = output_data.begin<typename output_type_info::TDT>();
-                                output_end_it = output_data.end<typename output_type_info::TDT>();
-                                ++string_pool;
-                            }
-                            // Trailing nulls are stripping in utf32_to_u8, so we only need to strip them for
-                            // fixed-width ASCII
-                            auto opt_str = input_col_with_strings->string_at_offset(
-                                    *input_it, input_type_info::data_type == DataType::ASCII_FIXED64
-                            );
-                            if (opt_str.has_value()) {
-                                if constexpr (is_fixed_string_type(input_type_info::data_type) &&
-                                              is_utf_type(input_type_info::data_type)) {
-                                    auto utf8_str = util::utf32_to_u8(*opt_str);
-                                    *output_it = string_pool->get(utf8_str).offset();
-                                } else {
-                                    *output_it = string_pool->get(*opt_str).offset();
-                                }
-                            } else {
-                                // This is only possible if the input column has a dynamic string type, and so *input_it
-                                // will represent either None or NaN
-                                ARCTICDB_DEBUG_CHECK(
-                                        ErrorCode::E_ASSERTION_FAILURE,
-                                        !is_a_string(*input_it),
-                                        "Invalid non-string offset {}",
-                                        *input_it
-                                );
-                                *output_it = *input_it;
-                            }
-                        }
-                    }
-                });
-                ARCTICDB_DEBUG_CHECK(
-                        ErrorCode::E_ASSERTION_FAILURE,
-                        input_col_with_strings->column_.use_count() == 1,
-                        "Unexpected column shared_ptr use count {} > 1 in SegmentReslicer",
-                        input_col_with_strings->column_.use_count()
-                );
-                input_col_with_strings.reset();
-            }
-        }
-    });
-    return res;
-}
-
-std::vector<std::optional<Column>> SegmentReslicer::reslice_columns(
-        std::vector<std::optional<ColumnWithStrings>>&& cols_with_strings, const SlicingInfo& slicing_info,
-        std::vector<StringPool>& string_pools
-) {
-    std::optional<TypeDescriptor> type;
-    for (const auto& col_with_strings : cols_with_strings) {
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                col_with_strings, "compact_data not yet supported with dynamic schema"
-        );
-        const auto& col = *col_with_strings->column_;
-        schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                !col.is_sparse(), "compact_data not yet supported with sparse data"
-        );
-        if (type.has_value()) {
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    col.type() == *type ||
-                            (is_sequence_type(col.type().data_type()) && type->data_type() == DataType::UTF_DYNAMIC64),
-                    "compact_data not yet supported with dynamic schema"
-            );
-        } else {
-            type = is_sequence_type(col.type().data_type()) ? make_scalar_type(DataType::UTF_DYNAMIC64) : col.type();
-        }
-    }
-    if (is_sequence_type(type->data_type())) {
-        return reslice_dense_string_static_schema_columns(std::move(cols_with_strings), slicing_info, string_pools);
-    } else {
-        return reslice_dense_numeric_static_schema_columns(std::move(cols_with_strings), slicing_info);
-    }
 }
 
 std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<SegmentInMemory>&& segments) {
@@ -184,29 +23,25 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     }
     // Use string over string_view for the keys in this map, as we are going to free the segments soon, which would
     // then invalidate the pointers in those string views
-    ankerl::unordered_dense::map<
-            std::string,
-            std::vector<std::optional<ColumnWithStrings>>,
-            util::TransparentStringHash,
-            std::equal_to<>>
-            column_map;
+    ankerl::unordered_dense::map<std::string, ColumnReslicer, util::TransparentStringHash, std::equal_to<>> column_map;
     // Build up the set of all columns in all segments
     // Also track the order they were added in
     std::vector<std::string> col_names_in_order;
-    uint64_t total_rows{0};
+    uint64_t total_rows = std::accumulate(
+            segments.cbegin(),
+            segments.cend(),
+            uint64_t(0),
+            [](uint64_t n, const SegmentInMemory& segment) { return n + segment.row_count(); }
+    );
+    ReslicingInfo reslicing_info{total_rows, max_rows_per_segment_};
     for (const auto& segment : segments) {
-        total_rows += segment.row_count();
         for (const auto& field : segment.descriptor().fields()) {
-            if (column_map.emplace(std::piecewise_construct, std::make_tuple(field.name()), std::make_tuple()).second) {
+            if (column_map.emplace(field.name(), ColumnReslicer(reslicing_info)).second) {
                 col_names_in_order.emplace_back(field.name());
             }
         }
     }
-    SlicingInfo slicing_info{total_rows, max_rows_per_segment_};
-    std::vector<SegmentInMemory> res(slicing_info.num_segments);
-    // This won't be sufficient with dynamic schema
-    // In that case, col_names_in_order will represent the correct columns. The types should probably be calculated
-    // in reslice_columns
+    std::vector<SegmentInMemory> res(reslicing_info.num_segments);
     const auto& desc = segments.front().descriptor();
     for (auto& segment : res) {
         // add_column also adds to the FieldCollection, so start with an empty one
@@ -214,49 +49,45 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
                 desc.segment_desc_, std::make_shared<FieldCollection>(), desc.stream_id_
         ));
     }
-    // For each segment, append the column to the corresponding vector in columns if it is present, or a nullptr if it
-    // is missing from this segment (dynamic schema)
+    // For each segment, add the column to the corresponding ColumnReslicer in column_map if it is present, or the
+    // number of rows in this segment if it is missing from this row slice (dynamic schema)
     for (const auto& segment : segments) {
         for (const auto& col_name : col_names_in_order) {
             if (auto col_idx = segment.column_index(col_name); col_idx.has_value()) {
-                column_map.at(col_name).emplace_back(std::make_optional<ColumnWithStrings>(
-                        segment.column_ptr(*col_idx), segment.string_pool_ptr(), col_name
-                ));
+                column_map.at(col_name).push_back(segment.column_ptr(*col_idx), segment.string_pool_ptr());
             } else {
-                column_map.at(col_name).emplace_back(std::nullopt);
+                column_map.at(col_name).push_back(segment.row_count());
             }
         }
     }
     // This ensures that the refcount of the column shared pointers is 1 when they are reset after having their data
     // copied into the result column, and so the memory is freed as early as possible
     segments.clear();
-    std::vector<StringPool> string_pools(slicing_info.num_segments);
+    std::vector<StringPool> string_pools(reslicing_info.num_segments);
     // We can use string_view keys here as they point to the keys in column_map, which are still live while this
     // variable is in use
     ankerl::unordered_dense::
             map<std::string_view, std::vector<std::optional<Column>>, util::TransparentStringHash, std::equal_to<>>
                     resliced_column_map;
-    for (auto&& [col_name, columns] : column_map) {
-        resliced_column_map.emplace(col_name, reslice_columns(std::move(columns), slicing_info, string_pools));
+    for (auto&& [col_name, column_reslicer] : column_map) {
+        resliced_column_map.emplace(col_name, column_reslicer.reslice_columns(string_pools));
     }
     for (const auto& col_name : col_names_in_order) {
         auto& sliced_cols = resliced_column_map.at(col_name);
         util::check(
-                sliced_cols.size() == slicing_info.num_segments,
+                sliced_cols.size() == reslicing_info.num_segments,
                 "Mismatched sliced column size {} != {}",
                 sliced_cols.size(),
-                slicing_info.num_segments
+                reslicing_info.num_segments
         );
-        for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
+        for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
             if (sliced_cols.at(idx).has_value()) {
                 res.at(idx).add_column(col_name, std::make_shared<Column>(std::move(*sliced_cols.at(idx))));
             }
         }
     }
-    for (size_t idx = 0; idx < slicing_info.num_segments; ++idx) {
-        auto rows_to_consume = std::min(slicing_info.rows_in_slice(idx), total_rows);
-        res.at(idx).set_row_data(rows_to_consume - 1);
-        total_rows -= rows_to_consume;
+    for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+        res.at(idx).set_row_id(reslicing_info.rows_in_slice(idx) - 1);
         res.at(idx).set_string_pool(std::make_shared<StringPool>(std::move(string_pools.at(idx))));
     }
     return res;

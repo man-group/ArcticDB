@@ -59,7 +59,8 @@ struct ColumnWithStrings {
     ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name);
 
     ColumnWithStrings(
-            std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name
+            std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool,
+            std::string_view col_name = ""
     );
 
     [[nodiscard]] std::optional<std::string_view> string_at_offset(

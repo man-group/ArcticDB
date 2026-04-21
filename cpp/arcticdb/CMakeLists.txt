@@ -216,6 +216,7 @@ set(arcticdb_srcs
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
         column_store/column_algorithms.hpp
+        column_store/column_reslicer.hpp
         column_store/column_utils.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
@@ -458,6 +459,7 @@ set(arcticdb_srcs
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
+        column_store/column_reslicer.cpp
         column_store/column_utils.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
@@ -1039,9 +1041,9 @@ if(${TEST})
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_column_data_random_accessor.cpp
+            column_store/test/test_column_reslicer.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
-            column_store/test/test_segment_reslicer.cpp
             column_store/test/test_statistics.cpp
             entity/test/test_atom_key.cpp
             entity/test/test_key_serialization.cpp
