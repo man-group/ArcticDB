@@ -8,6 +8,7 @@
 
 #include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/column_store/block.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
@@ -47,27 +48,33 @@ sparrow::primitive_array<T> create_primitive_array(
 }
 
 sparrow::array create_packed_bool_array(
-        TypedBlockData<ScalarTagType<DataTypeTag<DataType::BOOL8>>>& block, std::string_view name,
-        std::optional<sparrow::validity_bitmap>&& maybe_bitmap
+        TypedBlockData<ScalarTagType<DataTypeTag<DataType::BOOL8>>>& block, const ExternalPackedMemBlock* packed_block,
+        std::string_view name, std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
-    util::check(
-            block.mem_block()->get_type() == MemBlockType::EXTERNAL_PACKED, "Expected packed block for bool column"
-    );
     const auto num_bools = block.row_count();
-    const auto packed_bytes = block.mem_block()->physical_bytes();
+    const auto packed_bytes = packed_block->physical_bytes();
+    const auto shift = packed_block->shift();
     auto* data_ptr = block.release();
     // u8_buffer<bool> treats each element as 1 byte. We pass packed_bytes as the element count so that
     // the buffer owns exactly the packed allocation. sparrow's primitive_array<bool> interprets this
-    // buffer as packed bits, using num_bools as the logical element count.
+    // buffer as packed bits.
     sparrow::u8_buffer<bool> buffer(data_ptr, packed_bytes, get_detachable_allocator());
+    // The buffer holds num_bools + shift bits; slice_inplace below will restrict to [shift, shift + num_bools).
+    const auto unsliced_bools = num_bools + shift;
     auto arr = [&]() {
         if (maybe_bitmap) {
-            return sparrow::array{sparrow::primitive_array<bool>{std::move(buffer), num_bools, std::move(*maybe_bitmap)}
+            return sparrow::array{
+                    sparrow::primitive_array<bool>{std::move(buffer), unsliced_bools, std::move(*maybe_bitmap)}
             };
         } else {
-            return sparrow::array{sparrow::primitive_array<bool>{std::move(buffer), num_bools}};
+            return sparrow::array{sparrow::primitive_array<bool>{std::move(buffer), unsliced_bools}};
         }
     }();
+    // If the packed block has a non-zero bit shift (e.g. after truncation via memcpy) slice it inplace.
+    // This is zero-copy, only updates the arrow offset.
+    if (shift > 0) {
+        arr.slice_inplace(shift, shift + num_bools);
+    }
     arr.set_name(name);
     return arr;
 }
@@ -304,18 +311,27 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
                 vec.emplace_back(empty_arrow_array_for_column(column, name));
                 continue;
             }
-            auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
-            if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                if (column_data.buffer().has_extra_bytes_per_block()) {
-                    vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
-                } else {
-                    vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
-                }
-            } else if constexpr (is_bool_type(TagType::DataTypeTag::data_type)) {
-                util::check(column_data.buffer().is_packed(), "Expected packed bool column for arrow output");
-                vec.emplace_back(create_packed_bool_array(*block, name, std::move(bitmap)));
+            if constexpr (is_bool_type(TagType::DataTypeTag::data_type)) {
+                util::check(
+                        block->mem_block()->get_type() == MemBlockType::EXTERNAL_PACKED,
+                        "Expected packed block for bool column"
+                );
+                const auto* packed_mem = static_cast<const ExternalPackedMemBlock*>(block->mem_block());
+                // For bool columns we need to add the shift because we will later slice_inplace the buffer alongside
+                // the bitmap.
+                auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count() + packed_mem->shift());
+                vec.emplace_back(create_packed_bool_array(*block, packed_mem, name, std::move(bitmap)));
             } else {
-                vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
+                auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
+                if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
+                    if (column_data.buffer().has_extra_bytes_per_block()) {
+                        vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                    } else {
+                        vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                    }
+                } else {
+                    vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
+                }
             }
         }
     });
