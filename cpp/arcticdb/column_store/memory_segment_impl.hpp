@@ -273,6 +273,8 @@ class SegmentInMemoryImpl {
 
     SegmentInMemoryImpl();
 
+    explicit SegmentInMemoryImpl(Sparsity allow_sparse);
+
     SegmentInMemoryImpl(
             const StreamDescriptor& desc, size_t expected_column_size, AllocationType allocation_type,
             Sparsity allow_sparse, const std::optional<BlockConfigPerColumn>& block_config_per_column

@@ -238,6 +238,19 @@ ColumnStatsData::ColumnStatsData(SegmentInMemory&& segment, const TimeseriesDesc
             }
         }
 
+        // If a column's min and max are both absent (sparse bitmap), the column was not present
+        // in the data segment.
+        for (auto& [col_name, stats] : stats_row.stats_for_column) {
+            util::check(
+                    stats.min.has_value() == stats.max.has_value(),
+                    "MIN and MAX should both be present or both be absent, col_name={}",
+                    col_name
+            );
+            if (!stats.min) {
+                stats.column_absent = true;
+            }
+        }
+
         auto key = std::make_pair(stats_row.start_index, stats_row.end_index);
         if (auto [_, inserted] = index_to_row_.emplace(key, rows_.size()); !inserted) {
             // Duplicate (start_index, end_index). This can happen with timestamp indices where

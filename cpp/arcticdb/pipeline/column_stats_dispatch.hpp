@@ -80,7 +80,10 @@ struct FlippedComparator<NotEqualsOperator> {
 
 template<typename Func>
 StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func&& func) {
-    if (!stats_lhs.min || !stats_lhs.max) {
+    if (stats_lhs.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
+    if (!stats_lhs.min) {
         return StatsComparison::UNKNOWN;
     }
 
@@ -102,6 +105,41 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                 auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
                 auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
                 return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
+            }
+
+            return StatsComparison::UNKNOWN;
+        });
+    });
+}
+
+template<typename Func>
+StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const ColumnStatsValues& stats_rhs, Func&& func) {
+    if (stats_lhs.column_absent || stats_rhs.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
+    if (!stats_lhs.min || !stats_rhs.min) {
+        return StatsComparison::UNKNOWN;
+    }
+
+    return details::visit_type(stats_lhs.min->data_type(), [&](auto lhs_tag) -> StatsComparison {
+        using LhsTag = std::remove_reference_t<decltype(lhs_tag)>;
+
+        return details::visit_type(stats_rhs.min->data_type(), [&](auto rhs_tag) -> StatsComparison {
+            using RhsTag = std::remove_reference_t<decltype(rhs_tag)>;
+
+            if constexpr ((is_numeric_type(LhsTag::data_type) || is_time_type(LhsTag::data_type)) &&
+                          (is_numeric_type(RhsTag::data_type) || is_time_type(RhsTag::data_type))) {
+                using LhsRawType = LhsTag::raw_type;
+                using RhsRawType = RhsTag::raw_type;
+                using comp = Comparable<LhsRawType, RhsRawType>;
+                auto lhs_min = static_cast<typename comp::left_type>(stats_lhs.min->get<LhsRawType>());
+                auto lhs_max = static_cast<typename comp::left_type>(stats_lhs.max->get<LhsRawType>());
+                auto rhs_min = static_cast<typename comp::right_type>(stats_rhs.min->get<RhsRawType>());
+                auto rhs_max = static_cast<typename comp::right_type>(stats_rhs.max->get<RhsRawType>());
+                return func(
+                        ValueRange<typename comp::left_type>{lhs_min, lhs_max},
+                        ValueRange<typename comp::right_type>{rhs_min, rhs_max}
+                );
             }
 
             return StatsComparison::UNKNOWN;
@@ -132,6 +170,21 @@ std::vector<StatsComparison> visit_binary_comparator_stats(
                         result.reserve(r.size());
                         for (const auto& column_stats_values : r) {
                             result.emplace_back(stats_comparator(column_stats_values, *l, FlippedType{}));
+                        }
+                        return result;
+                    },
+                    [](const std::vector<ColumnStatsValues>& l,
+                       const std::vector<ColumnStatsValues>& r) -> std::vector<StatsComparison> {
+                        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                                l.size() == r.size(),
+                                "Column stats vectors must have the same size, got {} and {}",
+                                l.size(),
+                                r.size()
+                        );
+                        std::vector<StatsComparison> result;
+                        result.reserve(l.size());
+                        for (size_t i = 0; i < l.size(); ++i) {
+                            result.emplace_back(stats_comparator(l.at(i), r.at(i), FuncType{}));
                         }
                         return result;
                     },

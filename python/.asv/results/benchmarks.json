@@ -1409,12 +1409,40 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "column_stats:369",
+        "setup_cache_key": "column_stats:383",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "c51e2ca01ec0f6d1877864ce47df2839c806106a3f0008eb023ef306fc5859ef",
         "warmup_time": 0
+    },
+    "column_stats.ColumnStatsDynamicSchema.time_filter_col_col_sometimes_missing": {
+        "code": "class ColumnStatsDynamicSchema:\n    def time_filter_col_col_sometimes_missing(self, *args):\n        # Prunes 50% of segments: even chunks prune via column_absent on sometimes_missing_col\n        # odd chunks have max(sometimes_missing) < min(uint64) so those segments are still read.\n        q = QueryBuilder()\n        q = q[q[\"sometimes_missing_col\"] < q[\"uint64_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + [\"sometimes_missing_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"dynamic_schema\"\n    \n        # sometimes_missing_col has values 0..(5*ROWS_PER_CHUNK - 1) across the 5 odd chunks\n        total_sometimes_missing_rows = self.NUM_ROWS // 2\n        self.sometimes_missing_low = total_sometimes_missing_rows // 10\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(dynamic_schema=True))\n            lib_for_storage[storage] = lib\n    \n            sym = \"dynamic_schema\"\n            rows_per_chunk = self.ROWS_PER_CHUNK\n            sometimes_missing_counter = 0\n    \n            for chunk_idx in range(self.NUM_CHUNKS):\n                offset = chunk_idx * rows_per_chunk\n                timestamps = pd.date_range(\n                    start=pd.Timestamp(\"2020-01-01\") + pd.Timedelta(seconds=offset),\n                    periods=rows_per_chunk,\n                    freq=\"s\",\n                )\n                datetime_start = pd.Timestamp(\"2000-01-01\")\n                data = {\n                    \"uint64_col\": np.arange(offset, offset + rows_per_chunk, dtype=np.uint64),\n                    \"float_col\": np.linspace(chunk_idx * 100.0, (chunk_idx + 1) * 100.0, rows_per_chunk),\n                    \"bool_col\": np.zeros(rows_per_chunk, dtype=bool),\n                    \"datetime_col\": pd.date_range(\n                        start=datetime_start + pd.Timedelta(seconds=offset),\n                        periods=rows_per_chunk,\n                        freq=\"s\",\n                    ),\n                }\n                # Odd-numbered chunks include sometimes_missing_col with monotonically increasing values\n                if chunk_idx % 2 == 1:\n                    data[\"sometimes_missing_col\"] = np.arange(\n                        sometimes_missing_counter, sometimes_missing_counter + rows_per_chunk, dtype=np.uint64\n                    )\n                    sometimes_missing_counter += rows_per_chunk\n    \n                df = pd.DataFrame(data)\n                _add_extra_columns(df, rows_per_chunk, ordered=True)\n                df.index = timestamps\n                df.index.name = \"ts\"\n    \n                lib.append(sym, df)\n                self.logger.info(f\"Wrote chunk {chunk_idx} for {sym}\")\n    \n            lib._nvs.create_column_stats(sym, {\"sometimes_missing_col\": {\"MINMAX\"}, **COLUMN_STATS})\n            self.logger.info(f\"Created column stats for {sym}\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsDynamicSchema.time_filter_col_col_sometimes_missing",
+        "number": 0,
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:285",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6526966f22906a4145297899a41adf3eaafd3489d8301c95aa8671117101fdeb",
+        "warmup_time": 0.5
     },
     "column_stats.ColumnStatsDynamicSchema.time_filter_sometimes_missing_column": {
         "code": "class ColumnStatsDynamicSchema:\n    def time_filter_sometimes_missing_column(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"sometimes_missing_col\"] < self.sometimes_missing_low]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + [\"sometimes_missing_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"dynamic_schema\"\n    \n        # sometimes_missing_col has values 0..(5*ROWS_PER_CHUNK - 1) across the 5 odd chunks\n        total_sometimes_missing_rows = self.NUM_ROWS // 2\n        self.sometimes_missing_low = total_sometimes_missing_rows // 10\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(dynamic_schema=True))\n            lib_for_storage[storage] = lib\n    \n            sym = \"dynamic_schema\"\n            rows_per_chunk = self.ROWS_PER_CHUNK\n            sometimes_missing_counter = 0\n    \n            for chunk_idx in range(self.NUM_CHUNKS):\n                offset = chunk_idx * rows_per_chunk\n                timestamps = pd.date_range(\n                    start=pd.Timestamp(\"2020-01-01\") + pd.Timedelta(seconds=offset),\n                    periods=rows_per_chunk,\n                    freq=\"s\",\n                )\n                datetime_start = pd.Timestamp(\"2000-01-01\")\n                data = {\n                    \"uint64_col\": np.arange(offset, offset + rows_per_chunk, dtype=np.uint64),\n                    \"float_col\": np.linspace(chunk_idx * 100.0, (chunk_idx + 1) * 100.0, rows_per_chunk),\n                    \"bool_col\": np.zeros(rows_per_chunk, dtype=bool),\n                    \"datetime_col\": pd.date_range(\n                        start=datetime_start + pd.Timedelta(seconds=offset),\n                        periods=rows_per_chunk,\n                        freq=\"s\",\n                    ),\n                }\n                # Odd-numbered chunks include sometimes_missing_col with monotonically increasing values\n                if chunk_idx % 2 == 1:\n                    data[\"sometimes_missing_col\"] = np.arange(\n                        sometimes_missing_counter, sometimes_missing_counter + rows_per_chunk, dtype=np.uint64\n                    )\n                    sometimes_missing_counter += rows_per_chunk\n    \n                df = pd.DataFrame(data)\n                _add_extra_columns(df, rows_per_chunk, ordered=True)\n                df.index = timestamps\n                df.index.name = \"ts\"\n    \n                lib.append(sym, df)\n                self.logger.info(f\"Wrote chunk {chunk_idx} for {sym}\")\n    \n            lib._nvs.create_column_stats(sym, {\"sometimes_missing_col\": {\"MINMAX\"}, **COLUMN_STATS})\n            self.logger.info(f\"Created column stats for {sym}\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -1437,7 +1465,7 @@
         ],
         "rounds": 1,
         "sample_time": 0.5,
-        "setup_cache_key": "column_stats:278",
+        "setup_cache_key": "column_stats:285",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1465,7 +1493,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "column_stats:413",
+        "setup_cache_key": "column_stats:427",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1493,7 +1521,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "column_stats:413",
+        "setup_cache_key": "column_stats:427",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1521,7 +1549,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "column_stats:413",
+        "setup_cache_key": "column_stats:427",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1563,6 +1591,43 @@
         "type": "time",
         "unit": "seconds",
         "version": "191f87da766de9c93e59f255863048c358389c34a8a0e0ea31c53dfd898a4188",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_col_col": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_col_col(self, *args):\n        # uint64_col spans 0..n-1, float_col spans 0..1000, so min(uint64) > max(float) for\n        # every segment past the first. Therefore we prune ~99% of segments.\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] < q[\"float_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_col_col",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e6b512006ed8735ffd7ab0a43094e246c0c1e860b19c027afc0e32dd8d65ad40",
         "warmup_time": 0.5
     },
     "column_stats.ColumnStatsQueryPerformance.time_filter_combined_and": {
@@ -1919,7 +1984,7 @@
         ],
         "rounds": 1,
         "sample_time": 0.5,
-        "setup_cache_key": "column_stats:475",
+        "setup_cache_key": "column_stats:489",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

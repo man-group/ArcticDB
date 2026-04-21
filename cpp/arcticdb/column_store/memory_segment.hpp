@@ -28,6 +28,8 @@ class SegmentInMemory {
 
     SegmentInMemory();
 
+    explicit SegmentInMemory(Sparsity allow_sparse);
+
     explicit SegmentInMemory(
             const StreamDescriptor& tsd, size_t expected_column_size = 0,
             AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,

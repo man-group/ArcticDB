@@ -36,6 +36,32 @@ struct ValueRange {
     T max;
 };
 
+template<typename T>
+std::optional<StatsComparison> check_range_for_nan(const ValueRange<T>& range, StatsComparison nan_result) {
+    if constexpr (std::is_floating_point_v<T>) {
+        bool is_min_nan = std::isnan(range.min);
+        bool is_max_nan = std::isnan(range.max);
+        if (is_min_nan != is_max_nan) {
+            log::version().warn("Expected NaN at both ends of stats or neither, saw {}", range);
+            return StatsComparison::UNKNOWN;
+        }
+        if (is_min_nan) {
+            return nan_result;
+        }
+    }
+    return std::nullopt;
+}
+
+template<typename T>
+std::optional<StatsComparison> check_scalar_for_nan(T value, StatsComparison nan_result) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (std::isnan(value)) {
+            return nan_result;
+        }
+    }
+    return std::nullopt;
+}
+
 // If reordering this enum, is_binary_operation may also need to be changed
 enum class OperationType : uint8_t {
     // Unary
@@ -397,6 +423,15 @@ struct LessThanOperator {
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.max, rhs.min))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.min, rhs.max))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct LessThanEqualsOperator {
@@ -420,6 +455,15 @@ struct LessThanEqualsOperator {
         if ((*this)(range.max, value))
             return StatsComparison::ALL_MATCH;
         if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.max, rhs.min))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.min, rhs.max))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -449,6 +493,15 @@ struct GreaterThanOperator {
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.min, rhs.max))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.max, rhs.min))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct GreaterThanEqualsOperator {
@@ -472,6 +525,15 @@ struct GreaterThanEqualsOperator {
         if ((*this)(range.min, value))
             return StatsComparison::ALL_MATCH;
         if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.min, rhs.max))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.max, rhs.min))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -505,27 +567,29 @@ struct EqualsOperator {
 
     template<typename T, typename U>
     StatsComparison operator()(ValueRange<T> range, U value) const {
-        if constexpr (std::is_floating_point_v<T>) {
-            bool is_min_nan = std::isnan(range.min);
-            bool is_max_nan = std::isnan(range.max);
-            if (is_min_nan != is_max_nan) {
-                log::version().warn("Expected NaN at both ends of stats or neither, saw {}", range);
-                return StatsComparison::UNKNOWN;
-            }
-            if (is_min_nan) {
-                return StatsComparison::NONE_MATCH;
-            }
-        }
-        if constexpr (std::is_floating_point_v<U>) {
-            if (std::isnan(value)) {
-                // NaN != anything
-                return StatsComparison::NONE_MATCH;
-            }
-        }
+        if (auto r = check_range_for_nan(range, StatsComparison::NONE_MATCH))
+            return *r;
+        if (auto r = check_scalar_for_nan(value, StatsComparison::NONE_MATCH))
+            return *r;
 
         if ((*this)(range.min, value) && (*this)(range.max, value))
             return StatsComparison::ALL_MATCH;
         if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if (auto r = check_range_for_nan(lhs, StatsComparison::NONE_MATCH))
+            return *r;
+        if (auto r = check_range_for_nan(rhs, StatsComparison::NONE_MATCH))
+            return *r;
+
+        if ((*this)(lhs.min, rhs.min) && (*this)(lhs.max, rhs.max) && (*this)(lhs.min, lhs.max) &&
+            (*this)(rhs.min, rhs.max))
+            return StatsComparison::ALL_MATCH;
+        if (LessThanOperator{}(lhs.max, rhs.min) || LessThanOperator{}(rhs.max, lhs.min))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }
@@ -559,27 +623,31 @@ struct NotEqualsOperator {
 
     template<typename T, typename U>
     StatsComparison operator()(ValueRange<T> range, U value) const {
-        if constexpr (std::is_floating_point_v<T>) {
-            bool is_min_nan = std::isnan(range.min);
-            bool is_max_nan = std::isnan(range.max);
-            if (is_min_nan != is_max_nan) {
-                log::version().warn("Expected NaN at both ends of stats or neither, saw {}", range);
-                return StatsComparison::UNKNOWN;
-            }
-            if (is_min_nan) {
-                return StatsComparison::ALL_MATCH;
-            }
-        }
-        if constexpr (std::is_floating_point_v<U>) {
-            if (std::isnan(value)) {
-                // NaN != anything
-                return StatsComparison::ALL_MATCH;
-            }
-        }
+        if (auto r = check_range_for_nan(range, StatsComparison::ALL_MATCH))
+            return *r;
+        if (auto r = check_scalar_for_nan(value, StatsComparison::ALL_MATCH))
+            return *r;
 
         if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
             return StatsComparison::ALL_MATCH;
         if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if (auto r = check_range_for_nan(lhs, StatsComparison::ALL_MATCH))
+            return *r;
+        if (auto r = check_range_for_nan(rhs, StatsComparison::ALL_MATCH))
+            return *r;
+
+        // Ranges are disjoint: all values in lhs differ from all values in rhs
+        if (LessThanOperator{}(lhs.max, rhs.min) || LessThanOperator{}(rhs.max, lhs.min))
+            return StatsComparison::ALL_MATCH;
+        // Both ranges are a single identical point: all values are equal
+        if (EqualsOperator{}(lhs.min, lhs.max) && EqualsOperator{}(rhs.min, rhs.max) &&
+            EqualsOperator{}(lhs.min, rhs.min))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
     }

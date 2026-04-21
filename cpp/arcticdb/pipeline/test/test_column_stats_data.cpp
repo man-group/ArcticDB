@@ -207,3 +207,126 @@ TEST(ColumnStatsData, DuplicateIndexPairDoesNotAffectOtherRows) {
     // Duplicate key is not reachable.
     ASSERT_EQ(data.find_stats(300, 400), nullptr);
 }
+
+// Build a two-column stats segment where "volume" is absent (sparse) for certain rows.
+// Verify that ColumnStatsData marks those entries as column_absent = true.
+TEST(ColumnStatsData, SparseColumnAbsentMarkedCorrectly) {
+    using namespace arcticc::pb2::column_stats_pb2;
+
+    // Two data columns: price (offset 1) and volume (offset 2) in the TSD.
+    // Stats segment layout:
+    //   col 0: start_index
+    //   col 1: end_index
+    //   col 2: v1_MIN(price)
+    //   col 3: v1_MAX(price)
+    //   col 4: v1_MIN(volume)
+    //   col 5: v1_MAX(volume)
+    //
+    // Row 0: price=[10,20], volume=[100,200]  (both present)
+    // Row 1: price=[30,40], volume absent      (sparse)
+
+    auto start_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto end_col = std::make_shared<Column>(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::PERMITTED);
+    auto min_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto max_price_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto min_vol_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+    auto max_vol_col = std::make_shared<Column>(make_scalar_type(DataType::INT64), Sparsity::PERMITTED);
+
+    // Row 0: all present
+    start_col->push_back<timestamp>(100);
+    end_col->push_back<timestamp>(200);
+    min_price_col->push_back<int64_t>(10);
+    max_price_col->push_back<int64_t>(20);
+    min_vol_col->push_back<int64_t>(100);
+    max_vol_col->push_back<int64_t>(200);
+
+    // Row 1: volume absent
+    start_col->push_back<timestamp>(300);
+    end_col->push_back<timestamp>(400);
+    min_price_col->push_back<int64_t>(30);
+    max_price_col->push_back<int64_t>(40);
+    min_vol_col->mark_absent_rows(1);
+    max_vol_col->mark_absent_rows(1);
+
+    ssize_t last_row = 1;
+    start_col->set_row_data(last_row);
+    end_col->set_row_data(last_row);
+    min_price_col->set_row_data(last_row);
+    max_price_col->set_row_data(last_row);
+    min_vol_col->set_row_data(last_row);
+    max_vol_col->set_row_data(last_row);
+
+    SegmentInMemory seg;
+    seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);
+    seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, end_index_column_name), end_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MIN(price)"), min_price_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MAX(price)"), max_price_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MIN(volume)"), min_vol_col);
+    seg.add_column(scalar_field(DataType::INT64, "v1_MAX(volume)"), max_vol_col);
+    seg.set_row_data(last_row);
+
+    ColumnStatsHeader header;
+    header.set_version(1);
+    constexpr uint32_t price_offset = 1;
+    constexpr uint32_t volume_offset = 2;
+
+    auto& price_entries = (*header.mutable_stats_by_column())[price_offset];
+    auto* p_min = price_entries.add_entries();
+    p_min->set_stats_seg_offset(2);
+    p_min->set_type(MIN_V1);
+    auto* p_max = price_entries.add_entries();
+    p_max->set_stats_seg_offset(3);
+    p_max->set_type(MAX_V1);
+
+    auto& vol_entries = (*header.mutable_stats_by_column())[volume_offset];
+    auto* v_min = vol_entries.add_entries();
+    v_min->set_stats_seg_offset(4);
+    v_min->set_type(MIN_V1);
+    auto* v_max = vol_entries.add_entries();
+    v_max->set_stats_seg_offset(5);
+    v_max->set_type(MAX_V1);
+
+    google::protobuf::Any any;
+    any.PackFrom(header);
+    seg.set_metadata(std::move(any));
+
+    // Build TSD with timestamp, price, volume
+    TimeseriesDescriptor tsd;
+    tsd.mutable_fields().add_field(scalar_field(DataType::NANOSECONDS_UTC64, "timestamp"));
+    tsd.mutable_fields().add_field(scalar_field(DataType::INT64, "price"));
+    tsd.mutable_fields().add_field(scalar_field(DataType::INT64, "volume"));
+
+    ColumnStatsData data(std::move(seg), tsd);
+    ASSERT_FALSE(data.empty());
+
+    // Row 0: both columns present, neither absent
+    auto* row0 = data.find_stats(100, 200);
+    ASSERT_NE(row0, nullptr);
+    auto price0_it = row0->stats_for_column.find("price");
+    ASSERT_NE(price0_it, row0->stats_for_column.end());
+    ASSERT_TRUE(price0_it->second.min.has_value());
+    ASSERT_EQ(price0_it->second.min->get<int64_t>(), 10);
+    ASSERT_FALSE(price0_it->second.column_absent);
+
+    auto vol0_it = row0->stats_for_column.find("volume");
+    ASSERT_NE(vol0_it, row0->stats_for_column.end());
+    ASSERT_TRUE(vol0_it->second.min.has_value());
+    ASSERT_EQ(vol0_it->second.min->get<int64_t>(), 100);
+    ASSERT_FALSE(vol0_it->second.column_absent);
+
+    // Row 1: price present, volume absent
+    auto* row1 = data.find_stats(300, 400);
+    ASSERT_NE(row1, nullptr);
+    auto price1_it = row1->stats_for_column.find("price");
+    ASSERT_NE(price1_it, row1->stats_for_column.end());
+    ASSERT_TRUE(price1_it->second.min.has_value());
+    ASSERT_EQ(price1_it->second.min->get<int64_t>(), 30);
+    ASSERT_FALSE(price1_it->second.column_absent);
+
+    auto vol1_it = row1->stats_for_column.find("volume");
+    ASSERT_NE(vol1_it, row1->stats_for_column.end());
+    ASSERT_FALSE(vol1_it->second.min.has_value());
+    ASSERT_FALSE(vol1_it->second.max.has_value());
+    ASSERT_TRUE(vol1_it->second.column_absent);
+}

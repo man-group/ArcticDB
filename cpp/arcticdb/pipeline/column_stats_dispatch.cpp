@@ -39,6 +39,10 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
         return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
     }
 
+    if (stats.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
+
     if (!stats.min || !stats.max) {
         return StatsComparison::UNKNOWN;
     }
@@ -227,6 +231,9 @@ StatsComparison unary_boolean_stats(const StatsComparison& stats_comparison, Ope
 }
 
 StatsComparison unary_boolean_stats(const ColumnStatsValues& stats_values, OperationType operation) {
+    if (stats_values.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
     if (!stats_values.min || !stats_values.max) {
         return StatsComparison::UNKNOWN;
     }

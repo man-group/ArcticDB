@@ -35,6 +35,7 @@ struct PairHasher {
 struct ColumnStatsValues {
     std::optional<Value> min;
     std::optional<Value> max;
+    bool column_absent = false;
 
     ColumnStatsValues() = default;
 

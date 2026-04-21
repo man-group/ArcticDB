@@ -13,6 +13,8 @@ namespace arcticdb {
 
 SegmentInMemory::SegmentInMemory() : impl_(std::make_shared<SegmentInMemoryImpl>()) {}
 
+SegmentInMemory::SegmentInMemory(Sparsity allow_sparse) : impl_(std::make_shared<SegmentInMemoryImpl>(allow_sparse)) {}
+
 SegmentInMemory::SegmentInMemory(
         const StreamDescriptor& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
         const std::optional<BlockConfigPerColumn>& block_config_per_column

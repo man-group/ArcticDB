@@ -116,6 +116,14 @@ The comparison operator structs (`LessThanOperator`, `GreaterThanOperator`, `Equ
 
 `ValueRange<T>` holds `min` and `max` fields. The `FlippedComparator` trait (in `column_stats_dispatch.hpp`) handles reversed operand order (e.g. `5 < col` becomes `col > 5`).
 
+#### Column-to-Column Comparisons
+
+The comparison operator structs also have `ValueRange<T>, ValueRange<U>` overloads for `col1 OP col2` predicates where both sides have per-segment stats. The `stats_comparator(ColumnStatsValues, ColumnStatsValues, Func)` overload in `column_stats_dispatch.hpp` dispatches on both sides' types and invokes the range-vs-range comparator. Ordering operators (`<`, `<=`, `>`, `>=`) return `ALL_MATCH` when the ranges are disjoint in the right direction and `NONE_MATCH` when disjoint in the wrong direction. `!=` returns `ALL_MATCH` when ranges are disjoint and `NONE_MATCH` only when both ranges collapse to the same single point.
+
+`ColumnStatsValues::column_absent` distinguishes "column not present in segment" from "column present but stats unavailable". If either side is absent, the comparator returns `NONE_MATCH`; if either side lacks min/max but was present, it returns `UNKNOWN`. `ColumnStatsData::ColumnStatsData()` in `column_stats_filter.cpp` sets `column_absent` when both min and max are absent after reading the sparse bitmap.
+
+NaN handling is factored into `check_range_for_nan()` and `check_scalar_for_nan()` helpers in `operation_types.hpp`, shared by the `ValueRange/ValueRange` and `ValueRange/scalar` overloads of `EqualsOperator` and `NotEqualsOperator`.
+
 #### Membership Operators (isin / isnotin)
 
 `stats_membership_comparator()` in `column_stats_dispatch.cpp` evaluates a segment's min/max stats against a `ValueSet`. It uses the `ValueSet`'s cached `min_value()` / `max_value()` (computed lazily via `std::call_once`, filtering out NaN values) for a fast range disjointness check. If the ranges overlap and the result is ambiguous, it falls back to iterating individual set elements against the segment's `ValueRange`. The `isnotin` result is the logical inverse of `isin`. `visit_binary_membership_stats()` applies this per row-slice across the stats vector.

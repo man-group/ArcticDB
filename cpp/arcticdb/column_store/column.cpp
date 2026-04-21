@@ -413,7 +413,9 @@ void Column::unsparsify(size_t num_rows) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
-        auto dest = ChunkedBuffer::presized(dest_bytes);
+        auto alloc_type = data_.buffer().allocation_type();
+        auto dest = alloc_type == AllocationType::DETACHABLE ? ChunkedBuffer(dest_bytes, AllocationType::DETACHABLE)
+                                                             : ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
         util::expand_dense_buffer_and_promote_type<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
         std::swap(dest, data_.buffer());
