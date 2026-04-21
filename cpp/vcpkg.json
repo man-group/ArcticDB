@@ -84,7 +84,7 @@
   ],
   "overrides": [
     { "name": "openssl", "version-string": "3.3.0" },
-    { "name": "arcticdb-sparrow", "version": "2.3.0" },
+    { "name": "arcticdb-sparrow", "version": "2.4.0" },
     { "name": "arrow", "version": "21.0.0#2" },
     { "name": "aws-sdk-cpp", "version": "1.11.474", "$note": "Update overlay json to upgrade; Upgrade to >=1.11.486 blocked by default integrity change" },
     { "name": "aws-crt-cpp", "version": "0.29.7" },
@@ -126,5 +126,5 @@
     "overlay-ports": ["third_party/vcpkg_overlays"]
   },
   "$note on builtin-baseline": "Remember to regenerate third_party/vcpkg_overlays",
-  "builtin-baseline": "ac56141cba73a968d4a615aec7f48c966b73b6d0"
+  "builtin-baseline": "bb14c5ab24c8d4de66092ad655d45f17a38aa1d5"
 }
