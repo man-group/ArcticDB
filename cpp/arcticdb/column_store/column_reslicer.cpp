@@ -288,8 +288,8 @@ std::vector<std::optional<Column>> ColumnReslicer::initialise_output_columns() c
             auto num_rows = reslicing_info_.rows_in_slice(idx);
             auto set_bits = bitset.count_range(output_rows, output_rows + num_rows - 1, bit_index);
             output_values += set_bits;
-            if (set_bits == 0) {               // No values in the range of this output column
-                output_columns.emplace_back(); // std::nullopt
+            if (set_bits == 0) { // No values in the range of this output column
+                output_columns.emplace_back(std::nullopt);
             } else if (set_bits == num_rows) {
                 output_columns.emplace_back(
                         std::make_optional<Column>(type, num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED)

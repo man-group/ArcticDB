@@ -206,6 +206,97 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     ASSERT_EQ(col.buffer().blocks().front()->capacity(), value_count * sizeof(RawType));
 }
 
+TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissingTwoMiddleSlices) {
+    using RawType = TypeParam;
+    auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
+    uint64_t total_rows{14};
+    uint64_t value_count{9};
+    ReslicingInfo reslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{reslicing_info};
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<uint8_t> input_data{0, 0, 1, 1};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        // Missing middle row slices with 3 and 2 rows
+        reslicer.push_back(3);
+        reslicer.push_back(2);
+        input_data = std::vector<uint8_t>{1, 0, 0, 0, 1};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(uint8_t));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    } else {
+        std::vector<RawType> input_data{1, 2, 3, 4};
+        Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        // Missing middle row slices with 3 and 2 rows
+        reslicer.push_back(3);
+        reslicer.push_back(2);
+        input_data = std::vector<RawType>{101, 102, 103, 104, 105};
+        col = Column{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
+        col.set_row_data(input_data.size() - 1);
+        memcpy(col.ptr(), input_data.data(), input_data.size() * sizeof(RawType));
+        reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    }
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+    ASSERT_EQ(res.size(), 1);
+    ASSERT_TRUE(res.front().has_value());
+    auto& col = *res.front();
+    ASSERT_EQ(col.row_count(), value_count);
+    ASSERT_TRUE(col.is_sparse());
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<std::optional<bool>> expected_values{
+                false,
+                false,
+                true,
+                true,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                true,
+                false,
+                false,
+                false,
+                true
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    } else {
+        std::vector<std::optional<RawType>> expected_values{
+                1,
+                2,
+                3,
+                4,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                std::nullopt,
+                101,
+                102,
+                103,
+                104,
+                105
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            auto opt_val = col.scalar_at<RawType>(idx);
+            ASSERT_EQ(opt_val, expected_values.at(idx));
+        }
+    }
+    ASSERT_EQ(col.buffer().bytes(), value_count * sizeof(RawType));
+    ASSERT_EQ(col.num_blocks(), 1);
+    ASSERT_EQ(col.buffer().blocks().front()->capacity(), value_count * sizeof(RawType));
+}
+
 TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissingLastSlice) {
     using RawType = TypeParam;
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
