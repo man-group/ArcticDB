@@ -351,98 +351,6 @@ auto map_column_values_to_rows(const ColumnWithStrings& column) {
     return target_values;
 }
 
-size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) {
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP || descriptor.field(0).name() != name,
-            "Column \"{}\" specified in the 'on' parameter cannot have the same name as the timestamp index column. "
-            "Descriptor: {}",
-            name,
-            descriptor
-    );
-    const std::string repetition_prefix = fmt::format("__col_{}__", name);
-    const std::string mangled_name = stream::mangled_name(name);
-    auto field_it = std::ranges::find_if(descriptor.fields(), [&](const Field& field) {
-        return field.name() == name || field.name() == mangled_name || field.name().starts_with(repetition_prefix);
-    });
-    if (field_it == descriptor.fields().end()) {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                "Error while performing merge update with matching on columns. The \"on\" parameter contains a column "
-                "named \"{}\", but no such column exists in the following descriptor: {}",
-                name,
-                descriptor
-        );
-    }
-    if (field_it->name() == mangled_name) {
-        // Pandas multiindex and the column appears as a secondary index column of the multiindex
-        const auto name_or_repeated_it = std::find_if(field_it, descriptor.fields().end(), [&](const Field& field) {
-            return field.name().starts_with(repetition_prefix) || field.name() == name;
-        });
-        if (name_or_repeated_it != descriptor.fields().end()) {
-            if (name_or_repeated_it->name() == name) {
-                // The secondary index is mangled but the data column is unchanged
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        "Error while performing merge update with matching on columns. Column \"{}\" specified in the "
-                        "'on' parameter matches both a data column and an a secondary multiindex index column name. "
-                        "Descriptor: {}",
-                        name,
-                        descriptor
-                );
-            } else {
-                // When the primary index is not datetime index the name of the primary index in the descriptor is not
-                // changed, but any data column with the same name would get "__col_" prefix
-                std::string_view repetition_index = name_or_repeated_it->name().substr(repetition_prefix.size());
-                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
-                        "column named \"{}\", but the column appears more than once in the descriptor: {}. Once as the "
-                        "primary index and once at position {} in the descriptor",
-                        name,
-                        descriptor,
-                        repetition_index
-                );
-            }
-        } else {
-            // Appears only in the secondary index, and there are no variants of this column.
-            return std::distance(descriptor.fields().begin(), field_it);
-        }
-    } else if (field_it->name() == name) {
-        const auto mangled_or_repeated_field_it =
-                std::find_if(field_it, descriptor.fields().end(), [&](const Field& field) {
-                    return field.name() == mangled_name || field.name().starts_with(repetition_prefix);
-                });
-        if (mangled_or_repeated_field_it == descriptor.fields().end()) {
-            return std::distance(descriptor.fields().begin(), field_it);
-        }
-        if (mangled_or_repeated_field_it->name() == mangled_name) {
-            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
-                    "column named \"{}\" which appears both as a primary and a secondary index column in the "
-                    "descriptor: {}",
-                    name,
-                    descriptor
-            );
-        }
-        std::string_view repetition_index = mangled_or_repeated_field_it->name().substr(repetition_prefix.size());
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
-                "column named \"{}\" which appears as a primary index but and as a data column at position {} in the "
-                "descriptor: {}",
-                name,
-                repetition_index,
-                descriptor
-        );
-    } else {
-        std::string_view repetition_index = field_it->name().substr(repetition_prefix.size());
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                "Error while performing merge update with matching on columns. The \"on\" parameter contains a "
-                "column named \"{}\" which appears, more than once in the dataframe with descriptor {}, first "
-                "repetition at: {}",
-                name,
-                descriptor,
-                repetition_index
-        );
-    }
-}
-
 } // namespace
 
 namespace arcticdb {
@@ -2604,12 +2512,6 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
     std::optional<ScopedGILLock> scoped_gil_lock;
     for (std::string_view column_name : on) {
         const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                target_descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
-                        target_descriptor.field(0).name() != column_name,
-                "Column '{}' specified in the 'on' parameter cannot have the same name as the timestamp index column"
-        );
-
         const Field& source_field = source_descriptor.field(source_field_position);
         details::visit_type(source_field.type().data_type(), [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
             using SourceTDT = ScalarTagType<SourceDataTypeTag>;
@@ -2624,7 +2526,11 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                             source_row_start,
                     source_row_end - source_row_start
             );
-            const ColumnWithStrings target_column = std::get<ColumnWithStrings>(proc.get(ColumnName{column_name}));
+            // TODO: For dynamic schema the two fields might have different indexes
+            const size_t target_field_position = source_field_position;
+            const ColumnWithStrings target_column = std::get<ColumnWithStrings>(
+                    proc.get(ColumnName{target_descriptor.field(target_field_position).name()})
+            );
             ColumnData target_data = target_column.column_->data();
             details::visit_type(
                     target_column.column_->type().data_type(),
@@ -2697,6 +2603,46 @@ std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
 bool MergeUpdateClause::is_update_only() const {
     return strategy_ == MergeStrategy{MergeAction::UPDATE, MergeAction::DO_NOTHING};
+}
+
+size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor)
+        const {
+    // In case of unnamed index columns we set the fake_name property of the metadata to true and assign the name
+    // "index" to the column. In this specific case the user must be able to match on a column named "index".
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
+                    (descriptor.field(0).name() != name || (fake_index_name_ && descriptor.field(0).name() == name)),
+            "The \"on\" parameter must not contain the datetime index column \"{}\". Note that for date time indexed "
+            "column the index column is always used for matching. Descriptor: {}",
+            name,
+            descriptor
+    );
+    const boost::regex repetition_regex{fmt::format("^__col_{}__\\d+$", name)};
+    const std::string mutliindex_mangled_name = stream::mangled_name(name);
+    std::ranges::subrange data_fields{
+            std::next(descriptor.fields().begin(), descriptor.index().field_count()), descriptor.fields().end()
+    };
+    const auto is_name_or_mangled_name = [&](const Field& field) {
+        return field.name() == name || field.name() == mutliindex_mangled_name ||
+               boost::regex_match(field.name().begin(), field.name().end(), repetition_regex);
+    };
+    const auto field_it = std::ranges::find_if(data_fields, is_name_or_mangled_name);
+    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(
+            field_it != data_fields.end(),
+            "Column \"{}\" specified in the 'on' parameter does not exist. Descriptor: {}",
+            name,
+            descriptor
+    );
+    const auto repetition_it = std::ranges::find_if(
+            data_fields.next(std::distance(data_fields.begin(), field_it) + 1), is_name_or_mangled_name
+    );
+    user_input::check<ErrorCode::E_DUPLICATE_COLUMN>(
+            repetition_it == data_fields.end(),
+            "Column \"{}\" specified in the 'on' is appears more than once in the dataframe. Descriptor: {}",
+            name,
+            descriptor
+    );
+    return std::distance(descriptor.fields().begin(), field_it);
 }
 
 CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {

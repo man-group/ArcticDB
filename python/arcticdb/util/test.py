@@ -1456,7 +1456,7 @@ def _merge_update_multiindex(target: pd.DataFrame, source: pd.DataFrame, on: Lis
     index_names = list(target.index.names)
     data_columns = list(target.columns)
     overlap = [col for col in data_columns if col and col in index_names]
-    if len(overlap) > 0:
+    if len(overlap) > 0 and any(col in on for col in overlap):
         raise ValueError(
             f"Cannot perform merge_update on a DataFrame with MultiIndex columns that overlap with index. Overlap: {overlap}"
         )
@@ -1526,7 +1526,12 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
     if isinstance(target.index, pd.MultiIndex):
         return _merge_update_multiindex(target, source, on)
 
-    is_datetime = isinstance(target.index, pd.DatetimeIndex)
+    row_range_index_name = None
+    if isinstance(target.index, pd.RangeIndex):
+        row_range_index_name = target.index.name
+        target = target.reset_index(drop=True)
+        source = source.reset_index(drop=True)
+
     on_set = set(on)
 
     # Columns not in "on" are the ones we'll overwrite with source values.
@@ -1534,17 +1539,24 @@ def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[s
 
     # If every column is in "on", there's nothing to update.
     if not update_columns:
-        return target.copy(deep=True)
+        result = target.copy(deep=True)
+        if row_range_index_name is not None:
+            result.index.name = row_range_index_name
+        return result
 
     # If `on` contains duplicates (e.g. ["city", "city", "state"]), pd.merge would treat them as separate join keys and
     # create suffixed columns (city_x, city_y). dict.fromkeys preserves order while removing duplicates.
     merge_on = list(dict.fromkeys(on))
-
-    target_merge, source_merge, merge_on = _prepare_merge_frames(target, source, merge_on, match_on_index=is_datetime)
+    target_merge, source_merge, merge_on = _prepare_merge_frames(
+        target, source, merge_on, match_on_index=isinstance(target.index, pd.DatetimeIndex)
+    )
 
     matching_rows = _find_matching_rows(target_merge, source_merge, merge_on)
 
-    return _apply_updates(target, source, matching_rows, update_columns)
+    result = _apply_updates(target, source, matching_rows, update_columns)
+    if row_range_index_name is not None:
+        result.index.name = row_range_index_name
+    return result
 
 
 def merge(

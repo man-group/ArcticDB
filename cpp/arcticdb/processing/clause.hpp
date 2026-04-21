@@ -860,6 +860,7 @@ struct MergeUpdateClause {
     ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_set_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
+    bool fake_index_name_ = false;
     MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
@@ -915,6 +916,8 @@ struct MergeUpdateClause {
     std::vector<std::vector<size_t>> initialize_rows_to_update_for_rowrange_indexed_data(
             ProcessingUnit& proc, const StreamDescriptor& source_descriptor
     ) const;
+
+    size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
 
     bool is_update_only() const;
 

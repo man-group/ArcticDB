@@ -320,6 +320,20 @@ void compact_row_slices(std::span<SliceAndKey> slices) {
         previous_col_slice_end = slice.slice().col_range.end();
     }
 }
+
+bool is_fake_index_name(const arcticc::pb2::descriptors_pb2::NormalizationMetadata& normalization_metadata) {
+    const auto& common = normalization_metadata.has_df() ? normalization_metadata.df().common()
+                                                         : normalization_metadata.series().common();
+    const bool is_fake_datetime_index_name = common.has_index() && common.index().fake_name();
+    const bool is_fake_mutliindex_name =
+            common.has_multi_index() &&
+            ranges::find(common.multi_index().fake_field_pos(), 0) != common.multi_index().fake_field_pos().end();
+    // We store "fakeness" in two separate places. If the dataframe/series was originally datetime indexed we will store
+    // it in the "index" protobuf message. If the dataframe was a multiindex we will store the positions of all fake
+    // names in the "multi_index" protobuf message and not touch the fake_name property of "index".
+    return is_fake_datetime_index_name || is_fake_mutliindex_name;
+}
+
 } // namespace
 
 VersionedItem delete_range_impl(
@@ -3062,7 +3076,8 @@ folly::Future<VersionedItem> merge_update_impl(
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
-    read_query->clauses_.push_back(std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source)));
+    auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source));
+    read_query->clauses_.push_back(merge_update_clause);
     VersionIdentifier resolved = version_info;
     if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
         resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
@@ -3088,14 +3103,16 @@ folly::Future<VersionedItem> merge_update_impl(
                     index_type == IndexDescriptor::Type::ROWCOUNT,
             "Merge update supports only ascending indexed data and row count indexed data"
     );
+    folly::poly_cast<MergeUpdateClause>(*merge_update_clause).fake_index_name_ =
+            index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(*pipeline_context->norm_meta_);
     return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context),
                         store,
                         write_options,
                         source = std::move(source),
                         target_partial_index_key](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can create
-                // new segments and shift row slices.
+                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can
+                // create new segments and shift row slices.
                 ranges::sort(data_keys_and_slices);
                 std::vector<SliceAndKey> merged_ranges_and_keys;
                 auto new_slice = data_keys_and_slices.begin();
