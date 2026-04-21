@@ -682,6 +682,7 @@ TEST_F(SparseTestStore, Compact) {
 }
 
 TEST_F(SparseTestStore, CompactWithStrings) {
+    SKIP_WIN("Flaky in Windows CI Monday: 8416830355");
     using namespace arcticdb;
     using namespace arcticdb::stream;
     using DynamicAggregator =
