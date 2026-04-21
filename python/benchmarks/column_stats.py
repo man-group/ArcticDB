@@ -394,56 +394,6 @@ class ColumnStatsCreate:
         self.nvs.create_column_stats(self.symbol, COLUMN_STATS)
 
 
-class ColumnStatsManagement:
-    """Benchmark column stats operations: drop, get_info, read."""
-
-    number = 1
-    warmup_time = 0
-    timeout = 600
-
-    num_rows = [10_000_000]
-    storages = STORAGES
-
-    params = [num_rows, storages]
-    param_names = ["num_rows", "storage"]
-
-    def __init__(self):
-        self.logger = get_logger()
-
-    def setup_cache(self):
-        start = time.time()
-        lib_for_storage = create_libraries_across_storages(self.storages)
-        for storage in ColumnStatsManagement.storages:
-            if not is_storage_enabled(storage):
-                continue
-            lib = lib_for_storage[storage]
-            for rows in ColumnStatsManagement.num_rows:
-                df = _generate_column_stats_dataframe(rows)
-                sym = _symbol_name(rows, ordered=True)
-                self.logger.info(f"Writing {sym} with {rows} rows")
-                lib.write(sym, df)
-                lib._nvs.create_column_stats(sym, COLUMN_STATS)
-        self.logger.info(f"setup_cache time: {time.time() - start}")
-        return lib_for_storage
-
-    def setup(self, lib_for_storage, num_rows, storage):
-        self.lib = lib_for_storage[storage]
-        if self.lib is None:
-            raise SkipNotImplemented
-        self.nvs = self.lib._nvs
-        self.symbol = _symbol_name(num_rows, ordered=True)
-        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)
-
-    def time_drop_column_stats(self, *args):
-        self.nvs.drop_column_stats(self.symbol)
-
-    def time_get_column_stats_info(self, *args):
-        self.nvs.get_column_stats_info(self.symbol)
-
-    def time_read_column_stats(self, *args):
-        self.nvs.read_column_stats(self.symbol)
-
-
 class ColumnStatsWideFilter:
     """Benchmark the overhead of query builder filters that force decoding many extra columns.
 
