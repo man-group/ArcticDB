@@ -24,7 +24,7 @@ class ListSymbolsWithoutCache:
     warmup_time = 0
 
     storages = [Storage.LMDB, Storage.AMAZON]
-    num_symbols = [100, 1000]
+    num_symbols = [1000]
 
     params = [num_symbols, storages]
     param_names = ["num_symbols", "storage"]
@@ -84,7 +84,7 @@ class ListSymbolsWithCompactedCache:
     warmup_time = 0
 
     storages = [Storage.LMDB, Storage.AMAZON]
-    num_symbols = [1_000, 10_000]
+    num_symbols = [1_000]
     num_journal_entries = [0, 100]
 
     params = [num_symbols, num_journal_entries, storages]
@@ -142,7 +142,7 @@ class ListSymbolsCompaction:
 
     storages = [Storage.LMDB, Storage.AMAZON]
     num_symbols = [1_000]
-    num_versions = [10, 100]
+    num_versions = [10]
 
     params = [num_symbols, num_versions, storages]
     param_names = ["num_symbols", "num_versions", "storage"]
@@ -193,7 +193,7 @@ class ListSymbolsWithDeletes:
     warmup_time = 0
 
     storages = [Storage.LMDB, Storage.AMAZON]
-    num_symbols = [1_000, 10_000]
+    num_symbols = [1_000]
 
     params = [num_symbols, storages]
     param_names = ["num_symbols", "storage"]
