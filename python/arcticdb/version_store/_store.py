@@ -3984,7 +3984,8 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Dynamic schema is not yet supported.
+            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
+            compactions may fail. Additionally, resampling is not yet supported with sparse data.
 
             Sparse data is not yet supported.
 
@@ -4012,8 +4013,7 @@ class NativeVersionStore:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, the library has dynamic schema enabled, or the data is
-            sparse
+            If the existing data is recursively normalized, or the data is sparse
 
         Examples
         --------
