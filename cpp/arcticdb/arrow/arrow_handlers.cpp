@@ -494,9 +494,15 @@ void ArrowBoolHandler::
                 positions.end_idx_after_truncation
         );
         const auto& sparse_map = *source_column.opt_sparse_map();
-        // Copy the sparse map, because handle_truncation modifies the bitset inplace
+        // Copy the sparse map, because handle_truncation modifies the bitset inplace.
         auto validity_bitset = sparse_map;
-        handle_truncation(validity_bitset, m.truncate_);
+        auto bitmap_truncate = m.truncate_;
+        if (bitmap_truncate.start_.has_value()) {
+            // Round down the bitmap truncation start to the nearest byte boundary so that the BITMAP buffer's
+            // bit layout matches the packed data block's non-zero shift after handle_truncation(dest_column).
+            *bitmap_truncate.start_ -= *bitmap_truncate.start_ % 8;
+        }
+        handle_truncation(validity_bitset, bitmap_truncate);
 
         if (validity_bitset.count() != validity_bitset.size()) {
             create_dense_bitmap(
