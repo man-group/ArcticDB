@@ -9,6 +9,7 @@
 #include <arcticdb/toolbox/library_tool.hpp>
 
 #include <arcticdb/async/async_store.hpp>
+#include <arcticdb/async/tasks.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
@@ -41,7 +42,7 @@ py::tuple LibraryTool::segment_in_memory_to_read_result(SegmentInMemory& segment
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
 
     return adapt_read_df(
-            pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format),
+            pipelines::read_result_from_single_frame_sync(frame_and_descriptor, atom_key, handler_data, output_format),
             &handler_data
     );
 }
@@ -53,16 +54,18 @@ Segment LibraryTool::read_to_segment(const VariantKey& key) {
 }
 
 std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key) {
-    return store()->read_metadata(key, storage::ReadKeyOpts{}).get().second;
+    auto kv = store()->read_compressed_sync(key);
+    return async::DecodeMetadataTask{}(std::move(kv)).second;
 }
 
 StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key) {
-    auto metadata_and_descriptor = store()->read_metadata_and_descriptor(key, storage::ReadKeyOpts{}).get();
-    return std::get<StreamDescriptor>(metadata_and_descriptor);
+    auto kv = store()->read_compressed_sync(key);
+    return std::get<StreamDescriptor>(async::DecodeMetadataAndDescriptorTask{}(std::move(kv)));
 }
 
 TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key) {
-    return store()->read_timeseries_descriptor(key).get().second;
+    auto kv = store()->read_compressed_sync(key);
+    return async::DecodeTimeseriesDescriptorTask{}(std::move(kv)).second;
 }
 
 void LibraryTool::write(VariantKey key, const Segment& segment) {

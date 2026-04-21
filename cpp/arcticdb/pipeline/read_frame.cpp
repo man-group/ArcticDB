@@ -1048,6 +1048,27 @@ struct ReduceColumnTask : async::BaseTask {
     }
 };
 
+void reduce_and_fix_columns_sync(
+        std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
+) {
+    ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
+    ARCTICDB_DEBUG(log::version(), "Reduce and fix columns (sync)");
+    if (frame.empty())
+        return;
+
+    auto slice_map = std::make_shared<FrameSliceMap>(context, read_options.dynamic_schema().value_or(false));
+
+    DecodePathData shared_data;
+    for (size_t idx = 0; idx < frame.descriptor().fields().size(); ++idx) {
+        const auto& frame_field = frame.field(idx);
+        if (read_options.dynamic_schema().value_or(false) ||
+            (slice_map->columns_.contains(frame_field.name()) && is_sequence_type(frame_field.type().data_type()))) {
+            ReduceColumnTask(frame, idx, slice_map, context, shared_data, handler_data, read_options)();
+        }
+    }
+}
+
 folly::Future<folly::Unit> reduce_and_fix_columns(
         std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
         std::shared_ptr<std::any> handler_data

@@ -120,8 +120,9 @@ inline ReadResult create_python_read_result(
             std::move(node_results)};
 }
 
-inline ReadResult read_result_from_single_frame(
-        FrameAndDescriptor& frame_and_desc, const AtomKey& key, std::any& handler_data, OutputFormat output_format
+namespace detail {
+inline std::pair<std::shared_ptr<PipelineContext>, std::shared_ptr<std::any>> prepare_single_frame_context(
+        FrameAndDescriptor& frame_and_desc, const AtomKey& key, std::any& handler_data
 ) {
     auto pipeline_context = std::make_shared<PipelineContext>(frame_and_desc.frame_.descriptor());
     SliceAndKey sk{FrameSlice{frame_and_desc.frame_}, key};
@@ -136,7 +137,24 @@ inline ReadResult read_result_from_single_frame(
     auto descriptor = std::make_shared<StreamDescriptor>(frame_and_desc.frame_.descriptor());
     pipeline_context->begin()->set_descriptor(std::move(descriptor));
     std::shared_ptr<std::any> handler_data_ptr(std::shared_ptr<std::any>{}, &handler_data);
+    return {std::move(pipeline_context), std::move(handler_data_ptr)};
+}
+} // namespace detail
+
+inline ReadResult read_result_from_single_frame(
+        FrameAndDescriptor& frame_and_desc, const AtomKey& key, std::any& handler_data, OutputFormat output_format
+) {
+    auto [pipeline_context, handler_data_ptr] = detail::prepare_single_frame_context(frame_and_desc, key, handler_data);
     reduce_and_fix_columns(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data_ptr).get();
+    apply_type_handlers(frame_and_desc.frame_, handler_data, output_format);
+    return create_python_read_result(VersionedItem{key}, output_format, std::move(frame_and_desc));
+}
+
+inline ReadResult read_result_from_single_frame_sync(
+        FrameAndDescriptor& frame_and_desc, const AtomKey& key, std::any& handler_data, OutputFormat output_format
+) {
+    auto [pipeline_context, handler_data_ptr] = detail::prepare_single_frame_context(frame_and_desc, key, handler_data);
+    reduce_and_fix_columns_sync(pipeline_context, frame_and_desc.frame_, ReadOptions{}, handler_data_ptr);
     apply_type_handlers(frame_and_desc.frame_, handler_data, output_format);
     return create_python_read_result(VersionedItem{key}, output_format, std::move(frame_and_desc));
 }
