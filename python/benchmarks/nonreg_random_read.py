@@ -57,7 +57,7 @@ def _generate_random(n):
             "col_float4": rng.standard_normal(n),
             "col_string": _make_strings(n, rng),
             "col_string_sparse": _make_sparse_strings(n, rng),
-            "col_none": np.full(n, np.nan, dtype=np.float64),
+            "col_nan": np.full(n, np.nan, dtype=np.float64),
         },
         index=pd.date_range("2026-01-01", periods=n, freq="s"),
     )
