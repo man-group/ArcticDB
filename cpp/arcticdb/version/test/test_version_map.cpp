@@ -489,7 +489,7 @@ TEST(VersionMap, FixRefKey) {
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
     auto key4 = key3;
-    EXPECT_THROW(
+    ASSERT_THROW(
             {
                 // We should raise if we try to write a non-increasing index key
                 version_map->write_version(store, key4, key3);
@@ -528,11 +528,11 @@ TEST(VersionMap, FixRefKeyTombstones) {
     auto key1 = atom_key_with_version(id, 0, 1696590624524585339);
     version_map->write_version(store, key1, std::nullopt);
     auto key2 = atom_key_with_version(id, 0, 1696590624387628801);
-    EXPECT_THROW({ version_map->write_version(store, key2, key1); }, NonIncreasingIndexVersionException);
+    ASSERT_THROW({ version_map->write_version(store, key2, key1); }, NonIncreasingIndexVersionException);
     auto key3 = atom_key_with_version(id, 0, 1696590624532320286);
-    EXPECT_THROW({ version_map->write_version(store, key3, key2); }, NonIncreasingIndexVersionException);
+    ASSERT_THROW({ version_map->write_version(store, key3, key2); }, NonIncreasingIndexVersionException);
     auto key4 = atom_key_with_version(id, 0, 1696590624554476875);
-    EXPECT_THROW({ version_map->write_version(store, key4, key3); }, NonIncreasingIndexVersionException);
+    ASSERT_THROW({ version_map->write_version(store, key4, key3); }, NonIncreasingIndexVersionException);
     auto key5 = atom_key_with_version(id, 1, 1696590624590123209);
     version_map->write_version(store, key5, key4);
     auto entry = version_map->check_reload(
@@ -629,7 +629,7 @@ TEST(VersionMap, RecoverDeleted) {
 
     deleted = version_map->find_deleted_version_keys(store, id);
     ASSERT_EQ(deleted.size(), 3);
-    EXPECT_THROW({ get_all_versions(store, version_map, id); }, std::runtime_error);
+    ASSERT_THROW({ get_all_versions(store, version_map, id); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
     std::vector<AtomKey> expected{key3, key2, key1};
@@ -753,7 +753,7 @@ TEST(VersionMap, FollowingVersionChain) {
         auto follow_result = std::make_shared<VersionMapEntry>();
 
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{should_load_to});
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{should_load_to});
     };
 
     check_strategy_loads_to(
@@ -805,8 +805,8 @@ TEST(VersionMap, FollowingVersionChainWithCaching) {
     auto check_loads_versions = [&](LoadStrategy load_strategy, uint32_t should_load_any, uint32_t should_load_undeleted
                                 ) {
         auto loaded = version_map->check_reload(store, id, load_strategy, __FUNCTION__);
-        EXPECT_EQ(loaded->get_indexes(true).size(), should_load_any);
-        EXPECT_EQ(loaded->get_indexes(false).size(), should_load_undeleted);
+        ASSERT_EQ(loaded->get_indexes(true).size(), should_load_any);
+        ASSERT_EQ(loaded->get_indexes(false).size(), should_load_undeleted);
     };
 
     check_loads_versions(
@@ -834,7 +834,7 @@ TEST(VersionMap, FollowingVersionChainWithCaching) {
 
     // LATEST should still be cached, but the cached entry now needs to have no undeleted keys
     check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 0);
-    EXPECT_FALSE(version_map->has_cached_entry(
+    ASSERT_FALSE(version_map->has_cached_entry(
             id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(-1)}
     ));
     // FROM_TIME UNDELETED_ONLY should no longer be cached even though we used the same request before because the
@@ -844,14 +844,14 @@ TEST(VersionMap, FollowingVersionChainWithCaching) {
     );
     // We have the full version chain loaded, so has_cached_entry should always return true (even when requesting
     // timestamp before earliest version)
-    EXPECT_TRUE(version_map->has_cached_entry(
+    ASSERT_TRUE(version_map->has_cached_entry(
             id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(-1)}
     ));
-    EXPECT_TRUE(version_map->has_cached_entry(
+    ASSERT_TRUE(version_map->has_cached_entry(
             id, LoadStrategy{LoadType::FROM_TIME, LoadObjective::INCLUDE_DELETED, static_cast<timestamp>(-1)}
     ));
-    EXPECT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}));
-    EXPECT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}));
+    ASSERT_TRUE(version_map->has_cached_entry(id, LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}));
 
     // We add a new undeleted key
     auto key4 = atom_key_with_version(id, 3, 5);
@@ -890,7 +890,7 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
         // When loading with any of the specified load strategies with include_deleted=false we should end following the
         // version chain early at version 1 because that's when we encounter the TOMBSTONE_ALL.
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
     }
 
     for (auto load_strategy :
@@ -901,7 +901,7 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
         // When loading with any of the specified load strategies with include_deleted=true we should continue to the
         // beginning at version 0 even though it was deleted.
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
     }
 }
 
@@ -932,7 +932,7 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
           LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}}) {
         follow_result->clear();
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{3});
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{3});
     }
 
     for (auto load_strategy : {
@@ -944,7 +944,7 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
         // When loading with any of the specified load strategies with include_deleted=false we should end following the
         // version chain early at version 2 because that's when we encounter the TOMBSTONE_ALL.
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{2});
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{2});
     }
 
     for (auto load_strategy :
@@ -955,7 +955,7 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
         // When loading with any of the specified load strategies with include_deleted=true we should continue to the
         // beginning at version 0 even though it was deleted.
-        EXPECT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
     }
 }
 
@@ -981,7 +981,7 @@ TEST(VersionMap, HasCachedEntry) {
         // Load to_load inside the clean version map cache
         clean_version_map->check_reload(store, id, to_load, __FUNCTION__);
         // Check whether to_check_if_cached is being cached by to_load
-        EXPECT_EQ(clean_version_map->has_cached_entry(id, to_check_if_cached), expected_outcome);
+        ASSERT_EQ(clean_version_map->has_cached_entry(id, to_check_if_cached), expected_outcome);
     };
 
     auto check_all_caching = [&](const std::vector<LoadStrategy>& to_load,
@@ -1390,6 +1390,189 @@ TEST(VersionMap, TombstoneAllFromEntry) {
     ASSERT_TRUE(deleted_cached_entry);
     version_id = get_next_version_from_key(maybe_prev_cached_entry);
     ASSERT_EQ(version_id, 2);
+}
+
+// Test that has_cached_entry correctly returns false for DOWNTO requests
+// when the requested version hasn't been loaded, even if is_earliest_version_loaded is true.
+TEST(VersionMap, HasCachedEntryDowntoReloadsWhenVersionNotLoaded) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    // Client a writes versions v0, v1
+    auto version_map_a = std::make_shared<VersionMap>();
+    write_versions(store, version_map_a, id, 2);
+
+    // Client b creates a new version map and loads all versions
+    auto version_map_b = std::make_shared<VersionMap>();
+    auto entry = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+
+    // Verify that all versions are loaded and is_earliest_version_loaded is true
+    ASSERT_TRUE(entry->load_progress_.is_earliest_version_loaded);
+    ASSERT_EQ(entry->load_progress_.oldest_loaded_index_version_, VersionId{0});
+    ASSERT_EQ(entry->get_indexes(true).size(), 2); // v0, v1
+
+    // Verify has_cached_entry returns true for all existing versions
+    ASSERT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}
+    ));
+    ASSERT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)}
+    ));
+
+    // Client a writes new versions v2, v3 that Client b doesn't know about
+    for (int i = 2; i < 4; ++i) {
+        auto key = atom_key_with_version(id, i, i);
+        version_map_a->write_version(store, key, std::nullopt);
+    }
+
+    // Client b's cache still has is_earliest_version_loaded = true, but it doesn't have v2, v3
+    // has_cached_entry should return false for DOWNTO requests for these new versions
+    // because even though is_earliest_version_loaded is true, the specific versions aren't in the cache
+    ASSERT_FALSE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(2)}
+    ));
+    ASSERT_FALSE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(3)}
+    ));
+
+    // DOWNTO with negative indices should also correctly reload
+    // At this point, Client b thinks latest is v1, so -1 = v0
+    // The cache can still serve requests that resolve to loaded versions
+    ASSERT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(-1)}
+    )); // -1 resolves to v0 in cache, which is loaded
+
+    // Trigger a reload by requesting version 3 via DOWNTO (which should return false
+    // from has_cached_entry, causing check_reload to actually reload from storage).
+    // Note: DOWNTO 3 will only load from latest (v3) down to v3, so just v3.
+    entry = version_map_b->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(3)},
+            __FUNCTION__
+    );
+    // The entry should now include version 3
+    auto opt_v3 = entry->get_first_index(true);
+    ASSERT_TRUE(opt_v3.first.has_value());
+    ASSERT_EQ(opt_v3.first->version_id(), 3);
+
+    // has_cached_entry should now return true for version 3
+    ASSERT_TRUE(version_map_b->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(3)}
+    ));
+
+    // Now request ALL to load all versions. Since is_earliest_version_loaded is now false
+    // (we only loaded down to v3, not v0), has_cached_entry should return false and trigger a full reload.
+    entry = version_map_b->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    ASSERT_EQ(entry->get_indexes(true).size(), 4); // v0-v3
+}
+
+// Test that if we load with a DOWNTO strategy that doesn't include the earliest version
+// then the indication of the whether the earliest version is loaded should correctly reflect
+// with the _is_earliest_version_loaded flag
+TEST(VersionMap, PartialLoadCacheEarliestVersionNotLoaded) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test"};
+
+    auto version_map_a = std::make_shared<VersionMap>();
+    write_versions(store, version_map_a, id, 2);
+
+    auto entry_a = version_map_a->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
+            __FUNCTION__
+    );
+    ASSERT_EQ(entry_a->get_indexes(true).size(), 1); // v1 only
+
+    auto version_map_b = std::make_shared<VersionMap>();
+    auto entry_b = version_map_b->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(1)},
+            __FUNCTION__
+    );
+    ASSERT_EQ(entry_b->get_indexes(true).size(), 1); // v1 only
+    ASSERT_FALSE(entry_b->load_progress_.is_earliest_version_loaded
+    ); // We didn't load the earliest version, so this should be false
+
+    for (int i = 2; i < 4; ++i) {
+        auto key = atom_key_with_version(id, i, i);
+        version_map_a->write_version(store, key, std::nullopt);
+    }
+
+    entry_b = version_map_b->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(2)},
+            __FUNCTION__
+    );
+    ASSERT_EQ(entry_b->get_indexes(true).size(), 2); // v3, v2 only
+    ASSERT_FALSE(entry_b->load_progress_.is_earliest_version_loaded
+    ); // We didn't load the earliest version, so this should be false
+}
+
+// Regression test: after loading the version chain via FROM_TIME with a tombstone_all boundary,
+// a subsequent DOWNTO query for a version below the oldest loaded index should be a cache hit
+// because the tombstone_all means all older versions are deleted and we've loaded everything relevant.
+TEST(VersionMap, DowntoCacheHitAfterFromTimeWithTombstoneAll) {
+    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test"};
+
+    // Set up: v0 <- v1 <- tombstone_all(v1) <- v2 <- v3
+    // tombstone_all covers v0 and v1, v2 and v3 are undeleted.
+    using Type = VersionChainOperation::Type;
+    write_versions(
+            store,
+            version_map,
+            id,
+            {
+                    {Type::WRITE, 0},
+                    {Type::WRITE, 1},
+                    {Type::TOMBSTONE_ALL},
+                    {Type::WRITE, 2},
+                    {Type::WRITE, 3},
+            }
+    );
+
+    // Fresh version map (empty cache)
+    version_map = std::make_shared<VersionMap>();
+
+    // Load via FROM_TIME with timestamp 0 (undeleted only).
+    // Walking the chain: v3(ts=3), v2(ts=2), tombstone_all(v1), v1(tombstoned) -> STOP.
+    // Stops at v1 because tombstone_all(v1) covers oldest_loaded(v1). Does NOT load v0.
+    // After this, has_loaded_earliest_undeleted is true (tombstone_all covers remainder).
+    version_map->check_reload(
+            store,
+            id,
+            LoadStrategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, static_cast<timestamp>(0)},
+            __FUNCTION__
+    );
+
+    // DOWNTO v0 (undeleted only) should be a cache hit because tombstone_all covers everything
+    // below the oldest loaded index — there are no undeleted versions we haven't seen.
+    ASSERT_TRUE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)}
+    ));
+
+    // Negative index resolving to v0 should also be a cache hit
+    ASSERT_TRUE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-4)}
+    ));
+
+    // However, DOWNTO v0 with INCLUDE_DELETED should NOT be a cache hit because
+    // we haven't actually loaded v0 (we stopped at the tombstone_all boundary).
+    ASSERT_FALSE(version_map->has_cached_entry(
+            id, LoadStrategy{LoadType::DOWNTO, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(0)}
+    ));
 }
 
 #define GTEST_COUT std::cerr << "[          ] [ INFO ]"
