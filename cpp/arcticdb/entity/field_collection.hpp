@@ -95,16 +95,10 @@ class FieldCollection {
     // otherwise realloc+memcpy on every add_field (O(N^2) on wide schemas), so those are
     // always sized to exactly num_fields entries when num_fields > 0.
     explicit FieldCollection(std::size_t num_fields, std::size_t total_data_bytes = 0) {
-        if (num_fields == 0) {
-            log::version().debug("Creating empty FieldCollection");
+        if (num_fields == 0) 
             return;
-        }
-        log::version().debug(
-                "Creating FieldCollection with preallocated space for {} fields, {} data bytes",
-                num_fields,
-                total_data_bytes
-        );
-        const std::size_t index_bytes = num_fields * sizeof(shape_t);
+
+            const std::size_t index_bytes = num_fields * sizeof(shape_t);
         allocate_shapes(index_bytes);
         allocate_offsets(index_bytes);
         if (total_data_bytes > 0)
