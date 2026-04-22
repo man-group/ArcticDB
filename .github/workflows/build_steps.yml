@@ -64,11 +64,13 @@ jobs:
       ARCTICDB_VCPKG_PACKAGES_DIR: ${{matrix.vcpkg_packages_dir}}
       MACOSX_DEPLOYMENT_TARGET: "15.0"
       CMAKE_OSX_DEPLOYMENT_TARGET: "15.0"
+      COPY_VCPKG_DOWNLOADS_TO_HOST: ${{ inputs.job_type == 'build-python-wheels' && '1' || '' }}
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
         SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
+        X_VCPKG_ASSET_SOURCES COPY_VCPKG_DOWNLOADS_TO_HOST
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -123,12 +125,18 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Install AWS CLI
+        # For VCPKG source asset upload to cache in S3
+        if: matrix.os == 'linux' && inputs.job_type == 'cpp-tests'
+        run: yum install -y awscli
+
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
           HOME=~ . build_tooling/vcpkg_caching.sh # Linux build-python-wheels needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}
           ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
         env:
@@ -209,6 +217,11 @@ jobs:
       - name: Compile C++ core library only
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_core_static -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Upload vcpkg assets to S3 cache
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
+        run: bash build_tooling/vcpkg_upload_assets.sh
+        continue-on-error: true
 
       - name: Compile C++ rapidcheck tests
         if: inputs.job_type == 'cpp-tests'
@@ -406,7 +419,6 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
           CIBW_ARCHS_MACOS: "arm64"
-          # Ensure macOS builds use sccache as the compiler launcher
           CIBW_ENVIRONMENT_MACOS: |
             CMAKE_C_COMPILER_LAUNCHER=sccache
             CMAKE_CXX_COMPILER_LAUNCHER=sccache
@@ -414,6 +426,15 @@ jobs:
           C_COMPILER_LAUNCHER: sccache
           CXX_COMPILER_LAUNCHER: sccache
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
+
+      - name: Upload vcpkg assets to S3 cache
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        run: |
+          # setup.py copies vcpkg downloads to /host/tmp/vcpkg_downloads inside the
+          # CIBW container, which is /tmp/vcpkg_downloads on the host.
+          bash build_tooling/vcpkg_upload_assets.sh /tmp/vcpkg_downloads
+          sudo rm -rf /tmp/vcpkg_downloads
+        continue-on-error: true
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
