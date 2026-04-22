@@ -171,7 +171,12 @@ struct StreamDescriptor {
     [[nodiscard]] bool empty() const { return fields().empty(); }
 
     [[nodiscard]] std::optional<std::size_t> find_field(std::string_view view) const {
-        return fields().find_field(view);
+        auto it = std::find_if(begin(), end(), [&](const auto& field) { return field.name() == view; });
+
+        if (it == end())
+            return std::nullopt;
+
+        return std::distance(begin(), it);
     }
 
     friend bool operator==(const StreamDescriptor& left, const StreamDescriptor& right) {
@@ -297,7 +302,11 @@ inline DataType stream_id_data_type(const StreamId& stream_id) {
 inline FieldCollection field_collection_from_proto(
         const google::protobuf::RepeatedPtrField<arcticdb::proto::descriptors::StreamDescriptor_FieldDescriptor>& fields
 ) {
-    FieldCollection output;
+    std::size_t total_data_bytes = 0;
+    for (const auto& field : fields)
+        total_data_bytes += Field::calc_size(field.name());
+
+    FieldCollection output(fields.size(), total_data_bytes);
     for (const auto& field : fields)
         output.add_field(type_desc_from_proto(field.type_desc()), field.name());
 
