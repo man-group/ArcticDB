@@ -188,7 +188,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
     py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
-            .def(py::init<AtomKey, SegmentInMemory>());
+            .def(py::init<AtomKey, SegmentInMemory, std::optional<SegmentInMemory>>(),
+                 py::arg("index_key"),
+                 py::arg("index_seg"),
+                 py::arg("column_stats_seg") = std::nullopt);
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
@@ -331,7 +334,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
             .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
             .def_property_readonly("key", &DescriptorItem::key)
-            .def_property_readonly("index_segment", &DescriptorItem::index_segment);
+            .def_property_readonly("index_segment", &DescriptorItem::index_segment)
+            .def_property_readonly("column_stats_segment", &DescriptorItem::column_stats_segment);
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.

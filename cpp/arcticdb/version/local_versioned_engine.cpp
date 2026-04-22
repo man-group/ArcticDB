@@ -436,7 +436,14 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                return {preloaded_index_query};
+                // Clone because Python holds the PreloadedIndexQuery across multiple collect() calls.
+                auto column_stats = preloaded_index_query->column_stats_seg_.has_value()
+                                            ? std::optional{preloaded_index_query->column_stats_seg_->clone()}
+                                            : std::nullopt;
+                return std::make_shared<IndexInformation>(
+                        std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
+                        std::move(column_stats)
+                );
             },
             [&](const auto&) -> VersionIdentifier {
                 auto version = get_version_to_read(stream_id, version_query);
@@ -508,46 +515,67 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, bool include_index_segment) {
     const auto key = std::move(k);
-    return store()->read(key).thenValue([include_index_segment](auto&& key_seg_pair) -> DescriptorItem {
-        auto key = to_atom(std::move(key_seg_pair.first));
-        auto seg = std::move(key_seg_pair.second);
-        std::optional<TimeseriesDescriptor> timeseries_descriptor;
-        if (seg.has_index_descriptor())
-            timeseries_descriptor.emplace(seg.index_descriptor());
+    auto index_future = store()->read(key);
 
-        std::optional<timestamp> start_index;
-        std::optional<timestamp> end_index;
-        if (seg.row_count() > 0) {
-            const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
-            entity::details::visit_type(
-                    start_index_column.type().data_type(),
-                    [&start_index_column, &start_index](auto column_desc_tag) {
-                        using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
-                        if constexpr (is_time_type(type_info::data_type)) {
-                            start_index = start_index_column.template scalar_at<timestamp>(0);
-                        }
-                    }
-            );
+    auto column_stats_future = folly::makeFuture<std::optional<SegmentInMemory>>(std::nullopt);
+    if (include_index_segment) {
+        auto column_stats_key = index_key_to_column_stats_key(key);
+        column_stats_future = store()->read(column_stats_key)
+                                      .thenValue(
+                                              [](std::pair<VariantKey, SegmentInMemory>&& key_seg
+                                              ) -> std::optional<SegmentInMemory> { return std::move(key_seg.second); }
+                                      );
+    }
 
-            const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
-            entity::details::visit_type(
-                    end_index_column.type().data_type(),
-                    [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
-                        using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
-                        if constexpr (is_time_type(type_info::data_type)) {
-                            // -1 as the end timestamp in the data keys is one nanosecond greater than the last value in
-                            // the index column
-                            end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
-                        }
+    return folly::collectAll(std::move(index_future), std::move(column_stats_future))
+            .via(&async::io_executor())
+            .thenValue([include_index_segment](auto&& results) -> DescriptorItem {
+                auto& [index_try, column_stats_try] = results;
+                auto key_seg_pair = std::move(index_try).value();
+                auto key = to_atom(std::move(key_seg_pair.first));
+                auto seg = std::move(key_seg_pair.second);
+                std::optional<TimeseriesDescriptor> timeseries_descriptor;
+                if (seg.has_index_descriptor())
+                    timeseries_descriptor.emplace(seg.index_descriptor());
+
+                std::optional<timestamp> start_index;
+                std::optional<timestamp> end_index;
+                if (seg.row_count() > 0) {
+                    const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
+                    entity::details::visit_type(
+                            start_index_column.type().data_type(),
+                            [&start_index_column, &start_index](auto column_desc_tag) {
+                                using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                                if constexpr (is_time_type(type_info::data_type)) {
+                                    start_index = start_index_column.template scalar_at<timestamp>(0);
+                                }
+                            }
+                    );
+
+                    const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
+                    entity::details::visit_type(
+                            end_index_column.type().data_type(),
+                            [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
+                                using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                                if constexpr (is_time_type(type_info::data_type)) {
+                                    // -1 as the end timestamp in the data keys is one nanosecond greater than the last
+                                    // value in the index column
+                                    end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
+                                }
+                            }
+                    );
+                }
+                DescriptorItem descriptor_item{
+                        std::move(key), start_index, end_index, std::move(timeseries_descriptor)
+                };
+                if (include_index_segment) {
+                    descriptor_item.index_segment_ = std::move(seg);
+                    if (!column_stats_try.hasException()) {
+                        descriptor_item.column_stats_segment_ = std::move(column_stats_try).value();
                     }
-            );
-        }
-        DescriptorItem descriptor_item{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
-        if (include_index_segment) {
-            descriptor_item.index_segment_ = std::move(seg);
-        }
-        return descriptor_item;
-    });
+                }
+                return descriptor_item;
+            });
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
