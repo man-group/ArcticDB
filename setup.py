@@ -31,6 +31,40 @@ def _log_and_run(*cmd, **kwargs):
     subprocess.check_call(cmd, **kwargs)
 
 
+VCPKG_DOWNLOADS_HOST_PATH = "/host/tmp/vcpkg_downloads"
+
+
+def copy_vcpkg_downloads_to_host():
+    """Copy vcpkg downloaded source archives to a host-mounted path.
+
+    Inside CIBW the project directory is copied into the container, so files
+    written during the build (e.g. vcpkg source downloads) are lost when the
+    container exits. This function copies them to /host/tmp/ which is the
+    host filesystem mounted inside the container, making them available for
+    the asset-upload step that runs on the host after CIBW finishes."""
+    if os.environ.get("COPY_VCPKG_DOWNLOADS_TO_HOST", "") != "1":
+        return
+
+    downloads = Path("cpp") / "vcpkg" / "downloads"
+    if not downloads.is_dir():
+        print(f"vcpkg downloads dir not found at {downloads}, nothing to copy to host")
+        return
+
+    dest = Path(VCPKG_DOWNLOADS_HOST_PATH)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    for f in downloads.iterdir():
+        if not f.is_file():
+            continue
+        if f.suffix in (".tmp", ".part", ".lock"):
+            continue
+        shutil.copy2(str(f), str(dest / f.name))
+        copied += 1
+
+    print(f"Copied {copied} vcpkg download(s) to {dest}")
+
+
 def cleanup_vcpkg_artifacts():
     if os.environ.get("ARCTICDB_KEEP_VCPKG_SOURCES", "0") != "0":
         print("ARCTICDB_KEEP_VCPKG_SOURCES is set, skipping vcpkg cleanup")
@@ -240,6 +274,7 @@ class CMakeBuild(build_ext):
 
         _log_and_run(*cmd, cwd="cpp")
 
+        copy_vcpkg_downloads_to_host()
         cleanup_vcpkg_artifacts()
 
         search = f"cpp/out/{preset}-build"

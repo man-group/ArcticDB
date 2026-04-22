@@ -24,3 +24,8 @@ if [[ -n "$VCPKG_MAN_NUGET_TOKEN" ]] ; then
 fi
 
 popd
+
+# S3 asset cache: caches source archives so builds survive upstream outages
+if [[ -n "$AWS_ACCESS_KEY_ID" ]] ; then
+    export X_VCPKG_ASSET_SOURCES="x-script,aws s3 cp s3://arcticdb-ci-vcpkg-assets/{sha512} {dst} --region eu-west-1 --only-show-errors"
+fi
