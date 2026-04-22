@@ -86,6 +86,12 @@ versions = nvs.list_versions("symbol")
 - `read_metadata(symbol, as_of)` - Read only metadata
 - `get_info(symbol, as_of)` - Get symbol info without reading data
 
+#### Sort Order Propagation
+
+`ReadResult` and `NodeReadResult` (`version_store/read_result.py`) carry a `sort_order` field (`SortedValue` enum: `UNKNOWN`, `UNSORTED`, `ASCENDING`, `DESCENDING`) populated from the C++ `StreamDescriptor.sorted` field.
+
+When `output_format="polars"`, `NativeVersionStore._apply_polars_sorted_flag_to_index` calls `pl.col().set_sorted()` on the index column if `sort_order` is `ASCENDING` or `DESCENDING`. The index column name is resolved via `_get_index_col_from_norm(norm)`, which supports single-level indexes only (`multi_index` is excluded).
+
 ### Version Operations
 
 - `list_versions(symbol, snapshot, skip_snapshots)` - List versions
@@ -162,6 +168,7 @@ result = nvs.read("symbol", row_range=(0, 1000))
 | File | Purpose |
 |------|---------|
 | `version_store/_store.py` | NativeVersionStore class |
+| `version_store/read_result.py` | ReadResult / NodeReadResult (includes `sort_order`) |
 | `version_store/_normalization.py` | Data normalization |
 | `cpp/arcticdb/version/version_store_api.cpp` | C++ implementation |
 

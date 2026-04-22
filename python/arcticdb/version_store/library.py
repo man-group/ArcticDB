@@ -2074,6 +2074,9 @@ class Library:
             Output format for the returned dataframe.
             If `None`, uses the output format from the `Library` instance.
             See `OutputFormat` documentation for details on available formats.
+            When using ``POLARS`` output format, the index column (if physically stored) will automatically have
+            its Polars sorted flag set based on the sort order tracked by ArcticDB, enabling Polars sort-aware
+            optimizations such as fast joins and group-bys.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             String column format when using `PYARROW` or `POLARS` output formats.
@@ -2175,6 +2178,8 @@ class Library:
             Output format for the returned dataframes.
             If `None`, uses the output format from the `Library` instance.
             See `OutputFormat` documentation for details on available formats.
+            When using ``POLARS`` output format, the index column (if physically stored) will automatically have
+            its Polars sorted flag set based on the sort order tracked by ArcticDB.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             String column format when using `PYARROW` or `POLARS` output formats.

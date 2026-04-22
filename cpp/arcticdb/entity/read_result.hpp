@@ -27,14 +27,16 @@ using OutputFrame = std::variant<pipelines::PandasOutputFrame, ArrowOutputFrame>
 struct ARCTICDB_VISIBILITY_HIDDEN NodeReadResult {
     NodeReadResult(
             const StreamId& symbol, OutputFrame&& frame_data,
-            arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta
+            arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta, SortedValue sorted = SortedValue::UNKNOWN
     ) :
         symbol_(symbol),
         frame_data_(std::move(frame_data)),
-        norm_meta_(std::move(norm_meta)) {};
+        norm_meta_(std::move(norm_meta)),
+        sorted_(sorted) {};
     StreamId symbol_;
     OutputFrame frame_data_;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta_;
+    SortedValue sorted_ = SortedValue::UNKNOWN;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(NodeReadResult)
 };
@@ -47,7 +49,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
                     arcticdb::proto::descriptors::UserDefinedMetadata,
                     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
-            std::vector<NodeReadResult>&& node_results = {}
+            std::vector<NodeReadResult>&& node_results = {}, SortedValue sorted = SortedValue::UNKNOWN
     ) :
         item(versioned_item),
         frame_data(std::move(frame_data)),
@@ -55,7 +57,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
         norm_meta(norm_meta),
         user_meta(user_meta),
         multi_key_meta(multi_key_meta),
-        node_results(std::move(node_results)) {}
+        node_results(std::move(node_results)),
+        sorted(sorted) {}
     std::variant<VersionedItem, std::vector<VersionedItem>> item;
     OutputFrame frame_data;
     OutputFormat output_format;
@@ -66,6 +69,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
     std::vector<NodeReadResult> node_results;
+    SortedValue sorted = SortedValue::UNKNOWN;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadResult)
 };

@@ -351,6 +351,23 @@ def _assume_false(name, kwargs):
         return True
 
 
+def _get_index_col_from_norm(norm):
+    """Get the name of the index column from normalization metadata, or None if no physically stored index."""
+    input_type = norm.WhichOneof("input_type")
+    if input_type == "experimental_arrow":
+        if norm.experimental_arrow.has_index:
+            return norm.experimental_arrow.index_column_name
+    elif input_type in ("df", "series"):
+        common = norm.df.common if input_type == "df" else norm.series.common
+        index_type = common.WhichOneof("index_type")
+        # multi_index intentionally excluded: multi-level sorting semantics are more complex
+        if index_type == "index" and common.index.is_physically_stored:
+            if common.index.fake_name:
+                return "__index__"
+            return common.index.name
+    return None
+
+
 class NativeVersionStore:
     """
     NativeVersionStore objects provide access to ArcticDB libraries, enabling fundamental library operations
@@ -2908,8 +2925,23 @@ class NativeVersionStore:
 
         return data
 
+    @staticmethod
+    def _apply_polars_sorted_flag_to_index(data, read_result):
+        if pl is None or not isinstance(data, pl.DataFrame):
+            return data
+
+        sorted_val = read_result.sort_order
+        if sorted_val not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
+            return data
+
+        index_col = _get_index_col_from_norm(read_result.norm)
+        if index_col is not None and index_col in data.columns:
+            data = data.with_columns(pl.col(index_col).set_sorted(descending=(sorted_val == SortedValue.DESCENDING)))
+        return data
+
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
         data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format)
+        data = self._apply_polars_sorted_flag_to_index(data, read_result)
 
         if isinstance(read_result.version, list):
             versions = []
