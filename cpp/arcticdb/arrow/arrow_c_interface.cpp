@@ -8,8 +8,6 @@
 
 #include <arcticdb/arrow/arrow_c_interface.hpp>
 
-#include <vector>
-
 #include <sparrow/record_batch.hpp>
 
 namespace arcticdb {

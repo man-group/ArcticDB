@@ -23,12 +23,18 @@
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/storage/file/file_store.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/pipeline/read_pipeline.hpp>
 
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
 using namespace arcticdb::storage;
+
+// Upper bound on segment prefetch concurrency for the lazy read path.
+// Matches the eager read path's batch_size.  Keeps memory bounded while
+// still allowing enough in-flight I/O to hide storage latency.
+static constexpr size_t kMaxLazyPrefetchSegments = 200;
 
 template PythonVersionStore::PythonVersionStore(
         const std::shared_ptr<storage::Library>& library, const util::SysClock& ct
@@ -1056,6 +1062,111 @@ ReadResult PythonVersionStore::read_dataframe_version(
             std::nullopt,
             std::move(opt_version_and_frame.nodes_)
     );
+}
+
+PythonVersionStore::LazyReadResult PythonVersionStore::create_lazy_record_batch_iterator_with_metadata(
+        const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, std::shared_ptr<FilterClause> filter_clause, size_t prefetch_size
+) {
+    // Resolve version (needed for VersionedItem metadata, before delegating to create_lazy_record_batch_iterator)
+    py::gil_scoped_release release_gil;
+
+    auto version = get_version_to_read(stream_id, version_query);
+    VersionIdentifier version_info;
+    if (version) {
+        version_info = *version;
+    } else if (opt_false(read_options.incompletes())) {
+        version_info = stream_id;
+    } else {
+        missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                "create_lazy_record_batch_iterator_with_metadata: version matching query '{}' not found for symbol "
+                "'{}'",
+                version_query,
+                stream_id
+        );
+    }
+
+    // Read index to get metadata (cheap metadata I/O, no segment data)
+    auto pipeline_context = version_store::setup_pipeline_context(store(), version_info, *read_query, read_options);
+
+    util::check(
+            !pipeline_context->multi_key_,
+            "Lazy record batch iterator does not support recursive/composite data (multi_key)"
+    );
+
+    // Extract normalization and user metadata from the pipeline context
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+    if (pipeline_context->norm_meta_) {
+        norm_meta = *pipeline_context->norm_meta_;
+    }
+
+    std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta;
+    if (pipeline_context->user_meta_) {
+        user_meta = *pipeline_context->user_meta_;
+    }
+
+    // Re-sort slice_and_keys_ by (row_range, col_range) for column-slice merging
+    std::sort(
+            pipeline_context->slice_and_keys_.begin(),
+            pipeline_context->slice_and_keys_.end(),
+            [](const auto& a, const auto& b) {
+                return std::tie(a.slice_.row_range.first, a.slice_.col_range.first) <
+                       std::tie(b.slice_.row_range.first, b.slice_.col_range.first);
+            }
+    );
+
+    // Populate overall_column_bitset_ for column pushdown
+    pipelines::get_column_bitset_in_context(*read_query, pipeline_context);
+
+    // Build columns_to_decode from the pipeline context's column bitset
+    std::shared_ptr<std::unordered_set<std::string>> cols_to_decode;
+    if (pipeline_context->overall_column_bitset_) {
+        cols_to_decode = std::make_shared<std::unordered_set<std::string>>();
+        auto en = pipeline_context->overall_column_bitset_->first();
+        auto en_end = pipeline_context->overall_column_bitset_->end();
+        while (en < en_end) {
+            cols_to_decode->insert(std::string(pipeline_context->desc_->field(*en++).name()));
+        }
+        // Ensure filter clause input columns are decoded even if not in the user's column selection
+        if (filter_clause && filter_clause->clause_info().input_columns_) {
+            for (const auto& col : *filter_clause->clause_info().input_columns_) {
+                cols_to_decode->insert(col);
+            }
+        }
+    }
+
+    // Extract filter expression context and root node name from the FilterClause
+    std::shared_ptr<ExpressionContext> expression_context;
+    std::string filter_root_node_name;
+    if (filter_clause) {
+        expression_context = filter_clause->expression_context_;
+        expression_context->dynamic_schema_ = opt_false(read_options.dynamic_schema());
+        filter_root_node_name = filter_clause->root_node_name_.value;
+    }
+
+    // Prefetch all segments (capped at kMaxLazyPrefetchSegments) for latency hiding
+    const size_t effective_prefetch =
+            std::min(std::max(prefetch_size, pipeline_context->slice_and_keys_.size()), kMaxLazyPrefetchSegments);
+
+    auto iterator = std::make_shared<LazyRecordBatchIterator>(
+            std::move(pipeline_context->slice_and_keys_),
+            pipeline_context->descriptor(),
+            store(),
+            std::move(cols_to_decode),
+            read_query->row_filter,
+            std::move(expression_context),
+            std::move(filter_root_node_name),
+            effective_prefetch,
+            4ULL * 1024 * 1024 * 1024,
+            read_options
+    );
+
+    return LazyReadResult{
+            version ? *version : VersionedItem{},
+            std::move(norm_meta),
+            std::move(user_meta),
+            std::move(iterator),
+    };
 }
 
 VersionedItem PythonVersionStore::read_modify_write(

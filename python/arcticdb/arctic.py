@@ -7,8 +7,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import logging
-from re import L
-from typing import List, Optional, Any, Union
+from typing import TYPE_CHECKING, List, Optional, Any, Union
+
+if TYPE_CHECKING:
+    from arcticdb.version_store.duckdb import ArcticDuckDBContext
 
 from arcticdb.options import (
     DEFAULT_ENCODING_VERSION,
@@ -418,3 +420,141 @@ class Arctic:
         )
 
         logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")
+
+    def sql(
+        self,
+        query: str,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ):
+        """
+        Execute a SQL database discovery query on this Arctic instance.
+
+        ArcticDB uses ``database.library`` naming convention where database is
+        the permissioning unit (typically one per user). Top-level libraries
+        without a database prefix are grouped under ``__default__``.
+
+        Parameters
+        ----------
+        query : str
+            SQL query to execute. Currently only ``SHOW DATABASES`` is supported,
+            which returns all libraries grouped by their database prefix.
+
+        output_format : OutputFormat or str, optional
+            Output format for the result:
+            - ``"pandas"`` (default): Returns a pandas DataFrame
+            - ``"pyarrow"``: Returns a PyArrow Table
+            - ``"polars"``: Returns a Polars DataFrame
+
+        Returns
+        -------
+        pandas.DataFrame, pyarrow.Table, or polars.DataFrame
+            Query result in the requested format.
+
+        Raises
+        ------
+        ValueError
+            If the query is not a supported database discovery query.
+
+        Examples
+        --------
+        List all libraries grouped by database:
+
+        >>> arctic = adb.Arctic('lmdb://mydata')
+        >>> arctic.create_library('jblackburn.market_data')
+        >>> arctic.create_library('jblackburn.reference_data')
+        >>> arctic.create_library('global_config')
+        >>> result = arctic.sql("SHOW DATABASES")
+        >>> print(result)
+          database_name   library_name
+        0    jblackburn    market_data
+        1    jblackburn  reference_data
+        2   __default__  global_config
+
+        See Also
+        --------
+        duckdb : Context manager for complex cross-library queries.
+        Library.sql : SQL queries on individual libraries.
+        """
+        from arcticdb.version_store.duckdb.duckdb import _check_duckdb_available, _parse_library_name
+        from arcticdb.version_store.duckdb.pushdown import is_database_discovery_query
+
+        _check_duckdb_available()
+
+        # Check for SHOW DATABASES
+        if not is_database_discovery_query(query):
+            raise ValueError(
+                "Arctic.sql() only supports SHOW DATABASES. "
+                "For data queries, use library.sql() or arctic.duckdb() context manager."
+            )
+
+        # Get list of libraries and split into database/library columns
+        libraries = self.list_libraries()
+
+        database_names = []
+        library_names = []
+        for lib_name in libraries:
+            database, library = _parse_library_name(lib_name)
+            database_names.append(database)
+            library_names.append(library)
+
+        # Build result table
+        import pyarrow as pa
+        from arcticdb.version_store.duckdb.duckdb import _BaseDuckDBContext
+
+        arrow_table = pa.table(
+            {
+                "database_name": database_names,
+                "library_name": library_names,
+            }
+        )
+
+        return _BaseDuckDBContext._convert_arrow_table(arrow_table, output_format)
+
+    def duckdb(self, connection: Any = None) -> "ArcticDuckDBContext":
+        """
+        Create a DuckDB context for cross-library SQL queries.
+
+        The context manager allows explicit library and symbol registration,
+        enabling data discovery queries like SHOW DATABASES and queries
+        that span multiple libraries.
+
+        Parameters
+        ----------
+        connection : duckdb.DuckDBPyConnection, optional
+            External DuckDB connection to use. If provided, ArcticDB will register
+            symbols into this connection but will NOT close it when the context exits.
+            This allows joining ArcticDB data with data from other sources.
+            If not provided, a new in-memory connection is created and closed on exit.
+
+        Returns
+        -------
+        ArcticDuckDBContext
+            Context manager for DuckDB queries.
+
+        Examples
+        --------
+        Basic SHOW DATABASES:
+
+        >>> with arctic.duckdb() as ddb:
+        ...     ddb.register_all_libraries()
+        ...     databases = ddb.sql("SHOW DATABASES")
+
+        Cross-library queries:
+
+        >>> with arctic.duckdb() as ddb:
+        ...     ddb.register_symbol("market_data", "prices")
+        ...     ddb.register_symbol("reference_data", "securities", alias="ref")
+        ...     result = ddb.sql('''
+        ...         SELECT p.ticker, r.name, p.price
+        ...         FROM prices p
+        ...         JOIN ref r ON p.ticker = r.ticker
+        ...     ''')
+
+        See Also
+        --------
+        sql : Simple SQL queries for database discovery.
+        Library.duckdb : Context manager for single-library queries.
+        """
+        from arcticdb.version_store.duckdb import ArcticDuckDBContext
+
+        return ArcticDuckDBContext(self, connection=connection)

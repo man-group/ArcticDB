@@ -1,14 +1,12 @@
 #pragma once
 
-#include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/filter_range.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <cstdint>
 #include <optional>
-#include <variant>
 
 namespace arcticdb::pipelines {
-using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
+using arcticdb::FilterRange;
 
 struct SignedRowRange {
     std::optional<int64_t> start_;

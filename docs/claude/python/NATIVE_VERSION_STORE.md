@@ -157,6 +157,36 @@ result = nvs.read("symbol", row_range=(0, 1000))
 | Error types | Mixed | Consistent exception hierarchy |
 | Documentation | Minimal | Comprehensive |
 
+## Lazy Arrow Read Path
+
+### Logging
+
+`_store.py` uses `logging.getLogger(__name__)` for debug diagnostics, primarily in the lazy Arrow fallback path.
+
+### `_try_read_lazy_arrow()`
+
+Core method for lazy Arrow/Polars reads (`_store.py:_try_read_lazy_arrow`). Returns `VersionedItem` on success or `None` to trigger fallback to the eager path. Used by `_read_dataframe()` when `output_format` is `PYARROW` or `POLARS`.
+
+**Fallback triggers** (each logged at `logger.debug`):
+1. `query_builder` with clauses other than `DateRangeClause`/`RowRangeClause` (groupby, projections, etc.)
+2. Custom normalizer detected (non-standard `msg_pack_frame_meta`)
+3. Empty result from C++ iterator (0 segments)
+4. Arrow schema construction failure (type mismatch, unsupported type)
+
+**DateRangeClause extraction**: When `date_range` comes from `QueryBuilder().date_range()` rather than the `date_range=` parameter, it's stored in `query_builder.clauses` as a `_DateRangeClause`, not in `read_query.row_filter`. The method extracts it and sets `read_query.row_filter = _IndexRange(clause.start, clause.end)` so C++ applies truncation.
+
+### `read_as_lazy_record_batch_iterator()`
+
+Returns `(LazyRecordBatchIterator, resolved_version)` tuple. Delegates to C++ `create_lazy_record_batch_iterator`. Supports:
+- `date_range`, `row_range` — passed as `row_filter` to C++
+- `columns` — column projection
+- `query_builder` — `FilterClause` extracted and passed to C++ for per-segment WHERE evaluation
+- `prefetch_size` — controls C++ prefetch buffer depth (default 2)
+
+### OutputFormat Handling
+
+`_get_read_options_and_output_format()` wraps the output format in `OutputFormat.resolve()`, returning `Tuple[ReadOptions, OutputFormat]`. All downstream code compares with `OutputFormat` enum instances directly (no `.lower()` string gymnastics).
+
 ## Key Files
 
 | File | Purpose |
