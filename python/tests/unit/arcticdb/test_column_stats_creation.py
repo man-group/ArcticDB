@@ -122,11 +122,13 @@ def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
     df2 = pd.DataFrame({"col_1": [5.0, np.nan]}, index=pd.date_range("2000-01-05", periods=2))
     df3 = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
     df4 = pd.DataFrame({"col_1": [1.0, np.nan, 2.0]}, index=pd.date_range("2000-01-09", periods=3))
+    df5 = pd.DataFrame({"col_1": [np.nan, 1.0, 2.0, np.nan]}, index=pd.date_range("2000-01-12", periods=4))
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
     lib.append(sym, df4)
+    lib.append(sym, df5)
     expected_column_stats = lib.read_index(sym)
     expected_column_stats.drop(
         expected_column_stats.columns.difference(["start_index", "end_index"]),
@@ -134,9 +136,33 @@ def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
         inplace=True,
     )
 
-    # Note that for df4 we have min=1.0 max=2.0 even though the values include np.nan
-    expected_column_stats["v1_MIN(col_1)"] = [1.0, np.nan, 5.0, np.nan, 1.0]
-    expected_column_stats["v1_MAX(col_1)"] = [3.0, np.nan, 5.0, np.nan, 2.0]
+    # We store nan stats iff the whole block is nan
+    expected_column_stats["v1_MIN(col_1)"] = [1.0, 5.0, 5.0, np.nan, 1.0, 1.0]
+    expected_column_stats["v1_MAX(col_1)"] = [3.0, 5.0, 5.0, np.nan, 2.0, 2.0]
+    column_stats_dict = {"col_1": {"MINMAX"}}
+
+    lib.create_column_stats(sym, column_stats_dict)
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
+def test_column_stats_only_nan_values(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_values"
+    df = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
+    lib.write(sym, df)
+
+    expected_column_stats = lib.read_index(sym)
+    expected_column_stats.drop(
+        expected_column_stats.columns.difference(["start_index", "end_index"]),
+        axis=1,
+        inplace=True,
+    )
+
+    expected_column_stats["v1_MIN(col_1)"] = [np.nan]
+    expected_column_stats["v1_MAX(col_1)"] = [np.nan]
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
