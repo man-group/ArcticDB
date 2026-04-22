@@ -2275,15 +2275,13 @@ class NativeVersionStore:
 
         return read_queries
 
-    def _get_read_options_and_output_format(
-        self, **kwargs
-    ) -> Tuple[_PythonVersionStoreReadOptions, Union[OutputFormat, str]]:
+    def _get_read_options_and_output_format(self, **kwargs) -> Tuple[_PythonVersionStoreReadOptions, OutputFormat]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        output_format = self.resolve_runtime_defaults(
-            "output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs
+        output_format = OutputFormat.resolve(
+            self.resolve_runtime_defaults("output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs)
         )
         read_options.set_output_format(output_format_to_internal(output_format))
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
@@ -2899,7 +2897,7 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if output_format == OutputFormat.POLARS:
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)

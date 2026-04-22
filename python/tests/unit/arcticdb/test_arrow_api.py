@@ -35,11 +35,12 @@ def expected_output_type(arctic_output_format, library_output_format, output_for
     expected_output_format = (
         output_format_override or library_output_format or arctic_output_format or OutputFormat.PANDAS
     )
-    if expected_output_format.lower() == OutputFormat.PANDAS.lower():
+    fmt = OutputFormat.resolve(expected_output_format, default=OutputFormat.PANDAS)
+    if fmt == OutputFormat.PANDAS:
         return pd.DataFrame
-    if expected_output_format.lower() == OutputFormat.PYARROW.lower():
+    if fmt == OutputFormat.PYARROW:
         return pa.Table
-    if expected_output_format.lower() == OutputFormat.POLARS.lower():
+    if fmt == OutputFormat.POLARS:
         return pl.DataFrame
     raise ValueError("Unexpected format")
 
