@@ -228,6 +228,13 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                             break;
                         }
                         case OperationType::POW: {
+                            if constexpr (!is_integer_type(right_type_info::data_type)) {
+                                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                        "POW operator does not support floating point exponents, got {}",
+                                        right_type_info::data_type
+                                );
+                            }
+
                             using TargetType = typename binary_operation_promoted_type<
                                     typename left_type_info::RawType,
                                     typename right_type_info::RawType,
@@ -272,10 +279,10 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                     operation_type_
             );
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    (is_numeric_type(std::get<DataType>(left_type)) &&
-                     is_numeric_type(std::get<DataType>(right_type))) ||
-                            (is_bool_type(std::get<DataType>(left_type)) &&
-                             is_bool_type(std::get<DataType>(right_type))) ||
+                    (is_numeric_type(std::get<DataType>(left_type)) && is_numeric_type(std::get<DataType>(right_type))
+                    ) ||
+                            (is_bool_type(std::get<DataType>(left_type)) && is_bool_type(std::get<DataType>(right_type))
+                            ) ||
                             (is_sequence_type(std::get<DataType>(left_type)) &&
                              is_sequence_type(std::get<DataType>(right_type)) &&
                              (operation_type_ == OperationType::EQ || operation_type_ == OperationType::NE)),
