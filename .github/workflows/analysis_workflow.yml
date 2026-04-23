@@ -168,13 +168,17 @@ jobs:
         with:
           disable_annotations: 'true'  # supress noisy report that pollutes the summary page
                   
+      - name: Install AWS CLI
+        run: yum install -y awscli
+
       - name: Extra envs
         shell: bash -l {0}
         run: |
           . build_tooling/prep_cpp_build.sh
           . build_tooling/vcpkg_caching.sh
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
@@ -217,7 +221,16 @@ jobs:
       - name: Build project for ASV
         run: |
           python -m pip install -ve .[Testing]
-          
+        env:
+          ARCTICDB_KEEP_VCPKG_SOURCES: "1"
+
+      - name: Upload vcpkg assets to S3 cache
+        run: bash build_tooling/vcpkg_upload_assets.sh
+        continue-on-error: true
+
+      - name: Cleanup vcpkg artifacts
+        run: rm -rf cpp/vcpkg/buildtrees cpp/vcpkg/downloads cpp/vcpkg/packages
+
       - name: Run ASV Tests Check script
         run: |
           python python/utils/asv_checks.py
