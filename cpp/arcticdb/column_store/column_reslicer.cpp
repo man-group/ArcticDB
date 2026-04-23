@@ -20,8 +20,6 @@ ColumnReslicer::ColumnReslicer(const ReslicingInfo& reslicing_info) : reslicing_
 void ColumnReslicer::push_back(std::shared_ptr<Column> column, std::shared_ptr<StringPool> string_pool) {
     if (column->is_sparse()) {
         sparse_ = true;
-        // Will be implemented in a future PR
-        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("compact_data not yet supported with sparse data");
     }
     if (type_.has_value()) {
         if (type_->data_type() == DataType::UTF_DYNAMIC64) {
@@ -244,8 +242,6 @@ std::vector<std::optional<Column>> ColumnReslicer::initialise_output_columns() c
     output_columns.reserve(reslicing_info_.num_segments);
     const auto& type = *type_;
     if (sparse_) {
-        // This should "just work" for sparse columns, up to corner cases like all columns in an output segment having
-        // no values. Will need a lot of testing though, so push to future PR.
         uint64_t input_values{0};
         // Represents a global bitset for all of the input columns, with 0s where an entire row slice is missing
         util::BitSet bitset(reslicing_info_.total_rows);
