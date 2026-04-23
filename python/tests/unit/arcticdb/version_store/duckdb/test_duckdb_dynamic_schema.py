@@ -9,6 +9,7 @@ be governed by the Apache License, version 2.0.
 
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 duckdb = pytest.importorskip("duckdb")
@@ -481,6 +482,40 @@ class TestDynamicSchemaAppendEdgeCases:
 
         assert len(result) == 6
         np.testing.assert_array_almost_equal(result["val"].values, [1.0, 2.0, 3.0, 4.5, 5.5, 6.5])
+
+    def test_read_batch_reader_type_widening(self, lmdb_library_dynamic_schema):
+        """ArcticRecordBatchReader.read_all() must align batches to the widened schema.
+
+        Regression: without casting, the declared reader schema is float64 but the
+        first batch remains float32, so pa.Table.from_batches() raises
+        ArrowInvalid (or DuckDB reinterprets bytes with the wider type and reads
+        uninitialized memory past the buffer, matching the CI failure pattern for
+        test_append_type_widening_float).
+        """
+        lib = lmdb_library_dynamic_schema
+        idx1 = pd.date_range("2024-01-01", periods=3, freq="D")
+        lib.write("sym", pd.DataFrame({"val": np.array([1.0, 2.0, 3.0], dtype=np.float32)}, index=idx1))
+        idx2 = pd.date_range("2024-01-04", periods=3, freq="D")
+        lib.append("sym", pd.DataFrame({"val": np.array([4.5, 5.5, 6.5], dtype=np.float64)}, index=idx2))
+
+        reader, _ = lib._read_as_record_batch_reader("sym")
+        table = reader.read_all()
+        assert table.schema.field("val").type == pa.float64()
+        np.testing.assert_array_almost_equal(table.column("val").to_pylist(), [1.0, 2.0, 3.0, 4.5, 5.5, 6.5])
+
+    def test_to_pyarrow_reader_type_widening(self, lmdb_library_dynamic_schema):
+        """to_pyarrow_reader() must align batches to the widened schema it advertises."""
+        lib = lmdb_library_dynamic_schema
+        idx1 = pd.date_range("2024-01-01", periods=3, freq="D")
+        lib.write("sym", pd.DataFrame({"val": np.array([1, 2, 3], dtype=np.int32)}, index=idx1))
+        idx2 = pd.date_range("2024-01-04", periods=3, freq="D")
+        lib.append("sym", pd.DataFrame({"val": np.array([4.5, 5.5, 6.5], dtype=np.float64)}, index=idx2))
+
+        reader, _ = lib._read_as_record_batch_reader("sym")
+        pa_reader = reader.to_pyarrow_reader()
+        assert pa_reader.schema.field("val").type == pa.float64()
+        table = pa_reader.read_all()
+        np.testing.assert_array_almost_equal(table.column("val").to_pylist(), [1.0, 2.0, 3.0, 4.5, 5.5, 6.5])
 
     def test_append_multiple_different_column_sets(self, lmdb_library_dynamic_schema):
         """Three appends each with different column subsets -- SQL sees the union."""

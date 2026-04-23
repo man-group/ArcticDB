@@ -204,11 +204,21 @@ class ArcticRecordBatchReader:
 
         The C++ LazyRecordBatchIterator handles column-slice merging and schema
         padding, so each returned batch already has the full column set.
+
+        If ``_ensure_schema`` has widened the declared schema (e.g. the
+        descriptor promotes float32→float64 across segments), the batch is cast
+        so every yielded batch matches ``self._schema`` exactly — otherwise
+        downstream consumers that trust the stream's declared schema (DuckDB's
+        Arrow stream interface, ``pa.Table.from_batches``) misinterpret the
+        narrower buffer or fail schema validation.
         """
         batch_data = self._cpp_iterator.next()
         if batch_data is None:
             return None
-        return pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
+        batch = pa.RecordBatch._import_from_c(batch_data.array(), batch_data.schema())
+        if self._schema is not None and not batch.schema.equals(self._schema):
+            batch = batch.cast(self._schema)
+        return batch
 
     def _ensure_schema(self) -> None:
         """Derive schema from the first batch, then cache it.
@@ -259,6 +269,11 @@ class ArcticRecordBatchReader:
             else:
                 fields.append(batch_field)
         self._schema = pa.schema(fields)
+        # Cast the cached first batch to match the resolved schema so the first
+        # value yielded from read_next_batch() is consistent with subsequent
+        # batches (which are cast in _read_next_raw_batch).
+        if not self._first_batch.schema.equals(self._schema):
+            self._first_batch = self._first_batch.cast(self._schema)
 
     @property
     def schema(self) -> pa.Schema:
