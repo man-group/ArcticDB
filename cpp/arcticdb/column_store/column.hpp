@@ -401,6 +401,13 @@ class Column {
     void string_array_prologue(ssize_t row_offset, size_t num_strings);
     void string_array_epilogue(size_t num_strings);
 
+    // Optional hint: callers that know the eventual row count for a string-array
+    // column should call this once before the per-row write loop. shapes_ is
+    // Buffer-backed and grows by 8 bytes per row inside string_array_prologue;
+    // without an up-front reserve that's O(N^2) realloc+memcpy. Safe to call
+    // before any write or with num_rows = 0 (no-op).
+    void reserve_shapes(size_t num_rows);
+
     void set_string_array(
             ssize_t row_offset, size_t string_size, size_t num_strings, char* input, StringPool& string_pool
     );

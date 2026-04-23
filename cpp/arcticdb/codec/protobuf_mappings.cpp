@@ -145,8 +145,7 @@ size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHe
 
 EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding::SegmentHeader& hdr) {
     const auto encoded_buffer_size = calc_proto_encoded_blocks_size(hdr);
-    EncodedFieldCollection encoded_fields;
-    encoded_fields.reserve(encoded_buffer_size, hdr.fields_size());
+    EncodedFieldCollection encoded_fields(encoded_buffer_size, hdr.fields_size());
     for (auto&& [index, in_field] : folly::enumerate(hdr.fields())) {
         auto* out_field = encoded_fields.add_field(num_blocks(in_field));
         encoded_field_from_proto(in_field, *out_field);

@@ -57,6 +57,14 @@ class EncodedFieldCollection {
 
     EncodedFieldCollection() = default;
 
+    // Sizing constructor — preallocates data_ and offsets_ for a known field count
+    // before any add_field call. Mirrors `FieldCollection(num_fields, total_data_bytes)`
+    // and exists so callers can't accidentally fall into the per-call ensure pattern in
+    // add_field which would realloc+memcpy offsets_ on every append (O(N^2) on wide
+    // schemas). Equivalent to default construction followed by reserve(bytes, num_fields)
+    // but harder to misuse.
+    EncodedFieldCollection(size_t encoded_buffer_size, size_t num_fields) { reserve(encoded_buffer_size, num_fields); }
+
     [[nodiscard]] EncodedFieldCollection clone() const {
         auto output = EncodedFieldCollection{data_.clone(), offsets_.clone()};
         output.count_ = count_;

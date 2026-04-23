@@ -121,9 +121,9 @@ using EncodingPolicyV1 = EncodingPolicyType<EncodingVersion::V1, ColumnEncoderV1
     auto descriptor_data = in_mem_seg.descriptor().data_ptr();
     descriptor_data->uncompressed_bytes_ = uncompressed_size;
 
-    EncodedFieldCollection encoded_fields;
-    if (in_mem_seg.row_count() > 0) {
-        encoded_fields.reserve(encoded_buffer_size, in_mem_seg.num_columns());
+    const bool has_rows = in_mem_seg.row_count() > 0;
+    EncodedFieldCollection encoded_fields(has_rows ? encoded_buffer_size : 0, has_rows ? in_mem_seg.num_columns() : 0);
+    if (has_rows) {
         ARCTICDB_TRACE(log::codec(), "Encoding fields");
         for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
             const auto& column = in_mem_seg.column(column_index);

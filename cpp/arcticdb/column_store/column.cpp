@@ -441,6 +441,12 @@ void Column::sparsify() {
     });
 }
 
+void Column::reserve_shapes(size_t num_rows) {
+    if (num_rows == 0)
+        return;
+    shapes_.buffer().reserve(num_rows * sizeof(shape_t));
+}
+
 void Column::string_array_prologue(ssize_t row_offset, size_t num_strings) {
     util::check_arg(
             last_logical_row_ + 1 == row_offset,
@@ -791,6 +797,12 @@ void Column::inflate_string_arrays(const StringPool& string_pool) {
 
     CursoredBuffer<ChunkedBuffer> data;
     CursoredBuffer<Buffer> shapes;
+    // Preallocate shapes once for all rows. Without this each per-row
+    // inflate_string_array call would grow Buffer-backed shapes_ by 8 bytes,
+    // realloc+memcpy'ing the cumulative array — O(N^2) on tall string-array
+    // columns.
+    if (row_count() > 0)
+        shapes.buffer().reserve(row_count() * sizeof(shape_t));
     boost::container::small_vector<position_t, 1> offsets;
     for (position_t row = 0; row < row_count(); ++row) {
         auto string_refs = tensor_at<position_t>(row).value();

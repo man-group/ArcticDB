@@ -327,10 +327,10 @@ static void encode_encoded_fields(
     write_magic<IndexMagic>(*out_buffer, pos);
     encode_index_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
 
-    EncodedFieldCollection encoded_fields;
+    const bool has_rows = in_mem_seg.row_count() > 0;
+    EncodedFieldCollection encoded_fields(has_rows ? encoded_buffer_size : 0, has_rows ? in_mem_seg.num_columns() : 0);
     ColumnEncoderV2 encoder;
-    if (in_mem_seg.row_count() > 0) {
-        encoded_fields.reserve(encoded_buffer_size, in_mem_seg.num_columns());
+    if (has_rows) {
         ARCTICDB_TRACE(log::codec(), "Encoding fields");
         for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
             write_magic<ColumnMagic>(*out_buffer, pos);
