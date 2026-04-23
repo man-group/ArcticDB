@@ -97,6 +97,7 @@ nav:
 - Guides:
   - Tutorials:
     - Fundamentals: 'tutorials/fundamentals.md'
+    - SQL Queries: 'tutorials/sql_queries.md'
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
@@ -142,6 +143,7 @@ nav:
   - Library Related Objects: 'api/library_types.md'
   - DataFrame Processing Operations API: 'api/processing.md'
   - Exceptions: 'api/exceptions.md'
+  - Options: 'api/options.md'
   - Config: 'api/config.md'
   - Admin Tools: 'api/admin_tools.md'
   - Query Stats: 'api/query_stats.md'

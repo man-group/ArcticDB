@@ -191,17 +191,36 @@ class OutputFormat(str, Enum):
     PYARROW = "PYARROW"
     POLARS = "POLARS"
 
+    @staticmethod
+    def resolve(value: Union["OutputFormat", str, None], default: "OutputFormat" = None) -> "OutputFormat":
+        """Convert a string or OutputFormat to an OutputFormat enum value.
+
+        Case-insensitive string matching for backwards compatibility.
+        Raises ValueError for unknown values, or if value is None and no default is provided.
+        """
+        if value is None:
+            if default is not None:
+                return default
+            raise ValueError("output_format is None and no default provided")
+        if isinstance(value, OutputFormat):
+            return value
+        try:
+            return OutputFormat(value.upper())
+        except (ValueError, KeyError, AttributeError):
+            raise ValueError(f"Unknown OutputFormat: {value!r}. Expected OutputFormat enum or string.")
+
 
 def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
-    if output_format.lower() == OutputFormat.PANDAS.lower():
+    fmt = OutputFormat.resolve(output_format)
+    if fmt == OutputFormat.PANDAS:
         return InternalOutputFormat.PANDAS
-    elif output_format.lower() == OutputFormat.PYARROW.lower():
+    elif fmt == OutputFormat.PYARROW:
         if not _PYARROW_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow optional dependency missing but is required to use arrow output format."
             )
         return InternalOutputFormat.ARROW
-    elif output_format.lower() == OutputFormat.POLARS.lower():
+    elif fmt == OutputFormat.POLARS:
         if not _PYARROW_AVAILABLE or not _POLARS_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow or polars optional dependencies are missing but are required to use polars output format."
@@ -267,7 +286,7 @@ def arrow_output_string_format_to_internal(
         or _PYARROW_AVAILABLE
         and arrow_string_format == pa.string()
     ):
-        if output_format.lower() == OutputFormat.POLARS.lower():
+        if OutputFormat.resolve(output_format) == OutputFormat.POLARS:
             raise ValueError(
                 "SMALL_STRING is not supported with POLARS output format. Please use LARGE_STRING instead."
             )
@@ -283,11 +302,11 @@ class RuntimeOptions:
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
         arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
     ):
-        self.output_format = output_format
+        self.output_format = OutputFormat.resolve(output_format) if output_format is not None else None
         self.arrow_string_format_default = arrow_string_format_default
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
-        self.output_format = output_format
+        self.output_format = OutputFormat.resolve(output_format)
 
     def set_arrow_string_format_default(self, arrow_string_format_default: ArrowOutputStringFormat):
         self.arrow_string_format_default = arrow_string_format_default
