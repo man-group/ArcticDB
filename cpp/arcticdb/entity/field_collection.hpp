@@ -150,6 +150,15 @@ class FieldCollection {
 
     std::string_view add(const FieldRef& field) { return add_field(field.type(), field.name()); }
 
+    [[nodiscard]] std::optional<std::size_t> find_field(std::string_view view) const {
+        auto it = std::find_if(begin(), end(), [&](const auto& field) { return field.name() == view; });
+
+        if (it == end())
+            return std::nullopt;
+
+        return std::distance(begin(), it);
+    }
+
     void set_allow_sparse(Sparsity) {
         // Not used
     }
