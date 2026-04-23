@@ -22,6 +22,7 @@ import polars as pl
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
+from python.tests.conftest import lmdb_version_store_arrow
 from tests.util.mark import WINDOWS
 
 
@@ -184,8 +185,12 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
 
 
 @pytest.mark.parametrize("row_range", [None, (2, 3), (2, 5), (2, 6), (3, 5)])
-def test_datetime_col_with_nats(lmdb_version_store_arrow, row_range):
-    lib = lmdb_version_store_arrow
+@pytest.mark.parametrize("segment_size", [None, 1, 2, 1000])
+@pytest.mark.parametrize("use_query_builder", [False, True])
+def test_datetime_col_with_nats(version_store_factory, row_range, segment_size, use_query_builder):
+    slicing_params = {"segment_row_size": segment_size, "column_group_size": segment_size} if segment_size is not None else {}
+    lib = version_store_factory(**slicing_params, dynamic_strings=True)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         {
             "x": pd.to_datetime(
@@ -203,14 +208,20 @@ def test_datetime_col_with_nats(lmdb_version_store_arrow, row_range):
         }
     )
     lib.write("arrow", df)
-    table = lib.read("arrow", row_range=row_range).data
-    expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder and row_range is not None:
+        q = QueryBuilder().row_range(row_range)
+        table = lib.read("arrow", query_builder=q).data
+        expected = lib.read("arrow", query_builder=q, output_format=OutputFormat.PANDAS).data
+    else:
+        table = lib.read("arrow", row_range=row_range).data
+        expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
     assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
 
 
 @pytest.mark.parametrize("row_range", [None, (1, 5), (2, 7), (3, 6)])
-def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, row_range):
+@pytest.mark.parametrize("use_query_builder", [False, True])
+def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, row_range, use_query_builder):
     # Dynamic schema: column "x" is absent in some segments, producing sparse timestamp data.
     lib = lmdb_version_store_tiny_segment_dynamic
     lib.set_output_format(OutputFormat.PYARROW)
@@ -222,8 +233,13 @@ def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, 
     lib.append("arrow", df2)
     lib.append("arrow", df3)
     lib.append("arrow", df4)
-    table = lib.read("arrow", row_range=row_range).data
-    expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
+    if use_query_builder and row_range is not None:
+        q = QueryBuilder().row_range(row_range)
+        table = lib.read("arrow", query_builder=q).data
+        expected = lib.read("arrow", query_builder=q, output_format=OutputFormat.PANDAS).data
+    else:
+        table = lib.read("arrow", row_range=row_range).data
+        expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
     assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
 
@@ -235,19 +251,8 @@ def test_datetime_col_with_nats_and_sparse(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     lib.set_output_format(OutputFormat.PYARROW)
     nat_sentinel = np.iinfo(np.int64).min
-    values = np.array(
-        [
-            1735689600000000000,  # 2025-01-01
-            nat_sentinel,
-            0,
-            nat_sentinel,
-            1735776000000000000,  # 2025-01-02
-            0,
-        ],
-        dtype=np.int64,
-    )
-    mask = np.array([False, False, True, False, False, True])
-    timestamps = pa.array(values, type=pa.timestamp("ns"), mask=mask)
+    timestamps = pa.array([pd.Timestamp("2025-01-01").value, nat_sentinel, None, nat_sentinel, pd.Timestamp("2025-01-02").value, None], type=pa.int64())
+    timestamps = timestamps.cast(pa.timestamp("ns"))
     table = pa.table({"x": timestamps, "y": pa.array([1, 2, 3, 4, 5, 6])})
     lib.write("arrow", table)
     result = lib.read("arrow").data
