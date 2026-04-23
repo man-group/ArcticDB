@@ -73,17 +73,17 @@ class ColumnReslicer {
 
     void push_back(std::shared_ptr<Column> column, std::shared_ptr<StringPool> string_pool);
     void push_back(size_t row_count);
-    // There should be as many provided string pools as there will be output columns (including nullopts) as these are
-    // for the output segments
-    std::vector<std::optional<Column>> reslice_columns(std::vector<StringPool>& string_pools);
+    // There should be as many provided string pools as there will be output columns as these are for the output
+    // segments
+    std::vector<Column> reslice_columns(std::vector<StringPool>& string_pools);
 
   private:
     // Note that both of these methods care about sparsity only when calling initialise_output_columns
     // Once the output buffers have been allocated, dense and sparse inputs and outputs work in the same way, as every
     // value from the input must be copied to an element of the output.
-    std::vector<std::optional<Column>> reslice_by_memcpy();
-    std::vector<std::optional<Column>> reslice_by_iteration(std::vector<StringPool>& string_pools);
-    std::vector<std::optional<Column>> initialise_output_columns() const;
+    std::vector<Column> reslice_by_memcpy();
+    std::vector<Column> reslice_by_iteration(std::vector<StringPool>& string_pools);
+    std::vector<Column> initialise_output_columns() const;
 
     ReslicingInfo reslicing_info_;
     // Holds either a column along with its string pool, or the number of skipped rows if a row-slice was missing with
