@@ -18,8 +18,6 @@ from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
-from benchmarks.common import generate_pseudo_random_dataframe
-
 
 class ArrowNumeric:
     timeout = 600
@@ -75,17 +73,23 @@ class ArrowNumeric:
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
         self.fresh_lib = self.get_fresh_lib()
         self.fresh_lib._nvs._set_allow_arrow_input()
-        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))
+        num_cols = 9
+        index = pd.date_range("1970-01-01", freq="ns", periods=rows)
+        names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
+        self.table = pa.Table.from_arrays(
+            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],
+            names=names,
+        )
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
     def time_write(self, rows, date_range):
-        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column=True)
 
     def peakmem_write(self, rows, date_range):
-        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column=True)
 
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
@@ -285,7 +289,7 @@ class ArrowStrings:
         for rows in num_rows:
             for unique_string_count in unique_string_counts:
                 table = self._generate_table(rows, self.num_cols, unique_string_count)
-                lib.write(self.symbol_name(rows, unique_string_count), table, index_column="ts")
+                lib.write(self.symbol_name(rows, unique_string_count), table, index_column=True)
 
     def teardown(self, rows, date_range, unique_string_count, arrow_string_format):
         for lib in self.ac.list_libraries():
@@ -314,14 +318,14 @@ class ArrowStrings:
     def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
-            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
-            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 

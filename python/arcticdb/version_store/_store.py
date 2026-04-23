@@ -559,7 +559,7 @@ class NativeVersionStore:
         dynamic_strings,
         coerce_columns,
         norm_failure_options_msg="",
-        index_column=None,
+        index_column=False,
         recursive_normalize_msgpack_no_pickle_fallback=None,
         **kwargs,
     ):
@@ -707,7 +707,7 @@ class NativeVersionStore:
         validate_index: bool = False,
         sort_on_index: bool = False,
         sort_columns: List[str] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ):
         self._validate_kwargs("stage", {"norm_failure_options_msg"}, kwargs)
@@ -748,7 +748,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         pickle_on_failure: Optional[bool] = None,
         validate_index: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         """
@@ -788,9 +788,9 @@ class NativeVersionStore:
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
             data to be sorted. Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         kwargs :
             passed through to the write handler
 
@@ -934,7 +934,7 @@ class NativeVersionStore:
         incomplete: bool = False,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -961,9 +961,9 @@ class NativeVersionStore:
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
             on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         kwargs :
             passed through to the write handler
 
@@ -1071,7 +1071,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
         prune_previous_version: Optional[bool] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -1102,9 +1102,9 @@ class NativeVersionStore:
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1189,7 +1189,7 @@ class NativeVersionStore:
         data: TimeSeriesType,
         date_range: Optional[DateRangeInput],
         update_query: _PythonVersionStoreUpdateQuery,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> TimeSeriesType:
         """
         Parameters
@@ -1219,7 +1219,7 @@ class NativeVersionStore:
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
         upsert: bool = False,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[bool]] = None,
     ):
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
@@ -1768,7 +1768,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         pickle_on_failure=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1797,9 +1797,9 @@ class NativeVersionStore:
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
             Note that no checks are performed for Arrow input data.
-        index_column_vector: Optional[List[Optional[str]]], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column_vector: Optional[List[bool]], default=None
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
+            the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
@@ -1852,7 +1852,7 @@ class NativeVersionStore:
         pickle_on_failure: bool,
         norm_failure_msg: str,
         operation_supports_categoricals: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
@@ -1861,7 +1861,7 @@ class NativeVersionStore:
             metadata_vector = list(metadata_vector)
 
         if index_column_vector is None:
-            index_column_vector = len(symbols) * [None]
+            index_column_vector = len(symbols) * [False]
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(
@@ -1896,7 +1896,7 @@ class NativeVersionStore:
         pickle_on_failure=None,
         validate_index: bool = False,
         throw_on_error: bool = True,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1985,7 +1985,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -2012,9 +2012,9 @@ class NativeVersionStore:
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
             Note that no checks are performed for Arrow input data.
-        index_column_vector: Optional[List[Optional[str]]], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column_vector: Optional[List[bool]], default=None
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
+            the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler

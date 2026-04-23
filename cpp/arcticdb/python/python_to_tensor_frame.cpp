@@ -348,13 +348,7 @@ void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>
     for (const auto& rbd : record_batches) {
         sparrow_record_batches.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
-    auto [seg, index_column_position] = arrow_data_to_segment(
-            sparrow_record_batches,
-            arrow_norm_metadata.has_index() ? arrow_norm_metadata.index_column_name() : std::optional<std::string>()
-    );
-    if (index_column_position.has_value()) {
-        frame.norm_meta.mutable_experimental_arrow()->set_index_column_position(*index_column_position);
-    }
+    auto seg = arrow_data_to_segment(sparrow_record_batches, arrow_norm_metadata.has_index());
     frame.set_segment(std::move(seg), std::move(sparrow_record_batches));
 }
 
