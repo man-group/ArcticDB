@@ -22,6 +22,7 @@
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/storage/file/file_store.hpp>
+#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
 
@@ -1074,7 +1075,7 @@ PythonVersionStore::LazyReadResult PythonVersionStore::create_lazy_record_batch_
     auto version = get_version_to_read(stream_id, version_query);
     VersionIdentifier version_info;
     if (version) {
-        version_info = *version;
+        version_info = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store(), version->key_));
     } else if (opt_false(read_options.incompletes())) {
         version_info = stream_id;
     } else {

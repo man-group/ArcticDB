@@ -254,15 +254,15 @@ void prepare_segment_for_arrow(SegmentInMemory& segment, const ReadOptions& call
         if (is_sequence_type(field.type().data_type())) {
             // String column: determine output type and create destination column
             ArrowStringHandler arrow_handler;
-            auto [output_type, extra_bytes] =
-                    arrow_handler.output_type_and_extra_bytes(field.type(), field.name(), read_options);
+            auto [output_type, block_config] =
+                    arrow_handler.output_type_and_block_config(field.type(), field.name(), read_options);
 
             const auto num_rows = static_cast<size_t>(src_column_ptr->row_count());
             const auto dest_size = data_type_size(output_type);
             const auto dest_bytes = num_rows * dest_size;
 
             auto dest_column = std::make_shared<Column>(
-                    output_type, 0, AllocationType::DETACHABLE, Sparsity::PERMITTED, extra_bytes
+                    output_type, 0, AllocationType::DETACHABLE, Sparsity::PERMITTED, block_config
             );
             if (dest_bytes > 0) {
                 dest_column->allocate_data(dest_bytes);
@@ -301,6 +301,38 @@ void prepare_segment_for_arrow(SegmentInMemory& segment, const ReadOptions& call
             if (output_type != field.type()) {
                 segment.descriptor().mutable_field(col_idx).mutable_type() = output_type;
             }
+        } else if (is_bool_type(field.type().data_type())) {
+            // Bool column: pack into bit-array for Arrow output
+            ArrowBoolHandler arrow_handler;
+            auto [output_type, block_config] =
+                    arrow_handler.output_type_and_block_config(field.type(), field.name(), read_options);
+
+            const auto num_rows = static_cast<size_t>(src_column_ptr->row_count());
+
+            auto dest_column = std::make_shared<Column>(
+                    output_type, 0, AllocationType::DETACHABLE, Sparsity::PERMITTED, block_config
+            );
+            if (num_rows > 0) {
+                dest_column->allocate_and_advance_by(num_rows);
+            }
+
+            const ColumnMapping mapping{
+                    src_column_ptr->type(),
+                    output_type,
+                    field,
+                    data_type_size(output_type),
+                    num_rows,
+                    0, // first_row
+                    0, // offset_bytes
+                    num_rows * data_type_size(output_type),
+                    col_idx
+            };
+
+            arrow_handler.convert_type(
+                    *src_column_ptr, *dest_column, mapping, shared_data, handler_data, string_pool, read_options
+            );
+            dest_column->set_inflated(num_rows);
+            src_column_ptr = std::move(dest_column);
         } else {
             // Non-string column: handle sparse columns, ensure blocks are detachable
             if (src_column_ptr->opt_sparse_map().has_value()) {
@@ -369,7 +401,7 @@ LazyRecordBatchIterator::LazyRecordBatchIterator(
                 tf.is_dictionary = true;
             } else {
                 auto [output_type, _] =
-                        arrow_string_handler.output_type_and_extra_bytes(field.type(), name, read_options_);
+                        arrow_string_handler.output_type_and_block_config(field.type(), name, read_options_);
                 tf.arrow_format = default_arrow_format_for_type(output_type.data_type());
             }
         } else {
