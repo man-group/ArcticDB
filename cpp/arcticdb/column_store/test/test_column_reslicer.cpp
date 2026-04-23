@@ -45,8 +45,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneStatic) {
     std::vector<StringPool> string_pools; // Unused with numeric data
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res.front().has_value());
-    auto& col = *res.front();
+    auto& col = res.front();
     ASSERT_EQ(col.row_count(), total_rows);
     ASSERT_FALSE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
@@ -106,8 +105,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     std::vector<StringPool> string_pools; // Unused with numeric data
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res.front().has_value());
-    auto& col = *res.front();
+    auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
@@ -180,8 +178,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     std::vector<StringPool> string_pools; // Unused with numeric data
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res.front().has_value());
-    auto& col = *res.front();
+    auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
@@ -245,8 +242,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     std::vector<StringPool> string_pools; // Unused with numeric data
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res.front().has_value());
-    auto& col = *res.front();
+    auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
@@ -334,8 +330,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     std::vector<StringPool> string_pools; // Unused with numeric data
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res.front().has_value());
-    auto& col = *res.front();
+    auto& col = res.front();
     ASSERT_EQ(col.row_count(), value_count);
     ASSERT_TRUE(col.is_sparse());
     if constexpr (std::is_same_v<RawType, bool>) {
@@ -393,10 +388,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, SplitInTwoStatic) {
 
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
     ASSERT_EQ(res.size(), 2);
-    ASSERT_TRUE(res.front().has_value());
-    ASSERT_TRUE(res.back().has_value());
-    auto& col_0 = *res.front();
-    auto& col_1 = *res.back();
+    auto& col_0 = res.front();
+    auto& col_1 = res.back();
     ASSERT_EQ(col_0.row_count(), rows_in_first_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
     ASSERT_FALSE(col_0.is_sparse());
@@ -457,10 +450,8 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineThreeIntoTwoStatic)
     auto res = reslicer.reslice_columns(string_pools);
 
     ASSERT_EQ(res.size(), 2);
-    ASSERT_TRUE(res.front().has_value());
-    ASSERT_TRUE(res.back().has_value());
-    auto& col_0 = *res.front();
-    auto& col_1 = *res.back();
+    auto& col_0 = res.front();
+    auto& col_1 = res.back();
     ASSERT_EQ(col_0.row_count(), max_rows_per_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
     ASSERT_FALSE(col_0.is_sparse());
@@ -521,10 +512,8 @@ TEST(ColumnReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     auto res = reslicer.reslice_columns(string_pools);
 
     ASSERT_EQ(res.size(), 2);
-    ASSERT_TRUE(res.front().has_value());
-    ASSERT_TRUE(res.back().has_value());
-    auto& col_0 = *res.front();
-    auto& col_1 = *res.back();
+    auto& col_0 = res.front();
+    auto& col_1 = res.back();
     ASSERT_EQ(col_0.row_count(), max_rows_per_slice);
     ASSERT_EQ(col_1.row_count(), max_rows_per_slice);
     ASSERT_FALSE(col_0.is_sparse());
@@ -541,6 +530,164 @@ TEST(ColumnReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     ASSERT_EQ(col_1.num_blocks(), 1);
     ASSERT_EQ(col_0.buffer().blocks().front()->capacity(), max_rows_per_slice * sizeof(int64_t));
     ASSERT_EQ(col_1.buffer().blocks().front()->capacity(), max_rows_per_slice * sizeof(int64_t));
+}
+
+template<typename type>
+class ColumnReslicerSparseNumericSameTypeFixture : public testing::Test {};
+
+TYPED_TEST_SUITE(ColumnReslicerSparseNumericSameTypeFixture, test_types);
+
+TYPED_TEST(ColumnReslicerSparseNumericSameTypeFixture, CombineIntoOneStatic) {
+    using RawType = TypeParam;
+    auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
+    uint64_t total_rows{12};
+    uint64_t total_values{7};
+    ReslicingInfo reslicing_info{total_rows, total_rows};
+    ColumnReslicer reslicer{reslicing_info};
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<std::vector<std::optional<bool>>> input_data{
+                {false, std::nullopt, std::nullopt, true},
+                {std::nullopt, false, true},
+                {true, false, std::nullopt, false, std::nullopt}
+        };
+        for (const auto& data : input_data) {
+            Column col{type_descriptor, Sparsity::PERMITTED};
+            for (size_t idx = 0; idx < data.size(); ++idx) {
+                if (data.at(idx).has_value()) {
+                    col.set_scalar(idx, *data.at(idx));
+                }
+            }
+            col.set_row_data(data.size() - 1);
+            reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        }
+    } else {
+        std::vector<std::vector<std::optional<RawType>>> input_data{
+                {1, std::nullopt, std::nullopt, 4}, {std::nullopt, 12, 13}, {101, 102, std::nullopt, 104, std::nullopt}
+        };
+        for (const auto& data : input_data) {
+            Column col{type_descriptor, Sparsity::PERMITTED};
+            for (size_t idx = 0; idx < data.size(); ++idx) {
+                if (data.at(idx).has_value()) {
+                    col.set_scalar(idx, *data.at(idx));
+                }
+            }
+            col.set_row_data(data.size() - 1);
+            reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+        }
+    }
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+    ASSERT_EQ(res.size(), 1);
+    auto& col = res.front();
+    ASSERT_EQ(col.row_count(), total_values);
+    ASSERT_TRUE(col.is_sparse());
+    if constexpr (std::is_same_v<RawType, bool>) {
+        std::vector<std::optional<bool>> expected_values{
+                false,
+                std::nullopt,
+                std::nullopt,
+                true,
+                std::nullopt,
+                false,
+                true,
+                true,
+                false,
+                std::nullopt,
+                false,
+                std::nullopt
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            ASSERT_EQ(col.scalar_at<RawType>(idx), expected_values.at(idx));
+        }
+    } else {
+        std::vector<std::optional<RawType>> expected_values{
+                1, std::nullopt, std::nullopt, 4, std::nullopt, 12, 13, 101, 102, std::nullopt, 104, std::nullopt
+        };
+        for (size_t idx = 0; idx < total_rows; ++idx) {
+            ASSERT_EQ(col.scalar_at<RawType>(idx), expected_values.at(idx));
+        }
+    }
+    ASSERT_EQ(col.buffer().bytes(), total_values * sizeof(RawType));
+    ASSERT_EQ(col.num_blocks(), 1);
+    ASSERT_EQ(col.buffer().blocks().front()->capacity(), total_values * sizeof(RawType));
+}
+
+TYPED_TEST(ColumnReslicerSparseNumericSameTypeFixture, SplitInThreeStatic) {
+    using RawType = TypeParam;
+    auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
+    uint64_t total_rows{12};
+    ARCTICDB_UNUSED uint64_t total_values{6};
+    uint64_t max_rows_per_slice{4};
+    ReslicingInfo reslicing_info{total_rows, max_rows_per_slice};
+    ColumnReslicer reslicer{reslicing_info};
+    // First slice will be dense, second slice will have no values, third slice will be sparse
+    const auto input_data = []() {
+        if constexpr (std::is_same_v<RawType, bool>) {
+            return std::vector<std::optional<bool>>{
+                    true,
+                    false,
+                    true,
+                    true,
+                    std::nullopt,
+                    std::nullopt,
+                    std::nullopt,
+                    std::nullopt,
+                    std::nullopt,
+                    false,
+                    false,
+                    std::nullopt
+            };
+        } else {
+            return std::vector<std::optional<RawType>>{
+                    1,
+                    2,
+                    3,
+                    4,
+                    std::nullopt,
+                    std::nullopt,
+                    std::nullopt,
+                    std::nullopt,
+                    std::nullopt,
+                    11,
+                    12,
+                    std::nullopt
+            };
+        }
+    }();
+    Column col{type_descriptor, Sparsity::PERMITTED};
+    for (size_t idx = 0; idx < input_data.size(); ++idx) {
+        if (input_data.at(idx).has_value()) {
+            col.set_scalar(idx, *input_data.at(idx));
+        }
+    }
+    col.set_row_data(total_rows - 1);
+    reslicer.push_back(std::make_shared<Column>(std::move(col)), std::shared_ptr<StringPool>{});
+    std::vector<StringPool> string_pools; // Unused with numeric data
+    auto res = reslicer.reslice_columns(string_pools);
+    ASSERT_EQ(res.size(), 3);
+    auto& col_0 = res.front();
+    auto& col_1 = res.at(1);
+    auto& col_2 = res.back();
+    ASSERT_EQ(col_0.row_count(), 4);
+    ASSERT_EQ(col_1.row_count(), 0);
+    ASSERT_EQ(col_2.row_count(), 2);
+    ASSERT_FALSE(col_0.is_sparse());
+    ASSERT_TRUE(col_1.is_sparse());
+    ASSERT_TRUE(col_2.is_sparse());
+    for (size_t idx = 0; idx < 4; ++idx) {
+        // First output col
+        auto opt_val = col_0.scalar_at<RawType>(idx);
+        ASSERT_TRUE(opt_val.has_value());
+        ASSERT_EQ(*opt_val, *input_data.at(idx));
+        // Last output col
+        ASSERT_EQ(col_2.scalar_at<RawType>(idx), input_data.at(idx + 8));
+    }
+    ASSERT_EQ(col_0.buffer().bytes(), 4 * sizeof(RawType));
+    ASSERT_EQ(col_2.buffer().bytes(), 2 * sizeof(RawType));
+    ASSERT_EQ(col_0.num_blocks(), 1);
+    ASSERT_EQ(col_2.num_blocks(), 1);
+    ASSERT_EQ(col_0.buffer().blocks().front()->capacity(), 4 * sizeof(RawType));
+    ASSERT_EQ(col_2.buffer().blocks().front()->capacity(), 2 * sizeof(RawType));
 }
 
 // Test strings separately as they are quite different
@@ -614,8 +761,7 @@ TEST_F(ColumnReslicerDenseStringStaticSchema, CombineIntoOne) {
     std::vector<StringPool> string_pools(1);
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 1);
-    ASSERT_TRUE(res.front().has_value());
-    auto& col = *res.front();
+    auto& col = res.front();
     ASSERT_EQ(col.type(), utf8_td);
     const auto& string_pool = string_pools.front();
     ASSERT_EQ(col.row_count(), total_rows);
@@ -672,16 +818,14 @@ TEST_P(ColumnReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     const std::vector<std::string> input_data{"hello", "gutentag", "hello", "bonjour", "bonjour", "hello", "nihao"};
     auto col_with_strings = std::make_optional<ColumnWithStrings>(column_with_strings(input_data, GetParam()));
     reslicer.push_back(col_with_strings->column_, col_with_strings->string_pool_);
-    col_with_strings.reset(
-    ); // In debug builds there are checks that the reslicer has the last reference to input columns
+    // In debug builds there are checks that the reslicer has the last reference to input columns
+    col_with_strings.reset();
 
     std::vector<StringPool> string_pools(2);
     auto res = reslicer.reslice_columns(string_pools);
     ASSERT_EQ(res.size(), 2);
-    ASSERT_TRUE(res.front().has_value());
-    ASSERT_TRUE(res.back().has_value());
-    auto& col_0 = *res.front();
-    auto& col_1 = *res.back();
+    auto& col_0 = res.front();
+    auto& col_1 = res.back();
     ASSERT_EQ(col_0.type(), utf8_td);
     ASSERT_EQ(col_1.type(), utf8_td);
     const auto& string_pool_0 = string_pools.front();
