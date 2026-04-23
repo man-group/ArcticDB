@@ -1404,6 +1404,7 @@ class MsgPackNormalizer(Normalizer):
         if isinstance(obj, FrameData):
             np_arr = obj.data[0]
         elif _PYARROW_AVAILABLE and isinstance(obj, pa.Table):
+            # It would avoid the memcpys of combine_chunks if we always returned pickled data as Pandas
             np_arr = obj.column(0).combine_chunks().to_numpy(zero_copy_only=True)
         else:
             raise ArcticNativeException(f"Unexpected denormalization input in MsgPackNormlizer: {input}")

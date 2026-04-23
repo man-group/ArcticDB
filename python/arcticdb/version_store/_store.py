@@ -2899,7 +2899,10 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if (
+                output_format.lower() == OutputFormat.POLARS.lower()
+                and not norm.WhichOneof("input_type") == "msg_pack_frame"
+            ):
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
