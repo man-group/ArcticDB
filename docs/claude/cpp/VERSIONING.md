@@ -208,15 +208,20 @@ Tombstoned versions:
 
 ### Hard Delete (Prune)
 
-`prune_previous_versions` physically removes old version data:
+`prune_previous_versions` physically removes old version data. There are two modes:
 
-```python
-# Prune on write
-lib.write("sym", df, prune_previous_version=True)
+**Prune on write/append/update** (`prune_previous_versions=True` parameter) — uses a
+protection window to avoid deleting data that concurrent writers may still reference:
 
-# Explicit prune
-lib.prune_previous_versions("sym")
-```
+- Versions younger than `VersionStore.PrunePreviousProtectionSecs` (default 600 s) are exempt.
+- The newest version older than the window is kept as an *anchor* — even with a 0-second window,
+  at least one pre-existing version always survives to serve as a safe base for concurrent writers.
+- If fewer than 2 versions are eligible (old enough), no pruning occurs.
+- Implemented in `version_map.hpp:write_and_prune_previous()` via
+  `get_prune_previous_boundary()`.
+
+**Explicit prune** (`lib.prune_previous_versions("sym")`) — unconditional: removes all
+non-snapshotted versions except the latest, with no time-based protection window.
 
 ### TOMBSTONE_ALL
 
@@ -334,6 +339,9 @@ ArcticDB does not use locks for symbol writes. Concurrent writes use a **last-wr
 **Caveats:**
 - Concurrent appends may appear out of order or one may be dropped
 - Parallel writes to the same symbol are not recommended for modification operations
+- `prune_previous_versions=True` with concurrent writers: protected by a 10-minute window
+  (see [Hard Delete (Prune)](#hard-delete-prune)); writers that started from the same base version
+  still have their data accessible while they complete
 
 ### Read Concurrency
 

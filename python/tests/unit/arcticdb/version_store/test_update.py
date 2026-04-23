@@ -827,7 +827,7 @@ class TestBatchUpdate:
         assert_frame_equal(
             symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
         )
-        assert len(lib.list_versions("symbol_1")) == 1
+        assert len(lib.list_versions("symbol_1")) == 2  # anchor rule: V0 kept as anchor alongside V1
 
         symbol_2_expected_data = pd.DataFrame(
             {"b": [8, 9, 10]},
@@ -836,7 +836,7 @@ class TestBatchUpdate:
             ),
         )
         assert_frame_equal(symbol_2_vit.data, symbol_2_expected_data)
-        assert len(lib.list_versions("symbol_2")) == 1
+        assert len(lib.list_versions("symbol_2")) == 2  # anchor rule: V0 kept as anchor alongside V1
 
     def test_repeating_symbol_in_payload_list_throws(self, lmdb_library):
         lib = lmdb_library

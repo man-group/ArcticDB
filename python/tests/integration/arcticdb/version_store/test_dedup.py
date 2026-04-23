@@ -84,7 +84,9 @@ def test_de_dup_same_value_written(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_keys
 
     lib.write(symbol, df1, prune_previous_version=True)
-    assert len(lib.list_versions(symbol)) == 1
+    # Anchor rule: V1 survives as anchor alongside V2 (latest); V0 is tombstoned.
+    # All data keys are retained because V2 de-dupes against the same df1 segments.
+    assert len(lib.list_versions(symbol)) == 2
     assert len(get_data_keys(lib, symbol)) == num_keys
 
 
@@ -142,7 +144,9 @@ def test_de_dup_with_delete(basic_store_factory):
 
     lib.write(symbol, final_df, prune_previous_version=True)
     assert_frame_equal(lib.read(symbol).data, final_df)
-    assert len(get_data_keys(lib, symbol)) == num_elements
+    # Anchor rule: V0 (sole eligible) is kept as anchor. V0's 50 df1 keys survive alongside
+    # V3's 100 new keys (df2+df3 has no overlap with df1, so no de-dup protection either).
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
 @pytest.mark.storage
@@ -191,7 +195,9 @@ def test_de_dup_with_delete_multiple(basic_store_factory):
 
     lib.write(symbol, final_df, prune_previous_version=True)
     assert_frame_equal(lib.read(symbol).data, final_df)
-    assert len(get_data_keys(lib, symbol)) == num_elements
+    # Anchor rule: V0 (sole eligible) is kept as anchor. V0's 50 df1 keys survive alongside
+    # V3's 100 new keys (df2+df3 has no overlap with df1, so no de-dup protection either).
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
 @pytest.mark.storage

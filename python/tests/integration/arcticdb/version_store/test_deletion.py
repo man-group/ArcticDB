@@ -770,8 +770,8 @@ def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map
         vit = lib.read(symbol)
         assert_frame_equal(vit.data, df3)
 
-        # pruning enabled
-        assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
+        # pruning enabled: after 3 writes, V0 is tombstoned (boundary) and V1 survives as anchor
+        assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 2
 
         assert_frame_equal(lib.read(symbol, "delete_version_snap_2").data, df2)
         # with pytest.raises(NoDataFoundException):
@@ -914,7 +914,8 @@ def test_delete_date_range_with_prune_previous(lmdb_version_store, prune_previou
 
     versions = [version["version"] for version in lib.list_versions(symbol)]
     if prune_previous_versions:
-        assert len(versions) == 1 and versions[0] == 1
+        # V0 is the sole pre-existing candidate so the anchor rule keeps it alive; both V0 and V1 survive
+        assert len(versions) == 2 and versions[0] == 1
     else:
         assert len(versions) == 2
         assert_frame_equal(lib.read(symbol, as_of=0).data, old_df)

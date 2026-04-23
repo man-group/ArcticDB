@@ -86,12 +86,19 @@ TEST(PythonVersionStore, WriteWithPruneVersions) {
     using namespace arcticdb::stream;
     using namespace arcticdb::pipelines;
 
+    // Disable the protection window so pruning is not blocked by PilotedClock's tiny timestamps.
+    ScopedConfig no_protection("VersionStore.PrunePreviousProtectionSecs", 0);
+
     auto [version_store, mock_store] = python_version_store_in_memory();
 
     write_version_frame({"test_versioned_engine_delete"}, 0, version_store, 30, true);
     write_version_frame({"test_versioned_engine_delete"}, 1, version_store, 30, true, 0, std::nullopt, true);
-    // Should have pruned the previous version and have just one version
-    ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 1);
+    // After two writes: v0 is the only eligible candidate so it becomes the anchor — nothing pruned yet.
+    ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 2);
+
+    write_version_frame({"test_versioned_engine_delete"}, 2, version_store, 30, true, 0, std::nullopt, true);
+    // After third write with prune: v0 (boundary, tombstoned), v1 (anchor, kept), v2 (latest) — 2 survive.
+    ASSERT_EQ(mock_store->num_atom_keys_of_type(KeyType::TABLE_INDEX), 2);
 }
 
 TEST(PythonVersionStore, DeleteAllVersions) {

@@ -430,10 +430,14 @@ def test_finalize_with_tokens_and_prune_previous(
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
+    df_0 = pd.DataFrame({"col1": [0, 0, 0, 0, 0], "col2": [0, 0, 0, 0, 0]}, index=indexes[3])
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
     df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2])
-    lib.write(sym, df_1)
+    # Two pre-existing versions so the anchor rule still prunes one:
+    # with prune=True, anchor=V1 keeps df_1, boundary=V0 removes df_0.
+    lib.write(sym, df_0)  # V0
+    lib.write(sym, df_1)  # V1
     stage_result_2 = lib.stage(sym, df_2)
     lib.stage(sym, df_3)
 
@@ -454,11 +458,13 @@ def test_finalize_with_tokens_and_prune_previous(
     assert_frame_equal(res.data, df_2)
 
     if prune_previous_versions:
+        # V0 pruned (anchor=V1, latest=V2=finalize result).
         with pytest.raises(NoSuchVersionException):
             lib.read(sym, as_of=0)
+        assert_frame_equal(lib.read(sym, as_of=1).data, df_1)
     else:
-        res = lib.read(sym, as_of=0)
-        assert_frame_equal(res.data, df_1)
+        assert_frame_equal(lib.read(sym, as_of=0).data, df_0)
+        assert_frame_equal(lib.read(sym, as_of=1).data, df_1)
 
 
 @pytest.mark.parametrize("validate_index", (True, False))

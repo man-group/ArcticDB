@@ -1053,7 +1053,10 @@ class Library:
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
         staged: bool, default=False
             Deprecated. Use stage() instead.
             Whether to write to a staging area rather than immediately to the library.
@@ -1469,7 +1472,10 @@ class Library:
         append_payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1898,7 +1904,10 @@ class Library:
             Also accepts strings "write" or "append" (case-insensitive).
 
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
 
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
@@ -2541,8 +2550,11 @@ class Library:
         metadata
             Metadata to persist along with the symbol
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+            Removes old (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
             data it is referring to, and so this operation removes old versions of data as well as metadata.
+            Versions created within the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600)
+            are exempt, as is the newest eligible version (retained as an anchor for concurrent writers).
+            For unconditional pruning use :meth:`prune_previous_versions`.
 
         Returns
         -------
@@ -2570,8 +2582,11 @@ class Library:
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
+            Removes old (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
             data it is referring to, and so this operation removes old versions of data as well as metadata.
+            Versions created within the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600)
+            are exempt, as is the newest eligible version (retained as an anchor for concurrent writers).
+            For unconditional pruning use :meth:`prune_previous_versions`.
 
         Returns
         -------
@@ -2726,6 +2741,10 @@ class Library:
     def prune_previous_versions(self, symbol) -> None:
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
 
+        Unlike the ``prune_previous_versions`` parameter on write/append/update operations, this method
+        applies no time-based protection window — all non-snapshotted versions except the latest are
+        removed unconditionally.
+
         Parameters
         ----------
         symbol : `str`
@@ -2751,7 +2770,10 @@ class Library:
             The date range in which to delete data. Leaving any part of the tuple as None leaves that part of the range
             open ended.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
 
         Examples
         --------
@@ -3218,7 +3240,10 @@ class Library:
             setting. Note that subsequent calls to write, append, and update will continue to use the library
             configuration setting.
         prune_previous_versions : bool, default=False
-            If True, removes previous versions from the version list.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
 
         Returns
         -------
@@ -3304,7 +3329,10 @@ class Library:
             Note that no. of rows per segment, after compaction, may exceed the target.
             It is for achieving smallest no. of segment after compaction. Please refer to below example for further explanation.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
 
         Returns
         -------
@@ -3396,7 +3424,10 @@ class Library:
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
-            If True, removes previous versions from the version list.
+            Removes old (non-snapshotted) versions from the database. Versions created within
+            the last ``VersionStore.PrunePreviousProtectionSecs`` seconds (default: 600) are
+            exempt, as is the newest eligible version (retained as an anchor for concurrent
+            writers). For unconditional pruning use :meth:`prune_previous_versions`.
         upsert : bool, default False
             !!! warning
                 Not yet implemented

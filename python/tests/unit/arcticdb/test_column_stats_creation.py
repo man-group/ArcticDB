@@ -710,7 +710,9 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             create_stats()
             assert_column_stats_key_count()
             getattr(lib, operation)(sym, df1, prune_previous_version=True)
-            expected_count = 0
+            # Anchor rule: v0 is the sole eligible candidate so it is kept as the
+            # anchor and NOT tombstoned; its column stats key therefore survives.
+            expected_count = 1
             assert_column_stats_key_count()
             clear()
 
@@ -721,7 +723,9 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             create_stats()
             assert_column_stats_key_count()
             getattr(lib, operation)([sym], [df1], prune_previous_version=True)
-            expected_count = 0
+            # Anchor rule: v0 is the sole eligible candidate so it is kept as the
+            # anchor and NOT tombstoned; its column stats key therefore survives.
+            expected_count = 1
             assert_column_stats_key_count()
             clear()
 

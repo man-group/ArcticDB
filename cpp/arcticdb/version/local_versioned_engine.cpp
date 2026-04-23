@@ -1587,7 +1587,9 @@ void LocalVersionedEngine::write_version_and_prune_previous(
         bool prune_previous_versions, const AtomKey& new_version, const std::optional<IndexTypeKey>& previous_key
 ) {
     if (prune_previous_versions) {
-        auto pruned_indexes = version_map()->write_and_prune_previous(store(), new_version, previous_key);
+        auto pruned_indexes = version_map()->write_and_prune_previous(
+                store(), new_version, previous_key, cfg().write_options().delayed_deletes()
+        );
         delete_unreferenced_pruned_indexes(std::move(pruned_indexes), new_version).get();
     } else {
         version_map()->write_version(store(), new_version, previous_key);
@@ -1602,16 +1604,17 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     folly::Future<folly::Unit> write_version_fut;
 
     if (prune_previous_versions) {
-        write_version_fut =
-                async::submit_io_task(
-                        WriteAndPrunePreviousTask{
-                                store(), version_map, index_key, std::move(stream_update_info.previous_index_key_)
-                        }
-                )
-                        .via(&async::cpu_executor())
-                        .thenValue([this, index_key](auto&& atom_key_vec) {
-                            return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
-                        });
+        write_version_fut = async::submit_io_task(WriteAndPrunePreviousTask{
+                                                          store(),
+                                                          version_map,
+                                                          index_key,
+                                                          std::move(stream_update_info.previous_index_key_),
+                                                          cfg().write_options().delayed_deletes()
+                                                  })
+                                    .via(&async::cpu_executor())
+                                    .thenValue([this, index_key](auto&& atom_key_vec) {
+                                        return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
+                                    });
     } else {
         write_version_fut = async::submit_io_task(
                 WriteVersionTask{store(), version_map, index_key, stream_update_info.previous_index_key_}

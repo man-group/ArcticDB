@@ -742,12 +742,16 @@ def test_delete_version_that_does_not_exist(arctic_library):
 @pytest.mark.storage
 def test_delete_version_after_tombstone_all(arctic_library):
     lib = arctic_library
-    lib.write("symbol_tombstone_all", pd.DataFrame())
-    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=True)  # should write a tombstone_all
-    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=False)  # should NOT write a tombstone_all
-    assert len(lib.list_versions("symbol_tombstone_all")) == 2
+    # Anchor rule requires >=2 eligible candidates to write a TOMBSTONE_ALL: write an extra V0 as
+    # the boundary so that the prune write (V2) tombstones V0 while keeping V1 as anchor.
+    lib.write("symbol_tombstone_all", pd.DataFrame())  # V0 - will become boundary
+    lib.write("symbol_tombstone_all", pd.DataFrame())  # V1 - will become anchor
+    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=True)  # V2 - writes TOMBSTONE_ALL at V0
+    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=False)  # V3 - no tombstone
+    assert len(lib.list_versions("symbol_tombstone_all")) == 3  # V1 (anchor), V2, V3
     assert len(lib.list_symbols()) == 1
 
+    # V0 is covered by TOMBSTONE_ALL - all of the deletes below include V0 and should raise.
     with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0])
 
@@ -757,7 +761,7 @@ def test_delete_version_after_tombstone_all(arctic_library):
     with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0, 1, 2])
 
-    lib.delete("symbol_tombstone_all", versions=[1, 2])
+    lib.delete("symbol_tombstone_all", versions=[1, 2, 3])
 
     assert len(lib.list_versions("symbol_tombstone_all")) == 0
     assert len(lib.list_symbols()) == 0
@@ -927,14 +931,21 @@ def test_prune_previous_versions_with_write(arctic_library):
     v1 = lib.read("sym", as_of=1).data
     assert not v1.empty
 
-    # We do not prune by default
-    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
+    # First prune write: anchor=V1, boundary=V0 → V0 is tombstoned, V1 survives as anchor.
+    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)  # V2
     with pytest.raises(NoDataFoundException):
-        lib.read("sym", as_of=0)
-    with pytest.raises(NoDataFoundException):
-        lib.read("sym", as_of=1)
+        lib.read("sym", as_of=0)  # V0 tombstoned
 
-    v3 = lib.read("sym", as_of=2).data
+    # V1 is kept as anchor — still readable after the first prune.
+    v1_anchor = lib.read("sym", as_of=1).data
+    assert not v1_anchor.empty
+
+    # Second prune write: anchor=V2, boundary=V1 → V1 is now tombstoned.
+    lib.write("sym", pd.DataFrame(), prune_previous_versions=True)  # V3
+    with pytest.raises(NoDataFoundException):
+        lib.read("sym", as_of=1)  # V1 tombstoned
+
+    v3 = lib.read("sym", as_of=3).data
     assert v3.empty
 
 
@@ -966,9 +977,10 @@ def test_append_prune_previous_versions(arctic_library):
 
     expected = pd.DataFrame({"column": [1, 2, 3, 4, 5, 6]}, index=pd.date_range(start="1/1/2018", end="1/6/2018"))
     assert_frame_equal(lib["symbol"].data, expected)
-    # Check that old versions were pruned
+    # Anchor rule: V0 is the sole eligible version so it is kept as anchor alongside V1.
     symbols = lib.list_versions("symbol")
-    assert len(symbols) == 1
+    assert len(symbols) == 2
+    assert ("symbol", 0) in symbols
     assert ("symbol", 1) in symbols
 
 
@@ -1011,8 +1023,10 @@ def test_update_prune_previous_versions(arctic_library):
     result = lib.read("symbol").data
     expected = pd.DataFrame({"column": [400, 40, 4]}, index=pd.to_datetime(["1/1/2018", "1/3/2018", "1/4/2018"]))
     assert_frame_equal(result, expected)
+    # Anchor rule: V0 is the sole eligible version so it is kept as anchor alongside V1.
     symbols = lib.list_versions("symbol")
-    assert len(symbols) == 1
+    assert len(symbols) == 2
+    assert ("symbol", 0) in symbols
     assert ("symbol", 1) in symbols
 
 
@@ -1626,4 +1640,6 @@ def test_compact_data(lmdb_library, rows_per_segment, prune_previous_versions):
     rows_per_segment = 100_000 if rows_per_segment is None else rows_per_segment
     assert len(lib._dev_tools.library_tool().read_index(sym)) == max(len(df) // rows_per_segment, 1)
     prune_previous_versions = False if prune_previous_versions is None else prune_previous_versions
-    assert len(lib.list_versions(sym)) == (1 if prune_previous_versions else 11)
+    # Anchor rule: the newest eligible version (V9) is kept as anchor alongside the compacted V10,
+    # so 2 versions survive when pruning, not 1.
+    assert len(lib.list_versions(sym)) == (2 if prune_previous_versions else 11)

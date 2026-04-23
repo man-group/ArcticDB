@@ -291,7 +291,8 @@ def test_batch_write_with_pruning(basic_store, single_threaded_config):
 
     assert len(results) == len(symbols)
     for sym in symbols:
-        assert len(lib.list_versions(sym)) == 1
+        # Anchor rule: V0 (sole pre-existing version) is kept alongside V1.
+        assert len(lib.list_versions(sym)) == 2
         assert_frame_equal(lib.read(sym).data, df2)
 
 
@@ -336,4 +337,5 @@ def test_delete_tree_via_prune_previous(basic_store, single_threaded_config):
             lib.write(sym, df, prune_previous_version=True)
 
     for sym in symbols:
-        assert len(lib.list_versions(sym)) == 1
+        # Anchor rule: the most recent eligible version (anchor) is always kept alongside the latest.
+        assert len(lib.list_versions(sym)) == 2
