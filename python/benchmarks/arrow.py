@@ -18,8 +18,6 @@ from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 from asv_runner.benchmarks.mark import SkipNotImplemented
 
-from benchmarks.common import generate_pseudo_random_dataframe
-
 
 class ArrowNumeric:
     timeout = 600
@@ -75,7 +73,13 @@ class ArrowNumeric:
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
         self.fresh_lib = self.get_fresh_lib()
         self.fresh_lib._nvs._set_allow_arrow_input()
-        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))
+        num_cols = 9
+        index = pd.date_range("1970-01-01", freq="ns", periods=rows)
+        names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
+        self.table = pa.Table.from_arrays(
+            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],
+            names=names,
+        )
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
