@@ -441,12 +441,6 @@ void Column::sparsify() {
     });
 }
 
-void Column::reserve_shapes(size_t num_rows) {
-    if (num_rows == 0)
-        return;
-    shapes_.buffer().reserve(num_rows * sizeof(shape_t));
-}
-
 void Column::string_array_prologue(ssize_t row_offset, size_t num_strings) {
     util::check_arg(
             last_logical_row_ + 1 == row_offset,
