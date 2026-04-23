@@ -2060,6 +2060,174 @@
         "version": "c292f6f8757182d8ac67ddb990a81389675b5d264b32a5b2f720514bf703f6a9",
         "warmup_time": -1
     },
+    "list_symbols.ListSymbolsCompaction.peakmem_list_symbols": {
+        "code": "class ListSymbolsCompaction:\n    def peakmem_list_symbols(self, *args):\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, num_versions, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        # Write multiple versions per symbol to create many journal entries\n        # Total entries = num_symbols * num_versions\n        for v in range(num_versions):\n            batch_size = 1000\n            for start in range(0, num_symbols, batch_size):\n                end = min(start + batch_size, num_symbols)\n                payloads = [WritePayload(f\"sym_{i}\", simple_df) for i in range(start, end)]\n                self.lib.write_batch(payloads)\n\n    def setup_cache(self):\n        return create_libraries_across_storages(self.storages)",
+        "name": "list_symbols.ListSymbolsCompaction.peakmem_list_symbols",
+        "param_names": [
+            "num_symbols",
+            "num_versions",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000"
+            ],
+            [
+                "10"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "list_symbols:154",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "94ba7991182f7c4fecbb447270b9eed2beeeaedd57165a2aba287d9b413530d6"
+    },
+    "list_symbols.ListSymbolsCompaction.time_list_symbols": {
+        "code": "class ListSymbolsCompaction:\n    def time_list_symbols(self, *args):\n        # This triggers compaction since there are many uncompacted entries\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, num_versions, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        # Write multiple versions per symbol to create many journal entries\n        # Total entries = num_symbols * num_versions\n        for v in range(num_versions):\n            batch_size = 1000\n            for start in range(0, num_symbols, batch_size):\n                end = min(start + batch_size, num_symbols)\n                payloads = [WritePayload(f\"sym_{i}\", simple_df) for i in range(start, end)]\n                self.lib.write_batch(payloads)\n\n    def setup_cache(self):\n        return create_libraries_across_storages(self.storages)",
+        "min_run_count": 2,
+        "name": "list_symbols.ListSymbolsCompaction.time_list_symbols",
+        "number": 1,
+        "param_names": [
+            "num_symbols",
+            "num_versions",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000"
+            ],
+            [
+                "10"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_symbols:154",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "3df9d467f50b70b0623edeeff1dc919e3311985ae79b9de3a2e121fc19fdc0e9",
+        "warmup_time": 0
+    },
+    "list_symbols.ListSymbolsWithCompactedCache.peakmem_list_symbols": {
+        "code": "class ListSymbolsWithCompactedCache:\n    def peakmem_list_symbols(self, *args):\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, num_journal_entries, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        # Write symbols in batches to avoid very large payloads\n        batch_size = 1000\n        for start in range(0, num_symbols, batch_size):\n            end = min(start + batch_size, num_symbols)\n            payloads = [WritePayload(f\"sym_{i}\", simple_df) for i in range(start, end)]\n            self.lib.write_batch(payloads)\n    \n        # Trigger compaction by calling list_symbols\n        self.lib.list_symbols()\n    \n        # Add journal entries on top of the compacted cache\n        for i in range(num_journal_entries):\n            self.lib.write(f\"sym_{i}\", simple_df)\n\n    def setup_cache(self):\n        return create_libraries_across_storages(self.storages)",
+        "name": "list_symbols.ListSymbolsWithCompactedCache.peakmem_list_symbols",
+        "param_names": [
+            "num_symbols",
+            "num_journal_entries",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000"
+            ],
+            [
+                "0",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "list_symbols:97",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "b4be3096a68b9744d0576580f1dd94c8426b2828826419b4a881a1e2275c4087"
+    },
+    "list_symbols.ListSymbolsWithCompactedCache.time_list_symbols": {
+        "code": "class ListSymbolsWithCompactedCache:\n    def time_list_symbols(self, *args):\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, num_journal_entries, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        # Write symbols in batches to avoid very large payloads\n        batch_size = 1000\n        for start in range(0, num_symbols, batch_size):\n            end = min(start + batch_size, num_symbols)\n            payloads = [WritePayload(f\"sym_{i}\", simple_df) for i in range(start, end)]\n            self.lib.write_batch(payloads)\n    \n        # Trigger compaction by calling list_symbols\n        self.lib.list_symbols()\n    \n        # Add journal entries on top of the compacted cache\n        for i in range(num_journal_entries):\n            self.lib.write(f\"sym_{i}\", simple_df)\n\n    def setup_cache(self):\n        return create_libraries_across_storages(self.storages)",
+        "min_run_count": 2,
+        "name": "list_symbols.ListSymbolsWithCompactedCache.time_list_symbols",
+        "number": 3,
+        "param_names": [
+            "num_symbols",
+            "num_journal_entries",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000"
+            ],
+            [
+                "0",
+                "100"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_symbols:97",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f9910a09469fa71a142bc057314945fe8c50394fcf7def322ad0e3dec941ce2e",
+        "warmup_time": 0
+    },
+    "list_symbols.ListSymbolsWithDeletes.peakmem_list_symbols": {
+        "code": "class ListSymbolsWithDeletes:\n    def peakmem_list_symbols(self, *args):\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        batch_size = 1000\n        for start in range(0, num_symbols, batch_size):\n            end = min(start + batch_size, num_symbols)\n            payloads = [WritePayload(f\"sym_{i}\", simple_df) for i in range(start, end)]\n            self.lib.write_batch(payloads)\n    \n        # Compact\n        self.lib.list_symbols()\n    \n        # Delete 10% of symbols and add new ones\n        num_to_delete = num_symbols // 10\n        for i in range(num_to_delete):\n            self.lib.delete(f\"sym_{i}\")\n        for i in range(num_to_delete):\n            self.lib.write(f\"sym_new_{i}\", simple_df)\n\n    def setup_cache(self):\n        return create_libraries_across_storages(self.storages)",
+        "name": "list_symbols.ListSymbolsWithDeletes.peakmem_list_symbols",
+        "param_names": [
+            "num_symbols",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "list_symbols:205",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "e3fc772bf4b75f473b65d8a843dd3599cb8ca503b251067b12f0e22e6283a51c"
+    },
+    "list_symbols.ListSymbolsWithDeletes.time_list_symbols": {
+        "code": "class ListSymbolsWithDeletes:\n    def time_list_symbols(self, *args):\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n    \n        batch_size = 1000\n        for start in range(0, num_symbols, batch_size):\n            end = min(start + batch_size, num_symbols)\n            payloads = [WritePayload(f\"sym_{i}\", simple_df) for i in range(start, end)]\n            self.lib.write_batch(payloads)\n    \n        # Compact\n        self.lib.list_symbols()\n    \n        # Delete 10% of symbols and add new ones\n        num_to_delete = num_symbols // 10\n        for i in range(num_to_delete):\n            self.lib.delete(f\"sym_{i}\")\n        for i in range(num_to_delete):\n            self.lib.write(f\"sym_new_{i}\", simple_df)\n\n    def setup_cache(self):\n        return create_libraries_across_storages(self.storages)",
+        "min_run_count": 2,
+        "name": "list_symbols.ListSymbolsWithDeletes.time_list_symbols",
+        "number": 3,
+        "param_names": [
+            "num_symbols",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_symbols:205",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "d0da3af49ac919286ca7bdabb468c07c7fa93074dba87e05db3ddd8c33c2a831",
+        "warmup_time": 0
+    },
     "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols": {
         "code": "class ListSymbolsWithoutCache:\n    def peakmem_list_symbols(self, *args):\n        self._check_test_counter()\n        self.lib.list_symbols()\n\n    def setup(self, lib_for_storage, num_symbols, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.test_counter = 1\n    \n        simple_df = pd.DataFrame({\"a\": [1]})\n        write_payloads = [WritePayload(f\"{i}\", simple_df) for i in range(num_symbols)]\n        self.lib.write_batch(write_payloads)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "name": "list_symbols.ListSymbolsWithoutCache.peakmem_list_symbols",
@@ -2069,7 +2237,6 @@
         ],
         "params": [
             [
-                "100",
                 "1000"
             ],
             [
@@ -2094,7 +2261,6 @@
         ],
         "params": [
             [
-                "100",
                 "1000"
             ],
             [
@@ -2123,7 +2289,6 @@
         ],
         "params": [
             [
-                "100",
                 "1000"
             ],
             [
