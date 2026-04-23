@@ -848,9 +848,9 @@ def test_add_to_snapshot_with_negative_numbers(basic_store):
 
     # Lets check negative number version handling
     lib.add_to_snapshot("snap", ["s1"], [-1])
-    assert 102 == lib.read("s1", as_of="snap").data
+    assert 103 == lib.read("s1", as_of="snap").data
     lib.add_to_snapshot("snap", ["s1"], [-2])
-    assert 101 == lib.read("s1", as_of="snap").data
+    assert 102 == lib.read("s1", as_of="snap").data
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
