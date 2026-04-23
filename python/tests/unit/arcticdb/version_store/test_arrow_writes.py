@@ -929,7 +929,7 @@ def test_batch_append(lmdb_version_store_arrow):
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
-    lib.batch_write(["sym0", "sym1"], [table_0, df_1], index_column_vector=[False, False, True])
+    lib.batch_write(["sym0", "sym1"], [table_0, df_1], index_column_vector=[False, False])
     table_2 = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-04", periods=3), type=pa.timestamp("ns")),
