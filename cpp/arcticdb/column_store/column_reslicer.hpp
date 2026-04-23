@@ -65,7 +65,6 @@ class ReslicingInfo {
 // - Combining an arbitrary number of columns into a single one - by providing max_rows_per_segment to the constructor
 //   that is >= the total number of rows in the input segments
 // - Splitting a columns into a set of (approximately) equally sized smaller columns
-// Currently does not support sparse data, this limitation will be removed in future PRs.
 class ColumnReslicer {
   public:
     explicit ColumnReslicer(const ReslicingInfo& reslicing_info);
