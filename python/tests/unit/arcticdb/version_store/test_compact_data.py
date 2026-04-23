@@ -10,6 +10,7 @@ from hypothesis import given, settings, assume
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
+from polars.testing import assert_frame_equal as assert_frame_equal_pl
 import pytest
 
 from arcticdb_ext.exceptions import DuplicateKeyException, SchemaException, StorageException
@@ -27,7 +28,8 @@ from tests.util.naughty_strings import read_big_list_of_naughty_strings
 def generic_compact_data_test(lib, sym, method_arg=None):
     qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
-    vit_before_compaction = lib.read(sym)
+    # Use Polars so that sparse data checking is proper
+    vit_before_compaction = lib.read(sym, output_format="POLARS")
     expected = vit_before_compaction.data
     pre_compaction_data_keys = len(lib.read_index(sym))
     with qs.query_stats():
@@ -39,11 +41,11 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     )
     if rows_per_segment == 0:
         rows_per_segment = 100_000
-    received = lib.read(sym).data
+    received = lib.read(sym, output_format="POLARS").data
     if pickled:
         assert received == expected
     else:
-        assert_frame_equal(expected, received)
+        assert_frame_equal_pl(expected, received)
     index = lib.read_index(sym)
     row_counts = index["end_row"] - index["start_row"]
     # Definitions taken from CompactDataClause constructor
@@ -67,20 +69,19 @@ def generic_compact_data_test(lib, sym, method_arg=None):
 def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
-    vit_before_compaction = lib.read(sym)
+    vit_before_compaction = lib.read(sym, output_format="POLARS")
     expected = vit_before_compaction.data
     pre_compaction_index = lib.read_index(sym)
-    pre_compaction_data_keys = len(lib.read_index(sym))
     with qs.query_stats():
         compacted_version = lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment).version
         stats = qs.get_query_stats()
     qs.reset_stats()
     assert vit_before_compaction.version == compacted_version
-    received = lib.read(sym).data
+    received = lib.read(sym, output_format="POLARS").data
     if pickled:
         assert received == expected
     else:
-        assert_frame_equal(expected, received)
+        assert_frame_equal_pl(expected, received)
     post_compaction_index = lib.read_index(sym)
     assert_frame_equal(post_compaction_index, pre_compaction_index)
     new_data_keys = len(post_compaction_index[post_compaction_index["version_id"] > vit_before_compaction.version])
@@ -446,18 +447,6 @@ def test_compact_recursively_normalized_data(lmdb_version_store_v1):
     with pytest.raises(SchemaException) as e:
         lib.compact_data_experimental(sym)
     assert "recursive" in str(e.value) and sym in str(e.value)
-
-
-def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_compact_sparse_data"
-    write_df = pd.DataFrame({"col": [0.5, np.nan]})
-    append_df = pd.DataFrame({"col": [1.5]})
-    lib.write(sym, write_df, sparsify_floats=True)
-    lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "sparse" in str(e.value)
 
 
 @pytest.mark.parametrize(
