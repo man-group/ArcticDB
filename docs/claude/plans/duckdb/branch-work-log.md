@@ -1,5 +1,16 @@
 # DuckDB Branch Work Log
 
+## 2026-04-22: Release-build ASV benchmark run (Arrow + SQL)
+
+- Rebuilt `linux-release` after bool-column fix in `lazy_record_batch_iterator.cpp`, re-symlinked, confirmed loadable.
+- Ran full Arrow + SQL ASV suite (59 benchmarks, `--quick`) on the rebased `duckdb` tip — all passed.
+- Wrote comparison to PR #2904 claims in `benchmark-results-2026-04-22.md`. Key findings:
+  - Group-by at 10M rows: SQL path **1.4–1.7× faster** than read+QB on id1 (matches PR directionally; PR's 2.7–7× is 1B-row scale)
+  - Streaming-memory wins confirmed: aggregation peak –36 %, filtered_1pct peak –78 % vs baseline read
+  - Arrow-output vs pandas-output: consistent 1.5–2× speedup on full-materialisation SQL queries
+  - Wide-table narrow queries pay ~100–150 ms DuckDB overhead — covered by the fast-path bypass in production
+  - SharedStringDictionary / DETACHABLE claims (15–30 %, 10–15 %) require cross-commit A/B and were not re-validated this run
+
 ## 2026-02-24: Refactor — Extract LazyRecordBatchIterator and move lazy_read_helpers
 
 - **Extracted `FilterRange`** to `pipeline/filter_range.hpp` — removed 3 duplicate definitions from `read_query.hpp`, `arrow_output_frame.hpp`, and `lazy_read_helpers.hpp`
