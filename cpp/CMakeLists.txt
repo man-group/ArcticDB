@@ -41,6 +41,7 @@ option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations."
 option(ARCTICDB_KEEP_DEBUG_SYMBOLS "Whether to keep debug symbols in RelWithDebInfo builds." OFF)
 option(ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT "Enables pretty printing of segments. The printing can affect runtime" OFF)
 
+link_libraries(atomic)
 set(ARCTICDB_SANITIZER_FLAGS)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})
     # Note: -shared-libasan is not needed for sanitizers to work correctly.
