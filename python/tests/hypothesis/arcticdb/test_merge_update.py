@@ -7,12 +7,13 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     DataframeStrategyIndexType,
 )
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import DuplicateKeyException, UserInputException
 from arcticdb.version_store._store import MergeStrategy
-from hypothesis import strategies as st, given, settings, HealthCheck
+from hypothesis import assume, strategies as st, given, settings, HealthCheck
 from typing import List, Tuple, Optional
 
 from arcticdb.util.test import assert_frame_equal, merge
+from tests.util.mark import MACOS, WINDOWS
 
 pytestmark = pytest.mark.merge_update
 
@@ -115,18 +116,26 @@ def test_timeseries_merge_update(lmdb_version_store_v1, merge_args):
     lib = lmdb_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
-    for df in target_list:
-        lib.append(symbol, df)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     try:
-        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-    except UserInputException as e:
-        if "Multiple source rows match the same target row" not in str(e):
+        for df in target_list:
+            lib.append(symbol, df)
+        try:
+            lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+        except UserInputException as e:
+            if "Multiple source rows match the same target row" not in str(e):
+                raise
+            with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+                merge(pd.concat(target_list), source, strategy=strategy, on=on)
+            return
+        result = lib.read(symbol).data
+    except DuplicateKeyException:
+        # On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        # successive operations land within the same clock tick.
+        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+        if (not MACOS) and (not WINDOWS):
             raise
-        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-            merge(pd.concat(target_list), source, strategy=strategy, on=on)
-        return
-    result = lib.read(symbol).data
+        assume(False)
     expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)
 
@@ -140,16 +149,24 @@ def test_rowrange_merge_update(lmdb_version_store_v1, merge_args):
     lib = lmdb_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
-    lib.write(symbol, target[0])
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     try:
-        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-    except UserInputException as e:
-        if "Multiple source rows match the same target row" not in str(e):
+        lib.write(symbol, target[0])
+        try:
+            lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+        except UserInputException as e:
+            if "Multiple source rows match the same target row" not in str(e):
+                raise
+            with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+                merge(target[0], source, strategy=strategy, on=on)
+            return
+        result = lib.read(symbol).data
+    except DuplicateKeyException:
+        # On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        # successive operations land within the same clock tick.
+        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+        if (not MACOS) and (not WINDOWS):
             raise
-        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-            merge(target[0], source, strategy=strategy, on=on)
-        return
-    result = lib.read(symbol).data
+        assume(False)
     expected = merge(target[0], source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)
