@@ -4208,6 +4208,12 @@ class NativeVersionStore:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+
+            If a column name appears more than once in the source or the target it must not be added in the on
+            parameter.
+
+            In the case of a datetime-indexed DataFrame the on parameter must not contain the name of the datetime
+            index.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False

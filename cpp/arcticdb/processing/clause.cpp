@@ -26,6 +26,7 @@
 #include <arcticdb/util/movable_priority_queue.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
@@ -2211,13 +2212,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
     const std::string_view column_name = on_.front();
     std::vector<std::vector<size_t>> result;
     result.resize(source_->num_rows);
-    const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            source_field_position,
-            "Column '{}' specified in the 'on' parameter is not present in the source DataFrame",
-            column_name
-    );
-    const Field& source_field = source_descriptor.field(*source_field_position);
+    const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
+    const Field& source_field = source_descriptor.field(source_field_position);
     details::visit_type(source_field.type().data_type(), [&](auto source_field_dt) {
         using SourceTDT = ScalarTagType<std::decay_t<decltype(source_field_dt)>>;
         using SourceRawType = typename SourceTDT::DataTypeTag::raw_type;
@@ -2229,7 +2225,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                         std::conditional_t<is_sequence_type(SourceTDT::data_type()), PyObject* const, SourceRawType>;
                 auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(target_column);
                 const size_t column_position_in_source_tensors =
-                        *source_field_position - source_descriptor.index().field_count();
+                        source_field_position - source_descriptor.index().field_count();
                 std::span source_data(
                         static_cast<const SourceType*>(source_->field_tensors()[column_position_in_source_tensors].data(
                         )),
@@ -2515,18 +2511,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
     // been processed, on the assumption that if a column has one such string it will probably have many.
     std::optional<ScopedGILLock> scoped_gil_lock;
     for (std::string_view column_name : on) {
-        const std::optional<size_t> source_field_position = source_descriptor.find_field(column_name);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                source_field_position,
-                "Column '{}' specified in the 'on' parameter is not present in the source DataFrame",
-                column_name
-        );
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                target_descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
-                        target_descriptor.field(0).name() != column_name,
-                "Column '{}' specified in the 'on' parameter cannot have the same name as the timestamp index column"
-        );
-        const Field& source_field = source_descriptor.field(*source_field_position);
+        const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
+        const Field& source_field = source_descriptor.field(source_field_position);
         details::visit_type(source_field.type().data_type(), [&]<typename SourceDataTypeTag>(SourceDataTypeTag) {
             using SourceTDT = ScalarTagType<SourceDataTypeTag>;
             using SourceType = std::conditional_t<
@@ -2534,13 +2520,17 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                     PyObject* const*,
                     const typename SourceDataTypeTag::raw_type*>;
             const size_t column_position_in_source_tensors =
-                    *source_field_position - source_descriptor.index().field_count();
+                    source_field_position - source_descriptor.index().field_count();
             std::span source_data(
                     static_cast<SourceType>(source_tensors[column_position_in_source_tensors].data()) +
                             source_row_start,
                     source_row_end - source_row_start
             );
-            const ColumnWithStrings target_column = std::get<ColumnWithStrings>(proc.get(ColumnName{column_name}));
+            // TODO: For dynamic schema the two fields might have different indexes
+            const size_t target_field_position = source_field_position;
+            const ColumnWithStrings target_column = std::get<ColumnWithStrings>(
+                    proc.get(ColumnName{target_descriptor.field(target_field_position).name()})
+            );
             ColumnData target_data = target_column.column_->data();
             details::visit_type(
                     target_column.column_->type().data_type(),
@@ -2613,6 +2603,46 @@ std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
 bool MergeUpdateClause::is_update_only() const {
     return strategy_ == MergeStrategy{MergeAction::UPDATE, MergeAction::DO_NOTHING};
+}
+
+size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor)
+        const {
+    // In case of unnamed index columns we set the fake_name property of the metadata to true and assign the name
+    // "index" to the column. In this specific case the user must be able to match on a column named "index".
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            descriptor.index().type() != IndexDescriptor::Type::TIMESTAMP ||
+                    (descriptor.field(0).name() != name || (fake_index_name_ && descriptor.field(0).name() == name)),
+            "The \"on\" parameter must not contain the datetime index column \"{}\". Note that for date time indexed "
+            "column the index column is always used for matching. Descriptor: {}",
+            name,
+            descriptor
+    );
+    const boost::regex repetition_regex{fmt::format("^__col_{}__\\d+$", name)};
+    const std::string multiindex_mangled_name = stream::mangled_name(name);
+    std::ranges::subrange data_fields{
+            std::next(descriptor.fields().begin(), descriptor.index().field_count()), descriptor.fields().end()
+    };
+    const auto is_name_or_mangled_name = [&](const Field& field) {
+        return field.name() == name || field.name() == multiindex_mangled_name ||
+               boost::regex_match(field.name().begin(), field.name().end(), repetition_regex);
+    };
+    const auto field_it = std::ranges::find_if(data_fields, is_name_or_mangled_name);
+    user_input::check<ErrorCode::E_COLUMN_NOT_FOUND>(
+            field_it != data_fields.end(),
+            "Column \"{}\" specified in the 'on' parameter does not exist. Descriptor: {}",
+            name,
+            descriptor
+    );
+    const auto repetition_it = std::ranges::find_if(
+            data_fields.next(std::distance(data_fields.begin(), field_it) + 1), is_name_or_mangled_name
+    );
+    user_input::check<ErrorCode::E_DUPLICATE_COLUMN>(
+            repetition_it == data_fields.end(),
+            "Column \"{}\" specified in the 'on' appears more than once in the dataframe. Descriptor: {}",
+            name,
+            descriptor
+    );
+    return std::distance(descriptor.fields().begin(), field_it);
 }
 
 CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segment_(rows_per_segment) {

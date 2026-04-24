@@ -14,7 +14,14 @@ from arcticdb.version_store import VersionedItem
 from arcticdb_ext.exceptions import SchemaException
 from arcticdb_ext.storage import KeyType
 import numpy as np
-from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, UnsortedDataException, StorageException
+from arcticdb.exceptions import (
+    StreamDescriptorMismatch,
+    UserInputException,
+    SortingException,
+    UnsortedDataException,
+    StorageException,
+    ArcticException,
+)
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
@@ -40,22 +47,22 @@ def generic_merge_test(
     target: Union[List[pd.DataFrame], pd.DataFrame],
     source: pd.DataFrame,
     strategy: MergeStrategy,
+    expected: pd.DataFrame,
     on: Optional[List[str]] = None,
 ):
     if isinstance(target, pd.DataFrame):
         target = [target]
-    for df in target:
+    concat_target = pd.concat(target)
+    # Run the actual merge and compare against expected
+    lib.write(sym, target[0])
+    for df in target[1:]:
         lib.append(sym, df)
     lib.merge_experimental(sym, source, strategy=strategy, on=on)
-
-    concat_target = pd.concat(target)
-    # For row range indexes, reset the index after concat so that the expected DataFrame has a contiguous RangeIndex
-    # matching what ArcticDB returns on read.
-    if not isinstance(concat_target.index, pd.DatetimeIndex):
-        concat_target = concat_target.reset_index(drop=True)
-    expected = merge(concat_target, source, strategy, on=on)
     read_vit = lib.read(sym)
     assert_frame_equal(read_vit.data, expected)
+    oracle_expected = merge(concat_target, source, strategy, on=on)
+    assert_frame_equal(oracle_expected, expected)
+    return read_vit
 
 
 @pytest.mark.parametrize(
@@ -239,7 +246,11 @@ class TestMergeTimeseriesUpdate:
         assert merge_vit.host == write_vit.host
         assert merge_vit.data is None
 
-        expected = merge(target, source, strategy)
+        # Only Jan2 matches → update row 1 with source values
+        expected = pd.DataFrame(
+            {"a": [1, 5, 3], "b": [1.0, 8.0, 3.0], "c": ["a", "B", "c"]},
+            index=pd.date_range("2024-01-01", periods=3),
+        )
 
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
@@ -289,17 +300,22 @@ class TestMergeTimeseriesUpdate:
             },
             index=pd.date_range("2024-01-01", periods=5),
         )
-        lib.write("sym", target)
 
         source = pd.DataFrame(
             {"a": [30, 50], "b": [30.1, 50.1], "c": [False, False], "d": ["C", "E"]},
             index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")]),
         )
-        lib.merge_experimental("sym", source, strategy=self.strategy)
-        expected = merge(target, source, self.strategy)
-
-        received = lib.read("sym").data
-        assert_frame_equal(received, expected)
+        # Jan3 and Jan5 match → update those rows
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 30, 4, 50],
+                "b": [1.0, 2.0, 30.1, 4.0, 50.1],
+                "c": [True, False, False, False, False],
+                "d": ["a", "b", "C", "d", "E"],
+            },
+            index=pd.date_range("2024-01-01", periods=5),
+        )
+        read_vit = generic_merge_test(lib, "sym", target, source, self.strategy, expected)
 
         lt = lib._dev_tools.library_tool()
         if "rows_per_segment" in slicing_policy and "columns_per_segment" in slicing_policy:
@@ -327,8 +343,51 @@ class TestMergeTimeseriesUpdate:
             {"rows_per_segment": 2, "columns_per_segment": 2},
         ],
     )
-    @pytest.mark.parametrize("on", [["a"], ["d"], ["a", "d"]])
-    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on):
+    @pytest.mark.parametrize(
+        "on, expected",
+        [
+            (
+                ["a"],
+                # a=1,3,4,5 match on index+a; a=99 no match
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 3, 4, 5],
+                        "b": [10.0, 2.0, 30.0, 40.0, 50.0],
+                        "c": ["X", "y", "Z", "W", "V"],
+                        "d": [10, 20, 99, 40, 50],
+                    },
+                    index=pd.date_range("2024-01-01", periods=5),
+                ),
+            ),
+            (
+                ["d"],
+                # d=10,20,40,50 match on index+d; d=99 no match
+                pd.DataFrame(
+                    {
+                        "a": [1, 99, 3, 4, 5],
+                        "b": [10.0, 20.0, 3.0, 40.0, 50.0],
+                        "c": ["X", "Y", "z", "W", "V"],
+                        "d": [10, 20, 30, 40, 50],
+                    },
+                    index=pd.date_range("2024-01-01", periods=5),
+                ),
+            ),
+            (
+                ["a", "d"],
+                # only rows where both a AND d match; row 0 (a=1,d=10), row 3 (a=4,d=40), row 4 (a=5,d=50)
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 3, 4, 5],
+                        "b": [10.0, 2.0, 3.0, 40.0, 50.0],
+                        "c": ["X", "y", "z", "W", "V"],
+                        "d": [10, 20, 30, 40, 50],
+                    },
+                    index=pd.date_range("2024-01-01", periods=5),
+                ),
+            ),
+        ],
+    )
+    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on, expected):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {
@@ -348,7 +407,7 @@ class TestMergeTimeseriesUpdate:
             },
             index=pd.date_range("2024-01-01", periods=5),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=on)
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=on)
 
     def test_on_empty_list_same_as_none(self, lmdb_library):
         lib = lmdb_library
@@ -357,7 +416,9 @@ class TestMergeTimeseriesUpdate:
             {"a": [10, 20], "b": [10.0, 20.0]},
             index=pd.DatetimeIndex(["2024-01-01", "2024-01-05"]),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=[])
+        # on=[] same as None: match on index only. Jan1 matches → update; Jan5 no match
+        expected = pd.DataFrame({"a": [10, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=[])
 
     def test_on_index_and_column(self, lmdb_library):
         lib = lmdb_library
@@ -373,7 +434,9 @@ class TestMergeTimeseriesUpdate:
                 ]
             ),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # Only first source row matches (index=Jan1, a=1)
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_multiple_columns(self, lmdb_library):
         lib = lmdb_library
@@ -406,7 +469,18 @@ class TestMergeTimeseriesUpdate:
                 ]
             ),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["b", "d", "e"])
+        # Only row 0 matches (index=Jan1, b="a", d=10.1, e=100); rows 1-4 differ on at least one on-column
+        expected = pd.DataFrame(
+            {
+                "a": [10, 2, 3, 4],
+                "b": ["a", "b", "c", "d"],
+                "c": ["A", "B", "A", "C"],
+                "d": [10.1, 20.2, 30.3, 40.4],
+                "e": [100, 200, 300, 400],
+            },
+            index=pd.date_range("2024-01-01", periods=4),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["b", "d", "e"])
 
     def test_row_from_source_matches_multiple_rows_from_target(self, lmdb_library):
         lib = lmdb_library
@@ -417,7 +491,14 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         source = pd.DataFrame({"a": [5], "b": [20.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
-        generic_merge_test(lib, "sym", target, source, self.strategy)
+        # Source Jan1 matches both target rows at Jan1
+        expected = pd.DataFrame(
+            {"a": [5, 5, 3], "b": [20.0, 20.0, 3.0]},
+            index=pd.DatetimeIndex(
+                [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+            ),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected)
 
     def test_row_from_source_matches_multiple_rows_from_target_in_separate_slices(self, lmdb_library_factory):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
@@ -428,10 +509,16 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         source = pd.DataFrame({"a": [5], "b": [20.0], "c": ["B"]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
-        generic_merge_test(lib, "sym", target, source, self.strategy)
+        # Source Jan2 matches both target rows at Jan2
+        expected = pd.DataFrame(
+            {"a": [1, 5, 5], "b": [1.0, 20.0, 20.0], "c": ["a", "B", "B"]},
+            index=pd.DatetimeIndex(
+                [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]
+            ),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected)
 
-    @pytest.mark.skip(reason="Not implemented yet")
-    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, strategy):
+    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
@@ -519,7 +606,11 @@ class TestMergeTimeseriesUpdate:
 
         # The merge will be performed on the latest undeleted version
         merge_vit = lib.merge_experimental("sym", source, strategy=self.strategy)
-        expected = merge(target, source, self.strategy)
+        # Only Jan2 matches → update row 1 with source values
+        expected = pd.DataFrame(
+            {"a": [1, 5, 3], "b": [1.0, 8.0, 3.0], "c": ["a", "B", "c"]},
+            index=pd.date_range("2024-01-01", periods=3),
+        )
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
         assert merge_vit.version == 2
@@ -567,7 +658,8 @@ class TestMergeTimeseriesUpdate:
             lib.append("sym", df)
         lib.merge_experimental("sym", source, strategy=self.strategy)
         result = lib.read("sym").data
-        expected = merge(pd.concat(target), source, strategy=self.strategy)
+        # Both target rows at Ts0 match source at Ts0 → both updated to a=3
+        expected = pd.DataFrame({"a": [3, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)]))
         assert_frame_equal(result, expected)
 
     def test_sorted_segments_overlap(self, lmdb_version_store_v1):
@@ -581,7 +673,10 @@ class TestMergeTimeseriesUpdate:
             lib.append("test", tgt)
         lib.merge_experimental("test", source, strategy=self.strategy)
         res = lib.read("test").data
-        expected = merge(pd.concat(target_list), source, strategy=self.strategy)
+        # Ts0 from source matches target rows 0 and 1 → both updated to a=5; Ts5 no match → do_nothing
+        expected = pd.DataFrame(
+            {"a": [5, 5, 3]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)])
+        )
         assert_frame_equal(res, expected)
 
     def test_sorted_segments_overlap_but_source_is_in_first_segment_only(self, lmdb_version_store_v1):
@@ -590,7 +685,11 @@ class TestMergeTimeseriesUpdate:
         target_list = [target1, target2]
         source = pd.DataFrame({"a": [4, 5]}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1)]))
         lib = lmdb_version_store_v1
-        generic_merge_test(lib, "sym", target_list, source, self.strategy)
+        # Ts(0) no match, Ts(1) matches target row 0 → a=5
+        expected = pd.DataFrame(
+            {"a": [5, 2, 3]}, index=pd.to_datetime([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(2)])
+        )
+        generic_merge_test(lib, "sym", target_list, source, self.strategy, expected)
 
     def test_source_matches_first_value_of_first_segment_and_last_value_of_second_segment(self, lmdb_version_store_v1):
         target1 = pd.DataFrame({"a": [1, 2]}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1)]))
@@ -598,28 +697,40 @@ class TestMergeTimeseriesUpdate:
         target_list = [target1, target2]
         source = pd.DataFrame({"a": [5, 6]}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1)]))
         lib = lmdb_version_store_v1
-        generic_merge_test(lib, "sym", target_list, source, self.strategy)
+        # Ts(0) matches target row 0 → a=5; Ts(1) matches target rows 1 and 2 → a=6
+        expected = pd.DataFrame(
+            {"a": [5, 6, 6]}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(1)])
+        )
+        generic_merge_test(lib, "sym", target_list, source, self.strategy, expected)
 
     @pytest.mark.parametrize(
-        "source",
+        "source, expected",
         [
-            pd.DataFrame(
-                {"a": [1], "b": [99.0]},
-                index=pd.DatetimeIndex([pd.Timestamp(0)]),
+            (
+                pd.DataFrame({"a": [1], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
+                # a=1 at Ts(0) matches target row 0 → b=99.0
+                pd.DataFrame(
+                    {"a": [1, 2, 3], "b": [99.0, 20.0, 30.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)]),
+                ),
             ),
-            pd.DataFrame(
-                {"a": [2], "b": [99.0]},
-                index=pd.DatetimeIndex([pd.Timestamp(0)]),
+            (
+                pd.DataFrame({"a": [2], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
+                # a=2 at Ts(0) matches target row 1 → b=99.0
+                pd.DataFrame(
+                    {"a": [1, 2, 3], "b": [10.0, 99.0, 30.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)]),
+                ),
             ),
         ],
     )
-    def test_on_column_with_overlapping_segments(self, lmdb_version_store_v1, source):
+    def test_on_column_with_overlapping_segments(self, lmdb_version_store_v1, source, expected):
         lib = lmdb_version_store_v1
         target_list = [
             pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
             pd.DataFrame({"a": [2, 3], "b": [20.0, 30.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)])),
         ]
-        generic_merge_test(lib, "sym", target_list, source, self.strategy, on=["a"])
+        generic_merge_test(lib, "sym", target_list, source, self.strategy, expected, on=["a"])
 
     def test_index_matches_but_on_column_differs(self, lmdb_library):
         lib = lmdb_library
@@ -628,7 +739,9 @@ class TestMergeTimeseriesUpdate:
             {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]},
             index=pd.date_range("2024-01-01", periods=3),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # Index matches but a values differ (1≠10, 2≠20, 3≠30) → no updates
+        expected = target.copy()
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_all_columns_in_on(self, lmdb_library):
         lib = lmdb_library
@@ -637,7 +750,9 @@ class TestMergeTimeseriesUpdate:
             {"a": [1, 2, 3], "b": [99.0, 99.0, 99.0]},
             index=pd.date_range("2024-01-01", periods=3),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+        # b values differ (99≠1, 99≠2, 99≠3) → no matches
+        expected = target.copy()
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
     def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
@@ -652,16 +767,17 @@ class TestMergeTimeseriesUpdate:
             {"a": ["a", np.nan, None, np.nan, None], "b": [10, 20, 30, 40, 50]},
             index=pd.date_range("2024-01-01", periods=5),
         )
-        lib.write("sym", target)
-        lib.merge_experimental("sym", source, strategy=self.strategy)
-        assert_frame_equal(expected, merge(target, source, self.strategy))
-        assert_frame_equal(expected, lib.read("sym").data)
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected)
 
     def test_match_on_float_nan(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
         source = pd.DataFrame({"a": [np.nan], "b": [20]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # NaN matches NaN at Jan2 → update b=20
+        expected = pd.DataFrame(
+            {"a": [1.0, np.nan, 3.0], "b": [1, 20, 3]}, index=pd.date_range("2024-01-01", periods=3)
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_on_column_one_source_row_matches_multiple_target_rows(self, lmdb_library):
         lib = lmdb_library
@@ -672,7 +788,14 @@ class TestMergeTimeseriesUpdate:
             ),
         )
         source = pd.DataFrame({"a": [1], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # a=1 at Jan1 matches both target rows at Jan1 with a=1
+        expected = pd.DataFrame(
+            {"a": [1, 1, 2], "b": [99.0, 99.0, 30.0]},
+            index=pd.DatetimeIndex(
+                [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
+            ),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_on_column_one_source_row_matches_multiple_target_rows_across_segments(self, lmdb_library):
         lib = lmdb_library
@@ -689,15 +812,29 @@ class TestMergeTimeseriesUpdate:
             ),
         ]
         source = pd.DataFrame({"a": [2], "b": [99.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # a=2 at Jan1: no target at Jan1 has a=2 → no match
+        expected = pd.DataFrame(
+            {"a": [1, 1, 2, 2, 3], "b": [10.0, 20.0, 30.0, 40.0, 50.0]},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp("2024-01-01"),
+                    pd.Timestamp("2024-01-01"),
+                    pd.Timestamp("2024-01-02"),
+                    pd.Timestamp("2024-01-02"),
+                    pd.Timestamp("2024-01-03"),
+                ]
+            ),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_on_nonexistent_column_raises(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2], "b": [1.0, 2.0]}, index=pd.date_range("2024-01-01", periods=2))
         lib.write("sym", target)
         source = pd.DataFrame({"a": [1], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
-        with pytest.raises(UserInputException):
+        with pytest.raises(UserInputException) as exc_info:
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["nonexistent"])
+        assert '"nonexistent"' in str(exc_info.value)
 
     def test_on_with_repeated_index_values(self, lmdb_library):
         lib = lmdb_library
@@ -711,46 +848,9 @@ class TestMergeTimeseriesUpdate:
             {"a": [2, 100, 4], "b": [100.0, 101.0, 102.0], "c": ["B", "c", "d"]},
             index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(1)]),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
-
-    def test_on_columns_with_repeated_name(self, lmdb_library):
-        lib = lmdb_library
-        target = pd.DataFrame(
-            [[1, 2], [3, 4]],
-            columns=["my_duplicated_column", "my_duplicated_column"],
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
-        )
-        source = pd.DataFrame(
-            [[1, 2], [3, 4]],
-            columns=["my_duplicated_column", "my_duplicated_column"],
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
-        )
-        lib.write("sym", target)
-        with pytest.raises(UserInputException) as exc_info:
-            lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
-            assert '"my_duplicated_column"' in str(exc_info.value)
-            assert "multiple" in str(exc_info.value)
-
-    @pytest.mark.parametrize("index_name", (None, "index_name"))
-    def test_on_column_is_named_as_the_index(self, lmdb_library, index_name):
-        lib = lmdb_library
-        repeated_column = "index" if index_name is None else index_name
-        target = pd.DataFrame(
-            {repeated_column: [1, 2, 3], "b": [1.0, 2.0, 3.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
-        )
-        source = pd.DataFrame(
-            {repeated_column: [1, 20, 3], "b": [10.0, 20.0, 30.0]},
-            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
-        )
-        if index_name is not None:
-            target.index.name = index_name
-            source.index.name = index_name
-        lib.write("sym", target)
-        with pytest.raises(UserInputException) as exc_info:
-            lib.merge_experimental("sym", source, strategy=self.strategy, on=[repeated_column])
-            assert f"{index_name}" in str(exc_info.value)
-            assert "index column" in str(exc_info.value)
+        # No source (a,b) pair matches any target (a,b) pair at the same timestamp → no updates
+        expected = target.copy()
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
     def test_on_list_contains_the_same_column_twice(self, lmdb_library):
         lib = lmdb_library
@@ -762,7 +862,12 @@ class TestMergeTimeseriesUpdate:
             {"a": [1, 20, 3], "b": [10.0, 20.0, 30.0]},
             index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "a"])
+        # Deduped to on=["a"]. Source a=3 at Ts(2) matches target a=3 at Ts(2) → update b=30.0
+        expected = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 30.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "a"])
 
     def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library):
         lib = lmdb_library
@@ -816,7 +921,121 @@ class TestMergeTimeseriesUpdate:
         df2 = pd.DataFrame({"a": [0], "b": [255.0]}, index=pd.DatetimeIndex([t1]))
         source = pd.DataFrame({"a": [0, 1, 0], "b": [0.0, 0.0, 0.0]}, index=pd.DatetimeIndex([t0, t1, t1]))
 
-        generic_merge_test(lib, "sym", [df1, df2], source, self.strategy, on=["a"])
+        # Source (t0,a=0) no match; (t1,a=1) matches df1 row → b=0.0; (t1,a=0) matches df2 row → b=0.0
+        expected = pd.DataFrame({"a": [1, 0], "b": [0.0, 0.0]}, index=pd.DatetimeIndex([t1, t1]))
+        generic_merge_test(lib, "sym", [df1, df2], source, self.strategy, expected, on=["a"])
+
+    @pytest.mark.parametrize("on", ([None], ["a", None]))
+    def test_match_on_column_named_none(self, lmdb_library, on):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], None: [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        source = pd.DataFrame(
+            {"a": [10, 20, 30], None: [10.0, 20.0, 30.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(1), pd.Timestamp(2)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(TypeError):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+
+    def test_match_on_column_named_index_and_unnamed_index(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"index": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        source = pd.DataFrame(
+            {"index": [1, 2, 30, 40], "b": [10.0, 20.0, 30.0, 40.0]},
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",  # Matches index and column
+                    "2024-01-02 01:00:00",  # Matches column, but not index
+                    "2024-01-03",  # Matches index, but not column
+                    "2024-01-04",  # Does not match either
+                ]
+            ),
+        )
+
+        # Only first source row matches (index=Jan1, a=1)
+        expected = pd.DataFrame(
+            {"index": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3)
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["index"])
+
+    def test_match_on_non_existing_column_named_index_and_unnamed_index(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        source = pd.DataFrame(
+            {"a": [1, 2, 30, 40], "b": [10.0, 20.0, 30.0, 40.0]},
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",  # Matches index and column
+                    "2024-01-02 01:00:00",  # Matches column, but not index
+                    "2024-01-03",  # Matches index, but not column
+                    "2024-01-04",  # Does not match either
+                ]
+            ),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException) as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["index"])
+        assert "E_COLUMN_NOT_FOUND" in str(exc_info.value)
+
+    def test_match_on_column_named_index_and_unnamed_index_with_duplicates(self, lmdb_library):
+        lib = lmdb_library
+        column_names = ["index", "index"]
+        target = pd.DataFrame(
+            data=[[1, 2], [3, 4], [5, 6]], columns=column_names, index=pd.date_range("2024-01-01", periods=3)
+        )
+        source = pd.DataFrame(
+            data=[[1, 2], [3, 4], [5, 6], [7, 8]],
+            columns=column_names,
+            index=pd.DatetimeIndex(["2024-01-01", "2024-01-02 01:00:00", "2024-01-03", "2024-01-04"]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["index"])
+
+    @pytest.mark.parametrize("index_name", ("index", "some_name"))
+    @pytest.mark.parametrize("column_name", ("index", "some_name"))
+    def test_match_on_column_named_as_explicitly_named_index(self, lmdb_library, index_name, column_name):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {column_name: [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3)
+        )
+        target.index.name = index_name
+        source = pd.DataFrame(
+            {column_name: [1, 2, 30, 40], "b": [10.0, 20.0, 30.0, 40.0]},
+            index=pd.DatetimeIndex(
+                [
+                    "2024-01-01",  # Matches index and column
+                    "2024-01-02 01:00:00",  # Matches column, but not index
+                    "2024-01-03",  # Matches index, but not column
+                    "2024-01-04",  # Does not match either
+                ]
+            ),
+        )
+        source.index.name = index_name
+        lib.write("sym", target)
+        with pytest.raises(UserInputException) as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=[index_name])
+        assert f'"{index_name}"' in str(exc_info.value)
+        assert "not contain the datetime index column" in str(exc_info.value)
+
+    def test_on_columns_with_repeated_name(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            [[1, 2, 3], [4, 5, 6]],
+            columns=["a", "my_duplicated_column", "my_duplicated_column"],
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
+        )
+        source = pd.DataFrame(
+            [[1, 2, 3], [4, 5, 6]],
+            columns=["a", "my_duplicated_column", "my_duplicated_column"],
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["my_duplicated_column"])
 
 
 class TestMergeTimeseriesInsert:
@@ -1449,20 +1668,6 @@ class TestMergeTimeseriesUpdateAndInsert:
         with pytest.raises(UserInputException):
             lib.merge_experimental("sym", source, strategy=strategy)
 
-    class TestMergeMultiindex:
-        """Not implemented yet"""
-
-        def test_merge_not_implemented_with_multiindex_yet(self, lmdb_library, monkeypatch):
-            lib = lmdb_library
-            target = pd.DataFrame(
-                {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.MultiIndex.from_tuples([("A", 1), ("B", 2), ("C", 3)])
-            )
-            lib.write("sym", target)
-            source = pd.DataFrame({"a": [2], "b": [3.0]}, index=pd.MultiIndex.from_tuples([("A", 1)]))
-            monkeypatch.setattr(lib.__class__, "merge_experimental", raise_wrapper(UserInputException), raising=False)
-            with pytest.raises(UserInputException):
-                lib.merge_experimental("sym", source)
-
 
 @pytest.mark.parametrize(
     "strategy",
@@ -1580,67 +1785,54 @@ class TestMergeRowrangeUpdate:
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["x", "y", "z"]})
         source = pd.DataFrame({"a": [1, 99, 3], "b": [10.0, 20.0, 30.0], "c": ["X", "Y", "Z"]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # a=1 matches row 0, a=99 no match, a=3 matches row 2
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 2.0, 30.0], "c": ["X", "y", "Z"]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_no_matches(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # No a values match → no updates
+        expected = target.copy()
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_all_rows_match(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [3, 1, 2], "b": [30.0, 10.0, 20.0]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # All a values match: 1→10.0, 2→20.0, 3→30.0
+        expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 20.0, 30.0]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     @pytest.mark.parametrize(
-        "target,source",
+        "target, source, expected",
         [
             (
-                pd.DataFrame(
-                    {
-                        "a": [1, 2, 3, 4],
-                        "b": ["x", "y", "z", "w"],
-                        "c": [10.0, 20.0, 30.0, 40.0],
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "a": [1, 2, 99, 4],
-                        "b": ["x", "wrong", "z", "w"],
-                        "c": [99.0, 99.0, 99.0, 99.0],
-                    }
-                ),
+                pd.DataFrame({"a": [1, 2, 3, 4], "b": ["x", "y", "z", "w"], "c": [10.0, 20.0, 30.0, 40.0]}),
+                pd.DataFrame({"a": [1, 2, 99, 4], "b": ["x", "wrong", "z", "w"], "c": [99.0, 99.0, 99.0, 99.0]}),
+                # (a=1,b="x") and (a=4,b="w") match; (a=2,b="wrong") and (a=99,b="z") don't
+                pd.DataFrame({"a": [1, 2, 3, 4], "b": ["x", "y", "z", "w"], "c": [99.0, 20.0, 30.0, 99.0]}),
             ),
             (
-                pd.DataFrame(
-                    {
-                        "a": [1, 1, 2, 2],
-                        "b": ["x", "y", "x", "y"],
-                        "c": [10.0, 20.0, 30.0, 40.0],
-                    }
-                ),
-                pd.DataFrame(
-                    {
-                        "a": [1, 2, 1, 2],
-                        "b": ["x", "x", "y", "y"],
-                        "c": [99.0, 99.0, 99.0, 99.0],
-                    }
-                ),
+                pd.DataFrame({"a": [1, 1, 2, 2], "b": ["x", "y", "x", "y"], "c": [10.0, 20.0, 30.0, 40.0]}),
+                pd.DataFrame({"a": [1, 2, 1, 2], "b": ["x", "x", "y", "y"], "c": [99.0, 99.0, 99.0, 99.0]}),
+                # All four (a,b) combos match → all rows updated
+                pd.DataFrame({"a": [1, 1, 2, 2], "b": ["x", "y", "x", "y"], "c": [99.0, 99.0, 99.0, 99.0]}),
             ),
         ],
     )
-    def test_multiple_on_columns(self, lmdb_library, target, source):
+    def test_multiple_on_columns(self, lmdb_library, target, source, expected):
         lib = lmdb_library
-        # Must match on both "a" and "b": rows 0 and 3 match, rows 1 and 2 do not
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
     def test_one_source_row_matches_multiple_target_rows(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 1, 2], "b": [10.0, 20.0, 30.0]})
         source = pd.DataFrame({"a": [1], "b": [99.0]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # a=1 matches rows 0 and 1
+        expected = pd.DataFrame({"a": [1, 1, 2], "b": [99.0, 99.0, 30.0]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     @pytest.mark.parametrize(
         "slicing_policy",
@@ -1664,26 +1856,40 @@ class TestMergeRowrangeUpdate:
                 "d": ["C", "E"],
             }
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # a=3 matches row 2, a=5 matches row 4
+        expected = pd.DataFrame(
+            {
+                "a": [1, 2, 3, 4, 5],
+                "b": [1.0, 2.0, 30.1, 4.0, 50.1],
+                "c": [True, False, False, False, False],
+                "d": ["a", "b", "C", "d", "E"],
+            }
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_match_on_float_nan(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 2, 3]})
         source = pd.DataFrame({"a": [np.nan], "b": [20]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a"])
+        # NaN matches NaN → update b=20
+        expected = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [1, 20, 3]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
 
     def test_match_on_string_none_nan_indistinguishable(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         target = pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [1, 2, 3, 4, 5]})
         source = pd.DataFrame({"a": ["x", np.nan, None, None, np.nan], "b": [4, 5, 3, 2, 1], "c": [10, 20, 30, 40, 50]})
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+        # Match on (a,b): (NaN,5)→row4, (NaN,3)→row2, (NaN,2)→row1; "x" b mismatch, (NaN,1) no match
+        expected = pd.DataFrame({"a": ["x", np.nan, None, np.nan, None], "b": [1, 2, 3, 4, 5], "c": [1, 40, 30, 4, 20]})
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
     def test_all_columns_in_on(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]})
         source = pd.DataFrame({"a": [1, 2, 3], "b": [99.0, 99.0, 99.0]})
-        # When all columns are in on, there are no columns left to update
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=["a", "b"])
+        # When all columns are in on, b values differ → no matches
+        expected = target.copy()
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a", "b"])
 
     @pytest.mark.xfail(
         reason="In pandas 2 empty data frame is written it's index is datetime by default. The current implementation"
@@ -1732,8 +1938,48 @@ class TestMergeRowrangeUpdate:
             {"rows_per_segment": 2, "columns_per_segment": 2},
         ],
     )
-    @pytest.mark.parametrize("on", [["a"], ["d"], ["a", "d"]])
-    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on):
+    @pytest.mark.parametrize(
+        "on, expected",
+        [
+            (
+                ["a"],
+                # a=1,3,4,5 match; a=99 no match
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 3, 4, 5],
+                        "b": [10.0, 2.0, 30.0, 40.0, 50.0],
+                        "c": ["X", "y", "Z", "W", "V"],
+                        "d": [100, 20, 300, 400, 500],
+                    }
+                ),
+            ),
+            (
+                ["d"],
+                # Source d=[100,200,300,400,500] vs target d=[10,20,30,40,50] → no matches
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 3, 4, 5],
+                        "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+                        "c": ["x", "y", "z", "w", "v"],
+                        "d": [10, 20, 30, 40, 50],
+                    }
+                ),
+            ),
+            (
+                ["a", "d"],
+                # must match on both, source d values don't match target d → no matches
+                pd.DataFrame(
+                    {
+                        "a": [1, 2, 3, 4, 5],
+                        "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+                        "c": ["x", "y", "z", "w", "v"],
+                        "d": [10, 20, 30, 40, 50],
+                    }
+                ),
+            ),
+        ],
+    )
+    def test_on_column_with_column_slicing(self, lmdb_library_factory, slicing_policy, on, expected):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {
@@ -1751,7 +1997,7 @@ class TestMergeRowrangeUpdate:
                 "d": [100, 200, 300, 400, 500],
             }
         )
-        generic_merge_test(lib, "sym", target, source, self.strategy, on=on)
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=on)
 
     def test_throws_when_multiple_source_rows_match_same_target_row(self, lmdb_library):
         lib = lmdb_library
@@ -1768,3 +2014,572 @@ class TestMergeRowrangeUpdate:
         lib.write("sym", target)
         with pytest.raises(UserInputException, match="Multiple source rows match the same target row"):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["a"])
+
+    def test_on_column_named_same_as_index(self, lmdb_library):
+        """Row-range index name is protobuf-only and does not collide with data columns.
+        on=["col"] should match the data column and work without error."""
+        lib = lmdb_library
+        target = pd.DataFrame({"col": [1, 2, 3], "val": [10.0, 20.0, 30.0]})
+        target.index.name = "col"
+        source = pd.DataFrame({"col": [2], "val": [99.0]})
+        source.index.name = "col"
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=["col"])
+        result = lib.read("sym").data
+        expected = pd.DataFrame({"col": [1, 2, 3], "val": [10.0, 99.0, 30.0]})
+        expected.index.name = "col"
+        assert_frame_equal(result, expected)
+
+    @pytest.mark.parametrize(
+        "index_name",
+        ["col", None],
+        ids=["row_range_index_name_same_as_duplicated_column_name", "row_range_index_does_not_have_a_name"],
+    )
+    def test_on_duplicate_data_columns_raises(self, lmdb_library, index_name):
+        """Two data columns with the same name: on=["col"] is ambiguous → UserInputException."""
+        lib = lmdb_library
+        target = pd.DataFrame(
+            np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]),
+            columns=["col", "col", "other"],
+        )
+        source = pd.DataFrame(np.array([[10.0, 20.0, 30.0]]), columns=["col", "col", "other"])
+        if index_name:
+            target.index.name = index_name
+            source.index.name = index_name
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["col"])
+
+    @pytest.mark.parametrize("on", ([None], ["a", None]))
+    def test_match_on_column_named_none(self, lmdb_library, on):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], None: [1.0, 2.0, 3.0]})
+        source = pd.DataFrame({"a": [10, 20, 30], None: [10.0, 20.0, 30.0]})
+        lib.write("sym", target)
+        with pytest.raises(TypeError):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+
+    def test_row_range_index_name_is_not_an_actual_column(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
+        target.index.name = "my_index"
+        source = pd.DataFrame({"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.RangeIndex(start=0, stop=3))
+        source.index.name = "my_index"
+        lib.write("sym", target)
+        with pytest.raises(UserInputException) as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=["my_index"])
+        assert "E_COLUMN_NOT_FOUND" in str(exc_info.value)
+        assert "my_index" in str(exc_info.value)
+
+    def test_row_range_index_name_does_not_count_as_duplicate(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame({"my_index": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
+        target.index.name = "my_index"
+        source = pd.DataFrame({"my_index": [1, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.RangeIndex(start=0, stop=3))
+        source.index.name = "my_index"
+        lib.write("sym", target)
+        expected = pd.DataFrame({"my_index": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.RangeIndex(start=0, stop=3))
+        expected.index.name = "my_index"
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["my_index"])
+
+
+class TestMergeMultiindexUpdate:
+    """MultiIndex with datetime first level behaves like datetime-indexed merge.
+    MultiIndex without datetime first level behaves like row-range-indexed merge."""
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING)
+
+    ####################################################################################################################
+    # On contains column that appears more than once in the dataframe. This is ambiguous and should raise. Multiindex
+    # introduces another type of name mangling when a column is part of the multiindex. The primary index remains
+    # unchanged, secondary index columns get __idx__ prefix. If the primary index is datetime index and is not named
+    # it'll be assigned the default name "index" and in the protobuf we'll store that it's a fake name.
+    ####################################################################################################################
+
+    @pytest.mark.parametrize(
+        "index_column_names, data_column_names, on",
+        [
+            pytest.param(
+                ["my_duplicate", "my_duplicate", "secondary1"],
+                ["data0", "data1"],
+                ["my_duplicate"],
+                id="match on primary index duplicated in first secondary",
+            ),
+            pytest.param(
+                ["my_duplicate", "secondary0", "my_duplicate"],
+                ["data0", "data1"],
+                ["my_duplicate"],
+                id="match on primary index duplicated in second secondary",
+            ),
+            pytest.param(
+                ["primary", "my_duplicate", "my_duplicate"],
+                ["data0", "data1"],
+                ["my_duplicate"],
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+                id="match on secondary index that is duplicated in the multiindex",
+            ),
+            pytest.param(
+                ["my_duplicate", "my_duplicate", "my_duplicate"],
+                ["data0", "data1"],
+                ["my_duplicate"],
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+                id="match on primary index that is duplicated twice in the multiindex",
+            ),
+            pytest.param(
+                ["my_duplicate", "secondary0", "secondary1"],
+                ["my_duplicate", "data1"],
+                ["my_duplicate"],
+                id="match on primary index that is duplicated in the data",
+            ),
+            pytest.param(
+                ["primary", "secondary0", "my_duplicate"],
+                ["my_duplicate", "data1"],
+                ["my_duplicate"],
+                id="match on a secondary index that is duplicated in the data",
+            ),
+            pytest.param(
+                ["primary", "secondary0", "secondary1"],
+                ["my_duplicate", "my_duplicate"],
+                ["my_duplicate"],
+                id="match on data column that is duplicated but not in the multiindex",
+            ),
+        ],
+    )
+    def test_duplicate_on_column_raises_rowrange(self, lmdb_library, index_column_names, data_column_names, on):
+        lib = lmdb_library
+
+        target_index_values = [["A", "B"], [1, 2], [10.0, 20.0]]
+        target_data_values = [[pd.Timestamp(0), "A"], [pd.Timestamp(0), "B"]]
+        target_idx = pd.MultiIndex.from_arrays(target_index_values, names=index_column_names)
+        target = pd.DataFrame(target_data_values, columns=data_column_names, index=target_idx)
+
+        source_index_values = [["A", "b"], [10, 20], [100.0, 200.0]]
+        source_data_values = [[pd.Timestamp(100), "A"], [pd.Timestamp(200), "B"]]
+        source_idx = pd.MultiIndex.from_arrays(source_index_values, names=index_column_names)
+        source = pd.DataFrame(source_data_values, columns=data_column_names, index=source_idx)
+
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+        assert '"my_duplicate"' in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "index_column_names, data_column_names, on",
+        [
+            pytest.param(
+                ["index", "index", "secondary1"],
+                ["data0", "data1"],
+                ["index"],
+                id="Primary index explicitly named index not duplicated",
+            ),
+            pytest.param(
+                ["index", "index", "secondary1"],
+                ["data0", "data1"],
+                ["index"],
+                id="Primary index explicitly named index duplicated in secondary index",
+            ),
+            pytest.param(
+                ["index", "index", "index"],
+                ["data0", "data1"],
+                ["index"],
+                id="Primary index explicitly named index duplicated in secondary index twice",
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+            ),
+            pytest.param(
+                ["index", "secondary0", "secondary1"],
+                ["index", "data1"],
+                ["index"],
+                id="Primary index explicitly named index duplicated in data",
+            ),
+            pytest.param(
+                ["my_index", "my_index", "secondary1"],
+                ["data0", "data1"],
+                ["my_index"],
+                id="Primary index explicitly named index not duplicated",
+            ),
+            pytest.param(
+                ["my_index", "my_index", "secondary1"],
+                ["data0", "data1"],
+                ["my_index"],
+                id="Primary index explicitly named index duplicated in secondary index",
+            ),
+            pytest.param(
+                ["my_index", "my_index", "my_index"],
+                ["data0", "data1"],
+                ["my_index"],
+                id="Primary index explicitly named index duplicated in secondary index twice",
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+            ),
+            pytest.param(
+                ["my_index", "secondary0", "secondary1"],
+                ["my_index", "data1"],
+                ["my_index"],
+                id="Primary index explicitly named index duplicated in data",
+            ),
+        ],
+    )
+    def test_cannot_contain_index_column_name_when_datetime(
+        self, lmdb_library, index_column_names, data_column_names, on
+    ):
+        lib = lmdb_library
+
+        target_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [1, 2], [10.0, 20.0]]
+        target_data_values = [[pd.Timestamp(0), "A"], [pd.Timestamp(0), "B"]]
+        target_idx = pd.MultiIndex.from_arrays(target_index_values, names=index_column_names)
+        target = pd.DataFrame(target_data_values, columns=data_column_names, index=target_idx)
+
+        source_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [10, 20], [100.0, 200.0]]
+        source_data_values = [[pd.Timestamp(100), "A"], [pd.Timestamp(200), "B"]]
+        source_idx = pd.MultiIndex.from_arrays(source_index_values, names=index_column_names)
+        source = pd.DataFrame(source_data_values, columns=data_column_names, index=source_idx)
+
+        lib.write("sym", target)
+        with pytest.raises(UserInputException) as exc_info:
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+        assert "not contain the datetime index column" in str(exc_info.value)
+
+    def test_unnamed_datetime_index_on_contains_column_named_index_not_in_dataframe(self, lmdb_library):
+        lib = lmdb_library
+
+        index_column_names = [None, "secondary0", "secondary1"]
+        data_column_names = ["data0", "data1"]
+        on = ["index"]
+
+        target_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [1, 2], [10.0, 20.0]]
+        target_data_values = [[pd.Timestamp(0), "A"], [pd.Timestamp(0), "B"]]
+        target_idx = pd.MultiIndex.from_arrays(target_index_values, names=index_column_names)
+        target = pd.DataFrame(target_data_values, columns=data_column_names, index=target_idx)
+
+        source_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [10, 20], [100.0, 200.0]]
+        source_data_values = [[pd.Timestamp(100), "A"], [pd.Timestamp(200), "B"]]
+        source_idx = pd.MultiIndex.from_arrays(source_index_values, names=index_column_names)
+        source = pd.DataFrame(source_data_values, columns=data_column_names, index=source_idx)
+
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="E_COLUMN_NOT_FOUND"):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+
+    @pytest.mark.parametrize(
+        "index_column_names, data_column_names, on",
+        [
+            pytest.param(
+                [None, "index", "index"],
+                ["data0", "data1"],
+                ["index"],
+                id="Unnamed primary index and column named index appears twice in secondary index",
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+            ),
+            pytest.param(
+                [None, "index", "index"],
+                ["index", "data1"],
+                ["index"],
+                id="Unnamed primary index and column named index appears twice in secondary index and once in data",
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+            ),
+            pytest.param(
+                [None, "index", "secondary1"],
+                ["index", "data1"],
+                ["index"],
+                id="Unnamed primary index and column named index appears in secondary index and data",
+            ),
+            pytest.param(
+                [None, "duplicate", "duplicate"],
+                ["data0", "data1"],
+                ["duplicate"],
+                id="Unnamed primary index and column named duplicate appears twice in secondary index",
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+            ),
+            pytest.param(
+                [None, "duplicate", "duplicate"],
+                ["duplicate", "data1"],
+                ["duplicate"],
+                id="Unnamed primary index and column named duplicate appears twice in secondary index and once in data",
+                marks=pytest.mark.xfail(
+                    raises=ArcticException,
+                    reason="ArcticDB fails on write when there are duplicate column names in the secondary index",
+                ),
+            ),
+            pytest.param(
+                [None, "duplicate", "secondary1"],
+                ["duplicate", "data1"],
+                ["duplicate"],
+                id="Unnamed primary index and column named duplicate appears in secondary index and in data columns",
+            ),
+            pytest.param(
+                [None, "secondary0", "secondary1"],
+                ["duplicate", "duplicate"],
+                ["duplicate"],
+                id="Unnamed primary index and column named duplicate appears twice in data columns",
+            ),
+            pytest.param(
+                [None, "secondary0", "secondary1"],
+                ["index", "index"],
+                ["index"],
+                id="Unnamed primary index and column named index appears twice in data columns",
+            ),
+        ],
+    )
+    def test_unnamed_datetime_index_and_on_contains_duplicate_colum(
+        self, lmdb_library, index_column_names, data_column_names, on
+    ):
+        lib = lmdb_library
+
+        target_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [1, 2], [10.0, 20.0]]
+        target_data_values = [[pd.Timestamp(0), "A"], [pd.Timestamp(0), "B"]]
+        target_idx = pd.MultiIndex.from_arrays(target_index_values, names=index_column_names)
+        target = pd.DataFrame(target_data_values, columns=data_column_names, index=target_idx)
+
+        source_index_values = [pd.date_range("2025-01-01", "2025-01-02"), [10, 20], [100.0, 200.0]]
+        source_data_values = [[pd.Timestamp(100), "A"], [pd.Timestamp(200), "B"]]
+        source_idx = pd.MultiIndex.from_arrays(source_index_values, names=index_column_names)
+        source = pd.DataFrame(source_data_values, columns=data_column_names, index=source_idx)
+
+        lib.write("sym", target)
+        with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN"):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+
+    def test_default_on_rowrange_raises(self, lmdb_library):
+        index_names = ["idx", "a", "b"]
+        primary_target_vals = ["P", "Q", "R"]
+        primary_source_vals = ["Q", "Z"]
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["B", "X"], [2, 9]], names=index_names)
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+        source = pd.DataFrame({"c": [1000, 2000], "d": [-1000.0, -2000.0]}, index=source_idx)
+        lmdb_library.write("sym", target)
+        with pytest.raises(UserInputException):
+            lmdb_library.merge_experimental("sym", source, strategy=self.strategy)
+
+    ####################################################################################################################
+    # Happy paths
+    ####################################################################################################################
+
+    def test_can_match_on_data_column_named_index_when_primary_is_unnamed_datetime_index(self, lmdb_library):
+        lib = lmdb_library
+        index_names = [None, "a", "b"]
+        data_names = ["index", "d"]
+
+        primary_target_vals = pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(4), pd.Timestamp(10)])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
+        target_data = [[1.0, 10], [2.0, 20], [3.0, 30]]
+        target = pd.DataFrame(target_data, columns=data_names, index=target_idx)
+
+        primary_source_vals = pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(4)])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["aaa", "b"], [222, 444]], names=index_names)
+        source_data = [[1.0, 999], [2.0, 888]]
+        source = pd.DataFrame(source_data, columns=data_names, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "b", "C"], [1, 444, 3]], names=index_names)
+        expected_data = [[1.0, 10], [2.0, 888], [3.0, 30]]
+        expected = pd.DataFrame(expected_data, columns=data_names, index=expected_idx)
+
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["index"])
+
+    def test_can_match_on_secondary_index_column_named_index_when_primary_is_unnamed_datetime_index(self, lmdb_library):
+        lib = lmdb_library
+        index_names = [None, "index", "b"]
+        data_names = ["c", "d"]
+
+        primary_target_vals = pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(4), pd.Timestamp(10)])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
+        target_data = [[1.0, 10], [2.0, 20], [3.0, 30]]
+        target = pd.DataFrame(target_data, columns=data_names, index=target_idx)
+
+        primary_source_vals = pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(4)])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["aa", "B"], [222, 444]], names=index_names)
+        source_data = [[1.0, 999], [2.0, 888]]
+        source = pd.DataFrame(source_data, columns=data_names, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 444, 3]], names=index_names)
+        expected_data = [[1.0, 10], [2.0, 888], [3.0, 30]]
+        expected = pd.DataFrame(expected_data, columns=data_names, index=expected_idx)
+
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["index"])
+
+    def test_default_on_datetime(self, lmdb_library):
+        index_names = ["idx", "a", "b"]
+        primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        primary_source_vals = pd.to_datetime(["2024-01-02", "2024-01-05"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["a", "b"], [200, 300]], names=index_names)
+        source = pd.DataFrame({"c": [1000, 2000], "d": [-1000.0, -2000.0]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [primary_target_vals, ["A", "a", "C"], [1, 200, 3]], names=["idx", "a", "b"]
+        )
+        expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected)
+
+    def test_on_secondary_index_column_datetime(self, lmdb_library):
+        index_names = [None, "a", "b"]
+        primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        primary_source_vals = pd.to_datetime(["2024-01-02", "2024-01-05"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["B", "b"], [200, 300]], names=index_names)
+        source = pd.DataFrame({"c": [1000, 2000], "d": [-1000.0, -2000.0]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [primary_target_vals, ["A", "B", "C"], [1, 200, 3]], names=[None, "a", "b"]
+        )
+        expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a"])
+
+    def test_on_secondary_index_column_rowrange(self, lmdb_library):
+        index_names = ["idx", "a", "b"]
+        target_idx = pd.MultiIndex.from_arrays(
+            [np.array([-1, -2, -3], dtype=np.int8), ["A", "B", "C"], [1, 2, 3]], names=index_names
+        )
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [np.array([-10, -20], dtype=np.int8), ["B", "b"], [200, 300]], names=index_names
+        )
+        source = pd.DataFrame({"c": [1000, 2000], "d": [-1000.0, -2000.0]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [np.array([-1, -10, -3], dtype=np.int8), ["A", "B", "C"], [1, 200, 3]],
+            names=["idx", "a", "b"],
+        )
+        expected = pd.DataFrame({"c": [1, 1000, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a"])
+
+    def test_on_data_column_datetime(self, lmdb_library):
+        index_names = [None, "a", "b"]
+        primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([primary_target_vals, ["A", "B", "C"], [1, 2, 3]], names=index_names)
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        primary_source_vals = pd.to_datetime(["2024-01-02", "2024-01-05"])
+        source_idx = pd.MultiIndex.from_arrays([primary_source_vals, ["a", "b"], [200, 300]], names=index_names)
+        source = pd.DataFrame({"c": [2, 2000], "d": [-1000.0, -2000.0]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [primary_target_vals, ["A", "a", "C"], [1, 200, 3]], names=[None, "a", "b"]
+        )
+        expected = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -1000.0, -3.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["c"])
+
+    def test_on_data_column_rowrange(self, lmdb_library):
+        index_names = [None, "a", "b"]
+        target_idx = pd.MultiIndex.from_arrays(
+            [np.array([-1, -2, -3], dtype=np.int8), ["A", "B", "C"], [1, 2, 3]], names=index_names
+        )
+        target = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2.0, -3.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [np.array([-10, -20], dtype=np.int8), ["a", "b"], [200, 300]], names=index_names
+        )
+        source = pd.DataFrame({"c": [1000, 2], "d": [-1000.0, -2000.0]}, index=source_idx)
+
+        expected_idx = pd.MultiIndex.from_arrays(
+            [np.array([-1, -20, -3], dtype=np.int8), ["A", "b", "C"], [1, 300, 3]], names=index_names
+        )
+        expected = pd.DataFrame({"c": [1, 2, 3], "d": [-1.0, -2000.0, -3.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["c"])
+
+    def test_on_secondary_index_and_data_column_datetime(self, lmdb_library):
+        index_names = [None, "a", "b"]
+        primary_target_vals = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03", "2024-01-04"])
+        target_idx = pd.MultiIndex.from_arrays(
+            [primary_target_vals, ["A", "B", "C", "D"], [1, 2, 3, 4]], names=index_names
+        )
+        target = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -2.0, -3.0, -4.0]}, index=target_idx)
+
+        primary_source_vals = pd.to_datetime(["2024-01-02", "2024-01-03", "2024-01-04"])
+        source_idx = pd.MultiIndex.from_arrays(
+            [primary_source_vals, ["B", "X", "D"], [200, 300, 400]], names=index_names
+        )
+        source = pd.DataFrame({"c": [20, 30, 99], "d": [-200.0, -300.0, -400.0]}, index=source_idx)
+        expected_idx = pd.MultiIndex.from_arrays(
+            [primary_target_vals, ["A", "B", "C", "D"], [1, 200, 3, 4]], names=index_names
+        )
+        expected = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -200.0, -3.0, -4.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a", "c"])
+
+    def test_on_secondary_index_and_data_column_rowrange(self, lmdb_library):
+        index_names = ["idx", "a", "b"]
+        target_idx = pd.MultiIndex.from_arrays(
+            [np.array([-1, -2, -3, -4], dtype=np.int8), ["A", "B", "C", "D"], [1, 2, 3, 4]], names=index_names
+        )
+        target = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -2.0, -3.0, -4.0]}, index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [np.array([-10, -20, -30], dtype=np.int8), ["B", "X", "D"], [200, 300, 400]], names=index_names
+        )
+        source = pd.DataFrame({"c": [20, 30, 99], "d": [-200.0, -300.0, -400.0]}, index=source_idx)
+        expected_idx = pd.MultiIndex.from_arrays(
+            [np.array([-1, -10, -3, -4], dtype=np.int8), ["A", "B", "C", "D"], [1, 200, 3, 4]], names=index_names
+        )
+        expected = pd.DataFrame({"c": [10, 20, 30, 40], "d": [-1.0, -200.0, -3.0, -4.0]}, index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a", "c"])
+
+    def test_no_data_columns_datetime(self, lmdb_library):
+        dates = pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"])
+        target_idx = pd.MultiIndex.from_arrays([dates, ["A", "B", "C"]], names=["idx", "a"])
+        target = pd.DataFrame(index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays(
+            [pd.to_datetime(["2024-01-02", "2024-01-05"]), ["X", "Z"]], names=["idx", "a"]
+        )
+        source = pd.DataFrame(index=source_idx)
+        # on=None matches by timestamp only. Jan2 matches → __idx__a updated from B to X. Jan5 no match.
+        expected_idx = pd.MultiIndex.from_arrays([dates, ["A", "X", "C"]], names=["idx", "a"])
+        expected = pd.DataFrame(index=expected_idx)
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected)
+
+    def test_no_data_columns_rowrange(self, lmdb_library):
+        target_idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=["a", "b"])
+        target = pd.DataFrame(index=target_idx)
+
+        source_idx = pd.MultiIndex.from_arrays([["B", "X"], [2, 9]], names=["a", "b"])
+        source = pd.DataFrame(index=source_idx)
+        # a=B matches row 1, but b=2 same in source and target; no data columns → unchanged
+        expected = target.copy()
+        generic_merge_test(lmdb_library, "sym", target, source, self.strategy, expected, on=["a"])
+
+    @pytest.mark.parametrize("on", ([None], ["a", None]))
+    @pytest.mark.parametrize("is_datetime", [True, False], ids=["datetime", "rowrange"])
+    @pytest.mark.parametrize(
+        "index_names, data_names", [([None, "a"], ["b"]), (["a", None], ["b"]), (["a", "b"], [None])]
+    )
+    def test_match_on_column_named_none(self, lmdb_library, on, is_datetime, index_names, data_names):
+        lib = lmdb_library
+        if is_datetime:
+            idx = pd.MultiIndex.from_arrays(
+                [[pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], [1, 2, 3]], names=index_names
+            )
+            src_idx = pd.MultiIndex.from_arrays([[pd.Timestamp(0)], [1]], names=index_names)
+        else:
+            idx = pd.MultiIndex.from_arrays([["A", "B", "C"], [1, 2, 3]], names=index_names)
+            src_idx = pd.MultiIndex.from_arrays([["A"], [1]], names=index_names)
+        target = pd.DataFrame({c: [1.0, 2.0, 3.0] for c in data_names}, index=idx)
+        source = pd.DataFrame({c: [99.0] for c in data_names}, index=src_idx)
+        lib.write("sym", target)
+        with pytest.raises(TypeError):
+            lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
