@@ -18,6 +18,7 @@ from arcticdb.exceptions import (
     StreamDescriptorMismatch,
     UserInputException,
     SortingException,
+    UnsortedDataException,
     StorageException,
     ArcticException,
 )

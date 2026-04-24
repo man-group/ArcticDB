@@ -2618,12 +2618,12 @@ size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view na
             descriptor
     );
     const boost::regex repetition_regex{fmt::format("^__col_{}__\\d+$", name)};
-    const std::string mutliindex_mangled_name = stream::mangled_name(name);
+    const std::string multiindex_mangled_name = stream::mangled_name(name);
     std::ranges::subrange data_fields{
             std::next(descriptor.fields().begin(), descriptor.index().field_count()), descriptor.fields().end()
     };
     const auto is_name_or_mangled_name = [&](const Field& field) {
-        return field.name() == name || field.name() == mutliindex_mangled_name ||
+        return field.name() == name || field.name() == multiindex_mangled_name ||
                boost::regex_match(field.name().begin(), field.name().end(), repetition_regex);
     };
     const auto field_it = std::ranges::find_if(data_fields, is_name_or_mangled_name);
@@ -2638,7 +2638,7 @@ size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view na
     );
     user_input::check<ErrorCode::E_DUPLICATE_COLUMN>(
             repetition_it == data_fields.end(),
-            "Column \"{}\" specified in the 'on' is appears more than once in the dataframe. Descriptor: {}",
+            "Column \"{}\" specified in the 'on' appears more than once in the dataframe. Descriptor: {}",
             name,
             descriptor
     );

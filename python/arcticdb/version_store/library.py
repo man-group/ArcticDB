@@ -3397,7 +3397,8 @@ class Library:
             If a column name appears more than once in the source or the target it must not be added in the on
             parameter.
 
-            In case of datetime indexed dataframe the on parameter must not contain the name of the datetime index.
+            In the case of a datetime-indexed DataFrame the on parameter must not contain the name of the datetime
+            index.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
