@@ -581,15 +581,15 @@ void ArrowTimestampHandler::
         inserter.flush();
     } else {
         auto column_data = source_column.data();
-        const auto* src_ptr = reinterpret_cast<timestamp*>(column_data.buffer().data());
+        const auto* src_ptr = reinterpret_cast<timestamp*>(column_data.buffer().blocks()[0]->data());
 
         // 3x faster for dense to `memcpy` + scan each element than doing the copy in the for_each_enumerated.  
         // If going through the `handle_type` codepath we can skip the memcpy as we have decoded directly onto the destination buffer. 
-        if (auto* write_ptr = dest; src_ptr != write_ptr) {
+        if (auto* dest_ptr = dest; dest_ptr != src_ptr) {
             while (auto block = column_data.next<TimestampTag>()) {
                 const auto row_count = block->row_count();
-                memcpy(write_ptr, block->data(), row_count * sizeof(timestamp));
-                write_ptr += row_count;
+                memcpy(dest_ptr, block->data(), row_count * sizeof(timestamp));
+                dest_ptr += row_count;
             }
         }
 
