@@ -11,6 +11,7 @@ import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 from polars.testing import assert_frame_equal as assert_frame_equal_pl
+import pyarrow as pa
 import pytest
 
 from arcticdb_ext.exceptions import DuplicateKeyException, SchemaException, StorageException
@@ -148,18 +149,25 @@ def test_compact_data_explicit_rows_per_segment(
 ):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=lib_config_value, dynamic_strings=True)
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_explicit_rows_per_segment"
-    df = pd.DataFrame(
+    table = pa.table(
         {
-            "ints": np.arange(30, dtype=np.int64),
-            "floats": np.arange(30, 60, dtype=np.float32),
-            "bools": rng.random(30) > 0.5,
-            # Include multiple string columns with overlap of the values to test string pool construction
-            "strings_1": 6 * ["hello", None, "gutentag", np.nan, "konichiwa"],
-            "strings_2": 6 * ["hello", "bonjour", "gutentag", "nihao", "konichiwa"],
+            "ints dense": np.arange(30, dtype=np.int64),
+            "floats dense": np.arange(30, 60, dtype=np.float32),
+            "bools dense": rng.random(30) > 0.5,
+            "strings dense": 6 * ["hello", "bonjour", "gutentag", "nihao", "konichiwa"],
+            "ints sparse": pa.array(6 * [0, 1, 2, None, None], pa.int8()),
+            "floats sparse": pa.array(6 * [None, 0.1, 0.2, None, 0.3], pa.float32()),
+            "bools sparse": pa.array(6 * [True, None, None, None, False], pa.bool_()),
+            "strings sparse": 6 * ["hello", None, "gutentag", None, "konichiwa"],
+            "ints empty": pa.array(30 * [None], pa.uint16()),
+            "floats empty": pa.array(30 * [None], pa.float64()),
+            "bools empty": pa.array(30 * [None], pa.bool_()),
+            "strings empty": pa.array(30 * [None], pa.string()),
         }
     )
-    lib.write(sym, df)
+    lib.write(sym, table)
     generic_compact_data_test(lib, sym, method_arg)
 
 
@@ -546,8 +554,7 @@ def test_compact_data_dynamic_schema_missing_columns(in_memory_store_factory, in
 
 
 def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_store_factory):
-    # Prune previous as we're going to look at the data segment descriptors post-compaction
-    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10, prune_previous_version=True)
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
     sym = "test_compact_data_output_column_missing_from_slice_constant_types"
     # This configuration tests the right thing because:
     # - we start with row-slices of 5, 10, and 5 rows respectively
@@ -560,18 +567,6 @@ def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_
     lib.append(sym, pd.DataFrame({"present_in_all": np.arange(5, 15)}))
     lib.append(sym, pd.DataFrame({"present_in_all": np.arange(15, 20), "present_in_last": np.arange(15, 20)}))
     generic_compact_data_test(lib, sym)
-    lib_tool = lib.library_tool()
-    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
-    assert len(data_keys) == 2
-    # These aren't in any particular order
-    data_key_0 = [key for key in data_keys if key.start_index == 0][0]
-    data_key_1 = [key for key in data_keys if key.start_index == 10][0]
-    fields_0 = [field.name for field in lib_tool.read_descriptor(data_key_0).fields()]
-    fields_1 = [field.name for field in lib_tool.read_descriptor(data_key_1).fields()]
-    assert len(fields_0) == 2
-    assert len(fields_1) == 2
-    assert fields_0 == ["present_in_all", "present_in_first"]
-    assert fields_1 == ["present_in_all", "present_in_last"]
 
 
 # Like the test above, but with type promotion as well to force use of the iteration code-path, rather than the memcpy

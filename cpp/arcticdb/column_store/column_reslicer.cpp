@@ -89,7 +89,6 @@ std::vector<Column> ColumnReslicer::reslice_by_memcpy() {
     auto type_size = get_type_size(type_->data_type());
     auto output_col = output_columns.begin();
     auto advance_output_col = [&]() {
-        //        while (output_col != output_columns.end() && !output_col->has_value()) {
         while (output_col != output_columns.end() && output_col->row_count() == 0) {
             ++output_col;
         }
@@ -151,7 +150,6 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
     auto output_col = output_columns.begin();
     auto string_pool = string_pools.begin();
     auto advance_output_col = [&]() {
-        //        while (output_col != output_columns.end() && !output_col->has_value()) {
         while (output_col != output_columns.end() && output_col->row_count() == 0) {
             ++output_col;
             ++string_pool;
@@ -222,8 +220,14 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
         }
         // As we have allocated exactly as much space in the output data as was present in the input data, in the final
         // input column, we should advance output_it exactly to the end of the final output column
+        // This is no longer true, we could have a column with no values in it from a previous compaction
+        // This is safe, as at least one output column must have a value, so the find_if will never return rend
+        auto last_output_col =
+                std::next(std::find_if(output_columns.rbegin(), output_columns.rend(), [](const auto& col) {
+                    return col.row_count() > 0;
+                })).base();
         util::check(
-                output_col == std::prev(output_columns.end()) && output_it == output_end_it,
+                output_col == last_output_col && output_it == output_end_it,
                 "ColumnReslicer::reslice_by_iteration input iteration finished without reaching end of output columns"
         );
     });
