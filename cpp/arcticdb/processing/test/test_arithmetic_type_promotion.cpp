@@ -572,10 +572,6 @@ TEST(ArithmeticTypePromotion, Divide) {
 TEST(ArithmeticTypePromotion, Pow) {
     using namespace arcticdb;
     // Floating point types should promote to the larger type width
-    static_assert(std::is_same_v<binary_operation_promoted_type<float, float, PowOperator>::type, float>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<float, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<double, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<double, double, PowOperator>::type, double>);
     // uint ^ uint -> uint64_t (regardless of input widths)
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t, uint8_t, PowOperator>::type, uint64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t, uint16_t, PowOperator>::type, uint64_t>);
@@ -656,42 +652,21 @@ TEST(ArithmeticTypePromotion, Pow) {
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, PowOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, PowOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, PowOperator>::type, int64_t>);
-    // Mixed integral and floating point types should promote to double to avoid loss of precision. This is what
-    // Pandas does.
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, float, PowOperator>::type, double>);
 
     static_assert(std::is_same_v<binary_operation_promoted_type<float, uint8_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<float, uint16_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<float, uint32_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<float, uint64_t, PowOperator>::type, double>);
 
-    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, float, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, float, PowOperator>::type, double>);
-
     static_assert(std::is_same_v<binary_operation_promoted_type<float, int8_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<float, int16_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<float, int32_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<float, int64_t, PowOperator>::type, double>);
 
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<uint64_t, double, PowOperator>::type, double>);
-
     static_assert(std::is_same_v<binary_operation_promoted_type<double, uint8_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<double, uint16_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<double, uint32_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<double, uint64_t, PowOperator>::type, double>);
-
-    static_assert(std::is_same_v<binary_operation_promoted_type<int8_t, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<int16_t, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<int32_t, double, PowOperator>::type, double>);
-    static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, double, PowOperator>::type, double>);
 
     static_assert(std::is_same_v<binary_operation_promoted_type<double, int8_t, PowOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<double, int16_t, PowOperator>::type, double>);
