@@ -269,6 +269,26 @@ TEST_F(AstParsingOutputTypesTest, ProjectionPowNumericColValueSet) {
     ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
 }
 
+TEST_F(AstParsingOutputTypesTest, ProjectionPowBitsetNumericCol) {
+    ec.add_expression_node("bitset", bitset_node());
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ExpressionName("bitset"), ColumnName("int32"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"int32", "uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionPowValueSetNumericCol) {
+    std::unordered_set<uint8_t> raw_set{1, 2, 3};
+    auto value_set = std::make_shared<ValueSet>(std::make_shared<std::unordered_set<uint8_t>>(std::move(raw_set)));
+    ec.add_value_set("value_set", value_set);
+    ec.add_expression_node(
+            "root", std::make_shared<ExpressionNode>(ValueSetName("value_set"), ColumnName("uint8"), OperationType::POW)
+    );
+    ProjectClause project_clause{{"uint8"}, "root", ec};
+    ASSERT_THROW(project_clause.modify_schema(initial_schema()), UserInputException);
+}
+
 TEST_F(AstParsingOutputTypesTest, FilterIsInNumericColEmptyValueSet) {
     std::vector<std::string> raw_set;
     auto value_set = std::make_shared<ValueSet>(std::move(raw_set));
