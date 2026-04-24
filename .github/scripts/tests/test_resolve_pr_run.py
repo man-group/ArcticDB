@@ -29,6 +29,7 @@ class TestGetPrHead:
 class TestFindLatestFailedRun:
     @patch("resolve_pr_run.run_gh")
     def test_finds_most_recent_failure(self, mock_gh):
+        # All calls return the same data; the function picks the most recent
         mock_gh.return_value = json.dumps([
             {"id": 100, "created_at": "2025-01-01T00:00:00Z", "conclusion": "failure"},
             {"id": 200, "created_at": "2025-01-02T00:00:00Z", "conclusion": "failure"},
@@ -37,26 +38,37 @@ class TestFindLatestFailedRun:
         assert result == "200"
 
     @patch("resolve_pr_run.run_gh")
-    def test_prefers_most_recent_across_workflows(self, mock_gh):
-        # Each call to run_gh is for a different workflow
-        call_count = 0
-        def side_effect(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return json.dumps([
-                    {"id": 100, "created_at": "2025-01-01T00:00:00Z", "conclusion": "failure"},
-                ])
-            elif call_count == 2:
-                return json.dumps([
-                    {"id": 300, "created_at": "2025-01-03T00:00:00Z", "conclusion": "timed_out"},
-                ])
-            else:
-                return ""
-
-        mock_gh.side_effect = side_effect
+    def test_finds_timed_out_runs(self, mock_gh):
+        mock_gh.return_value = json.dumps([
+            {"id": 500, "created_at": "2025-01-05T00:00:00Z", "conclusion": "timed_out"},
+        ])
         result = find_latest_failed_run("owner/repo", "feature/foo")
-        assert result == "300"
+        assert result == "500"
+
+    @patch("resolve_pr_run.run_gh")
+    def test_queries_both_failure_and_timed_out(self, mock_gh):
+        """Verify that both status=failure and status=timed_out are queried."""
+        mock_gh.return_value = ""
+        find_latest_failed_run("owner/repo", "feature/foo")
+        # Each workflow generates 2 calls (failure + timed_out)
+        statuses_queried = set()
+        for call in mock_gh.call_args_list:
+            url = call[0][2]  # Third positional arg is the API URL
+            if "status=failure" in url:
+                statuses_queried.add("failure")
+            if "status=timed_out" in url:
+                statuses_queried.add("timed_out")
+        assert statuses_queried == {"failure", "timed_out"}
+
+    @patch("resolve_pr_run.run_gh")
+    def test_url_encodes_branch_name(self, mock_gh):
+        mock_gh.return_value = ""
+        find_latest_failed_run("owner/repo", "feat/foo&bar")
+        # All API calls should have the branch URL-encoded
+        for call in mock_gh.call_args_list:
+            url = call[0][2]
+            assert "feat%2Ffoo%26bar" in url
+            assert "feat/foo&bar" not in url
 
     @patch("resolve_pr_run.run_gh")
     def test_no_failures_returns_none(self, mock_gh):

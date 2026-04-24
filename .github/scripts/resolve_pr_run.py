@@ -12,6 +12,7 @@ import argparse
 import json
 import subprocess
 import sys
+from urllib.parse import quote
 
 # The workflows we track — must stay in sync with the workflow_run trigger list
 TRACKED_WORKFLOWS = [
@@ -51,31 +52,35 @@ def find_latest_failed_run(repo: str, branch: str) -> str | None:
     """
     best_run_id = None
     best_run_date = ""
+    branch_encoded = quote(branch, safe="")
 
     for workflow_name in TRACKED_WORKFLOWS:
-        raw = run_gh(
-            "api", "--paginate",
-            f"repos/{repo}/actions/runs"
-            f"?branch={branch}&status=failure&per_page=5",
-            "--jq", (
-                f'[.workflow_runs[] | select(.name == "{workflow_name}") '
-                f'| {{id, created_at, conclusion}}]'
-            ),
-            check=False,
-        )
-        if not raw:
-            continue
-
-        for line in raw.splitlines():
-            line = line.strip()
-            if not line:
+        # GitHub treats "failure" and "timed_out" as separate status values,
+        # so we must query for both.
+        for status in ("failure", "timed_out"):
+            raw = run_gh(
+                "api", "--paginate",
+                f"repos/{repo}/actions/runs"
+                f"?branch={branch_encoded}&status={status}&per_page=5",
+                "--jq", (
+                    f'[.workflow_runs[] | select(.name == "{workflow_name}") '
+                    f'| {{id, created_at, conclusion}}]'
+                ),
+                check=False,
+            )
+            if not raw:
                 continue
-            runs = json.loads(line)
-            for run in runs:
-                if run["conclusion"] in ("failure", "timed_out"):
-                    if run["created_at"] > best_run_date:
-                        best_run_date = run["created_at"]
-                        best_run_id = str(run["id"])
+
+            for line in raw.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                runs = json.loads(line)
+                for run in runs:
+                    if run["conclusion"] in ("failure", "timed_out"):
+                        if run["created_at"] > best_run_date:
+                            best_run_date = run["created_at"]
+                            best_run_id = str(run["id"])
 
     return best_run_id
 

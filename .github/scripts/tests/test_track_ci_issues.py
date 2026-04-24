@@ -71,7 +71,8 @@ class TestGroupingThreshold:
         assert GROUPING_THRESHOLD == 10
 
     @patch("track_ci_issues.create_issue", return_value="https://github.com/owner/repo/issues/1")
-    def test_creates_grouped_issue_for_tests(self, mock_create):
+    @patch("track_ci_issues.find_existing_issue", return_value=None)
+    def test_creates_grouped_issue_for_tests(self, mock_find, mock_create):
         tracker = IssueTracker(
             repo="owner/repo",
             run_id="123",
@@ -81,28 +82,45 @@ class TestGroupingThreshold:
         items = [f"Test.Name{i}" for i in range(15)]
         tracker.create_grouped_issue("test", items)
 
+        mock_find.assert_called_once_with("owner/repo", "flaky-test", "Grouped CI test failures")
         mock_create.assert_called_once()
-        call_args = mock_create.call_args
-        title = call_args[1]["title"] if "title" in call_args[1] else call_args[0][1]
-        assert "Grouped CI test failures (15 tests)" in title
+        title = mock_create.call_args[0][1]
+        assert title == "Grouped CI test failures"
         assert len(tracker.slack_lines) == 1
         assert "15 tests failed" in tracker.slack_lines[0]
 
     @patch("track_ci_issues.create_issue", return_value="https://github.com/owner/repo/issues/2")
-    def test_creates_grouped_issue_for_steps(self, mock_create):
+    @patch("track_ci_issues.find_existing_issue", return_value=None)
+    def test_creates_grouped_issue_for_steps(self, mock_find, mock_create):
         tracker = IssueTracker(
             repo="owner/repo",
             run_id="456",
             run_url="https://github.com/owner/repo/actions/runs/456",
             commit_sha="def456",
         )
-        items = [f"Job / Step{i}" for i in range(20)]
+        items = [f"Step{i}" for i in range(20)]
         tracker.create_grouped_issue("step", items)
 
-        call_args = mock_create.call_args
-        title = call_args[1]["title"] if "title" in call_args[1] else call_args[0][1]
-        assert "Grouped CI step failures (20 steps)" in title
+        title = mock_create.call_args[0][1]
+        assert title == "Grouped CI step failures"
         assert "20 steps failed" in tracker.slack_lines[0]
+
+    @patch("track_ci_issues.get_issue_url", return_value="https://github.com/owner/repo/issues/7")
+    @patch("track_ci_issues.comment_on_issue")
+    @patch("track_ci_issues.find_existing_issue", return_value=7)
+    def test_comments_on_existing_grouped_issue(self, mock_find, mock_comment, mock_url):
+        tracker = IssueTracker(
+            repo="owner/repo",
+            run_id="789",
+            run_url="https://github.com/owner/repo/actions/runs/789",
+            commit_sha="def789",
+        )
+        items = [f"Test.Name{i}" for i in range(15)]
+        tracker.create_grouped_issue("test", items)
+
+        mock_comment.assert_called_once()
+        assert "#7" in tracker.slack_lines[0]
+        assert "15 tests failed" in tracker.slack_lines[0]
 
 
 # ---------------------------------------------------------------------------

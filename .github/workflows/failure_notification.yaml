@@ -32,8 +32,10 @@ jobs:
       - name: React to comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
         run: |
-          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
             -f content='eyes' --silent
 
       - name: Checkout repository
@@ -43,15 +45,17 @@ jobs:
         id: find
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           run_id=$(python3 .github/scripts/resolve_pr_run.py \
-            --pr-number "${{ github.event.issue.number }}" \
-            --repo "${{ github.repository }}")
+            --pr-number "$PR_NUMBER" \
+            --repo "$REPO")
 
           if [ -z "$run_id" ]; then
-            gh pr comment "${{ github.event.issue.number }}" \
-              --repo "${{ github.repository }}" \
+            gh pr comment "$PR_NUMBER" \
+              --repo "$REPO" \
               --body "No failed CI runs found for this PR."
             echo "run_id=" >> "$GITHUB_OUTPUT"
           else
@@ -119,24 +123,31 @@ jobs:
       - name: Parse CI failures
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          python3 .github/scripts/parse_ci_failures.py
-          --run-id "${{ steps.meta.outputs.run_id }}"
-          --repo "${{ github.repository }}"
-          --output-dir /tmp/ci_failures
+          META_RUN_ID: ${{ steps.meta.outputs.run_id }}
+          META_REPO: ${{ github.repository }}
+        run: |
+          python3 .github/scripts/parse_ci_failures.py \
+            --run-id "$META_RUN_ID" \
+            --repo "$META_REPO" \
+            --output-dir /tmp/ci_failures
 
       - name: Create or update issues
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          python3 .github/scripts/track_ci_issues.py
-          --input-dir /tmp/ci_failures
-          --run-id "${{ steps.meta.outputs.run_id }}"
-          --run-url "${{ steps.meta.outputs.run_url }}"
-          --repo "${{ github.repository }}"
-          --commit-sha "${{ steps.meta.outputs.commit_sha }}"
-          --conclusion "${{ steps.meta.outputs.conclusion }}"
-          --output-file /tmp/ci_failures/slack_summary.txt
+          META_RUN_ID: ${{ steps.meta.outputs.run_id }}
+          META_RUN_URL: ${{ steps.meta.outputs.run_url }}
+          META_REPO: ${{ github.repository }}
+          META_COMMIT_SHA: ${{ steps.meta.outputs.commit_sha }}
+          META_CONCLUSION: ${{ steps.meta.outputs.conclusion }}
+        run: |
+          python3 .github/scripts/track_ci_issues.py \
+            --input-dir /tmp/ci_failures \
+            --run-id "$META_RUN_ID" \
+            --run-url "$META_RUN_URL" \
+            --repo "$META_REPO" \
+            --commit-sha "$META_COMMIT_SHA" \
+            --conclusion "$META_CONCLUSION" \
+            --output-file /tmp/ci_failures/slack_summary.txt
 
       - name: Set Slack summary output
         id: summary
@@ -167,6 +178,12 @@ jobs:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SUMMARY: ${{ needs.track-failures.outputs.slack_summary }}
           TRACKER_RESULT: ${{ needs.track-failures.result }}
+          WR_NAME: ${{ github.event.workflow_run.name }}
+          WR_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          WR_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          WR_RUN_ID: ${{ github.event.workflow_run.id }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
         run: |
           # Write summary to a temp file for the script
           SUMMARY_ARG=""
@@ -177,12 +194,12 @@ jobs:
 
           python3 .github/scripts/send_slack_notification.py \
             --webhook-url "$SLACK_WEBHOOK_URL" \
-            --workflow-name "${{ github.event.workflow_run.name }}" \
-            --conclusion "${{ github.event.workflow_run.conclusion }}" \
-            --branch "${{ github.event.workflow_run.head_branch }}" \
-            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.event.workflow_run.id }}" \
-            --repo "${{ github.repository }}" \
-            --repo-url "${{ github.server_url }}/${{ github.repository }}" \
+            --workflow-name "$WR_NAME" \
+            --conclusion "$WR_CONCLUSION" \
+            --branch "$WR_BRANCH" \
+            --run-url "$SERVER_URL/$REPO/actions/runs/$WR_RUN_ID" \
+            --repo "$REPO" \
+            --repo-url "$SERVER_URL/$REPO" \
             $SUMMARY_ARG \
             ${TRACKER_RESULT:+--tracker-result "$TRACKER_RESULT"}
 
@@ -202,9 +219,11 @@ jobs:
           RUN_ID: ${{ needs.resolve-pr-run.outputs.run_id }}
           PR_NUMBER: ${{ needs.resolve-pr-run.outputs.pr_number }}
           TRACKER_RESULT: ${{ needs.track-failures.result }}
+          SERVER_URL: ${{ github.server_url }}
+          REPO: ${{ github.repository }}
         run: |
           if [ "$TRACKER_RESULT" != "success" ]; then
-            gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
+            gh pr comment "$PR_NUMBER" --repo "$REPO" \
               --body "**CI failure analysis** for run \`$RUN_ID\` did not complete successfully (status: $TRACKER_RESULT)."
             exit 0
           fi
@@ -214,11 +233,12 @@ jobs:
             | sed 's/:rotating_light:/🚨/g' \
             | sed 's/:warning:/⚠️/g' \
             | sed 's/:question:/❓/g' \
+            | sed 's/:hourglass:/⏳/g' \
             | sed 's/\*\([^*]*\)\*/**\1**/g')
 
-          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/$RUN_ID"
+          run_url="$SERVER_URL/$REPO/actions/runs/$RUN_ID"
 
-          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$(cat <<EOF
+          gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$(cat <<EOF
           ### CI failure analysis
 
           Run: [$RUN_ID]($run_url)
@@ -233,7 +253,10 @@ jobs:
       - name: React with result
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRACKER_RESULT: ${{ needs.track-failures.result }}
+          REPO: ${{ github.repository }}
+          COMMENT_ID: ${{ github.event.comment.id }}
         run: |
-          emoji=$( [ "${{ needs.track-failures.result }}" = "success" ] && echo "rocket" || echo "-1" )
-          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+          emoji=$( [ "$TRACKER_RESULT" = "success" ] && echo "rocket" || echo "-1" )
+          gh api "repos/$REPO/issues/comments/$COMMENT_ID/reactions" \
             -f content="$emoji" --silent
