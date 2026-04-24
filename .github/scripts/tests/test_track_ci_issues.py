@@ -130,3 +130,36 @@ class TestTrackItem:
         mock_comment.assert_called_once()
         assert ":warning:" in tracker.slack_lines[0]
         assert "#5" in tracker.slack_lines[0]
+
+
+# ---------------------------------------------------------------------------
+# handle_timeout
+# ---------------------------------------------------------------------------
+class TestHandleTimeout:
+    @patch("track_ci_issues.create_issue", return_value="https://github.com/owner/repo/issues/20")
+    @patch("track_ci_issues.find_existing_issue", return_value=None)
+    def test_creates_timeout_issue(self, mock_find, mock_create):
+        tracker = IssueTracker("owner/repo", "1", "https://url", "abc123")
+        tracker.handle_timeout()
+
+        mock_find.assert_called_once_with("owner/repo", "ci-failure", "CI timeout")
+        mock_create.assert_called_once()
+        title = mock_create.call_args[0][1]
+        assert title == "CI timeout"
+        body = mock_create.call_args[0][3]
+        assert "exceeded its time limit" in body
+        assert ":hourglass:" in tracker.slack_lines[0]
+        assert "Timeout" in tracker.slack_lines[0]
+
+    @patch("track_ci_issues.get_issue_url", return_value="https://github.com/owner/repo/issues/20")
+    @patch("track_ci_issues.comment_on_issue")
+    @patch("track_ci_issues.find_existing_issue", return_value=20)
+    def test_comments_on_existing_timeout_issue(self, mock_find, mock_comment, mock_url):
+        tracker = IssueTracker("owner/repo", "1", "https://url", "abc123")
+        tracker.handle_timeout()
+
+        mock_comment.assert_called_once()
+        comment_body = mock_comment.call_args[0][2]
+        assert "Another timeout" in comment_body
+        assert ":hourglass:" in tracker.slack_lines[0]
+        assert "#20" in tracker.slack_lines[0]

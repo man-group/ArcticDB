@@ -75,15 +75,26 @@ python/tests/unit/arcticdb/test_arctic.py::TestArcticBasic::test_list_libraries
 python/tests/unit/arcticdb/test_arctic.py::TestArcticBasic::test_delete_library
 ```
 
-`failed_steps.txt` — one step name per line, deduplicated across jobs
-(infrastructure steps only; test-runner steps are filtered out when test names
-are available):
+`failed_steps.txt` — one step name per line, deduplicated across jobs.
+Test-runner steps (matching `test`, `pytest`, `ctest`) are always filtered out
+— when test names were parsed they're redundant, and when no test names were
+parsed their presence indicates a timeout rather than an infra failure:
 ```
 Install system dependencies
 Fetch vcpkg cache
 ```
 
-When no failures are found, both files are empty (0 bytes).
+`failure_kind.txt` — a single word classifying the failure:
+
+| Value | Meaning |
+|-------|---------|
+| `test_failure` | Individual test names were parsed from logs |
+| `infra_failure` | Only infrastructure steps failed (no test names) |
+| `timeout` | Only test-runner steps failed with no test names (likely timed out) |
+| `unknown` | No failed steps or tests found at all |
+
+When no failures are found, the text files are empty (0 bytes) and
+`failure_kind.txt` is `unknown`.
 
 ---
 
@@ -94,16 +105,18 @@ failing test/step), and writes a Slack summary.
 
 ```
 python3 track_ci_issues.py --input-dir <DIR> --run-id <RUN_ID> --run-url <URL> \
-                           --repo <OWNER/REPO> --commit-sha <SHA> --output-file <FILE>
+                           --repo <OWNER/REPO> --commit-sha <SHA> \
+                           --conclusion <CONCLUSION> --output-file <FILE>
 ```
 
 | Argument | Required | Description |
 |----------|----------|-------------|
-| `--input-dir` | yes | Directory containing `failing_tests.txt` and `failed_steps.txt` |
+| `--input-dir` | yes | Directory containing `failing_tests.txt`, `failed_steps.txt`, `failure_kind.txt` |
 | `--run-id` | yes | Numeric workflow run ID |
 | `--run-url` | yes | Full URL to the workflow run |
 | `--repo` | yes | Repository in `owner/repo` format |
 | `--commit-sha` | yes | Full commit SHA of the failing run |
+| `--conclusion` | no | Run conclusion from GitHub (`failure`, `timed_out`). If `timed_out`, forces timeout handling regardless of `failure_kind.txt`. |
 | `--output-file` | yes | Path to write the Slack summary |
 
 **Behaviour:**
@@ -115,24 +128,31 @@ python3 track_ci_issues.py --input-dir <DIR> --run-id <RUN_ID> --run-url <URL> \
 - Same logic for steps with `Flaky step: <step_name>` and `flaky-step` label.
 - If >10 tests (or >10 steps) fail in one run, a single grouped issue is
   created instead of individual ones (correlated failures).
-- If neither tests nor steps are found (unparseable), creates or updates a
-  single `CI failures (unparseable)` issue.
+- **Timeout:** if `failure_kind.txt` says `timeout` (or `--conclusion` is
+  `timed_out`), creates or updates a single `CI timeout` issue.
+- **Unparseable:** if neither tests, steps, nor timeout are detected, creates
+  or updates a single `CI failures (unparseable)` issue.
 
 **Output file** (`--output-file`) — Slack-formatted summary, one line per item:
 ```
-:rotating_light: *New* — `TestVersionMap.TestWriteAndReadVersion` (<https://github.com/man-group/ArcticDB/issues/123|issue>)
-:warning: *Known* — `TestCodecVersion1.RoundtripLz4` (<https://github.com/man-group/ArcticDB/issues/98|#98>)
-:warning: *Known* — `Fetch vcpkg cache` (<https://github.com/man-group/ArcticDB/issues/101|#101>)
+:rotating_light: *New* — `TestVersionMap.TestWriteAndReadVersion` (<url|issue>)
+:warning: *Known* — `TestCodecVersion1.RoundtripLz4` (<url|#98>)
+:warning: *Known* — `Fetch vcpkg cache` (<url|#101>)
 ```
 
 When >10 failures are grouped:
 ```
-:rotating_light: *42 tests failed* — likely correlated (<https://github.com/man-group/ArcticDB/issues/150|issue>)
+:rotating_light: *42 tests failed* — likely correlated (<url|issue>)
+```
+
+When timeout:
+```
+:hourglass: *Timeout* (<url|issue>)
 ```
 
 When unparseable:
 ```
-:question: Could not identify specific failures (<https://github.com/man-group/ArcticDB/issues/160|issue>)
+:question: Could not identify specific failures (<url|issue>)
 ```
 
 ---
@@ -230,6 +250,7 @@ python3 .github/scripts/parse_ci_failures.py \
 # 2. Inspect intermediate files
 cat /tmp/ci_failures/failing_tests.txt
 cat /tmp/ci_failures/failed_steps.txt
+cat /tmp/ci_failures/failure_kind.txt
 
 # 3. Create/update issues (will create real GitHub issues!)
 python3 .github/scripts/track_ci_issues.py \
@@ -238,6 +259,7 @@ python3 .github/scripts/track_ci_issues.py \
   --run-url "https://github.com/man-group/ArcticDB/actions/runs/12345678" \
   --repo man-group/ArcticDB \
   --commit-sha abc123def456 \
+  --conclusion failure \
   --output-file /tmp/ci_failures/slack_summary.txt
 
 cat /tmp/ci_failures/slack_summary.txt

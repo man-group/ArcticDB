@@ -135,6 +135,7 @@ jobs:
           --run-url "${{ steps.meta.outputs.run_url }}"
           --repo "${{ github.repository }}"
           --commit-sha "${{ steps.meta.outputs.commit_sha }}"
+          --conclusion "${{ steps.meta.outputs.conclusion }}"
           --output-file /tmp/ci_failures/slack_summary.txt
 
       - name: Set Slack summary output

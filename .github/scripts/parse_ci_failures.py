@@ -101,12 +101,15 @@ def parse_pytest_failures(log_text: str) -> set[str]:
     return {m.group(1) for m in re.finditer(pattern, log_text)}
 
 
-def filter_infra_steps(
-    all_steps: list[str], has_test_failures: bool
-) -> list[str]:
-    """When test names are known, filter out test-runner steps."""
-    if not has_test_failures:
-        return all_steps
+def filter_infra_steps(all_steps: list[str]) -> list[str]:
+    """Filter out test-runner steps, keeping only infrastructure steps.
+
+    Test-runner steps (e.g. "Run test", "Run pytest") are always removed:
+    - When test names were parsed, these are redundant.
+    - When no test names were parsed (e.g. timeout), removing them lets the
+      pipeline fall through to the unparseable/timeout fallback rather than
+      creating a useless "Flaky step: Run test" issue.
+    """
     test_keywords = re.compile(r"(test|pytest|ctest)", re.IGNORECASE)
     return [s for s in all_steps if not test_keywords.search(s)]
 
@@ -155,16 +158,33 @@ def main() -> None:
     failing_tests_sorted = sorted(failing_tests)
     print(f"Failing tests:\n" + "\n".join(failing_tests_sorted))
 
-    # 4. Filter infra steps
-    infra_steps = filter_infra_steps(all_failed_steps, bool(failing_tests))
+    # 4. Filter infra steps (always strip test-runner steps)
+    infra_steps = filter_infra_steps(all_failed_steps)
+    stripped_test_steps = len(all_failed_steps) - len(infra_steps)
     print(f"Infrastructure steps:\n" + "\n".join(infra_steps))
 
-    # 5. Write outputs
+    # 5. Determine failure kind
+    if failing_tests:
+        failure_kind = "test_failure"
+    elif infra_steps:
+        failure_kind = "infra_failure"
+    elif stripped_test_steps > 0:
+        # All failed steps were test runners but no test names were parsed — timeout
+        failure_kind = "timeout"
+    else:
+        failure_kind = "unknown"
+
+    print(f"Failure kind: {failure_kind}")
+
+    # 6. Write outputs
     with open(os.path.join(args.output_dir, "failing_tests.txt"), "w") as f:
         f.write("\n".join(failing_tests_sorted) + "\n" if failing_tests_sorted else "")
 
     with open(os.path.join(args.output_dir, "failed_steps.txt"), "w") as f:
         f.write("\n".join(infra_steps) + "\n" if infra_steps else "")
+
+    with open(os.path.join(args.output_dir, "failure_kind.txt"), "w") as f:
+        f.write(failure_kind + "\n")
 
     print(f"Done: {len(failing_tests_sorted)} failing test(s), {len(infra_steps)} failed step(s).")
 

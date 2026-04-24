@@ -129,32 +129,31 @@ class TestParsePytestFailures:
 # filter_infra_steps
 # ---------------------------------------------------------------------------
 class TestFilterInfraSteps:
-    def test_filters_test_steps_when_tests_found(self):
+    def test_filters_test_runner_steps(self):
         steps = [
             "Install deps",
             "Run pytest",
             "Run ctest",
             "Upload artifacts",
         ]
-        result = filter_infra_steps(steps, has_test_failures=True)
-        assert result == [
+        assert filter_infra_steps(steps) == [
             "Install deps",
             "Upload artifacts",
         ]
 
-    def test_keeps_all_when_no_test_failures(self):
-        steps = [
-            "Install deps",
-            "Run pytest",
-        ]
-        result = filter_infra_steps(steps, has_test_failures=False)
-        assert result == steps
+    def test_all_test_steps_produces_empty(self):
+        """When the only failed steps are test runners (e.g. timeout),
+        the result is empty, triggering the unparseable fallback."""
+        steps = ["Run test", "Run pytest"]
+        assert filter_infra_steps(steps) == []
+
+    def test_infra_only_steps_kept(self):
+        steps = ["Install deps", "Fetch vcpkg cache"]
+        assert filter_infra_steps(steps) == steps
 
     def test_empty_list(self):
-        assert filter_infra_steps([], has_test_failures=True) == []
-        assert filter_infra_steps([], has_test_failures=False) == []
+        assert filter_infra_steps([]) == []
 
     def test_case_insensitive(self):
         steps = ["Run Tests", "Install"]
-        result = filter_infra_steps(steps, has_test_failures=True)
-        assert result == ["Install"]
+        assert filter_infra_steps(steps) == ["Install"]
