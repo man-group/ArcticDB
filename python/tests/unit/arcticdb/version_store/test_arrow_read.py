@@ -22,6 +22,7 @@ import polars as pl
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
+from python.tests.conftest import lmdb_version_store_arrow
 from tests.util.mark import WINDOWS
 
 
@@ -183,9 +184,12 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
     assert_frame_equal_with_arrow(table, expected)
 
 
-@pytest.mark.xfail(reason="NaT values in datetime columns are not converted to Arrow nulls (monday ref: 11525537906)")
-def test_datetime_col_with_nats(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
+@pytest.mark.parametrize("row_range", [None, (2, 3), (2, 5), (2, 6), (3, 5)])
+@pytest.mark.parametrize("segment_size", [None, 1, 2, 1000])
+@pytest.mark.parametrize("use_query_builder", [False, True])
+def test_datetime_col_with_nats(version_store_factory, row_range, segment_size, use_query_builder):
+    slicing_params = {"segment_row_size": segment_size, "column_group_size": segment_size} if segment_size is not None else {}
+    lib = version_store_factory(**slicing_params, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         {
@@ -204,10 +208,57 @@ def test_datetime_col_with_nats(lmdb_version_store_tiny_segment):
         }
     )
     lib.write("arrow", df)
-    table = lib.read("arrow").data
-    expected = lib.read("arrow", output_format=OutputFormat.PANDAS).data
-    assert table.column("x").null_count == 4
+    if use_query_builder and row_range is not None:
+        q = QueryBuilder().row_range(row_range)
+        table = lib.read("arrow", query_builder=q).data
+        expected = lib.read("arrow", query_builder=q, output_format=OutputFormat.PANDAS).data
+    else:
+        table = lib.read("arrow", row_range=row_range).data
+        expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
+    assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
+
+
+@pytest.mark.parametrize("row_range", [None, (1, 5), (2, 7), (3, 6)])
+@pytest.mark.parametrize("use_query_builder", [False, True])
+def test_datetime_col_with_nats_sparse(lmdb_version_store_tiny_segment_dynamic, row_range, use_query_builder):
+    # Dynamic schema: column "x" is absent in some segments, producing sparse timestamp data.
+    lib = lmdb_version_store_tiny_segment_dynamic
+    lib.set_output_format(OutputFormat.PYARROW)
+    df1 = pd.DataFrame({"y": [1, 2]})
+    df2 = pd.DataFrame({"x": pd.to_datetime(["2025-01-01", pd.NaT]), "y": [3, 4]})
+    df3 = pd.DataFrame({"x": pd.to_datetime([pd.NaT, "2025-01-02"]), "y": [5, 6]})
+    df4 = pd.DataFrame({"y": [7, 8]})
+    lib.write("arrow", df1)
+    lib.append("arrow", df2)
+    lib.append("arrow", df3)
+    lib.append("arrow", df4)
+    if use_query_builder and row_range is not None:
+        q = QueryBuilder().row_range(row_range)
+        table = lib.read("arrow", query_builder=q).data
+        expected = lib.read("arrow", query_builder=q, output_format=OutputFormat.PANDAS).data
+    else:
+        table = lib.read("arrow", row_range=row_range).data
+        expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
+    assert table.column("x").is_null().to_pylist() == expected["x"].isna().tolist()
+
+
+def test_datetime_col_with_nats_and_sparse(lmdb_version_store_arrow):
+    # Arrow writes store nulls as sparse gaps. To get NaT sentinels (int64 min) alongside
+    # sparse data, we write the sentinel as a valid (non-null) timestamp value.
+    # On read, the handler must detect both sparse gaps AND NaT sentinels as nulls.
+    lib = lmdb_version_store_arrow
+    lib.set_output_format(OutputFormat.PYARROW)
+    nat_sentinel = np.iinfo(np.int64).min
+    timestamps = pa.array([pd.Timestamp("2025-01-01").value, nat_sentinel, None, nat_sentinel, pd.Timestamp("2025-01-02").value, None], type=pa.int64())
+    timestamps = timestamps.cast(pa.timestamp("ns"))
+    table = pa.table({"x": timestamps, "y": pa.array([1, 2, 3, 4, 5, 6])})
+    lib.write("arrow", table)
+    result = lib.read("arrow").data
+    # Positions 1,3 have NaT sentinel → null. Positions 2,5 are Arrow nulls (sparse) → null.
+    expected_nulls = [False, True, True, True, False, True]
+    assert result.column("x").is_null().to_pylist() == expected_nulls
 
 
 def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):

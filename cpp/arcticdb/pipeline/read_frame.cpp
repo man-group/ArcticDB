@@ -335,7 +335,7 @@ void decode_or_expand(
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
+    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc)) {
         handler->handle_type(
                 data,
                 dest_column,
