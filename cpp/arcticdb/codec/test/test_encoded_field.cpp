@@ -13,7 +13,7 @@
 TEST(EncodedField, ScalarBlocks) {
     using namespace arcticdb;
     EncodedFieldCollection coll;
-    coll.reserve(calc_field_bytes(4), 1);
+    coll.reserve(1, calc_field_bytes(4));
     auto* field_ptr = coll.add_field(4);
     auto& field = *field_ptr;
     auto* v1 = field.add_values(EncodingVersion::V1);
@@ -39,7 +39,7 @@ TEST(EncodedField, ScalarBlocks) {
 TEST(EncodedField, OldStyleShapes) {
     using namespace arcticdb;
     EncodedFieldCollection coll;
-    coll.reserve(calc_field_bytes(8), 1);
+    coll.reserve(1, calc_field_bytes(8));
     auto* field_ptr = coll.add_field(8);
     auto& field = *field_ptr;
     auto* s1 = field.add_shapes();
@@ -79,7 +79,7 @@ TEST(EncodedField, OldStyleShapes) {
 TEST(EncodedField, OldStyleShapesEnterShapesFirst) {
     using namespace arcticdb;
     EncodedFieldCollection coll;
-    coll.reserve(calc_field_bytes(8), 1);
+    coll.reserve(1, calc_field_bytes(8));
     auto* field_ptr = coll.add_field(8);
     auto& field = *field_ptr;
     auto* s1 = field.add_shapes();
@@ -120,7 +120,7 @@ TEST(EncodedField, OldStyleShapesEnterShapesFirst) {
 TEST(EncodedField, NewStyleShapes) {
     using namespace arcticdb;
     EncodedFieldCollection coll;
-    coll.reserve(calc_field_bytes(5), 1);
+    coll.reserve(1, calc_field_bytes(5));
     auto* field_ptr = coll.add_field(5);
     auto& field = *field_ptr;
     auto* s1 = field.add_shapes();
