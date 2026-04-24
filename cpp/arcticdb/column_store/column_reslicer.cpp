@@ -94,6 +94,11 @@ std::vector<Column> ColumnReslicer::reslice_by_memcpy() {
         }
     };
     advance_output_col();
+    if (output_col == output_columns.end()) {
+        // There were no values in the input columns. The sparse maps of the output columns have already been correctly
+        // initialised, so we can just return them as-is
+        return output_columns;
+    }
     auto dest_ptr = output_col->buffer().data();
     uint64_t output_col_capacity = type_size * output_col->row_count();
     for (auto& col_or_row_count : cols_or_row_counts_) {
@@ -156,6 +161,11 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
         }
     };
     advance_output_col();
+    if (output_col == output_columns.end()) {
+        // There were no values in the input columns. The sparse maps of the output columns have already been correctly
+        // initialised, so we can just return them as-is
+        return output_columns;
+    }
     auto output_data = output_col->data();
     details::visit_type(type_->data_type(), [&](auto output_tag) {
         using output_type_info = ScalarTypeInfo<decltype(output_tag)>;
