@@ -50,20 +50,16 @@ class EncodedFieldCollection {
         data_(std::move(data)),
         offsets_(std::move(offsets)) {}
 
-    void reserve(size_t bytes, size_t num_fields) {
+    void reserve(size_t num_fields, size_t bytes) {
         data_.reserve(bytes);
         offsets_.reserve(num_fields * sizeof(uint64_t));
     }
 
     EncodedFieldCollection() = default;
 
-    // Sizing constructor — preallocates data_ and offsets_ for a known field count
-    // before any add_field call. Mirrors `FieldCollection(num_fields, total_data_bytes)`
-    // and exists so callers can't accidentally fall into the per-call ensure pattern in
-    // add_field which would realloc+memcpy offsets_ on every append (O(N^2) on wide
-    // schemas). Equivalent to default construction followed by reserve(bytes, num_fields)
-    // but harder to misuse.
-    EncodedFieldCollection(size_t encoded_buffer_size, size_t num_fields) { reserve(encoded_buffer_size, num_fields); }
+    // Preallocates data_ and offsets_ for a known field count to avoid O(N^2) realloc
+    // on wide schemas. Matches FieldCollection(num_fields, total_data_bytes) parameter order.
+    EncodedFieldCollection(size_t num_fields, size_t encoded_buffer_size) { reserve(num_fields, encoded_buffer_size); }
 
     [[nodiscard]] EncodedFieldCollection clone() const {
         auto output = EncodedFieldCollection{data_.clone(), offsets_.clone()};

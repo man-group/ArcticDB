@@ -328,7 +328,12 @@ static void encode_encoded_fields(
     encode_index_descriptors(in_mem_seg, segment_header, codec_opts, *out_buffer, pos);
 
     const bool has_rows = in_mem_seg.row_count() > 0;
-    EncodedFieldCollection encoded_fields(has_rows ? encoded_buffer_size : 0, has_rows ? in_mem_seg.num_columns() : 0);
+    // Pre-allocate the encoded field metadata buffers to avoid O(N^2) realloc on wide schemas.
+    // reserve_bytes: space for EncodedFieldImpl + EncodedBlock structs.
+    // reserve_fields: one offset entry per column.
+    const auto reserve_fields = has_rows ? in_mem_seg.num_columns() : 0;
+    const auto reserve_bytes = has_rows ? encoded_buffer_size : 0;
+    EncodedFieldCollection encoded_fields(reserve_fields, reserve_bytes);
     ColumnEncoderV2 encoder;
     if (has_rows) {
         ARCTICDB_TRACE(log::codec(), "Encoding fields");
