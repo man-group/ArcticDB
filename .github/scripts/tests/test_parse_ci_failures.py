@@ -131,21 +131,21 @@ class TestParsePytestFailures:
 class TestFilterInfraSteps:
     def test_filters_test_steps_when_tests_found(self):
         steps = [
-            "Build (Linux) / Install deps",
-            "Build (Linux) / Run pytest",
-            "Build (Linux) / Run ctest",
-            "Build (Linux) / Upload artifacts",
+            "Install deps",
+            "Run pytest",
+            "Run ctest",
+            "Upload artifacts",
         ]
         result = filter_infra_steps(steps, has_test_failures=True)
         assert result == [
-            "Build (Linux) / Install deps",
-            "Build (Linux) / Upload artifacts",
+            "Install deps",
+            "Upload artifacts",
         ]
 
     def test_keeps_all_when_no_test_failures(self):
         steps = [
-            "Build (Linux) / Install deps",
-            "Build (Linux) / Run pytest",
+            "Install deps",
+            "Run pytest",
         ]
         result = filter_infra_steps(steps, has_test_failures=False)
         assert result == steps
@@ -155,6 +155,6 @@ class TestFilterInfraSteps:
         assert filter_infra_steps([], has_test_failures=False) == []
 
     def test_case_insensitive(self):
-        steps = ["Job / Run Tests", "Job / Install"]
+        steps = ["Run Tests", "Install"]
         result = filter_infra_steps(steps, has_test_failures=True)
-        assert result == ["Job / Install"]
+        assert result == ["Install"]

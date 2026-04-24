@@ -9,22 +9,70 @@ on:
         description: "ID of the failed workflow run to analyse (from the run URL)"
         required: true
         type: string
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
   issues: write
   actions: read
+  pull-requests: write
 
 jobs:
+  resolve-pr-run:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/analyse-failures')
+    outputs:
+      run_id: ${{ steps.find.outputs.run_id }}
+      pr_number: ${{ github.event.issue.number }}
+    steps:
+      - name: React to comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content='eyes' --silent
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Find latest failed run
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          run_id=$(python3 .github/scripts/resolve_pr_run.py \
+            --pr-number "${{ github.event.issue.number }}" \
+            --repo "${{ github.repository }}")
+
+          if [ -z "$run_id" ]; then
+            gh pr comment "${{ github.event.issue.number }}" \
+              --repo "${{ github.repository }}" \
+              --body "No failed CI runs found for this PR."
+            echo "run_id=" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          fi
+
   track-failures:
     runs-on: ubuntu-latest
-    # Automatic trigger: only master failures. Manual trigger: always run.
+    needs: [resolve-pr-run]
+    # Run when: workflow_run (master only), workflow_dispatch, or issue_comment (with a resolved run ID)
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      ((github.event.workflow_run.conclusion == 'failure' ||
-        github.event.workflow_run.conclusion == 'timed_out') &&
-       (github.event.workflow_run.head_branch == 'master' ||
-        github.event.workflow_run.head_branch == ''))
+      always() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'issue_comment' &&
+         needs.resolve-pr-run.outputs.run_id != '') ||
+        (github.event_name == 'workflow_run' &&
+         (github.event.workflow_run.conclusion == 'failure' ||
+          github.event.workflow_run.conclusion == 'timed_out') &&
+         (github.event.workflow_run.head_branch == 'master' ||
+          github.event.workflow_run.head_branch == ''))
+      )
     outputs:
       slack_summary: ${{ steps.summary.outputs.slack_summary }}
     steps:
@@ -39,9 +87,10 @@ jobs:
           SERVER_URL: ${{ github.server_url }}
           WR_RUN_ID: ${{ github.event.workflow_run.id }}
           DISPATCH_RUN_ID: ${{ github.event.inputs.run_id }}
+          PR_RUN_ID: ${{ needs.resolve-pr-run.outputs.run_id }}
         run: |
           set -euo pipefail
-          RUN_ID="${DISPATCH_RUN_ID:-$WR_RUN_ID}"
+          RUN_ID="${DISPATCH_RUN_ID:-${PR_RUN_ID:-$WR_RUN_ID}}"
           if [ -z "$RUN_ID" ]; then
             echo "::error::No run ID available"
             exit 1
@@ -135,3 +184,55 @@ jobs:
             --repo-url "${{ github.server_url }}/${{ github.repository }}" \
             $SUMMARY_ARG \
             ${TRACKER_RESULT:+--tracker-result "$TRACKER_RESULT"}
+
+  notify-pr:
+    runs-on: ubuntu-latest
+    needs: [resolve-pr-run, track-failures]
+    if: >-
+      always() &&
+      github.event_name == 'issue_comment' &&
+      needs.resolve-pr-run.outputs.run_id != '' &&
+      needs.track-failures.result != 'cancelled'
+    steps:
+      - name: Post results to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SUMMARY: ${{ needs.track-failures.outputs.slack_summary }}
+          RUN_ID: ${{ needs.resolve-pr-run.outputs.run_id }}
+          PR_NUMBER: ${{ needs.resolve-pr-run.outputs.pr_number }}
+          TRACKER_RESULT: ${{ needs.track-failures.result }}
+        run: |
+          if [ "$TRACKER_RESULT" != "success" ]; then
+            gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" \
+              --body "**CI failure analysis** for run \`$RUN_ID\` did not complete successfully (status: $TRACKER_RESULT)."
+            exit 0
+          fi
+
+          # Convert Slack-flavoured markdown to GitHub markdown
+          body=$(printf '%s\n' "$SUMMARY" \
+            | sed 's/:rotating_light:/🚨/g' \
+            | sed 's/:warning:/⚠️/g' \
+            | sed 's/:question:/❓/g' \
+            | sed 's/\*\([^*]*\)\*/**\1**/g')
+
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/$RUN_ID"
+
+          gh pr comment "$PR_NUMBER" --repo "${{ github.repository }}" --body "$(cat <<EOF
+          ### CI failure analysis
+
+          Run: [$RUN_ID]($run_url)
+
+          $body
+
+          ---
+          *Triggered by \`/analyse-failures\` comment.*
+          EOF
+          )"
+
+      - name: React with result
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          emoji=$( [ "${{ needs.track-failures.result }}" = "success" ] && echo "rocket" || echo "-1" )
+          gh api "repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions" \
+            -f content="$emoji" --silent

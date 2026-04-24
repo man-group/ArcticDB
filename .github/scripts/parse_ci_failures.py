@@ -132,12 +132,11 @@ def main() -> None:
 
     print(f"Failed jobs: {json.dumps(failed_jobs, indent=2)}")
 
-    # 2. Collect failed steps from each job
+    # 2. Collect failed steps from each job (step name only, no job prefix)
     all_failed_steps: list[str] = []
     for job in failed_jobs:
         step_names = fetch_failed_steps(args.repo, job["id"])
-        for step in step_names:
-            all_failed_steps.append(f"{job['name']} / {step}")
+        all_failed_steps.extend(step_names)
 
     all_failed_steps = sorted(set(all_failed_steps))
     print(f"Failed steps:\n" + "\n".join(all_failed_steps))

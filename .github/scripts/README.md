@@ -7,17 +7,39 @@ create/update GitHub issues, and send Slack notifications.
 All scripts are Python 3 (stdlib only, no third-party packages) and use the
 `gh` CLI for GitHub API access.
 
+## Triggers
+
+| Trigger | When | What happens |
+|---------|------|--------------|
+| `workflow_run` | A tracked CI workflow fails on `master` | Parse → track issues → Slack notification |
+| `workflow_dispatch` | Manual run with a specific run ID | Parse → track issues (no Slack) |
+| `issue_comment` | `/analyse-failures` comment on a PR | Resolve latest failed run → parse → track issues → PR comment |
+
 ## Pipeline overview
 
 ```
-┌──────────────────────┐     ┌─────────────────────┐     ┌───────────────────────────┐
-│parse_ci_failures.py  │ ──▶ │ track_ci_issues.py  │ ──▶ │send_slack_notification.py │
-│                      │     │                     │     │                           │
-│ IN:  run ID          │     │ IN:  text files      │     │ IN:  slack summary file   │
-│ OUT: text files      │     │ OUT: GH issues +     │     │ OUT: Slack message        │
-│      (test names,    │     │      slack summary   │     └───────────────────────────┘
-│       step names)    │     │      file            │
-└──────────────────────┘     └─────────────────────┘
+  /analyse-failures ──▶ ┌───────────────────┐
+       on PR             │resolve_pr_run.py  │
+                         │ IN:  PR number     │
+                         │ OUT: run ID        │
+                         └────────┬──────────┘
+                                  │ run ID
+                                  ▼
+                     ┌──────────────────────┐     ┌─────────────────────┐
+  workflow_run /     │parse_ci_failures.py  │ ──▶ │ track_ci_issues.py  │
+  workflow_dispatch  │                      │     │                     │
+  also feed in here  │ IN:  run ID          │     │ IN:  text files      │
+          ──────────▶│ OUT: text files      │     │ OUT: GH issues +     │
+                     │      (test names,    │     │      slack summary   │
+                     │       step names)    │     │      file            │
+                     └──────────────────────┘     └──────────┬──────────┘
+                                                             │ summary
+                                                             │
+                          master ┌───────────────────────┐   │   PR ┌────────────┐
+                          only   │send_slack_notif..py   │◀──┴────▶│ PR comment │
+                          ──────▶│ IN: slack summary     │         │            │
+                                 │ OUT: Slack message    │         └────────────┘
+                                 └───────────────────────┘
 ```
 
 ## Scripts
@@ -26,6 +48,12 @@ All scripts are Python 3 (stdlib only, no third-party packages) and use the
 
 Fetches job/step metadata and logs for a failed GitHub Actions run,
 extracts individual test names and infrastructure step failures.
+
+Recognised test failure patterns:
+- GoogleTest / RapidCheck: `[  FAILED  ] TestSuite.TestName/Param` (parameterised suffix stripped).
+  RapidCheck tests use GoogleTest integration (`RC_GTEST_PROP`) so failures appear in the same format.
+- pytest: `FAILED path/to/test.py::TestClass::test_method`
+- pytest errors: `ERROR path/to/test.py::test_name - ...` (collection errors, fixture failures, etc.)
 
 ```
 python3 parse_ci_failures.py --run-id <RUN_ID> --repo <OWNER/REPO> --output-dir <DIR>
@@ -47,11 +75,12 @@ python/tests/unit/arcticdb/test_arctic.py::TestArcticBasic::test_list_libraries
 python/tests/unit/arcticdb/test_arctic.py::TestArcticBasic::test_delete_library
 ```
 
-`failed_steps.txt` — one `job_name / step_name` entry per line (infrastructure
-steps only; test-runner steps are filtered out when test names are available):
+`failed_steps.txt` — one step name per line, deduplicated across jobs
+(infrastructure steps only; test-runner steps are filtered out when test names
+are available):
 ```
-Build (Linux, Debug) / Install system dependencies
-Build (Linux, Debug) / Fetch vcpkg cache
+Install system dependencies
+Fetch vcpkg cache
 ```
 
 When no failures are found, both files are empty (0 bytes).
@@ -93,7 +122,7 @@ python3 track_ci_issues.py --input-dir <DIR> --run-id <RUN_ID> --run-url <URL> \
 ```
 :rotating_light: *New* — `TestVersionMap.TestWriteAndReadVersion` (<https://github.com/man-group/ArcticDB/issues/123|issue>)
 :warning: *Known* — `TestCodecVersion1.RoundtripLz4` (<https://github.com/man-group/ArcticDB/issues/98|#98>)
-:warning: *Known* — `Build (Linux, Debug) / Fetch vcpkg cache` (<https://github.com/man-group/ArcticDB/issues/101|#101>)
+:warning: *Known* — `Fetch vcpkg cache` (<https://github.com/man-group/ArcticDB/issues/101|#101>)
 ```
 
 When >10 failures are grouped:
@@ -143,6 +172,45 @@ tracking itself failed instead of the summary.
 > :warning: *Known* — `TestCodecVersion1.RoundtripLz4` ([#98](https://...))
 >
 > man-group/ArcticDB | [View Failure](https://...)
+
+---
+
+### resolve_pr_run.py
+
+Finds the most recent failed workflow run for a pull request by looking up
+the PR's head branch and searching across all tracked CI workflows.
+
+```
+python3 resolve_pr_run.py --pr-number <N> --repo <OWNER/REPO>
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--pr-number` | yes | PR number |
+| `--repo` | yes | Repository in `owner/repo` format |
+
+Prints the run ID to stdout if a failed run is found. Prints nothing (empty
+stdout) if no failures exist. Diagnostic messages go to stderr.
+
+The list of tracked workflows is defined in `TRACKED_WORKFLOWS` inside the
+script and must stay in sync with the `workflow_run` trigger in the workflow
+YAML.
+
+---
+
+## Using `/analyse-failures` on a PR
+
+Comment `/analyse-failures` on any pull request to analyse its most recent
+failed CI run. The workflow will:
+
+1. React to your comment with :eyes:
+2. Look up the PR's head branch and find the latest failed run
+3. Parse test and step failures from the run logs
+4. Create or update tracking issues (same as the master flow)
+5. Post a summary comment on the PR
+6. React with :rocket: (success) or :-1: (failure)
+
+If no failed runs are found, a comment saying so is posted instead.
 
 ---
 
