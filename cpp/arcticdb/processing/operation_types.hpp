@@ -380,6 +380,18 @@ struct DivideOperator {
 struct PowOperator {
     template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PowOperator>::type>
     V apply(T t, U u) {
+        if constexpr (std::is_unsigned_v<T> && std::is_unsigned_v<U>) {
+            uint64_t result = 1;
+            uint64_t base = static_cast<uint64_t>(t);
+            uint64_t exponent = static_cast<uint64_t>(u);
+
+            for (uint64_t i = 0; i < exponent; ++i) {
+                result *= base;
+            }
+
+            return result;
+        }
+        
         return static_cast<V>(std::pow(static_cast<V>(t), static_cast<V>(u)));
     }
 };
