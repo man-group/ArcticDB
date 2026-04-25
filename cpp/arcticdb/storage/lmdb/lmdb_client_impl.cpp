@@ -12,6 +12,7 @@
 #include <arcticdb/storage/lmdb/lmdb_client_impl.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 namespace arcticdb::storage::lmdb {
 
@@ -26,16 +27,20 @@ bool RealLmdbClient::exists(const std::string&, std::string& path, ::lmdb::txn& 
     return ::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val);
 }
 
-std::optional<Segment> RealLmdbClient::read(const std::string&, std::string& path, ::lmdb::txn& txn, ::lmdb::dbi& dbi)
-        const {
+std::optional<Segment> RealLmdbClient::read(
+        const std::string&, std::string& path, ::lmdb::txn& txn, ::lmdb::dbi& dbi, KeyType key_type
+) const {
     MDB_val mdb_key{path.size(), path.data()};
     MDB_val mdb_val;
 
-    ARCTICDB_SUBSAMPLE(LmdbStorageGet, 0)
-    if (!::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val)) {
-        return std::nullopt;
+    ARCTICDB_SUBSAMPLE(LmdbStorageGet, 0) {
+        auto dbi_get_timer = query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_DbiGet, key_type);
+        if (!::lmdb::dbi_get(txn, dbi.handle(), &mdb_key, &mdb_val)) {
+            return std::nullopt;
+        }
     }
 
+    auto segment_timer = query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_SegmentFromBytes, key_type);
     auto segment = Segment::from_bytes(reinterpret_cast<std::uint8_t*>(mdb_val.mv_data), mdb_val.mv_size);
     return segment;
 }

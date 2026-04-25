@@ -50,12 +50,16 @@ class EncodedFieldCollection {
         data_(std::move(data)),
         offsets_(std::move(offsets)) {}
 
-    void reserve(size_t bytes, size_t num_fields) {
+    void reserve(size_t num_fields, size_t bytes) {
         data_.reserve(bytes);
         offsets_.reserve(num_fields * sizeof(uint64_t));
     }
 
     EncodedFieldCollection() = default;
+
+    // Preallocates data_ and offsets_ for a known field count to avoid O(N^2) realloc
+    // on wide schemas. Matches FieldCollection(num_fields, total_data_bytes) parameter order.
+    EncodedFieldCollection(size_t num_fields, size_t encoded_buffer_size) { reserve(num_fields, encoded_buffer_size); }
 
     [[nodiscard]] EncodedFieldCollection clone() const {
         auto output = EncodedFieldCollection{data_.clone(), offsets_.clone()};
@@ -118,7 +122,25 @@ class EncodedFieldCollection {
         if (!offsets_.empty())
             return;
 
+        // First pass: count fields so offsets_ can be reserved to exactly the needed size.
+        // Without this, each iteration below would grow offsets_ by 8 bytes via
+        // Buffer::ensure, realloc+memcpy'ing the cumulative offsets array every time —
+        // O(N^2) copy work. This is on the V1/V2 read hot path (called per segment on
+        // decode), so on wide schemas it adds up fast.
+        size_t field_count = 0;
         auto pos = 0UL;
+        while (pos < data_.bytes()) {
+            pos += encoded_field_bytes(to_field(pos));
+            ++field_count;
+        }
+        util::check(pos == data_.bytes(), "Size mismatch in regenerate_offsets, {} != {}", pos, data_.bytes());
+
+        if (field_count == 0)
+            return;
+
+        offsets_.reserve(field_count * sizeof(uint64_t));
+
+        pos = 0UL;
         count_ = 0UL;
         while (pos < data_.bytes()) {
             const auto& field = to_field(pos);
@@ -127,7 +149,6 @@ class EncodedFieldCollection {
             ++count_;
             pos += encoded_field_bytes(field);
         }
-        util::check(pos == data_.bytes(), "Size mismatch in regenerate_offsets, {} != {}", pos, data_.bytes());
     }
 
     [[nodiscard]] EncodedFieldImpl* add_field(size_t num_blocks) {

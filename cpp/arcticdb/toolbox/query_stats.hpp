@@ -30,6 +30,13 @@ enum class TaskType : size_t {
     Memory_GetObject = 8,
     Memory_DeleteObject = 9,
     Memory_HeadObject = 10,
+    LMDB_ListObjects = 11,
+    LMDB_PutObject = 12,
+    LMDB_GetObject = 13,
+    LMDB_DeleteObjects = 14,
+    LMDB_HeadObject = 15,
+    LMDB_DbiGet = 16,
+    LMDB_SegmentFromBytes = 17,
     END
 };
 

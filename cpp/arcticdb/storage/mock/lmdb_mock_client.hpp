@@ -36,8 +36,9 @@ class MockLmdbClient : public LmdbClientWrapper {
 
     bool exists(const std::string& db_name, std::string& path, ::lmdb::txn& txn, ::lmdb::dbi& dbi) const override;
 
-    std::optional<Segment> read(const std::string& db_name, std::string& path, ::lmdb::txn& txn, ::lmdb::dbi& dbi)
-            const override;
+    std::optional<Segment> read(
+            const std::string& db_name, std::string& path, ::lmdb::txn& txn, ::lmdb::dbi& dbi, KeyType key_type
+    ) const override;
 
     void write(
             const std::string& db_name, std::string& path, Segment& segment, ::lmdb::txn& txn, ::lmdb::dbi& dbi,
