@@ -2519,6 +2519,55 @@
         "version": "eee3f8539d658de25ad38be90b670970a13fc5030a402331fbe2e1a191fe18ff",
         "warmup_time": 0
     },
+    "nonreg_random_read.NonRegRandomRead.peakmem_read": {
+        "code": "class NonRegRandomRead:\n    def peakmem_read(self, libs_for_storage, rows, storage):\n        self.lib.read(self.symbol).data\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = {}\n        library_names = [_lib_name(self.num_rows)]\n        df = _generate_random(self.num_rows)\n        for storage in STORAGES:\n            libs = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libs))\n            lib = libs_for_storage[storage][library_names[0]]\n            if lib is None:\n                continue\n            lib.write(_symbol(self.num_rows), df)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "name": "nonreg_random_read.NonRegRandomRead.peakmem_read",
+        "param_names": [
+            "rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "nonreg_random_read:91",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "69353e7df39440ffe03bf80d85c4752a1f1db28aca80f47928408b8dc9b45451"
+    },
+    "nonreg_random_read.NonRegRandomRead.time_read": {
+        "code": "class NonRegRandomRead:\n    def time_read(self, libs_for_storage, rows, storage):\n        self.lib.read(self.symbol).data\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = {}\n        library_names = [_lib_name(self.num_rows)]\n        df = _generate_random(self.num_rows)\n        for storage in STORAGES:\n            libs = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libs))\n            lib = libs_for_storage[storage][library_names[0]]\n            if lib is None:\n                continue\n            lib.write(_symbol(self.num_rows), df)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "min_run_count": 2,
+        "name": "nonreg_random_read.NonRegRandomRead.time_read",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "nonreg_random_read:91",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "54d190c55702975510edf47cdb800becc58916ede08d29d59d38870213dabcae",
+        "warmup_time": 0.2
+    },
     "query_builder.QueryBuilderFunctions.peakmem_filtering_numeric": {
         "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, *args):\n        self._filtering_numeric()\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "name": "query_builder.QueryBuilderFunctions.peakmem_filtering_numeric",
