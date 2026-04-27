@@ -277,6 +277,22 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
 
 using VersionVectorType = std::vector<VersionId>;
 
+inline std::optional<VersionId> resolve_version_id(
+        VersionId version, const std::shared_ptr<VersionMapEntry>& entry
+) {
+    const auto signed_version = static_cast<SignedVersionId>(version);
+
+    if (signed_version >= 0)
+        return version;
+
+    auto opt_latest = entry->get_first_index(true).first;
+
+    if (!opt_latest.has_value())
+        return std::nullopt;
+
+    return get_version_id_negative_index(opt_latest->version_id(), signed_version);
+}
+
 /**
  * Returns multiple versions for the same symbol
  * @return Does not guarantee the returned keys actually exist in storage.
@@ -306,11 +322,18 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                 auto sym_it = sym_versions.find(sym_version.first);
                 util::check(sym_it != sym_versions.end(), "Failed to find versions for symbol {}", sym_version.first);
                 const auto& versions = sym_it->second;
+
                 for (auto version : versions) {
-                    auto index_key = find_index_key_for_version_id(version, entry, include_deleted);
+                    auto opt_resolved = resolve_version_id(version, entry);
+
+                    if (!opt_resolved.has_value())
+                        continue;
+
+                    auto index_key = find_index_key_for_version_id(*opt_resolved, entry, include_deleted);
+                    
                     if (index_key) {
                         std::lock_guard lock{*mutex};
-                        (*output)[std::pair(sym_version.first, version)] = *index_key;
+                        (*output)[std::pair(sym_version.first, *opt_resolved)] = *index_key;
                     }
                 }
             }
