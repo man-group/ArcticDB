@@ -22,7 +22,6 @@ import polars as pl
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
-from python.tests.conftest import lmdb_version_store_arrow
 from tests.util.mark import WINDOWS
 
 

@@ -539,7 +539,8 @@ void ArrowTimestampHandler::handle_type(
             return Column(m.source_type_desc_, num_non_empty_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED);
         } else {
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
-            // When the column is not sparse we can decode directly onto the destination buffer. So, we make decoded_data hold a non-owning pointer to the destination buffer.  
+            // When the column is not sparse we can decode directly onto the destination buffer. So, we make
+            // decoded_data hold a non-owning pointer to the destination buffer.
             column.buffer().add_external_block(dest_column.bytes_at(m.offset_bytes_, bytes), bytes);
             return column;
         }
@@ -583,8 +584,9 @@ void ArrowTimestampHandler::
         auto column_data = source_column.data();
         const auto* src_ptr = reinterpret_cast<timestamp*>(column_data.buffer().blocks()[0]->data());
 
-        // 3x faster for dense to `memcpy` + scan each element than doing the copy in the for_each_enumerated.  
-        // If going through the `handle_type` codepath we can skip the memcpy as we have decoded directly onto the destination buffer. 
+        // 3x faster for dense to `memcpy` + scan each element than doing the copy in the for_each_enumerated.
+        // If going through the `handle_type` codepath we can skip the memcpy as we have decoded directly onto the
+        // destination buffer.
         if (auto* dest_ptr = dest; dest_ptr != src_ptr) {
             while (auto block = column_data.next<TimestampTag>()) {
                 const auto row_count = block->row_count();
