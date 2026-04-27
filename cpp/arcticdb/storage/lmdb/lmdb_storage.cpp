@@ -21,7 +21,6 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 
 #include <arcticdb/storage/storage_exceptions.hpp>
@@ -86,15 +85,8 @@ void LmdbStorage::do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn) {
     auto k = to_serialized_key(key_seg.variant_key());
     auto& seg = *key_seg.segment_ptr();
     int64_t overwrite_flag = std::holds_alternative<RefKey>(key_seg.variant_key()) ? 0 : MDB_NOOVERWRITE;
-    auto key_type = key_seg.key_type();
-    auto segment_size = seg.calculate_size();
-    auto query_stat_operation_time =
-            query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_PutObject, key_type);
     try {
         lmdb_client_->write(db_name, k, seg, txn, dbi, overwrite_flag);
-        query_stats::add(
-                query_stats::TaskType::LMDB_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size
-        );
     } catch (const ::lmdb::key_exist_error& e) {
         throw DuplicateKeyException(fmt::format("Key already exists: {}: {}", key_seg.variant_key(), e.what()));
     } catch (const ::lmdb::error& ex) {
@@ -140,28 +132,22 @@ void LmdbStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
 KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageReadReturn, 0)
     std::optional<VariantKey> failed_read;
-    auto key_type = variant_key_type(variant_key);
-    auto db_name = fmt::format(FMT_COMPILE("{}"), key_type);
+    auto db_name = fmt::format(FMT_COMPILE("{}"), variant_key_type(variant_key));
     ::lmdb::dbi& dbi = get_dbi(db_name);
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(variant_key);
     try {
         auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
         ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-        auto query_stat_operation_time =
-                query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_GetObject, key_type);
-        auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi, key_type);
+        auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi);
 
         if (segment.has_value()) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-            query_stats::add(
-                    query_stats::TaskType::LMDB_GetObject, key_type, query_stats::StatType::SIZE_BYTES, segment->size()
-            );
             segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
             ARCTICDB_DEBUG(
                     log::storage(),
                     "Read key {}: {}, with {} bytes of data",
-                    key_type,
+                    variant_key_type(variant_key),
                     variant_key_view(variant_key),
                     segment->size()
             );
@@ -182,28 +168,22 @@ KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
 void LmdbStorage::do_read(VariantKey&& key, const ReadVisitor& visitor, storage::ReadKeyOpts) {
     ARCTICDB_SAMPLE(LmdbStorageRead, 0)
     std::optional<VariantKey> failed_read;
-    auto key_type = variant_key_type(key);
-    auto db_name = fmt::format(FMT_COMPILE("{}"), key_type);
+    auto db_name = fmt::format(FMT_COMPILE("{}"), variant_key_type(key));
     ::lmdb::dbi& dbi = get_dbi(db_name);
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(key);
     try {
         auto txn = std::make_shared<::lmdb::txn>(::lmdb::txn::begin(env(), nullptr, MDB_RDONLY));
         ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
-        auto query_stat_operation_time =
-                query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_GetObject, key_type);
-        auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi, key_type);
+        auto segment = lmdb_client_->read(db_name, stored_key, *txn, dbi);
 
         if (segment.has_value()) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
-            query_stats::add(
-                    query_stats::TaskType::LMDB_GetObject, key_type, query_stats::StatType::SIZE_BYTES, segment->size()
-            );
             segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
             ARCTICDB_DEBUG(
                     log::storage(),
                     "Read key {}: {}, with {} bytes of data",
-                    key_type,
+                    variant_key_type(key),
                     variant_key_view(key),
                     segment->size()
             );
@@ -228,14 +208,11 @@ bool LmdbStorage::do_key_exists(const VariantKey& key) {
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY);
     ARCTICDB_SUBSAMPLE(LmdbStorageInTransaction, 0)
     ARCTICDB_DEBUG_THROW(5)
-    auto key_type = variant_key_type(key);
-    auto db_name = fmt::format("{}", key_type);
+    auto db_name = fmt::format("{}", variant_key_type(key));
     ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
     auto stored_key = to_serialized_key(key);
     try {
         ::lmdb::dbi& dbi = get_dbi(db_name);
-        auto query_stat_operation_time =
-                query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_HeadObject, key_type);
         return lmdb_client_->exists(db_name, stored_key, txn, dbi);
     } catch ([[maybe_unused]] const ::lmdb::not_found_error& ex) {
         ARCTICDB_DEBUG(log::storage(), "Caught lmdb not found error: {}", ex.what());
@@ -252,16 +229,13 @@ boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(
 
     ARCTICDB_DEBUG_THROW(5)
     for (auto&& key : variant_keys) {
-        auto key_type = variant_key_type(key);
-        auto db_name = fmt::format("{}", key_type);
+        auto db_name = fmt::format("{}", variant_key_type(key));
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         try {
             ::lmdb::dbi& dbi = get_dbi(db_name);
             auto stored_key = to_serialized_key(key);
 
             try {
-                auto query_stat_operation_time =
-                        query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_DeleteObjects, key_type);
                 if (lmdb_client_->remove(db_name, stored_key, txn, dbi)) {
                     ARCTICDB_DEBUG(log::storage(), "Deleted segment for key {}", variant_key_view(key));
                 } else {
@@ -346,8 +320,6 @@ bool LmdbStorage::do_iterate_type_until_match(
     ::lmdb::dbi& dbi = get_dbi(type_db);
 
     try {
-        auto query_stat_operation_time =
-                query_stats::add_task_count_and_time(query_stats::TaskType::LMDB_ListObjects, key_type);
         auto keys = lmdb_client_->list(type_db, prefix, txn, dbi, key_type);
         for (auto& k : keys) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitKey, 0)

@@ -74,9 +74,8 @@ bool MockLmdbClient::exists(const std::string& db_name, std::string& path, ::lmd
     return has_key(key);
 }
 
-std::optional<Segment> MockLmdbClient::read(
-        const std::string& db_name, std::string& path, ::lmdb::txn&, ::lmdb::dbi&, KeyType
-) const {
+std::optional<Segment> MockLmdbClient::read(const std::string& db_name, std::string& path, ::lmdb::txn&, ::lmdb::dbi&)
+        const {
     LmdbKey key = {db_name, path};
     raise_if_has_failure_trigger(key, StorageOperation::READ);
 
