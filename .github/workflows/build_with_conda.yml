@@ -598,8 +598,8 @@ jobs:
           max_attempts: 3
           command: npm install -g azurite
 
-      - name: Install zs3 (S3 mock server)
-        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
+      - name: Install rustfs (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/rustfs-bin" bash build_tooling/install_rustfs.sh && echo "$RUNNER_TEMP/rustfs-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         run: |
@@ -736,8 +736,8 @@ jobs:
           max_attempts: 3
           command: npm install -g azurite
 
-      - name: Install zs3 (S3 mock server)
-        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
+      - name: Install rustfs (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/rustfs-bin" bash build_tooling/install_rustfs.sh && echo "$RUNNER_TEMP/rustfs-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         run: |
@@ -883,8 +883,8 @@ jobs:
           max_attempts: 3
           command: npm install -g azurite
 
-      - name: Install zs3 (S3 mock server)
-        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
+      - name: Install rustfs (S3 mock server)
+        run: INSTALL_DIR="$RUNNER_TEMP/rustfs-bin" bash build_tooling/install_rustfs.sh && echo "$RUNNER_TEMP/rustfs-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         run: |
@@ -1198,9 +1198,9 @@ jobs:
           echo "PATH includes: $npm_bin_dir"
           which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
 
-      - name: Install zs3 (S3 mock server)
+      - name: Install rustfs (S3 mock server)
         shell: bash -elo pipefail {0}
-        run: INSTALL_DIR="$RUNNER_TEMP/zs3-bin" bash build_tooling/install_zs3.sh && echo "$RUNNER_TEMP/zs3-bin" >> $GITHUB_PATH
+        run: INSTALL_DIR="$RUNNER_TEMP/rustfs-bin" bash build_tooling/install_rustfs.sh && echo "$RUNNER_TEMP/rustfs-bin" >> $GITHUB_PATH
 
       - name: Check no arcticdb file depend on tests package
         shell: bash -elo pipefail {0}

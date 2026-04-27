@@ -1062,18 +1062,18 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 import shutil
 
-ZS3_BINARY = os.environ.get("ZS3_BINARY", shutil.which("zs3") or os.path.expanduser("~/bin/zs3"))
+RUSTFS_BINARY = os.environ.get("RUSTFS_BINARY", shutil.which("rustfs") or os.path.expanduser("~/bin/rustfs"))
 
 
-class Zs3StorageFixtureFactory(BaseS3StorageFixtureFactory):
-    """Lightweight S3 fixture factory backed by zs3 (https://github.com/Lulzx/zs3).
+class RustfsStorageFixtureFactory(BaseS3StorageFixtureFactory):
+    """Lightweight S3 fixture factory backed by rustfs (https://github.com/rustfs/rustfs).
 
-    Compared to the moto-based MotoS3StorageFixtureFactory, zs3 is much faster (27-537x
-    depending on operation) but does not support SSL, IAM, bucket versioning, or rate
-    limiting. Use this for tests that only need basic S3 PUT/GET/DELETE/LIST operations.
+    Compared to the moto-based MotoS3StorageFixtureFactory, rustfs is much faster
+    but does not support SSL or rate limiting.
+    Use this for tests that only need basic S3 PUT/GET/DELETE/LIST operations.
     """
 
-    default_key = Key(id="minioadmin", secret="minioadmin", user_name="dummy")
+    default_key = Key(id="rustfsadmin", secret="rustfsadmin", user_name="dummy")
     host = "localhost"
     region = "us-east-1"
     port: int
@@ -1097,7 +1097,7 @@ class Zs3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._test_only_is_nfs_layout = False
         self.unique_id = str(int(time.time()))
 
-    def bucket_name(self, bucket_type="zs3"):
+    def bucket_name(self, bucket_type="rustfs"):
         self._bucket_id += 1
         return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
 
@@ -1115,33 +1115,33 @@ class Zs3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     def _start_server(self, seed=30):
         port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"http://{self.host}:{port}"
-        self.working_dir = mkdtemp(suffix="Zs3StorageFixtureFactory")
+        self.working_dir = mkdtemp(suffix="RustfsStorageFixtureFactory")
 
         self.ssl = False
         self.client_cert_file = None
         self.client_cert_dir = self.working_dir
 
         self._p = GracefulProcessUtils.start(
-            [ZS3_BINARY, f"--port={port}"],
+            [RUSTFS_BINARY, "server", f"--address=:{port}", self.working_dir],
             cwd=self.working_dir,
             stdout=sys.stderr,
             stderr=sys.stderr,
         )
-        wait_for_server_to_come_up(self.endpoint, "zs3", self._p, timeout=60)
+        wait_for_server_to_come_up(self.endpoint, "rustfs", self._p, timeout=60)
 
     def _safe_enter(self):
         for i in range(5):
             try:
-                logger.info(f"Attempt to start zs3 server - {i}")
+                logger.info(f"Attempt to start rustfs server - {i}")
                 self._start_server(30 + i)
                 self._s3_admin = self._boto(service="s3", key=self.default_key)
-                logger.info(f"zs3 STARTED on port {self.port}")
+                logger.info(f"rustfs STARTED on port {self.port}")
                 break
             except AssertionError as e:
                 sys.stderr.write(repr(e))
                 GracefulProcessUtils.terminate(self._p)
             except Exception as e:
-                logger.error(f"Error during startup of zs3. Trying again. Error: {e}")
+                logger.error(f"Error during startup of rustfs. Trying again. Error: {e}")
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):

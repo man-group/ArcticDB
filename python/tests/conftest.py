@@ -42,7 +42,7 @@ from arcticdb.storage_fixtures.s3 import (
     NfsS3Bucket,
     S3Bucket,
     Key,
-    Zs3StorageFixtureFactory,
+    RustfsStorageFixtureFactory,
     real_gcp_from_environment_variables,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
@@ -372,24 +372,24 @@ def s3_ssl_disabled_storage(s3_ssl_disabled_storage_factory) -> Generator[S3Buck
         yield f
 
 
-# ========================= zs3-backed S3 fixtures =========================
+# ========================= rustfs-backed S3 fixtures =========================
 # Faster alternative to moto for tests that only need basic S3 operations.
-# Does NOT support: SSL, IAM permissions, bucket versioning, rate limiting.
+# Does NOT support: SSL, rate limiting.
 @pytest.fixture(scope="session")
-def zs3_storage_factory() -> Generator[Zs3StorageFixtureFactory, None, None]:
-    with Zs3StorageFixtureFactory() as f:
+def rustfs_storage_factory() -> Generator[RustfsStorageFixtureFactory, None, None]:
+    with RustfsStorageFixtureFactory() as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def zs3_storage(zs3_storage_factory) -> Generator[S3Bucket, None, None]:
-    with zs3_storage_factory.create_fixture() as f:
+def rustfs_storage(rustfs_storage_factory) -> Generator[S3Bucket, None, None]:
+    with rustfs_storage_factory.create_fixture() as f:
         yield f
 
 
 @pytest.fixture(scope="function")
-def zs3_clean_bucket(zs3_storage_factory) -> Generator[S3Bucket, None, None]:
-    with zs3_storage_factory.create_fixture() as f:
+def rustfs_clean_bucket(rustfs_storage_factory) -> Generator[S3Bucket, None, None]:
+    with rustfs_storage_factory.create_fixture() as f:
         yield f
 
 
