@@ -210,9 +210,9 @@ class ShortWideRead:
 
 
 class ShortWideBatchRead:
-    rows = [1, 5_000]
+    rows = [1]
     COLS = 30_000
-    NUM_SYMBOLS = 10
+    NUM_SYMBOLS = 5
 
     params = [rows, STORAGES]
     param_names = ["num_rows", "storage"]
