@@ -90,66 +90,105 @@ static void BM_arrow_string_handler(benchmark::State& state) {
 }
 
 BENCHMARK(BM_arrow_string_handler)
+        ->Name("BM_arrow_string_handler_10k")
         // Dynamic strings
         // ArrowOutputStringFormat::CATEGORICAL
         // Not sparse, small string buffers
         ->Args({10'000, 1, 0, 0, 0})
-        ->Args({100'000, 1, 0, 0, 0})
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 0, 0})
-        ->Args({100'000, 100'000, 0, 0, 0})
         // Half sparse
         ->Args({10'000, 1, 5'000, 0, 0})
-        ->Args({100'000, 1, 50'000, 0, 0})
         // Fully sparse
         ->Args({10'000, 1, 10'000, 0, 0})
-        ->Args({100'000, 1, 100'000, 0, 0})
         // ArrowOutputStringFormat::LARGE_STRING
         // Not sparse, small string buffers
         ->Args({10'000, 1, 0, 1, 0})
-        ->Args({100'000, 1, 0, 1, 0})
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 1, 0})
-        ->Args({100'000, 100'000, 0, 1, 0})
         // Half sparse
         ->Args({10'000, 1, 5'000, 1, 0})
-        ->Args({100'000, 1, 50'000, 1, 0})
         // Fully sparse
         ->Args({10'000, 1, 10'000, 1, 0})
-        ->Args({100'000, 1, 100'000, 1, 0})
         // ArrowOutputStringFormat::SMALL_STRING
         // Not sparse, small string buffers
         ->Args({10'000, 1, 0, 2, 0})
-        ->Args({100'000, 1, 0, 2, 0})
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 2, 0})
-        ->Args({100'000, 100'000, 0, 2, 0})
         // Half sparse
         ->Args({10'000, 1, 5'000, 2, 0})
-        ->Args({100'000, 1, 50'000, 2, 0})
         // Fully sparse
         ->Args({10'000, 1, 10'000, 2, 0})
-        ->Args({100'000, 1, 100'000, 2, 0})
 
         // Fixed-width strings
         // ArrowOutputStringFormat::CATEGORICAL
         // Not sparse, small string buffers
         ->Args({10'000, 1, 0, 0, 1})
-        ->Args({100'000, 1, 0, 0, 1})
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 0, 1})
-        ->Args({100'000, 100'000, 0, 0, 1})
         // ArrowOutputStringFormat::LARGE_STRING
         // Not sparse, small string buffers
         ->Args({10'000, 1, 0, 1, 1})
-        ->Args({100'000, 1, 0, 1, 1})
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 1, 1})
-        ->Args({100'000, 100'000, 0, 1, 1})
         // ArrowOutputStringFormat::STRING
         // Not sparse, small string buffers
         ->Args({10'000, 1, 0, 2, 1})
-        ->Args({100'000, 1, 0, 2, 1})
         // Not sparse, large string buffers
         ->Args({10'000, 10'000, 0, 2, 1})
-        ->Args({100'000, 100'000, 0, 2, 1});
+        ->MinWarmUpTime(0.5)
+        ->MinTime(1.0)
+        ->Repetitions(14)
+        ->ReportAggregatesOnly(true);
+
+BENCHMARK(BM_arrow_string_handler)
+        ->Name("BM_arrow_string_handler_100k")
+        // Dynamic strings
+        // ArrowOutputStringFormat::CATEGORICAL
+        // Not sparse, small string buffers
+        ->Args({100'000, 1, 0, 0, 0})
+        // Not sparse, large string buffers
+        ->Args({100'000, 100'000, 0, 0, 0})
+        // Half sparse
+        ->Args({100'000, 1, 50'000, 0, 0})
+        // Fully sparse
+        ->Args({100'000, 1, 100'000, 0, 0})
+        // ArrowOutputStringFormat::LARGE_STRING
+        // Not sparse, small string buffers
+        ->Args({100'000, 1, 0, 1, 0})
+        // Not sparse, large string buffers
+        ->Args({100'000, 100'000, 0, 1, 0})
+        // Half sparse
+        ->Args({100'000, 1, 50'000, 1, 0})
+        // Fully sparse
+        ->Args({100'000, 1, 100'000, 1, 0})
+        // ArrowOutputStringFormat::SMALL_STRING
+        // Not sparse, small string buffers
+        ->Args({100'000, 1, 0, 2, 0})
+        // Not sparse, large string buffers
+        ->Args({100'000, 100'000, 0, 2, 0})
+        // Half sparse
+        ->Args({100'000, 1, 50'000, 2, 0})
+        // Fully sparse
+        ->Args({100'000, 1, 100'000, 2, 0})
+
+        // Fixed-width strings
+        // ArrowOutputStringFormat::CATEGORICAL
+        // Not sparse, small string buffers
+        ->Args({100'000, 1, 0, 0, 1})
+        // Not sparse, large string buffers
+        ->Args({100'000, 100'000, 0, 0, 1})
+        // ArrowOutputStringFormat::LARGE_STRING
+        // Not sparse, small string buffers
+        ->Args({100'000, 1, 0, 1, 1})
+        // Not sparse, large string buffers
+        ->Args({100'000, 100'000, 0, 1, 1})
+        // ArrowOutputStringFormat::STRING
+        // Not sparse, small string buffers
+        ->Args({100'000, 1, 0, 2, 1})
+        // Not sparse, large string buffers
+        ->Args({100'000, 100'000, 0, 2, 1})
+        ->MinWarmUpTime(0.5)
+        ->MinTime(1.0)
+        ->Repetitions(9)
+        ->ReportAggregatesOnly(true);

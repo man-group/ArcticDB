@@ -28,4 +28,7 @@ BENCHMARK(BM_regex_match)
         ->Args({100'000, 1'000, true})
         ->Args({100'000, 1'000, false})
         ->Args({100'000, 10'000, true})
-        ->Args({100'000, 10'000, false});
+        ->Args({100'000, 10'000, false})
+        ->MinWarmUpTime(0.5)
+        ->Repetitions(9)
+        ->ReportAggregatesOnly(true);

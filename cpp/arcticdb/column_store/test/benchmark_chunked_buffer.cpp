@@ -45,17 +45,41 @@ static void BM_chunked_buffer_random_access(benchmark::State& state) {
 }
 
 BENCHMARK(BM_chunked_buffer_allocate_with_ensure)
+        ->Name("BM_chunked_buffer_allocate_with_ensure_100k")
         ->Args({100'000, 203, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
         ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
         ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
-        ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)});
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
 
+BENCHMARK(BM_chunked_buffer_allocate_with_ensure)
+        ->Name("BM_chunked_buffer_allocate_with_ensure_10k")
+        ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+
+// Sub-microsecond per call — measurement-precision limited. Fixed Iterations() forces
+// many inner samples per rep so per-rep mean has tighter CI than auto-tuned MinTime.
 BENCHMARK(BM_chunked_buffer_random_access)
+        ->Name("BM_chunked_buffer_random_access_100k")
         ->Args({100'000, 203, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
         ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
         ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
+        ->MinWarmUpTime(0.5)
+        ->Iterations(10'000'000)
+        ->Repetitions(6)
+        ->ReportAggregatesOnly(true);
+
+// 30ns per call — pure measurement-precision noise. Fixed Iterations() forces
+// many inner samples per rep so per-rep mean has tighter CI than auto-tuned MinTime.
+BENCHMARK(BM_chunked_buffer_random_access)
+        ->Name("BM_chunked_buffer_random_access_10k")
         ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
         ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)});
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
+        ->MinWarmUpTime(0.5)
+        ->Iterations(10'000'000)
+        ->Repetitions(9)
+        ->ReportAggregatesOnly(true);

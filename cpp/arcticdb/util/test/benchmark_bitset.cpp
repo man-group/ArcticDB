@@ -45,7 +45,9 @@ BENCHMARK(BM_packed_bits_to_buffer)
         ->Args({1'000'000})
         ->Args({10'000'000})
         ->Args({100'000'000})
-        ->Args({1'000'000'000});
+        ->Args({1'000'000'000})
+        ->Repetitions(9)
+        ->ReportAggregatesOnly(true);
 
 static void BM_bools_to_packed_bits(benchmark::State& state) {
     auto num_bools = static_cast<size_t>(state.range(0));
@@ -62,4 +64,9 @@ static void BM_bools_to_packed_bits(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_bools_to_packed_bits)->Args({100'000})->Args({1'000'000})->Args({10'000'000});
+BENCHMARK(BM_bools_to_packed_bits)
+        ->Args({100'000})
+        ->Args({1'000'000})
+        ->Args({10'000'000})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);

@@ -310,60 +310,110 @@ static void BM_ternary_bool_bool(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_ternary_bitset_bitset)->Args({100'000});
+BENCHMARK(BM_ternary_bitset_bitset)->Args({100'000})->Repetitions(3)->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_bitset_bool)
         ->Args({100'000, true, true})
         ->Args({100'000, true, false})
         ->Args({100'000, false, true})
-        ->Args({100'000, false, false});
-BENCHMARK(BM_ternary_numeric_dense_col_dense_col)->Args({100'000});
-BENCHMARK(BM_ternary_numeric_sparse_col_sparse_col)->Args({100'000});
-BENCHMARK(BM_ternary_numeric_dense_col_sparse_col)->Args({100'000, true})->Args({100'000, false});
+        ->Args({100'000, false, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_numeric_dense_col_dense_col)->Args({100'000})->Repetitions(3)->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_numeric_sparse_col_sparse_col)->Args({100'000})->Repetitions(3)->ReportAggregatesOnly(true);
+// baseline max/min was 1.24; modest reps is enough.
+BENCHMARK(BM_ternary_numeric_dense_col_sparse_col)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_string_dense_col_dense_col)
         ->Args({100'000, 100'000, true})
         ->Args({100'000, 100'000, false})
         ->Args({100'000, 2, true})
-        ->Args({100'000, 2, false});
+        ->Args({100'000, 2, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_string_sparse_col_sparse_col)
         ->Args({100'000, 100'000, true})
         ->Args({100'000, 100'000, false})
         ->Args({100'000, 2, true})
-        ->Args({100'000, 2, false});
+        ->Args({100'000, 2, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_string_dense_col_sparse_col)
         ->Args({100'000, 100'000, true})
         ->Args({100'000, 100'000, false})
         ->Args({100'000, 2, true})
-        ->Args({100'000, 2, false});
-BENCHMARK(BM_ternary_numeric_dense_col_val)->Args({100'000, true})->Args({100'000, false});
-BENCHMARK(BM_ternary_numeric_sparse_col_val)->Args({100'000, true})->Args({100'000, false});
+        ->Args({100'000, 2, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_numeric_dense_col_val)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->MinWarmUpTime(0.5)
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_numeric_sparse_col_val)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_string_dense_col_val)
         ->Args({100'000, true, 100'000})
         ->Args({100'000, false, 100'000})
         ->Args({100'000, true, 2})
-        ->Args({100'000, false, 2});
+        ->Args({100'000, false, 2})
+        ->MinWarmUpTime(0.5)
+        ->MinTime(2.0)
+        ->Repetitions(14)
+        ->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_string_sparse_col_val)
         ->Args({100'000, true, 100'000})
         ->Args({100'000, false, 100'000})
         ->Args({100'000, true, 2})
-        ->Args({100'000, false, 2});
-BENCHMARK(BM_ternary_numeric_dense_col_empty)->Args({100'000, true})->Args({100'000, false});
+        ->Args({100'000, false, 2})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+// baseline max/min was 1.24; modest reps is enough.
+BENCHMARK(BM_ternary_numeric_dense_col_empty)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+// Naturally stable in baseline — no decoration needed.
 BENCHMARK(BM_ternary_numeric_sparse_col_empty)->Args({100'000, true})->Args({100'000, false});
 BENCHMARK(BM_ternary_string_dense_col_empty)
         ->Args({100'000, true, 100'000})
         ->Args({100'000, false, 100'000})
         ->Args({100'000, true, 2})
-        ->Args({100'000, false, 2});
+        ->Args({100'000, false, 2})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
 BENCHMARK(BM_ternary_string_sparse_col_empty)
         ->Args({100'000, true, 100'000})
         ->Args({100'000, false, 100'000})
         ->Args({100'000, true, 2})
-        ->Args({100'000, false, 2});
-BENCHMARK(BM_ternary_numeric_val_val)->Args({100'000});
-BENCHMARK(BM_ternary_string_val_val)->Args({100'000});
-BENCHMARK(BM_ternary_numeric_val_empty)->Args({100'000, true})->Args({100'000, false});
-BENCHMARK(BM_ternary_string_val_empty)->Args({100'000, true})->Args({100'000, false});
+        ->Args({100'000, false, 2})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_numeric_val_val)->Args({100'000})->Repetitions(3)->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_string_val_val)->Args({100'000})->Repetitions(5)->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_numeric_val_empty)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->Repetitions(10)
+        ->ReportAggregatesOnly(true);
+BENCHMARK(BM_ternary_string_val_empty)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+// 1us per call — precision-limited; Iterations() amortises measurement noise.
 BENCHMARK(BM_ternary_bool_bool)
         ->Args({100'000, true, true})
         ->Args({100'000, true, false})
         ->Args({100'000, false, true})
-        ->Args({100'000, false, false});
+        ->Args({100'000, false, false})
+        ->Iterations(1'000'000)
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);

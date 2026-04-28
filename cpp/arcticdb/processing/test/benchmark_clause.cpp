@@ -170,9 +170,10 @@ void BM_hash_grouping_string(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_merge_interleaved)->Args({10'000, 100});
-BENCHMARK(BM_merge_ordered)->Args({10'000, 100});
+BENCHMARK(BM_merge_interleaved)->Args({10'000, 100})->Repetitions(3)->ReportAggregatesOnly(true);
+BENCHMARK(BM_merge_ordered)->Args({10'000, 100})->Repetitions(3)->ReportAggregatesOnly(true);
 
+// Naturally stable in baseline (max/min < 1.15) — no decoration needed.
 BENCHMARK(BM_hash_grouping_int<int8_t>)->Args({100'000, 10, 2});
 BENCHMARK(BM_hash_grouping_int<int16_t>)->Args({100'000, 10, 2})->Args({100'000, 10'000, 2});
 BENCHMARK(BM_hash_grouping_int<int32_t>)->Args({100'000, 10, 2})->Args({100'000, 100'000, 2});
@@ -182,4 +183,6 @@ BENCHMARK(BM_hash_grouping_string)
         ->Args({100'000, 10, 2, 10})
         ->Args({100'000, 100'000, 2, 10})
         ->Args({100'000, 10, 2, 100})
-        ->Args({100'000, 100'000, 2, 100});
+        ->Args({100'000, 100'000, 2, 100})
+        ->Repetitions(6)
+        ->ReportAggregatesOnly(true);

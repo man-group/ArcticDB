@@ -93,7 +93,14 @@ def escape_for_benchmark_filter(name: str) -> str:
 
 
 def run_one(binary: Path, full_name: str) -> float:
-    """Run a single benchmark by exact-match filter, return its real_time in milliseconds."""
+    """Run a single benchmark by exact-match filter, return its real_time in milliseconds.
+
+    When the C++ side sets ``->Repetitions(N)->ReportAggregatesOnly(true)``, the JSON
+    contains only aggregate rows (mean/median/stddev/cv) and we use the median —
+    robust against a single outlier repetition (typically the first, which pays
+    cold-cache costs). When no repetitions are configured, there is exactly one
+    iteration row and we use that value directly.
+    """
     result = subprocess.run(
         [
             str(binary),
@@ -105,10 +112,16 @@ def run_one(binary: Path, full_name: str) -> float:
         text=True,
     )
     data = json.loads(result.stdout)
-    # Skip aggregate rows (mean, stddev, …) when --benchmark_repetitions is active.
-    iterations = [b for b in data.get("benchmarks", []) if b.get("run_type", "iteration") == "iteration"]
+    benchmarks = data.get("benchmarks", [])
+    median_row = next(
+        (b for b in benchmarks if b.get("run_type") == "aggregate" and b.get("aggregate_name") == "median"),
+        None,
+    )
+    if median_row is not None:
+        return to_milliseconds(median_row["real_time"], median_row.get("time_unit", "ms"), full_name)
+    iterations = [b for b in benchmarks if b.get("run_type", "iteration") == "iteration"]
     if not iterations:
-        raise RuntimeError(f"No iteration result returned for benchmark {full_name!r}")
+        raise RuntimeError(f"No iteration or aggregate result returned for benchmark {full_name!r}")
     bm = iterations[0]
     return to_milliseconds(bm["real_time"], bm.get("time_unit", "ms"), full_name)
 

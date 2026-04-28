@@ -61,5 +61,9 @@ static void BM_search_sorted_single_value(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_search_sorted_random)->Args({100'000});
-BENCHMARK(BM_search_sorted_single_value)->Args({100'000, true})->Args({100'000, false});
+BENCHMARK(BM_search_sorted_random)->Args({100'000})->Repetitions(6)->ReportAggregatesOnly(true);
+BENCHMARK(BM_search_sorted_single_value)
+        ->Args({100'000, true})
+        ->Args({100'000, false})
+        ->Repetitions(11)
+        ->ReportAggregatesOnly(true);

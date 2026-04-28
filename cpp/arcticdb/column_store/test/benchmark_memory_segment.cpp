@@ -144,8 +144,14 @@ static void BM_iterate_with_iterator(benchmark::State& state) {
 
 // The {100k, 100} puts more weight on the sort_external part of the sort
 // where the {1M, 1} puts more weight on the create_jive_table part.
-BENCHMARK(BM_sort_shuffled)->Args({100'000, 100})->Args({1'000'000, 1});
-BENCHMARK(BM_sort_ordered)->Args({100'000, 100});
-BENCHMARK(BM_sort_sparse)->Args({100'000, 100});
-BENCHMARK(BM_iterate_with_scalar_at)->Args({100'000, 100});
-BENCHMARK(BM_iterate_with_iterator)->Args({100'000, 100});
+BENCHMARK(BM_sort_shuffled)
+        ->Args({100'000, 100})
+        ->Args({1'000'000, 1})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+// baseline max/min was 1.19 / 1.28; modest reps is enough.
+BENCHMARK(BM_sort_ordered)->Args({100'000, 100})->Repetitions(3)->ReportAggregatesOnly(true);
+BENCHMARK(BM_sort_sparse)->Args({100'000, 100})->Repetitions(3)->ReportAggregatesOnly(true);
+// Naturally stable in baseline — no decoration needed.
+BENCHMARK(BM_iterate_with_scalar_at)->Args({100'000, 100})->Repetitions(6)->ReportAggregatesOnly(true);
+BENCHMARK(BM_iterate_with_iterator)->Args({100'000, 100})->Repetitions(6)->ReportAggregatesOnly(true);

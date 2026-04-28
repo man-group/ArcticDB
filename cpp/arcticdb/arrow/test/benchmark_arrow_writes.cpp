@@ -76,44 +76,100 @@ static void BM_arrow_convert_multiple_record_batches_to_segment(benchmark::State
 }
 
 BENCHMARK(BM_arrow_convert_single_record_batch_to_segment)
-        // Numeric data
-        // Short and wide
+        ->Name("BM_arrow_convert_single_record_batch_to_segment_short_and_wide_numeric")
         ->Args({10, 100'000, -1, true})
         ->Args({10, 100'000, 0, true})
         ->Args({10, 100'000, 50'000, true})
-        // Long and thin
-        ->Args({10'000'000, 10, -1, true})
-        ->Args({10'000'000, 10, 0, true})
-        ->Args({10'000'000, 10, 5, true})
-        // String data
-        // Short and wide
+        ->ArgNames({"num_rows", "num_columns", "index_column", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->Iterations(3)
+        ->Repetitions(4)
+        ->ReportAggregatesOnly(true);
+
+BENCHMARK(BM_arrow_convert_single_record_batch_to_segment)
+        ->Name("BM_arrow_convert_single_record_batch_to_segment_short_and_wide_string")
         ->Args({10, 100'000, -1, false})
         ->Args({10, 100'000, 0, false})
         ->Args({10, 100'000, 50'000, false})
-// Long and thin - Windows CI can't handle this
+        ->ArgNames({"num_rows", "num_columns", "index_column", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->Iterations(3)
+        ->Repetitions(8)
+        ->ReportAggregatesOnly(true);
+
+BENCHMARK(BM_arrow_convert_single_record_batch_to_segment)
+        ->Name("BM_arrow_convert_single_record_batch_to_segment_long_and_thin_numeric")
+        ->Args({10'000'000, 10, -1, true})
+        ->Args({10'000'000, 10, 0, true})
+        ->Args({10'000'000, 10, 5, true})
+        ->ArgNames({"num_rows", "num_columns", "index_column", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->Repetitions(4)
+        ->ReportAggregatesOnly(true);
+
+// Windows CI can't handle this
 #ifndef WIN32
+BENCHMARK(BM_arrow_convert_single_record_batch_to_segment)
+        ->Name("BM_arrow_convert_single_record_batch_to_segment_long_and_thin_string")
         ->Args({10'000'000, 10, -1, false})
         ->Args({10'000'000, 10, 0, false})
         ->Args({10'000'000, 10, 5, false})
+        ->ArgNames({"num_rows", "num_columns", "index_column", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->Repetitions(4)
+        ->ReportAggregatesOnly(true);
 #endif
-        ;
 
 BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
-        // Numeric data
-        // Short and wide
+        ->Name("BM_arrow_convert_multiple_record_batches_to_segment_short_and_wide_numeric")
         ->Args({10, 100'000, 10, true})
-        // Long and thin
+        ->ArgNames({"num_rows", "num_columns", "num_record_batches", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->Iterations(2)
+        ->Repetitions(9)
+        ->ReportAggregatesOnly(true);
+
+BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
+        ->Name("BM_arrow_convert_multiple_record_batches_to_segment_long_and_thin_numeric")
         ->Args({10'000'000, 10, 100, true})
         ->Args({10'000'000, 10, 10'000, true})
-        // Highly fragmented
+        ->ArgNames({"num_rows", "num_columns", "num_record_batches", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->MinTime(5.0)
+        ->Repetitions(22)
+        ->ReportAggregatesOnly(true);
+
+BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
+        ->Name("BM_arrow_convert_multiple_record_batches_to_segment_numeric_fragmented")
         ->Args({1'000, 10, 1'000, true})
-        // String data
-        // Short and wide
+        ->ArgNames({"num_rows", "num_columns", "num_record_batches", "numeric_data"})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
+
+BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
+        ->Name("BM_arrow_convert_multiple_record_batches_to_segment_short_and_wide_string")
         ->Args({10, 100'000, 10, false})
-// Long and thin - Windows CI can't handle this
+        ->ArgNames({"num_rows", "num_columns", "num_record_batches", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->Repetitions(6)
+        ->ReportAggregatesOnly(true);
+
+// Windows CI can't handle this
 #ifndef WIN32
+BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
+        ->Name("BM_arrow_convert_multiple_record_batches_to_segment_long_and_thin_string")
         ->Args({10'000'000, 10, 100, false})
         ->Args({10'000'000, 10, 10'000, false})
+        ->ArgNames({"num_rows", "num_columns", "num_record_batches", "numeric_data"})
+        ->MinWarmUpTime(0.5)
+        ->MinTime(4.0)
+        ->Repetitions(6)
+        ->ReportAggregatesOnly(true);
 #endif
-        // Highly fragmented
-        ->Args({1'000, 10, 1'000, false});
+
+BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
+        ->Name("BM_arrow_convert_multiple_record_batches_to_segment_string_fragmented")
+        ->Args({1'000, 10, 1'000, false})
+        ->ArgNames({"num_rows", "num_columns", "num_record_batches", "numeric_data"})
+        ->Repetitions(3)
+        ->ReportAggregatesOnly(true);
