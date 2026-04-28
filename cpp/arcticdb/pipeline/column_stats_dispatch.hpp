@@ -117,8 +117,11 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                                              is_time_type(StatsTag::data_type) || is_bool_type(StatsTag::data_type);
             constexpr bool val_supported = is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type) ||
                                            is_bool_type(ValTag::data_type);
+            // Mixed bool/non-bool comparisons are rejected at runtime by check_no_mixed_bool_comparison.
+            // MSVC C4804 treats `numeric > bool` as an error.
+            constexpr bool bool_compatible = is_bool_type(StatsTag::data_type) == is_bool_type(ValTag::data_type);
             check_no_mixed_bool_comparison<StatsTag::data_type, ValTag::data_type>(*stats_lhs.min, val_rhs);
-            if constexpr (stats_supported && val_supported) {
+            if constexpr (stats_supported && val_supported && bool_compatible) {
                 using StatsRawType = StatsTag::raw_type;
                 using ValRawType = ValTag::raw_type;
                 using comp = Comparable<StatsRawType, ValRawType>;
