@@ -27,7 +27,9 @@ void register_version_store_common_bindings(py::module& version, BindingScope sc
             .def("extract_numpy_arrays",
                  [](PandasOutputFrame& self) { return python_util::extract_numpy_arrays(self); });
 
-    py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame", py::module_local(local_bindings))
+    py::class_<ArrowOutputFrame, std::shared_ptr<ArrowOutputFrame>>(
+            version, "ArrowOutputFrame", py::module_local(local_bindings)
+    )
             .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches);
 }
 

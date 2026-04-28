@@ -274,8 +274,8 @@ TEST(ArrowRead, ConvertSegmentBasic) {
 
     auto arrow_data = segment_to_arrow_data(segment);
     // We expect to see num_chunks record batches
-    EXPECT_EQ(arrow_data->size(), num_chunks);
-    for (const auto& record_batch : *arrow_data) {
+    EXPECT_EQ(arrow_data.size(), num_chunks);
+    for (const auto& record_batch : arrow_data) {
         auto names = record_batch.names();
         auto columns = record_batch.columns();
         // Each record batch should have all columns for the row range (including the index)
@@ -338,10 +338,10 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
 
     // Convert to arrow
     auto arrow_data = segment_to_arrow_data(segment);
-    EXPECT_EQ(arrow_data->size(), num_chunks);
+    EXPECT_EQ(arrow_data.size(), num_chunks);
     for (auto i = 0u; i < num_chunks; ++i) {
         auto row_count = std::min(chunk_size, num_rows - i * chunk_size);
-        const auto& record_batch = (*arrow_data)[i];
+        const auto& record_batch = (arrow_data)[i];
         auto names = record_batch.names();
         auto columns = record_batch.columns();
         // Each record batch should have all columns for the row range (including the index)

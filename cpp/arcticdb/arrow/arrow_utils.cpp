@@ -338,22 +338,20 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
     return vec;
 }
 
-std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
+std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
     if (num_columns == 0) {
         // We can't construct a record batch with no columns, so in this case we return an empty list of record batches,
         // which needs special handling in python.
-        return std::make_shared<std::vector<sparrow::record_batch>>();
+        return std::vector<sparrow::record_batch>();
     }
     const auto column_blocks = segment.column(0).num_blocks();
     util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     // column_blocks == 0 is a special case where we are returning a zero-row structure (e.g. if date_range is
     // provided outside of the time range covered by the symbol)
-    auto output = std::make_shared<std::vector<sparrow::record_batch>>(
-            column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{}
-    );
+    std::vector<sparrow::record_batch> output{column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{}};
     for (auto i = 0UL; i < num_columns; ++i) {
         auto& column = segment.column(static_cast<position_t>(i));
         util::check(
@@ -365,15 +363,15 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 
         auto column_arrays = arrow_arrays_from_column(column, segment.field(i).name());
         util::check(
-                column_arrays.size() == output->size(),
+                column_arrays.size() == output.size(),
                 "Unexpected number of arrow arrays returned: {} != {}",
                 column_arrays.size(),
-                output->size()
+                output.size()
         );
 
         for (auto block_idx = 0UL; block_idx < column_arrays.size(); ++block_idx) {
-            util::check(block_idx < output->size(), "Block index overflow {} > {}", block_idx, output->size());
-            (*output)[block_idx].add_column(
+            util::check(block_idx < output.size(), "Block index overflow {} > {}", block_idx, output.size());
+            output[block_idx].add_column(
                     static_cast<std::string>(segment.field(i).name()), std::move(column_arrays[block_idx])
             );
         }
