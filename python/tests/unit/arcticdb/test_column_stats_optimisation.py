@@ -1432,10 +1432,10 @@ def test_column_stats_bool_comparison_operators(
 @pytest.mark.parametrize(
     "query_expr,expected_reads",
     [
-        pytest.param(lambda q: (q["int_col"] > 4) & q["bool_col"], 1, id="comparison_and_bool_col"),
-        pytest.param(lambda q: q["bool_col"] & (q["int_col"] > 4), 1, id="bool_col_and_comparison"),
-        pytest.param(lambda q: (q["int_col"] > 4) & q["bool_col"], 1, id="bool_col_and_comparison_flipped"),
-        pytest.param(lambda q: (q["int_col"] > 4) | q["bool_col"], 1, id="comparison_or_bool_col"),
+        pytest.param(lambda q: (q["int_col"] > 4) & q["bool_col"], 1, id="int_col_and_bool_col"),
+        pytest.param(lambda q: q["bool_col"] & (q["int_col"] > 4), 1, id="bool_col_and_int_col"),
+        pytest.param(lambda q: (q["int_col"] > 4) | q["bool_col"], 1, id="int_col_or_bool_col"),
+        pytest.param(lambda q: q["bool_col"] | (q["int_col"] > 4), 1, id="bool_col_or_int_col"),
     ],
 )
 def test_column_stats_bool_col_combined_with_comparison(
@@ -1520,7 +1520,7 @@ def test_column_stats_two_bool_cols(in_memory_version_store, clear_query_stats, 
     assert table_data_reads == 1, f"Expected 1 read, got {table_data_reads}"
 
 
-@pytest.mark.xfail("Needs support for col-col comparisons")
+@pytest.mark.xfail(reason="Needs support for col-col comparisons")
 def test_column_stats_two_bool_cols_comparison(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled
 ):

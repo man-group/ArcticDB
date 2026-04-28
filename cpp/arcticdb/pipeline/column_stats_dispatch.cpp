@@ -148,19 +148,6 @@ std::vector<StatsComparison> visit_binary_membership_stats(
     );
 }
 
-bool value_is_nan(const Value& val) {
-    if (is_floating_point_type(val.data_type())) {
-        return details::visit_type(val.data_type(), [&val]<typename TagType>(TagType) -> bool {
-            using RawType = TagType::raw_type;
-            if constexpr (std::is_floating_point_v<RawType>) {
-                return std::isnan(val.get<RawType>());
-            }
-            return false;
-        });
-    }
-    return false;
-}
-
 StatsComparison to_stats_comparison_for_boolean(const ColumnStatsValues& csv) {
     return unary_boolean_stats(csv, OperationType::IDENTITY);
 }
@@ -224,8 +211,6 @@ std::vector<StatsComparison> convert_boolean_stats_to_comparisons(const std::vec
     return result;
 }
 
-std::vector<StatsComparison> broadcast_value(StatsComparison val, size_t size) { return std::vector(size, val); }
-
 } // namespace
 
 std::vector<StatsComparison> visit_binary_boolean_stats(
@@ -255,36 +240,6 @@ std::vector<StatsComparison> visit_binary_boolean_stats(
                                 operation
                         );
                     },
-                    // StatsComparison x bool Value
-                    [operation](const std::vector<StatsComparison>& l, const std::shared_ptr<Value>& r)
-                            -> std::vector<StatsComparison> {
-                        return pairwise_binary_boolean(
-                                l, broadcast_value(to_stats_comparison_for_boolean(*r), l.size()), operation
-                        );
-                    },
-                    // bool Value x StatsComparison
-                    [operation](const std::shared_ptr<Value>& l, const std::vector<StatsComparison>& r)
-                            -> std::vector<StatsComparison> {
-                        return pairwise_binary_boolean(
-                                broadcast_value(to_stats_comparison_for_boolean(*l), r.size()), r, operation
-                        );
-                    },
-                    // ColumnStatsValues x bool Value
-                    [operation](const std::vector<ColumnStatsValues>& l, const std::shared_ptr<Value>& r)
-                            -> std::vector<StatsComparison> {
-                        auto converted_l = convert_boolean_stats_to_comparisons(l);
-                        return pairwise_binary_boolean(
-                                converted_l, broadcast_value(to_stats_comparison_for_boolean(*r), l.size()), operation
-                        );
-                    },
-                    // bool Value x ColumnStatsValues
-                    [operation](const std::shared_ptr<Value>& l, const std::vector<ColumnStatsValues>& r)
-                            -> std::vector<StatsComparison> {
-                        auto converted_r = convert_boolean_stats_to_comparisons(r);
-                        return pairwise_binary_boolean(
-                                broadcast_value(to_stats_comparison_for_boolean(*l), r.size()), converted_r, operation
-                        );
-                    },
                     // The remaining combinations are invalid for boolean operations.
                     // Each is listed explicitly so that adding a new type to StatsVariantData
                     // produces a compile error rather than silently falling into a catch-all.
@@ -297,12 +252,30 @@ std::vector<StatsComparison> visit_binary_boolean_stats(
                        const std::shared_ptr<ValueSet>&) -> std::vector<StatsComparison> {
                         util::raise_rte("ValueSet x ValueSet is not valid in visit_binary_boolean_stats");
                     },
+                    [](const std::shared_ptr<ValueSet>&,
+                       const std::shared_ptr<Value>&) -> std::vector<StatsComparison> {
+                        util::raise_rte("ValueSet x Value is not valid in visit_binary_boolean_stats");
+                    },
+                    [](const std::shared_ptr<Value>&,
+                       const std::shared_ptr<ValueSet>&) -> std::vector<StatsComparison> {
+                        util::raise_rte("Value x ValueSet is not valid in visit_binary_boolean_stats");
+                    },
                     [](const std::shared_ptr<ValueSet>&, const auto&) -> std::vector<StatsComparison> {
                         util::raise_rte("ValueSet x other is not valid in visit_binary_boolean_stats");
                     },
                     [](const auto&, const std::shared_ptr<ValueSet>&) -> std::vector<StatsComparison> {
                         util::raise_rte("other x ValueSet is not valid in visit_binary_boolean_stats");
-                    }
+                    },
+                    // any x bool Value
+                    [](const auto&, const std::shared_ptr<Value>&) -> std::vector<StatsComparison> {
+                        util::raise_rte("other x Value is not valid in visit_binary_boolean_stats (should have been "
+                                        "simplified in Python layer)");
+                    },
+                    // bool Value x any
+                    [](const std::shared_ptr<Value>&, const auto&) -> std::vector<StatsComparison> {
+                        util::raise_rte("Value x other is not valid in visit_binary_boolean_stats (should have been "
+                                        "simplified in Python layer)");
+                    },
             },
             left,
             right

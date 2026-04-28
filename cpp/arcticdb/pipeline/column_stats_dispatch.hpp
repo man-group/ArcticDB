@@ -52,8 +52,6 @@ namespace column_stats_detail {
 
 size_t stats_variant_size(const StatsVariantData& v);
 
-bool value_is_nan(const Value& val);
-
 template<DataType StatsType, DataType ValType>
 void check_no_mixed_bool_comparison(const Value& stats_val, const Value& query_val) {
     constexpr bool stats_is_bool = is_bool_type(StatsType);
