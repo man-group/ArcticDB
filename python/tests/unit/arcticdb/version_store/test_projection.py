@@ -265,6 +265,30 @@ def test_project_pow_col_value(lmdb_version_store_v1, any_output_format):
     assert_frame_equal(df, data)
 
 
+def test_project_pow_float_base(lmdb_version_store_v1, any_output_format):
+    # float ^ uint -> float64, float ^ int -> float64
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    df = pd.DataFrame(
+        {
+            "BASE": np.arange(1.0, 11.0, dtype=np.float64),
+            "UINT_EXP": np.arange(1, 11, dtype=np.uint8),
+            "INT_EXP": np.arange(-5, 5, dtype=np.int32),
+        },
+        index=np.arange(10),
+    )
+    lib.write("pow_float_base", df)
+
+    q = QueryBuilder()
+    q = q.apply("FLOAT_POW_UINT", q["BASE"] ** q["UINT_EXP"])
+    q = q.apply("FLOAT_POW_INT", q["BASE"] ** q["INT_EXP"])
+    data = lib.read("pow_float_base", query_builder=q).data
+
+    df["FLOAT_POW_UINT"] = df["BASE"].astype(np.float64) ** df["UINT_EXP"].astype(np.float64)
+    df["FLOAT_POW_INT"] = df["BASE"].astype(np.float64) ** df["INT_EXP"].astype(np.float64)
+    assert_frame_equal(df, data)
+
+
 def test_project_pow_string_raises(lmdb_version_store_v1, any_output_format):
     # Pow with string operand should raise UserInputException (matching other arithmetic ops)
     lib = lmdb_version_store_v1
@@ -279,6 +303,23 @@ def test_project_pow_string_raises(lmdb_version_store_v1, any_output_format):
 
     q = QueryBuilder()
     q = q.apply("result", q["s"] ** q["num"])
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+def test_project_pow_float_exponent_raises(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_pow_float_exponent_raises"
+    lib.write(symbol, pd.DataFrame({"num": np.array([1, 2, 3], dtype=np.int32), "f": np.array([1.0, 2.0, 3.0], dtype=np.float64)}))
+
+    q = QueryBuilder()
+    q = q.apply("result", q["num"] ** q["f"])
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+    q = QueryBuilder()
+    q = q.apply("result", q["num"] ** np.float64(2.0))
     with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
 
