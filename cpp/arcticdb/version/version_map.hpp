@@ -865,20 +865,16 @@ class VersionMapImpl {
                 return true;
             }
         } else {
-            auto opt_latest = entry.get_first_index(true).first;
-            if (opt_latest.has_value()) {
-                auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), requested_version_id);
-                if (opt_version_id.has_value() &&
-                    entry.load_progress_.oldest_loaded_index_version_ <= *opt_version_id) {
-                    ARCTICDB_DEBUG(
-                            log::version(),
-                            "Loaded as far as required value {}, have {} and there are {} total versions",
-                            requested_version_id,
-                            entry.load_progress_.oldest_loaded_index_version_,
-                            opt_latest->version_id()
-                    );
-                    return true;
-                }
+            auto opt_version_id = resolve_version_id(requested_version_id, entry);
+            
+            if (opt_version_id.has_value() && entry.load_progress_.oldest_loaded_index_version_ <= *opt_version_id) {
+                ARCTICDB_DEBUG(
+                        log::version(),
+                        "Loaded as far as required value {}, have {}",
+                        requested_version_id,
+                        entry.load_progress_.oldest_loaded_index_version_
+                );
+                return true;
             }
         }
         return false;
