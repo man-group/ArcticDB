@@ -971,7 +971,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "f4a967266cd6ea1d0d981ad126d561f2f00dbb8eeab69cc3e865dffa411e06f7"
@@ -998,7 +998,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "c0ae8f163bf19c07653b6f60ab6e995158aa563e662c2d8ccd347a5ba505688c"
@@ -1025,7 +1025,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "d362cfb67572e9f68968dfe29777803a15c4691f01653af49ea32bdb7c158b01"
@@ -1057,7 +1057,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "9c67c6ac2385d57d12dc1d8d49b7a0d0711d60e36d0e7d6a99a23e5fcc7cfbb5",
@@ -1090,7 +1090,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "a93ba8dc7f258d45759f62c1d3d2a48bcf6ea4d091a58f36008ed020b4eeefb9",
@@ -1123,7 +1123,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "64aec41d93970093050e6a4b50565a81f071487c2b3a63f9e6fabe9afe0b0f7f",
@@ -1156,7 +1156,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "f2cdd6b45cd2d49f2358097a18969b2ad5f2efc6cf26a854ab889d6b23fc4c4f",
@@ -1184,7 +1184,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:227",
+        "setup_cache_key": "basic_functions:271",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "434b63682c3d0bae77a89fe975756e348383dffe6c1f6a37b8149c6342e38e26"
@@ -1216,10 +1216,58 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:227",
+        "setup_cache_key": "basic_functions:271",
         "type": "time",
         "unit": "seconds",
         "version": "5f2cd16f87dc39fde97363a9689a3c011855cb7b83e7af0c50d3403c655e0ff8",
+        "warmup_time": -1
+    },
+    "basic_functions.ShortWideBatchRead.peakmem_read_batch": {
+        "code": "class ShortWideBatchRead:\n    def peakmem_read_batch(self, *args):\n        self.lib.read_batch(self.read_reqs)\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.read_reqs = [ReadRequest(f\"sym_{i}\") for i in range(ShortWideBatchRead.NUM_SYMBOLS)]\n\n    def setup_cache(self):\n        libs_for_storage = dict()\n        library_names = [_lib_name(rows) for rows in ShortWideBatchRead.rows]\n    \n        for storage in STORAGES:\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n    \n        for rows in ShortWideBatchRead.rows:\n            df = generate_random_floats_dataframe(rows, ShortWideBatchRead.COLS)\n            lib_name = _lib_name(rows)\n            for storage in STORAGES:\n                lib = libs_for_storage[storage][lib_name]\n                if not lib:\n                    continue\n                for i in range(ShortWideBatchRead.NUM_SYMBOLS):\n                    lib.write(f\"sym_{i}\", df)\n    \n        return libs_for_storage",
+        "name": "basic_functions.ShortWideBatchRead.peakmem_read_batch",
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:223",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "789687592daeaac9b7b0f25842c3980faea1e93a89568d5f4a53a47e9cd28f49"
+    },
+    "basic_functions.ShortWideBatchRead.time_read_batch": {
+        "code": "class ShortWideBatchRead:\n    def time_read_batch(self, *args):\n        self.lib.read_batch(self.read_reqs)\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.read_reqs = [ReadRequest(f\"sym_{i}\") for i in range(ShortWideBatchRead.NUM_SYMBOLS)]\n\n    def setup_cache(self):\n        libs_for_storage = dict()\n        library_names = [_lib_name(rows) for rows in ShortWideBatchRead.rows]\n    \n        for storage in STORAGES:\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n    \n        for rows in ShortWideBatchRead.rows:\n            df = generate_random_floats_dataframe(rows, ShortWideBatchRead.COLS)\n            lib_name = _lib_name(rows)\n            for storage in STORAGES:\n                lib = libs_for_storage[storage][lib_name]\n                if not lib:\n                    continue\n                for i in range(ShortWideBatchRead.NUM_SYMBOLS):\n                    lib.write(f\"sym_{i}\", df)\n    \n        return libs_for_storage",
+        "min_run_count": 2,
+        "name": "basic_functions.ShortWideBatchRead.time_read_batch",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:223",
+        "type": "time",
+        "unit": "seconds",
+        "version": "879b8cf644f777b80f8f519d95fe4325809abc992d4294bba75e1e5c7ec39e29",
         "warmup_time": -1
     },
     "basic_functions.ShortWideRead.peakmem_read": {

@@ -89,6 +89,24 @@ class FieldCollection {
 
     FieldCollection() = default;
 
+    // Preallocates backing storage for `num_fields` entries. `total_data_bytes` optionally
+    // reserves a single ChunkedBuffer block sized for all field names+headers so add_field
+    // never has to add further blocks. offsets_/shapes_ are Buffer-backed and would
+    // otherwise realloc+memcpy on every add_field (O(N^2) on wide schemas), so those are
+    // always sized to exactly num_fields entries when num_fields > 0.
+    explicit FieldCollection(std::size_t num_fields, std::size_t total_data_bytes = 0) {
+        if (num_fields == 0) {
+            return;
+        }
+
+        const std::size_t index_bytes = num_fields * sizeof(shape_t);
+        allocate_shapes(index_bytes);
+        allocate_offsets(index_bytes);
+        if (total_data_bytes > 0) {
+            buffer_.buffer().reserve(total_data_bytes);
+        }
+    }
+
     std::string_view add_field(const FieldRef& field) { return add_field(field.type_, field.name_); }
 
     std::string_view add_field(const TypeDescriptor& type, std::string_view name);
@@ -118,6 +136,12 @@ class FieldCollection {
         util::check(bytes != 0, "Allocate data called with zero size");
         buffer_.ensure_bytes(bytes);
         return buffer_.cursor();
+    }
+
+    inline shape_t* allocate_offsets(std::size_t bytes) {
+        util::check(bytes != 0, "Allocate offsets called with zero size");
+        offsets_.ensure_bytes(bytes);
+        return reinterpret_cast<shape_t*>(offsets_.cursor());
     }
 
     inline void advance_data(std::size_t size) { buffer_.advance(position_t(size)); }
