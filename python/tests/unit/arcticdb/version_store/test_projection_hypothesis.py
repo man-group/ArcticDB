@@ -39,11 +39,6 @@ pytestmark = pytest.mark.pipeline
 
 def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
-    # Guards for POW: avoid overflow and NaN from negative-base-fractional-exponent
-    assume(df["b"].abs().max() < 50)
-    assume(abs(val) < 50)
-    assume((df["a"] >= 0).all())
-    assume(val >= 0)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_binary_operation"
@@ -52,7 +47,7 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_form
     # only do these operations once to save time
     # Have to cast all Pandas values to doubles before computing, otherwise it gets the types wrong and over/underflows
     # a lot: https://github.com/pandas-dev/pandas/issues/59524
-    for op in ["+", "-", "*", "/", "**"]:
+    for op in ["+", "-", "*", "/"]:
         for comp in ["col op col", "col op val", "val op col"]:
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
@@ -71,9 +66,6 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_form
             elif op == "/":
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
-            elif op == "**":
-                q = q.apply("c", qb_lhs ** qb_rhs)
-                df["c"] = pandas_lhs ** pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
                 assert_frame_equal(df, received, check_dtype=False)
@@ -84,6 +76,52 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_form
                     f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
                 )
                 raise e
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=dataframe_strategy(
+        [
+            column_strategy("a", supported_numeric_dtypes(), restrict_range=True),
+            column_strategy("b", supported_numeric_dtypes(), restrict_range=True),
+        ],
+    ),
+    val=numeric_type_strategies(),
+)
+def test_project_pow_numeric_binary_operation(lmdb_version_store_v1, any_output_format, df, val):
+    assume(not df.empty)
+    # Exponent must be integer: ArcticDB does not support floating point exponents
+    assume(not np.issubdtype(df["b"].dtype, np.floating))
+    assume(not np.issubdtype(type(val), np.floating))
+    # Avoid overflow: large base ^ large exponent can exceed int64/uint64 range
+    assume(df["b"].abs().max() < 50)
+    assume(abs(val) < 50)
+    # Avoid int64 overflow when ArcticDB computes int^uint in integer space
+    assume((df["a"] >= 0).all())
+    assume(val >= 0)
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_pow_numeric_binary_operation"
+    lib.write(symbol, df)
+    for comp in ["col op col", "col op val", "val op col"]:
+        q = QueryBuilder()
+        qb_lhs = q["a"] if comp.startswith("col") else val
+        qb_rhs = q["b"] if comp.endswith("col") else val
+        pandas_lhs = df["a"].astype(np.float64) if comp.startswith("col") else np.float64(val)
+        pandas_rhs = df["b"].astype(np.float64) if comp.endswith("col") else np.float64(val)
+        q = q.apply("c", qb_lhs ** qb_rhs)
+        df["c"] = pandas_lhs ** pandas_rhs
+        received = lib.read(symbol, query_builder=q).data
+        try:
+            assert_frame_equal(df, received, check_dtype=False)
+        except AssertionError as e:
+            original_df = lib.read(symbol).data
+            print(
+                f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nval:\n{val}\nwith dtype:\n{val.dtype}\nquery:\n{q}"""
+                f"""\nPandas result:\n{df}\n"ArcticDB result:\n{received}"""
+            )
+            raise e
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -135,11 +173,6 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, any_output_forma
 
 def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
     assume(len(df) >= 3)
-    # Guards for POW: avoid overflow and NaN from negative-base-fractional-exponent
-    assume(df["b"].abs().max() < 50)
-    assume(abs(val) < 50)
-    assume((df["a"] >= 0).all())
-    assume(val >= 0)
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_binary_operation_dynamic"
@@ -154,7 +187,7 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
     df = pd.concat(slices)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
-    for op in ["+", "-", "*", "/", "**"]:
+    for op in ["+", "-", "*", "/"]:
         for comp in ["col op col", "col op val", "val op col"]:
             q = QueryBuilder()
             qb_lhs = q["a"] if comp.startswith("col") else val
@@ -173,9 +206,6 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
             elif op == "/":
                 q = q.apply("c", qb_lhs / qb_rhs)
                 df["c"] = pandas_lhs / pandas_rhs
-            elif op == "**":
-                q = q.apply("c", qb_lhs ** qb_rhs)
-                df["c"] = pandas_lhs ** pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
                 assert_frame_equal(df, received, check_dtype=False)
