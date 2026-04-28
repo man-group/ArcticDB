@@ -328,7 +328,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     for (const auto& row_slice : row_slices) {
         input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
     }
-    const auto output_index_column = generate_output_index_column(input_index_columns, bucket_boundaries);
+    const auto output_index_column = generate_output_index_column<closed_boundary>(input_index_columns, bucket_boundaries, *date_range_, label_boundary_);
     // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets
     // here if necessary
     bucket_boundaries.front(
@@ -433,67 +433,6 @@ std::vector<timestamp> ResampleClause<closed_boundary>::generate_bucket_boundari
     // case for data written by old versions of Arctic using update. See
     // test_compatibility.py::test_compat_resample_updated_data for more explanation
     return bucket_boundaries;
-}
-
-template<ResampleBoundary closed_boundary>
-std::shared_ptr<Column> ResampleClause<closed_boundary>::generate_output_index_column(
-        const std::vector<std::shared_ptr<Column>>& input_index_columns, const std::vector<timestamp>& bucket_boundaries
-) const {
-    constexpr auto data_type = DataType::NANOSECONDS_UTC64;
-    using IndexTDT = ScalarTagType<DataTypeTag<data_type>>;
-
-    const auto max_index_column_bytes = (bucket_boundaries.size() - 1) * get_type_size(data_type);
-    auto output_index_column = std::make_shared<Column>(
-            TypeDescriptor(data_type, Dimension::Dim0),
-            Sparsity::NOT_PERMITTED,
-            ChunkedBuffer::presized_in_blocks(max_index_column_bytes)
-    );
-    auto output_index_column_data = output_index_column->data();
-    auto output_index_column_it = output_index_column_data.template begin<IndexTDT>();
-    size_t output_index_column_row_count{0};
-
-    auto bucket_end_it = std::next(bucket_boundaries.cbegin());
-    Bucket<closed_boundary> current_bucket{*std::prev(bucket_end_it), *bucket_end_it};
-    bool current_bucket_added_to_index{false};
-    // Only include buckets that have at least one index value in range
-    for (const auto& input_index_column : input_index_columns) {
-        auto index_column_data = input_index_column->data();
-        const auto cend = index_column_data.cend<IndexTDT>();
-        auto it = index_column_data.cbegin<IndexTDT>();
-        // In case the passed date_range does not span the whole segment we need to skip the index values
-        // which are before the date range start.
-        while (it != cend && *it < date_range_->first) {
-            ++it;
-        }
-        for (; it != cend && *it <= date_range_->second; ++it) {
-            if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
-                if (ARCTICDB_UNLIKELY(!current_bucket_added_to_index)) {
-                    *output_index_column_it++ =
-                            label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
-                    ++output_index_column_row_count;
-                    current_bucket_added_to_index = true;
-                }
-            } else {
-                advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_end_it, *it);
-                if (ARCTICDB_UNLIKELY(bucket_end_it == bucket_boundaries.end())) {
-                    break;
-                } else {
-                    current_bucket.set_boundaries(*std::prev(bucket_end_it), *bucket_end_it);
-                    current_bucket_added_to_index = false;
-                    if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
-                        *output_index_column_it++ =
-                                label_boundary_ == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
-                        ++output_index_column_row_count;
-                        current_bucket_added_to_index = true;
-                    }
-                }
-            }
-        }
-    }
-    const auto actual_index_column_bytes = output_index_column_row_count * get_type_size(data_type);
-    output_index_column->buffer().trim(actual_index_column_bytes);
-    output_index_column->set_row_data(output_index_column_row_count - 1);
-    return output_index_column;
 }
 
 template struct ResampleClause<ResampleBoundary::LEFT>;

@@ -15,6 +15,7 @@
 #include <folly/Poly.h>
 
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 
@@ -88,6 +89,13 @@ class Bucket {
     timestamp start_;
     timestamp end_;
 };
+
+template<ResampleBoundary closed_boundary>
+std::shared_ptr<Column> generate_output_index_column(
+        const std::vector<std::shared_ptr<Column>>& input_index_columns,
+        const std::vector<timestamp>& bucket_boundaries, const TimestampRange& date_range,
+        ResampleBoundary label_boundary
+);
 
 enum class AggregationOperator { SUM, MEAN, MIN, MAX, FIRST, LAST, COUNT };
 
