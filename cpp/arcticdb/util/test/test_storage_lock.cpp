@@ -352,7 +352,7 @@ class StorageLockWithAndWithoutRetry : public ::testing::TestWithParam<bool> {
 };
 
 TEST(StorageLock, ConcurrentWritesWithRetrying) {
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     constexpr size_t num_writers = 3;
 
     auto lock_data = std::make_shared<LockData>(1);

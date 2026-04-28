@@ -111,31 +111,31 @@ def merge_arguments(
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_arguments(COL_NAMES, DTYPES))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
+)
 def test_timeseries_merge_update(lmdb_version_store_v1, merge_args):
     target_list, source, on = merge_args
     lib = lmdb_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+    for df in target_list:
+        lib.append(symbol, df)
     try:
-        for df in target_list:
-            lib.append(symbol, df)
-        try:
-            lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-        except UserInputException as e:
-            if "Multiple source rows match the same target row" not in str(e):
-                raise
-            with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-                merge(pd.concat(target_list), source, strategy=strategy, on=on)
-            return
-        result = lib.read(symbol).data
-    except DuplicateKeyException:
-        # On macOS/Windows the low timestamp resolution can cause duplicate keys when
-        # successive operations land within the same clock tick.
-        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if (not MACOS) and (not WINDOWS):
+        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+    except UserInputException as e:
+        if "Multiple source rows match the same target row" not in str(e):
             raise
-        assume(False)
+        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+            merge(pd.concat(target_list), source, strategy=strategy, on=on)
+        return
+    result = lib.read(symbol).data
     expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)
 
@@ -173,6 +173,14 @@ def test_multiindex_merge_update(lmdb_version_store_v1, merge_args, cols_to_prom
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_arguments(COL_NAMES, DTYPES, index_type=DataframeStrategyIndexType.ROWRANGE))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
+)
 def test_rowrange_merge_update(lmdb_version_store_v1, merge_args):
     target, source, on = merge_args
     assert len(target) == 1
@@ -180,23 +188,15 @@ def test_rowrange_merge_update(lmdb_version_store_v1, merge_args):
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
+    lib.write(symbol, target[0])
     try:
-        lib.write(symbol, target[0])
-        try:
-            lib.merge_experimental(symbol, source, strategy=strategy, on=on)
-        except UserInputException as e:
-            if "Multiple source rows match the same target row" not in str(e):
-                raise
-            with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
-                merge(target[0], source, strategy=strategy, on=on)
-            return
-        result = lib.read(symbol).data
-    except DuplicateKeyException:
-        # On macOS/Windows the low timestamp resolution can cause duplicate keys when
-        # successive operations land within the same clock tick.
-        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if (not MACOS) and (not WINDOWS):
+        lib.merge_experimental(symbol, source, strategy=strategy, on=on)
+    except UserInputException as e:
+        if "Multiple source rows match the same target row" not in str(e):
             raise
-        assume(False)
+        with pytest.raises(ValueError, match="Multiple source rows match the same target row"):
+            merge(target[0], source, strategy=strategy, on=on)
+        return
+    result = lib.read(symbol).data
     expected = merge(target[0], source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)
