@@ -18,6 +18,9 @@
 
 namespace arcticdb {
 
+// Similar to PreloadedIndexQuery, but without const fields. Also forces developers to convert a PreloadedIndexQuery
+// to an IndexInformation when it is submitted to our processing engine, so that the query can be safely re-used later.
+// Without this typing, it would be easy to forget to clone your PreloadedIndexQuery.
 struct IndexInformation {
     ARCTICDB_MOVE_ONLY_DEFAULT(IndexInformation)
     IndexInformation() = default;

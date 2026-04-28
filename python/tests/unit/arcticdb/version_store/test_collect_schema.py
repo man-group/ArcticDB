@@ -271,6 +271,8 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
         assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
         if create_column_stats:
             assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 1
+        else:
+            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
         with qs.query_stats():
             lazy_df._collect_schema()
             stats = qs.get_query_stats()
@@ -314,9 +316,9 @@ def test_collect_schema_and_collect_multiple_times(mem_library, create_column_st
             received_df = lazy_df.collect().data
             stats = qs.get_query_stats()
         qs.reset_stats()
+        # Column stats were preloaded during _collect_schema, clone preserves them
+        assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
         if create_column_stats:
-            # Column stats were preloaded during _collect_schema, clone preserves them
-            assert query_stats_operation_count(stats, "Memory_GetObject", "COLUMN_STATS") == 0
             assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
         else:
             # Read the data key, but no vref, version, or index keys

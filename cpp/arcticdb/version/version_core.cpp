@@ -1956,7 +1956,8 @@ void create_column_stats_impl(
     auto index_future = store->read(versioned_item.key_);
 
     using OptionalSeg = std::optional<SegmentInMemory>;
-    auto column_stats_future = store->read(column_stats_key)
+    storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
+    auto column_stats_future = store->read(column_stats_key, stats_read_opts)
                                        .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalSeg {
                                            return std::move(key_seg.second);
                                        });
@@ -2788,8 +2789,9 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
     folly::Future<OptionalKeySeg> column_stats_future = folly::makeFuture<OptionalKeySeg>(std::nullopt);
     if (need_column_stats) {
         auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+        storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
         column_stats_future =
-                store->read(column_stats_key)
+                store->read(column_stats_key, stats_read_opts)
                         .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalKeySeg {
                             return std::move(key_seg.second);
                         });

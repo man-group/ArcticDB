@@ -39,6 +39,7 @@ struct SpecificVersionQuery {
     bool iterate_snapshots_if_tombstoned;
 };
 
+// Similar to IndexInformation. See comment on IndexInformation for why both are useful.
 struct PreloadedIndexQuery {
     PreloadedIndexQuery(
             AtomKey index_key, SegmentInMemory index_seg, std::optional<SegmentInMemory> column_stats_seg = std::nullopt

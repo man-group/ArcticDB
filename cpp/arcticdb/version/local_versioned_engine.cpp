@@ -22,6 +22,7 @@
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <pipeline/column_stats_filter.hpp>
 
 namespace {
 using namespace arcticdb;
@@ -518,9 +519,10 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, 
     auto index_future = store()->read(key);
 
     auto column_stats_future = folly::makeFuture<std::optional<SegmentInMemory>>(std::nullopt);
-    if (include_index_segment) {
+    if (include_index_segment && is_column_stats_enabled()) {
         auto column_stats_key = index_key_to_column_stats_key(key);
-        column_stats_future = store()->read(column_stats_key)
+        storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
+        column_stats_future = store()->read(column_stats_key, stats_read_opts)
                                       .thenValue(
                                               [](std::pair<VariantKey, SegmentInMemory>&& key_seg
                                               ) -> std::optional<SegmentInMemory> { return std::move(key_seg.second); }
