@@ -81,7 +81,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTIC_CMAKE_PRESET: ${{inputs.preset}}
-          CMAKE_BUILD_PARALLEL_LEVEL: ${{contains(inputs.platform, 'aarch64') && '2' || ''}}
+          CMAKE_BUILD_PARALLEL_LEVEL: ${{contains(inputs.platform, 'aarch64') && '3' || ''}}
 
       - name: Show sccache stats
         run: ${SCCACHE_PATH} --show-stats || sccache --show-stats
@@ -166,7 +166,7 @@ jobs:
       - name: Build C++ Tests
         run: |
           cd cpp
-          CMAKE_JOBS=${{contains(inputs.platform, 'aarch64') && '2' || steps.cpu-cores.outputs.count}}
+          CMAKE_JOBS=${{contains(inputs.platform, 'aarch64') && '3' || steps.cpu-cores.outputs.count}}
           cmake --build --preset ${{inputs.preset}} --target arcticdb_rapidcheck_tests -j $CMAKE_JOBS
           cmake --build --preset ${{inputs.preset}} --target test_unit_arcticdb -j $CMAKE_JOBS
         env:
