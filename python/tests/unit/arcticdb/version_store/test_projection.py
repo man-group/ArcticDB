@@ -171,7 +171,7 @@ def test_project_pow_uint_uint(lmdb_version_store_v1, any_output_format):
     data = lib.read("pow_uint_uint", query_builder=q).data
 
     df["RESULT"] = df["BASE"].astype(np.uint64) ** df["EXP"].astype(np.uint64)
-    assert_frame_equal(df.astype({"RESULT": "uint64"}), data)
+    assert_frame_equal(df, data)
 
 
 def test_project_pow_int_uint(lmdb_version_store_v1, any_output_format):
@@ -192,7 +192,7 @@ def test_project_pow_int_uint(lmdb_version_store_v1, any_output_format):
     data = lib.read("pow_int_uint", query_builder=q).data
 
     df["RESULT"] = df["BASE"].astype(np.int64) ** df["EXP"].astype(np.int64)
-    assert_frame_equal(df.astype({"RESULT": "int64"}), data)
+    assert_frame_equal(df, data)
 
 
 def test_project_pow_uint_int(lmdb_version_store_v1, any_output_format):
@@ -213,7 +213,7 @@ def test_project_pow_uint_int(lmdb_version_store_v1, any_output_format):
     data = lib.read("pow_uint_int", query_builder=q).data
 
     df["RESULT"] = df["BASE"].astype(np.float64) ** df["EXP"].astype(np.float64)
-    assert_frame_equal(df.astype({"RESULT": "float64"}), data)
+    assert_frame_equal(df, data)
 
 
 def test_project_pow_int_int(lmdb_version_store_v1, any_output_format):
@@ -234,7 +234,7 @@ def test_project_pow_int_int(lmdb_version_store_v1, any_output_format):
     data = lib.read("pow_int_int", query_builder=q).data
 
     df["RESULT"] = df["BASE"].astype(np.float64) ** df["EXP"].astype(np.float64)
-    assert_frame_equal(df.astype({"RESULT": "float64"}), data)
+    assert_frame_equal(df, data)
 
 
 def test_project_pow_col_value(lmdb_version_store_v1, any_output_format):
@@ -262,15 +262,7 @@ def test_project_pow_col_value(lmdb_version_store_v1, any_output_format):
     df["INT_POW_UINT_VAL"] = df["INT_COL"].astype(np.int64) ** np.int64(3)
     df["INT_POW_INT_VAL"] = df["INT_COL"].astype(np.float64) ** np.float64(2)
 
-    expected = df.astype(
-        {
-            "UINT_POW_UINT_VAL": "uint64",
-            "UINT_POW_INT_VAL": "float64",
-            "INT_POW_UINT_VAL": "int64",
-            "INT_POW_INT_VAL": "float64",
-        }
-    )
-    assert_frame_equal(expected, data)
+    assert_frame_equal(df, data)
 
 
 def test_project_pow_string_raises(lmdb_version_store_v1, any_output_format):
