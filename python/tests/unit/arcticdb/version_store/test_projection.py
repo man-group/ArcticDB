@@ -299,7 +299,7 @@ def test_project_pow_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_fo
 
     expected, slices = make_dynamic(df)
     for df_slice in slices:
-        lib.append(symbol, df_slice, write_if_missing=True)
+        lib.append(symbol, df_slice)
 
     q = QueryBuilder()
     q = q.apply("RESULT", q["BASE"] ** q["EXP"])
@@ -425,7 +425,7 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format
 
     expected, slices = make_dynamic(df)
     for df_slice in slices:
-        lib.append(symbol, df_slice, write_if_missing=True)
+        lib.append(symbol, df_slice)
 
     q = QueryBuilder()
     q = q.apply("ADJUSTED", q["ASK"] * q["ACVOL"] + 7)
