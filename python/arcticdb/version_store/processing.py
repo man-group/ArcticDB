@@ -443,6 +443,15 @@ class QueryBuilder:
 
     * Binary arithmetic: +, -, *, /
     * Unary arithmetic: -, abs
+    * Power: ** (base may be integer or float; exponent must be an integer type, not float)
+
+      Result type of ** depends on operand types:
+
+      - unsigned integer ^ unsigned integer -> uint64
+      - signed integer ^ unsigned integer   -> int64
+      - any integer ^ signed integer        -> float64 (negative exponents may produce fractional results)
+      - float ^ integer                     -> float64
+      - any data type ^ float               -> not supported!
 
     Supported filtering operations:
 
@@ -502,6 +511,7 @@ class QueryBuilder:
     Query involves comparing strings using <, <=, >, or >= operators
     Query involves comparing a string to one or more numeric values, or vice versa
     Query involves arithmetic with a column containing strings
+    Exponent in ** is a floating point value
     """
 
     def __init__(self):
