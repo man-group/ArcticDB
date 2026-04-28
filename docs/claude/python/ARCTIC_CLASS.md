@@ -51,9 +51,9 @@ ac.delete_library("my_library")
 ## Class Definition
 
 `Arctic` class in `python/arcticdb/arctic.py` provides:
-- `__init__(uri, encoding_version)` - Initialize connection
-- `create_library(name, library_options)` - Create a new library
-- `get_library(name, create_if_missing)` - Get existing library
+- `__init__(uri, encoding_version, output_format=PANDAS, arrow_string_format_default=LARGE_STRING)` - Initialize connection with default output format and Arrow string format for all libraries
+- `create_library(name, library_options, enterprise_library_options, output_format=None, arrow_string_format_default=None)` - Create a new library with optional per-library format overrides
+- `get_library(name, create_if_missing, library_options, output_format=None, arrow_string_format_default=None)` - Get existing library with optional per-library format overrides
 - `delete_library(name)` - Delete a library and all its data
 - `list_libraries()` - List all library names
 - `__getitem__(name)` - Shorthand for `get_library()`
@@ -187,6 +187,49 @@ except ArcticException:
 
 The `Arctic` class uses lazy initialization for the adapter (created on first access). Libraries may be cached to avoid repeated lookups.
 
+### RuntimeOptions Propagation
+
+`Arctic.__init__` stores `output_format` and `arrow_string_format_default` as instance defaults. These are cascaded to each `Library` via `RuntimeOptions`:
+
+```
+Arctic(output_format=PYARROW)
+  └─ get_library("lib") / create_library("lib")
+       └─ Library._runtime_options = RuntimeOptions(output_format=PYARROW)
+            └─ lib.read("sym")  →  uses PYARROW unless overridden per-call
+```
+
+Per-library overrides: `get_library(output_format=POLARS)` and `create_library(output_format=POLARS)` override the Arctic-level default. Per-call overrides (`lib.read(output_format=...)`) override the library-level default. Resolution uses `OutputFormat.resolve()` for case-insensitive string compatibility.
+
+## DuckDB SQL Integration
+
+### `sql(query, output_format=None)`
+
+Only supports `SHOW DATABASES` — returns libraries grouped by database prefix. Raises `ValueError` for other queries (use `Library.sql()` for data queries).
+
+```python
+result = arctic.sql("SHOW DATABASES")
+# Returns: database_name | library_name
+```
+
+### `duckdb(connection=None)` → `ArcticDuckDBContext`
+
+Context manager for cross-library SQL queries. Optional `connection` parameter accepts an external `duckdb.DuckDBPyConnection` — if provided, ArcticDB registers symbols into it but does NOT close it on `__exit__`.
+
+```python
+with arctic.duckdb() as ddb:
+    ddb.register_symbol("market_data", "trades")
+    ddb.register_symbol("reference_data", "securities")
+    result = ddb.sql("SELECT ... FROM trades JOIN securities ...")
+
+# With external connection (for joining with non-ArcticDB data)
+conn = duckdb.connect()
+with arctic.duckdb(connection=conn) as ddb:
+    ddb.register_symbol("market_data", "trades")
+    # conn remains open after context exits
+```
+
+See [DUCKDB.md](DUCKDB.md) for full details.
+
 ## Key Files
 
 | File | Purpose |
@@ -199,5 +242,6 @@ The `Arctic` class uses lazy initialization for the adapter (created on first ac
 ## Related Documentation
 
 - [LIBRARY_API.md](LIBRARY_API.md) - Library class returned by Arctic
+- [DUCKDB.md](DUCKDB.md) - DuckDB SQL integration details
 - [ADAPTERS.md](ADAPTERS.md) - Storage adapter details
 - [../cpp/STORAGE_BACKENDS.md](../cpp/STORAGE_BACKENDS.md) - Backend configurations

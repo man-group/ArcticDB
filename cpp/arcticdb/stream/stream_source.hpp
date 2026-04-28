@@ -70,7 +70,8 @@ struct StreamSource {
 
     virtual std::vector<folly::Future<pipelines::SegmentAndSlice>> batch_read_uncompressed(
             std::vector<pipelines::RangesAndKey>&& ranges_and_keys,
-            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
+            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode,
+            entity::AllocationType allocation_type = entity::AllocationType::DYNAMIC
     ) = 0;
 
     virtual folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
