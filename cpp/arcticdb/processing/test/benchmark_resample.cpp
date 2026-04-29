@@ -132,9 +132,7 @@ Layout build_layout(size_t rows_per_segment, size_t num_segments, size_t num_buc
         boundaries.push_back(boundaries.back() + bucket_size);
     }
 
-    return Layout{
-            std::move(segments), std::move(boundaries), 0, total_span - row_step
-    };
+    return Layout{std::move(segments), std::move(boundaries), 0, total_span - row_step};
 }
 
 std::vector<EntityId> register_segments(

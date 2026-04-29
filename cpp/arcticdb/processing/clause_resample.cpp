@@ -328,13 +328,9 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     for (const auto& row_slice : row_slices) {
         input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
     }
-    const auto output_index_column = generate_output_index_column<closed_boundary>(input_index_columns, bucket_boundaries, *date_range_, label_boundary_);
-    // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets
-    // here if necessary
-    bucket_boundaries.front(
-    ) = std::max(bucket_boundaries.front(), date_range_->first - (closed_boundary == ResampleBoundary::RIGHT ? 1 : 0));
-    bucket_boundaries.back(
-    ) = std::min(bucket_boundaries.back(), date_range_->second + (closed_boundary == ResampleBoundary::LEFT ? 1 : 0));
+    const auto [output_index_column, mapping] = generate_output_index_column<closed_boundary>(
+            input_index_columns, bucket_boundaries, *date_range_, label_boundary_
+    );
     SegmentInMemory seg;
     RowRange output_row_range(
             row_slices.front().row_ranges_->at(0)->start(),
@@ -369,14 +365,8 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                     }
             );
         }
-        std::optional<Column> aggregated = aggregator.aggregate(
-                input_index_columns,
-                input_agg_columns,
-                bucket_boundaries,
-                *output_index_column,
-                string_pool,
-                label_boundary_
-        );
+        std::optional<Column> aggregated =
+                aggregator.aggregate(input_index_columns, input_agg_columns, mapping, string_pool);
         if (aggregated) {
             seg.add_column(
                     scalar_field(aggregated->type().data_type(), aggregator.get_output_column_name().value),
