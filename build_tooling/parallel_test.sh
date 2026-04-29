@@ -22,6 +22,7 @@ if [ "$VERSION_MAP_RELOAD_INTERVAL" != "-1" ]; then
 fi
 
 export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+export ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR=all
 # Enable faulthandler so SIGSEGV/SIGBUS dump tracebacks to stderr
 export PYTHONFAULTHANDLER=1
 # Arm a C-level per-test watchdog that dumps tracebacks and kills the worker

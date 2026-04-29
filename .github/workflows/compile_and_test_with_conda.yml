@@ -309,6 +309,7 @@ jobs:
           eval "$COMMANDLINE"
           export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+          export ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR=all
           python setup.py protoc --build-lib python
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
