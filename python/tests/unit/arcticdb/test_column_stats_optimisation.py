@@ -1377,8 +1377,8 @@ def test_column_stats_duplicate_timestamp_index_still_prunes_unique_keys(
 @pytest.mark.parametrize(
     "query_expr,expected_reads",
     [
-        # seg0: a=[1,2], b=[10,20], c=[2,3], d=[2,3], e=[2,2]
-        # seg1: a=[30,40], b=[3,4], c=[4,5], d=[41, 45], e=[42, 42]
+        # seg0: a=[1,2], b=[10,20], c=[2,3], d=[2,2], e=[2,2]
+        # seg1: a=[30,40], b=[3,4], c=[4,5], d=[41, 41], e=[42, 42]
         pytest.param(lambda q: q["a"] < q["b"], 1, id="lt_pruning"),
         pytest.param(lambda q: q["a"] < q["d"], 2, id="lt_no_pruning"),
         pytest.param(lambda q: q["a"] <= q["b"], 1, id="lte_pruning"),

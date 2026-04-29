@@ -249,13 +249,6 @@ TEST(ColumnStatsData, SparseColumnAbsentMarkedCorrectly) {
     max_vol_col->mark_absent_rows(1);
 
     ssize_t last_row = 1;
-    start_col->set_row_data(last_row);
-    end_col->set_row_data(last_row);
-    min_price_col->set_row_data(last_row);
-    max_price_col->set_row_data(last_row);
-    min_vol_col->set_row_data(last_row);
-    max_vol_col->set_row_data(last_row);
-
     SegmentInMemory seg;
     seg.descriptor().set_index(IndexDescriptorImpl(IndexDescriptorImpl::Type::ROWCOUNT, 0));
     seg.add_column(scalar_field(DataType::NANOSECONDS_UTC64, start_index_column_name), start_col);

@@ -601,9 +601,10 @@ struct EqualsOperator {
         if (auto r = check_range_for_nan(rhs, StatsComparison::NONE_MATCH))
             return *r;
 
-        if ((*this)(lhs.min, rhs.min) && (*this)(lhs.max, rhs.max) && (*this)(lhs.min, lhs.max) &&
-            (*this)(rhs.min, rhs.max))
+        // Both ranges are a single identical point: all values are equal
+        if ((*this)(lhs.min, lhs.max) && (*this)(rhs.min, rhs.max) && (*this)(lhs.min, rhs.min))
             return StatsComparison::ALL_MATCH;
+        // Ranges are disjoint: all values in lhs differ from all values in rhs
         if (LessThanOperator{}(lhs.max, rhs.min) || LessThanOperator{}(rhs.max, lhs.min))
             return StatsComparison::NONE_MATCH;
         return StatsComparison::UNKNOWN;
