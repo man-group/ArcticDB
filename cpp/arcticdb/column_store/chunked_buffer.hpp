@@ -211,8 +211,12 @@ class ChunkedBufferImpl {
                 allocation_type_ == entity::AllocationType::DETACHABLE,
                 "block_at_offset is only valid for detachable buffers"
         );
-        auto it = std::lower_bound(block_offsets_.begin(), block_offsets_.end(), offset);
-        util::check(it != block_offsets_.end() && *it == offset, "No block found at offset {}", offset);
+        // upper_bound - 1 lands on the last entry equal to `offset`, skipping any zero-sized leading blocks that may be
+        // produced by truncate_first_block (which can set block_offsets_[0] == block_offsets_[1]).
+        auto it = std::ranges::upper_bound(block_offsets_, offset);
+        util::check(it != block_offsets_.begin(), "No block found at offset {}", offset);
+        --it;
+        util::check(*it == offset, "No block found at offset {}", offset);
         return blocks_[std::distance(block_offsets_.begin(), it)];
     }
 
