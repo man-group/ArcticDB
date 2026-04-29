@@ -1,11 +1,11 @@
 # CI Failure Tracking Scripts
 
-These scripts are called by the `CI failure notification` workflow
+These scripts are called by the `Track flaky CI failures` workflow
 (`.github/workflows/failure_notification.yaml`) to parse CI failures,
 create/update GitHub issues, and send Slack notifications.
 
 All scripts are Python 3 (stdlib only, no third-party packages) and use the
-`gh` CLI for GitHub API access.
+`gh` CLI for GitHub API access. Shared helpers live in `utils.py`.
 
 ## Triggers
 
@@ -93,8 +93,8 @@ Fetch vcpkg cache
 | `timeout` | Only test-runner steps failed with no test names (likely timed out) |
 | `unknown` | No failed steps or tests found at all |
 
-When no failures are found, the text files are empty (0 bytes) and
-`failure_kind.txt` is `unknown`.
+When no failed jobs are found, the script exits early without writing any
+output files. Downstream scripts treat missing files as "nothing to track".
 
 ---
 
@@ -106,7 +106,8 @@ failing test/step), and writes a Slack summary.
 ```
 python3 track_ci_issues.py --input-dir <DIR> --run-id <RUN_ID> --run-url <URL> \
                            --repo <OWNER/REPO> --commit-sha <SHA> \
-                           --conclusion <CONCLUSION> --output-file <FILE>
+                           --conclusion <CONCLUSION> --run-date <ISO8601> \
+                           --output-file <FILE>
 ```
 
 | Argument | Required | Description |
@@ -117,6 +118,7 @@ python3 track_ci_issues.py --input-dir <DIR> --run-id <RUN_ID> --run-url <URL> \
 | `--repo` | yes | Repository in `owner/repo` format |
 | `--commit-sha` | yes | Full commit SHA of the failing run |
 | `--conclusion` | no | Run conclusion from GitHub (`failure`, `timed_out`). If `timed_out`, forces timeout handling regardless of `failure_kind.txt`. |
+| `--run-date` | no | ISO 8601 timestamp of the CI run (`created_at` from the GitHub API). Used in issue bodies so failures can be cross-referenced against outages. |
 | `--output-file` | yes | Path to write the Slack summary |
 
 **Behaviour:**
@@ -260,6 +262,7 @@ python3 .github/scripts/track_ci_issues.py \
   --repo man-group/ArcticDB \
   --commit-sha abc123def456 \
   --conclusion failure \
+  --run-date "2025-03-15T10:30:00Z" \
   --output-file /tmp/ci_failures/slack_summary.txt
 
 cat /tmp/ci_failures/slack_summary.txt

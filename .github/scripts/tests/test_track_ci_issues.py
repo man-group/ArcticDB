@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from track_ci_issues import IssueTracker, GROUPING_THRESHOLD, read_lines
+from track_ci_issues import IssueTracker, GROUPING_THRESHOLD, main, read_lines
 
 
 # ---------------------------------------------------------------------------
@@ -29,6 +29,28 @@ class TestReadLines:
 
 
 # ---------------------------------------------------------------------------
+# main() early exit when no failure_kind.txt
+# ---------------------------------------------------------------------------
+class TestMainNoFailedJobs:
+    def test_exits_early_when_no_failure_kind(self, tmp_path):
+        """When parse_ci_failures found no failed jobs, failure_kind.txt
+        is absent and main() should exit without creating any issues."""
+        output_file = tmp_path / "slack_summary.txt"
+        with patch("sys.argv", [
+            "track_ci_issues.py",
+            "--input-dir", str(tmp_path),
+            "--run-id", "123",
+            "--run-url", "https://example.com",
+            "--repo", "owner/repo",
+            "--commit-sha", "abc123",
+            "--conclusion", "failure",
+            "--output-file", str(output_file),
+        ]):
+            main()
+        assert output_file.read_text() == ""
+
+
+# ---------------------------------------------------------------------------
 # IssueTracker body generation
 # ---------------------------------------------------------------------------
 class TestIssueTrackerBodies:
@@ -39,6 +61,7 @@ class TestIssueTrackerBodies:
             run_id="99999",
             run_url="https://github.com/owner/repo/actions/runs/99999",
             commit_sha="abcdef1234567890abcdef1234567890abcdef12",
+            run_date="2025-03-15T10:30:00Z",
         )
 
     def test_test_issue_body_contains_test_name(self, tracker):
@@ -61,6 +84,14 @@ class TestIssueTrackerBodies:
 
     def test_short_sha_is_10_chars(self, tracker):
         assert tracker.short_sha == "abcdef1234"
+
+    def test_run_date_used_in_body(self, tracker):
+        body = tracker.test_issue_body("Test.Name")
+        assert "2025-03-15T10:30:00Z" in body
+
+    def test_run_date_defaults_to_unknown(self):
+        tracker = IssueTracker("owner/repo", "1", "https://url", "abc123")
+        assert tracker.run_date == "unknown"
 
 
 # ---------------------------------------------------------------------------

@@ -10,9 +10,10 @@ and empty output if no failed run exists.
 """
 import argparse
 import json
-import subprocess
 import sys
 from urllib.parse import quote
+
+from utils import run_gh
 
 # The workflows we track — must stay in sync with the workflow_run trigger list
 TRACKED_WORKFLOWS = [
@@ -22,16 +23,6 @@ TRACKED_WORKFLOWS = [
     "Coverity Static Analysis",
     "Installation Tests Execution",
 ]
-
-
-def run_gh(*args: str, check: bool = True) -> str:
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        check=check,
-    )
-    return result.stdout.strip()
 
 
 def get_pr_head(repo: str, pr_number: str) -> tuple[str, str]:

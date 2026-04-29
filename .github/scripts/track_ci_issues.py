@@ -17,21 +17,11 @@ Requirements: gh (GitHub CLI)
 """
 import argparse
 import json
-import subprocess
-from datetime import datetime, timezone
+import re
+
+from utils import run_gh
 
 GROUPING_THRESHOLD = 10
-
-
-def run_gh(*args: str, check: bool = True) -> str:
-    """Run a gh CLI command and return stdout."""
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        check=check,
-    )
-    return result.stdout.strip()
 
 
 def read_lines(path: str) -> list[str]:
@@ -51,7 +41,6 @@ def _sanitise_search_query(title: str) -> str:
     return zero results. We strip these from the search query and rely on
     the exact title match below to filter accurately.
     """
-    import re
     return re.sub(r'[\[\]:/."]', " ", title)
 
 
@@ -99,12 +88,13 @@ def comment_on_issue(repo: str, number: int, body: str) -> None:
 class IssueTracker:
     """Tracks CI failures as GitHub issues and accumulates a Slack summary."""
 
-    def __init__(self, repo: str, run_id: str, run_url: str, commit_sha: str):
+    def __init__(self, repo: str, run_id: str, run_url: str, commit_sha: str,
+                 run_date: str | None = None):
         self.repo = repo
         self.run_id = run_id
         self.run_url = run_url
         self.short_sha = commit_sha[:10]
-        self.run_date = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        self.run_date = run_date or "unknown"
         self.slack_lines: list[str] = []
 
     def _failure_comment(self) -> str:
@@ -306,21 +296,33 @@ def main() -> None:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--conclusion", default="", help="Run conclusion (failure, timed_out)")
+    parser.add_argument("--run-date", default=None, help="Timestamp of the actual CI run (ISO 8601)")
     parser.add_argument("--output-file", required=True)
     args = parser.parse_args()
 
     failing_tests = read_lines(f"{args.input_dir}/failing_tests.txt")
     failed_steps = read_lines(f"{args.input_dir}/failed_steps.txt")
 
-    # Read failure kind determined by parse_ci_failures.py
+    # Read failure kind determined by parse_ci_failures.py.
+    # If the file is missing, parse_ci_failures found no failed jobs — nothing to track.
     failure_kind_lines = read_lines(f"{args.input_dir}/failure_kind.txt")
-    failure_kind = failure_kind_lines[0] if failure_kind_lines else "unknown"
+    if not failure_kind_lines:
+        print("No failure_kind.txt found — no failed jobs to track.")
+        # Still create the output file — the workflow step that reads it
+        # (cat /tmp/ci_failures/slack_summary.txt) would fail if it's missing.
+        with open(args.output_file, "w") as f:
+            f.write("")
+        return
+    failure_kind = failure_kind_lines[0]
 
     # Explicit timed_out conclusion from GitHub overrides
     if args.conclusion == "timed_out":
         failure_kind = "timeout"
 
-    tracker = IssueTracker(args.repo, args.run_id, args.run_url, args.commit_sha)
+    tracker = IssueTracker(
+        args.repo, args.run_id, args.run_url, args.commit_sha,
+        run_date=args.run_date,
+    )
 
     # Process failing tests
     if failing_tests:

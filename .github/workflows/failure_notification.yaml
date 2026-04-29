@@ -1,4 +1,4 @@
-name: CI failure notification
+name: Track flaky CI failures
 on:
   workflow_run:
     workflows: ["Build and Test", "Build with conda", "Build with analysis tools", "Coverity Static Analysis", "Installation Tests Execution"]
@@ -104,7 +104,7 @@ jobs:
           fi
 
           run_json=$(gh api "repos/$REPO/actions/runs/$RUN_ID" \
-            --jq '{head_sha, head_branch, conclusion, name}')
+            --jq '{head_sha, head_branch, conclusion, name, created_at}')
 
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "run_url=$SERVER_URL/$REPO/actions/runs/$RUN_ID" >> "$GITHUB_OUTPUT"
@@ -112,6 +112,7 @@ jobs:
           echo "branch=$(echo "$run_json" | jq -r '.head_branch')" >> "$GITHUB_OUTPUT"
           echo "conclusion=$(echo "$run_json" | jq -r '.conclusion')" >> "$GITHUB_OUTPUT"
           echo "workflow_name=$(echo "$run_json" | jq -r '.name')" >> "$GITHUB_OUTPUT"
+          echo "run_date=$(echo "$run_json" | jq -r '.created_at')" >> "$GITHUB_OUTPUT"
 
       - name: Ensure labels exist
         env:
@@ -142,6 +143,7 @@ jobs:
           META_REPO: ${{ github.repository }}
           META_COMMIT_SHA: ${{ steps.meta.outputs.commit_sha }}
           META_CONCLUSION: ${{ steps.meta.outputs.conclusion }}
+          META_RUN_DATE: ${{ steps.meta.outputs.run_date }}
         run: |
           python3 .github/scripts/track_ci_issues.py \
             --input-dir /tmp/ci_failures \
@@ -150,6 +152,7 @@ jobs:
             --repo "$META_REPO" \
             --commit-sha "$META_COMMIT_SHA" \
             --conclusion "$META_CONCLUSION" \
+            --run-date "$META_RUN_DATE" \
             --output-file /tmp/ci_failures/slack_summary.txt
 
       - name: Set Slack summary output

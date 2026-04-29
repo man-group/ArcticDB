@@ -16,19 +16,9 @@ import argparse
 import json
 import os
 import re
-import subprocess
 import sys
 
-
-def run_gh(*args: str, check: bool = True) -> str:
-    """Run a gh CLI command and return stdout."""
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        check=check,
-    )
-    return result.stdout.strip()
+from utils import run_gh
 
 
 def fetch_failed_jobs(repo: str, run_id: str) -> list[dict]:
@@ -58,23 +48,17 @@ def fetch_failed_steps(repo: str, job_id: int) -> list[str]:
 
 def download_failed_logs(repo: str, run_id: str, output_path: str) -> bool:
     """Download logs for the failed run. Returns True on success."""
-    result = subprocess.run(
-        ["gh", "run", "view", run_id, "--repo", repo, "--log-failed"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    with open(output_path, "w") as f:
-        f.write(result.stdout)
-    if result.returncode != 0:
+    try:
+        output = run_gh("run", "view", run_id, "--repo", repo, "--log-failed")
+    except Exception:
         print(
-            f"WARNING: gh run view --log-failed failed (exit {result.returncode}); "
+            "WARNING: gh run view --log-failed failed; "
             "test name parsing will be skipped",
             file=sys.stderr,
         )
-        if result.stderr:
-            print(f"stderr: {result.stderr[:500]}", file=sys.stderr)
         return False
+    with open(output_path, "w") as f:
+        f.write(output)
     return True
 
 
@@ -129,8 +113,6 @@ def main() -> None:
 
     if not failed_jobs:
         print("No failed jobs found.")
-        for name in ("failing_tests.txt", "failed_steps.txt"):
-            open(os.path.join(args.output_dir, name), "w").close()
         return
 
     print(f"Failed jobs: {json.dumps(failed_jobs, indent=2)}")
