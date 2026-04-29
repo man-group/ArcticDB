@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
 
 from utils import run_gh
@@ -50,7 +51,7 @@ def download_failed_logs(repo: str, run_id: str, output_path: str) -> bool:
     """Download logs for the failed run. Returns True on success."""
     try:
         output = run_gh("run", "view", run_id, "--repo", repo, "--log-failed")
-    except Exception:
+    except subprocess.CalledProcessError:
         print(
             "WARNING: gh run view --log-failed failed; "
             "test name parsing will be skipped",

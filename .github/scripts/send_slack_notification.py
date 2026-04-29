@@ -88,6 +88,12 @@ def send_to_slack(webhook_url: str, payload: dict) -> None:
     except urllib.error.HTTPError as e:
         print(f"Slack webhook failed: {e.code} {e.reason}", file=sys.stderr)
         sys.exit(1)
+    except urllib.error.URLError as e:
+        # Log only the reason, not the URL — the URL is the authentication
+        # secret for Slack incoming webhooks. GitHub Actions masks secrets in
+        # logs, but we avoid logging it as defence in depth.
+        print(f"Slack webhook connection error: {e.reason}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main() -> None:
