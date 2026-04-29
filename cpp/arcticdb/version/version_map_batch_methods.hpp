@@ -275,7 +275,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
     return output;
 }
 
-using VersionVectorType = std::vector<VersionId>;
+using VersionVectorType = std::vector<SignedVersionId>;
 
 /**
  * Returns multiple versions for the same symbol
@@ -294,9 +294,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
             std::move(tasks_input),
             [store, version_map](auto sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
-                LoadStrategy load_strategy{
-                        LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(first_version)
-                };
+                LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, first_version};
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
             },
 
@@ -308,7 +306,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                 const auto& versions = sym_it->second;
 
                 for (auto version : versions) {
-                    auto opt_resolved = resolve_version_id(static_cast<SignedVersionId>(version), *entry);
+                    auto opt_resolved = resolve_version_id(version, *entry);
 
                     if (!opt_resolved.has_value())
                         continue;
