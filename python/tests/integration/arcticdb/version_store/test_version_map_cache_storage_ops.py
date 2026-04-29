@@ -1,11 +1,13 @@
 import uuid
+from enum import Enum
+from typing import NamedTuple
 
 import pandas as pd
 import pytest
 
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.exceptions import NoSuchVersionException
-from arcticdb.util.test import config_context
+from arcticdb.util.test import config_context, query_stats_operation_count
 from tests.util.mark import MEM_TESTS_MARK
 
 pytestmark = MEM_TESTS_MARK
@@ -22,14 +24,21 @@ def make_ts_df(start_day=0, periods=3):
 
 
 def get_version_reads(stats):
-    return stats.get("storage_operations", {}).get("Memory_GetObject", {}).get("VERSION", {}).get("count", 0)
+    return query_stats_operation_count(stats, "Memory_GetObject", "VERSION")
 
 
 def get_version_ref_reads(stats):
-    return stats.get("storage_operations", {}).get("Memory_GetObject", {}).get("VERSION_REF", {}).get("count", 0)
+    return query_stats_operation_count(stats, "Memory_GetObject", "VERSION_REF")
 
 
-TOMBSTONE_ALL = "tombstone_all"
+class TombstoneType(Enum):
+    INDIVIDUAL = 0
+    ALL = 1
+
+
+class Tombstone(NamedTuple):
+    version_id: int
+    type: TombstoneType
 
 
 def _ts_from_version_info(version_info):
@@ -39,151 +48,164 @@ def _ts_from_version_info(version_info):
 def _iter_versions(chain):
     """Yield (vinfo, is_deleted) newest-to-oldest"""
     tombstoned_ids = set()
-    tombstone_all_seen = False
+    tombstone_all_version = None
     for entry in chain:
-        if isinstance(entry, tuple):
-            tombstoned_ids.add(entry[1])
-        elif entry == TOMBSTONE_ALL:
-            tombstone_all_seen = True
+        if isinstance(entry, Tombstone):
+            if entry.type == TombstoneType.INDIVIDUAL:
+                tombstoned_ids.add(entry.version_id)
+            else:
+                if tombstone_all_version is None or entry.version_id > tombstone_all_version:
+                    tombstone_all_version = entry.version_id
         else:
-            yield entry, entry.version in tombstoned_ids or tombstone_all_seen
+            deleted = entry.version in tombstoned_ids or (
+                tombstone_all_version is not None and entry.version <= tombstone_all_version
+            )
+            yield entry, deleted
 
 
-def _is_tombstone_head(ci):
-    return isinstance(ci[0], tuple) or ci[0] == TOMBSTONE_ALL
+def _is_tombstone_head(chain_info):
+    return isinstance(chain_info[0], Tombstone)
 
 
-def _latest_version(ci):
-    return next(v.version for v, deleted in _iter_versions(ci) if not deleted)
+def _latest_version(chain_info):
+    return next(v.version for v, deleted in _iter_versions(chain_info) if not deleted)
 
 
-def _oldest_undeleted(ci):
-    return min(v.version for v, deleted in _iter_versions(ci) if not deleted)
+def _oldest_undeleted(chain_info):
+    return min(v.version for v, deleted in _iter_versions(chain_info) if not deleted)
 
 
-def _total_versions(ci):
-    return sum(1 for e in ci if not isinstance(e, tuple) and e != TOMBSTONE_ALL)
+def _total_versions(chain_info):
+    return sum(1 for e in chain_info if not isinstance(e, Tombstone))
 
 
-def _ts_of(ci, version_id):
-    return next(_ts_from_version_info(v) for v, _ in _iter_versions(ci) if v.version == version_id)
+def _ts_of(chain_info, version_id):
+    return next(_ts_from_version_info(v) for v, _ in _iter_versions(chain_info) if v.version == version_id)
 
 
-def _mid_version(ci):
-    undeleted = sorted(v.version for v, deleted in _iter_versions(ci) if not deleted)
+def _mid_version(chain_info):
+    undeleted = sorted(v.version for v, deleted in _iter_versions(chain_info) if not deleted)
     return undeleted[len(undeleted) // 2]
 
 
-def _is_index_head(ci):
-    return not _is_tombstone_head(ci)
+def _is_index_head(chain_info):
+    return not _is_tombstone_head(chain_info)
 
 
-def _oldest_loaded_after_cold_read(as_of_type, ci):
+def _oldest_loaded_after_cold_read(as_of_type, chain_info):
     """Derive oldest_loaded_index_version_ from chain structure and as_of type."""
-    is_idx_head = _is_index_head(ci)
-    undeleted_asc = sorted(v.version for v, deleted in _iter_versions(ci) if not deleted)
+    is_idx_head = _is_index_head(chain_info)
+    undeleted_asc = sorted(v.version for v, deleted in _iter_versions(chain_info) if not deleted)
 
     if not is_idx_head or len(undeleted_asc) == 1:
         if as_of_type in ("latest", "version_latest"):
             return undeleted_asc[-1]
         elif as_of_type == "version_neg_1":
-            return _total_versions(ci) - 1
+            return _total_versions(chain_info) - 1
         elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
-            return _mid_version(ci)
+            return _mid_version(chain_info)
         elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
             return undeleted_asc[0]
+        else:
+            raise Exception("Unexpected as_of_type")
     elif len(undeleted_asc) > 1:  # we have penultimate index also cached
         penultimate = undeleted_asc[-2]
         if as_of_type in ("latest", "version_latest", "version_neg_1"):
             return penultimate
         elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
-            v = _mid_version(ci)
+            v = _mid_version(chain_info)
             return penultimate if v >= penultimate else v
         elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
             v = undeleted_asc[0]
             return penultimate if v >= penultimate else v
+        else:
+            raise Exception("Unexpected as_of_type")
     return None
 
 
 def setup_simple_6(lib, sym):
     """v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
     w = [lib.write(sym, make_df()) for _ in range(6)]
-    return [w[5], w[4], w[3], w[2], w[1], w[0]]
+    return w[::-1]
 
 
 def setup_multi_tombstone_all(lib, sym):
-    """v4 -> v3 -> v2 -> TOMBSTONE_ALL -> v1 -> TOMBSTONE_ALL -> v0"""
+    """v4 -> v3 -> v2 -> Tombstone(ALL,1) -> v1 -> Tombstone(ALL,0) -> v0"""
     v0 = lib.write(sym, make_df())
     lib.delete(sym)
     v1 = lib.write(sym, make_df())
     lib.delete(sym)
     v2, v3, v4 = lib.write(sym, make_df()), lib.write(sym, make_df()), lib.write(sym, make_df())
-    return [v4, v3, v2, TOMBSTONE_ALL, v1, TOMBSTONE_ALL, v0]
+    return [v4, v3, v2, Tombstone(v1.version, TombstoneType.ALL), v1, Tombstone(v0.version, TombstoneType.ALL), v0]
 
 
 def setup_multi_individual_tombstone(lib, sym):
-    """("tombstone",3) -> ("tombstone",1) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
+    """Tombstone(INDIVIDUAL,3) -> Tombstone(INDIVIDUAL,1) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
     w = [lib.write(sym, make_df()) for _ in range(6)]
     lib.delete_version(sym, 1)
     lib.delete_version(sym, 3)
-    return [("tombstone", 3), ("tombstone", 1), w[5], w[4], w[3], w[2], w[1], w[0]]
+    return [Tombstone(3, TombstoneType.INDIVIDUAL), Tombstone(1, TombstoneType.INDIVIDUAL)] + w[::-1]
 
 
 def setup_append_chain(lib, sym):
     """v2 -> v1 -> v0 via write + 2 appends"""
     w = [lib.write(sym, make_ts_df(0, 2)), lib.append(sym, make_ts_df(2, 2)), lib.append(sym, make_ts_df(4, 2))]
-    return [w[2], w[1], w[0]]
+    return w[::-1]
 
 
 def setup_update_chain(lib, sym):
     """v2 -> v1 -> v0 via write + 2 updates"""
     w = [lib.write(sym, make_ts_df(0, 3)), lib.update(sym, make_ts_df(1, 1)), lib.update(sym, make_ts_df(2, 1))]
-    return [w[2], w[1], w[0]]
+    return w[::-1]
 
 
 def setup_prune_chain(lib, sym):
-    """v2 only (v0, v1 pruned)"""
+    """Tombstone(ALL,1) -> v2 -> v1 -> v0"""
     w = [lib.write(sym, make_df()) for _ in range(3)]
     lib.prune_previous_versions(sym)
-    return [w[2], TOMBSTONE_ALL, w[1], w[0]]
+    return [Tombstone(w[1].version, TombstoneType.ALL), w[2], w[1], w[0]]
 
 
 def setup_tombstone_all_then_writes(lib, sym):
-    """v6 -> v5 -> v4 -> v3 -> v2 -> v1 -> TOMBSTONE_ALL -> v0"""
+    """v6 -> v5 -> v4 -> v3 -> v2 -> v1 -> Tombstone(ALL,0) -> v0"""
     v0 = lib.write(sym, make_df())
     lib.delete(sym)
     w = [lib.write(sym, make_df()) for _ in range(6)]  # v1..v6
-    return [w[5], w[4], w[3], w[2], w[1], w[0], TOMBSTONE_ALL, v0]
+    return w[::-1] + [Tombstone(v0.version, TombstoneType.ALL), v0]
 
 
 def setup_tombstone_latest(lib, sym):
-    """("tombstone",5) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
+    """Tombstone(INDIVIDUAL,5) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
     w = [lib.write(sym, make_df()) for _ in range(6)]
     lib.delete_version(sym, 5)
-    return [("tombstone", 5), w[5], w[4], w[3], w[2], w[1], w[0]]
+    return [Tombstone(5, TombstoneType.INDIVIDUAL)] + w[::-1]
 
 
 def setup_tombstone_all_every_version(lib, sym):
-    """v11->...->v6 -> TOMBSTONE_ALL->v5->...->TOMBSTONE_ALL->v0"""
+    """v11->...->v6 -> Tombstone(ALL,5)->v5->...->Tombstone(ALL,0)->v0"""
     initial = []
     for _ in range(6):
-        initial.append(lib.write(sym, make_df()))
+        v = lib.write(sym, make_df())
         lib.delete(sym)
+        initial.append(v)
+        initial.append(Tombstone(v.version, TombstoneType.ALL))
     rest = [lib.write(sym, make_df()) for _ in range(6)]  # v6..v11
-    chain = list(reversed(rest))
-    for v in reversed(initial):
-        chain.extend([TOMBSTONE_ALL, v])
-    return chain
+    return rest[::-1] + initial[::-1]
 
 
 def setup_tombstone_even_plus_latest(lib, sym):
-    """("tombstone",5)->("tombstone",4)->("tombstone",2)->("tombstone",0)->v5->v4->v3->v2->v1->v0"""
+    """Tombstone(INDIVIDUAL,5)->...->Tombstone(INDIVIDUAL,0)->v5->v4->v3->v2->v1->v0"""
     w = [lib.write(sym, make_df()) for _ in range(6)]
     lib.delete_version(sym, 0)
     lib.delete_version(sym, 2)
     lib.delete_version(sym, 4)
     lib.delete_version(sym, 5)
-    return [("tombstone", 5), ("tombstone", 4), ("tombstone", 2), ("tombstone", 0), w[5], w[4], w[3], w[2], w[1], w[0]]
+    return [
+        Tombstone(5, TombstoneType.INDIVIDUAL),
+        Tombstone(4, TombstoneType.INDIVIDUAL),
+        Tombstone(2, TombstoneType.INDIVIDUAL),
+        Tombstone(0, TombstoneType.INDIVIDUAL),
+    ] + w[::-1]
 
 
 CHAIN_SETUPS = [
@@ -303,48 +325,50 @@ EXPECTED_RAISES = {
 }
 
 
-def resolve_as_of(as_of_type, ci):
+def resolve_as_of(as_of_type, chain_info):
     if as_of_type == "latest":
         return None
     elif as_of_type == "version_latest":
-        return _latest_version(ci)
+        return _latest_version(chain_info)
     elif as_of_type == "oldest_undeleted_version":
-        return _oldest_undeleted(ci)
+        return _oldest_undeleted(chain_info)
     elif as_of_type == "version_mid":
-        return _mid_version(ci)
+        return _mid_version(chain_info)
     elif as_of_type == "timestamp_mid":
-        return _ts_of(ci, _mid_version(ci))
+        return _ts_of(chain_info, _mid_version(chain_info))
     elif as_of_type == "version_neg_1":
         return -1
     elif as_of_type == "version_neg_mid":
-        return _mid_version(ci) - _total_versions(ci)
+        return _mid_version(chain_info) - _total_versions(chain_info)
     elif as_of_type == "version_neg_oldest":
-        return _oldest_undeleted(ci) - _total_versions(ci)
+        return _oldest_undeleted(chain_info) - _total_versions(chain_info)
 
 
-def required_version(as_of_type, ci):
+def required_version(as_of_type, chain_info):
     if as_of_type in ("latest", "version_latest"):
-        return _latest_version(ci)
+        return _latest_version(chain_info)
     elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
-        return _oldest_undeleted(ci)
+        return _oldest_undeleted(chain_info)
     elif as_of_type in ("version_mid", "version_neg_mid"):
-        return _mid_version(ci)
+        return _mid_version(chain_info)
     elif as_of_type == "timestamp_mid":
-        return _ts_of(ci, _mid_version(ci))
+        return _ts_of(chain_info, _mid_version(chain_info))
     elif as_of_type == "version_neg_1":
-        return _total_versions(ci) - 1
+        return _total_versions(chain_info) - 1
     return None
 
 
-def is_cached(chain_id, as_of_type_first_read, as_of_type_second_read, ci):
-    if EXPECTED_COUNTS.get((chain_id, as_of_type_first_read)) is None:
-        return False
-    oldest_loaded = _oldest_loaded_after_cold_read(as_of_type_first_read, ci)
-    req = required_version(as_of_type_second_read, ci)
+def is_cached(chain_id, as_of_type_first_read, as_of_type_second_read, chain_info):
+    assert (
+        chain_id,
+        as_of_type_first_read,
+    ) in EXPECTED_COUNTS, f"Missing EXPECTED_COUNTS entry for ({chain_id!r}, {as_of_type_first_read!r})"
+    oldest_loaded = _oldest_loaded_after_cold_read(as_of_type_first_read, chain_info)
+    req = required_version(as_of_type_second_read, chain_info)
     if req is None or oldest_loaded is None:
         return False
     if isinstance(req, pd.Timestamp):
-        return req >= _ts_of(ci, oldest_loaded)
+        return req >= _ts_of(chain_info, oldest_loaded)
     return req >= oldest_loaded
 
 
@@ -360,8 +384,8 @@ def test_read_version_chain(
     chain_id, chain_setup_fn = chain_setup
 
     with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
-        ci = chain_setup_fn(lib_chain_setup, sym)
-        as_of_first_read = resolve_as_of(as_of_type_first_read, ci)
+        chain_info = chain_setup_fn(lib_chain_setup, sym)
+        as_of_first_read = resolve_as_of(as_of_type_first_read, chain_info)
         key = (chain_id, as_of_type_first_read)
 
         qs.enable()
@@ -391,7 +415,7 @@ def test_read_version_chain(
 
         # Cache check with the second as_of type read
         qs.reset_stats()
-        as_of_second_read = resolve_as_of(as_of_type_second_read, ci)
+        as_of_second_read = resolve_as_of(as_of_type_second_read, chain_info)
         second_read_key = (chain_id, as_of_type_second_read)
         if second_read_key in EXPECTED_RAISES:
             with pytest.raises(NoSuchVersionException):
@@ -399,7 +423,7 @@ def test_read_version_chain(
         else:
             lib_read.read(sym, as_of=as_of_second_read)
         stats = qs.get_query_stats()
-        if is_cached(chain_id, as_of_type_first_read, as_of_type_second_read, ci):
+        if is_cached(chain_id, as_of_type_first_read, as_of_type_second_read, chain_info):
             assert get_version_reads(stats) == 0
             assert get_version_ref_reads(stats) == 0
         else:
