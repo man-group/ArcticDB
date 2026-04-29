@@ -280,6 +280,9 @@ using VersionVectorType = std::vector<SignedVersionId>;
 /**
  * Returns multiple versions for the same symbol
  * @return Does not guarantee the returned keys actually exist in storage.
+ * 
+ * Allows requesting both positive and negative versions for the same symbol. If they end up corresponding to the same version they will be deduplicated in the output.
+ * For example if symbol has versions `v0, v1, v2 and v3`. And we request both for `[2, -2]`, method will return only `{2: index_key_for_version_2}`
  */
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
