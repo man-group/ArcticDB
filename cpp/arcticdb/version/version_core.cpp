@@ -2173,7 +2173,16 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
     try {
         auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
         auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
-        segment_in_memory.unsparsify();
+        const auto num_rows = segment_in_memory.row_count();
+        for (auto i = 0u; i < segment_in_memory.num_columns(); ++i) {
+            auto& column = segment_in_memory.column(static_cast<position_t>(i));
+            if (column.is_sparse()) {
+                auto sparse_map = column.sparse_map();
+                sparse_map.resize(num_rows);
+                column.unsparsify(num_rows);
+                create_dense_bitmap_if_any_nulls(0, sparse_map, column);
+            }
+        }
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
