@@ -82,6 +82,7 @@ jobs:
       )
     outputs:
       slack_summary: ${{ steps.summary.outputs.slack_summary }}
+      github_summary: ${{ steps.summary.outputs.github_summary }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -153,15 +154,21 @@ jobs:
             --commit-sha "$META_COMMIT_SHA" \
             --conclusion "$META_CONCLUSION" \
             --run-date "$META_RUN_DATE" \
-            --output-file /tmp/ci_failures/slack_summary.txt
+            --output-file /tmp/ci_failures/slack_summary.txt \
+            --github-output-file /tmp/ci_failures/github_summary.txt
 
-      - name: Set Slack summary output
+      - name: Set summary outputs
         id: summary
         run: |
           {
             echo "slack_summary<<SLACK_EOF"
             cat /tmp/ci_failures/slack_summary.txt
             echo "SLACK_EOF"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "github_summary<<GH_EOF"
+            cat /tmp/ci_failures/github_summary.txt
+            echo "GH_EOF"
           } >> "$GITHUB_OUTPUT"
 
   notify-slack:
@@ -221,7 +228,7 @@ jobs:
       - name: Post results to PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SUMMARY: ${{ needs.track-failures.outputs.slack_summary }}
+          SUMMARY: ${{ needs.track-failures.outputs.github_summary }}
           RUN_ID: ${{ needs.resolve-pr-run.outputs.run_id }}
           PR_NUMBER: ${{ needs.resolve-pr-run.outputs.pr_number }}
           TRACKER_RESULT: ${{ needs.track-failures.result }}
@@ -234,14 +241,6 @@ jobs:
             exit 0
           fi
 
-          # Convert Slack-flavoured markdown to GitHub markdown
-          body=$(printf '%s\n' "$SUMMARY" \
-            | sed 's/:rotating_light:/🚨/g' \
-            | sed 's/:warning:/⚠️/g' \
-            | sed 's/:question:/❓/g' \
-            | sed 's/:hourglass:/⏳/g' \
-            | sed 's/\*\([^*]*\)\*/**\1**/g')
-
           run_url="$SERVER_URL/$REPO/actions/runs/$RUN_ID"
 
           gh pr comment "$PR_NUMBER" --repo "$REPO" --body "$(cat <<EOF
@@ -249,7 +248,7 @@ jobs:
 
           Run: [$RUN_ID]($run_url)
 
-          $body
+          $SUMMARY
 
           ---
           *Triggered by \`/analyse-failures\` comment.*

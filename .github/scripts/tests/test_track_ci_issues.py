@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from track_ci_issues import IssueTracker, GROUPING_THRESHOLD, main, read_lines
+from track_ci_issues import IssueTracker, SummaryEntry, GROUPING_THRESHOLD, main, read_lines
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +48,80 @@ class TestMainNoFailedJobs:
         ]):
             main()
         assert output_file.read_text() == ""
+
+    def test_exits_early_creates_github_output_file(self, tmp_path):
+        """When --github-output-file is provided, it should also be created on early exit."""
+        output_file = tmp_path / "slack_summary.txt"
+        github_file = tmp_path / "github_summary.txt"
+        with patch("sys.argv", [
+            "track_ci_issues.py",
+            "--input-dir", str(tmp_path),
+            "--run-id", "123",
+            "--run-url", "https://example.com",
+            "--repo", "owner/repo",
+            "--commit-sha", "abc123",
+            "--conclusion", "failure",
+            "--output-file", str(output_file),
+            "--github-output-file", str(github_file),
+        ]):
+            main()
+        assert output_file.read_text() == ""
+        assert github_file.read_text() == ""
+
+
+# ---------------------------------------------------------------------------
+# SummaryEntry — dual-format output
+# ---------------------------------------------------------------------------
+class TestSummaryEntry:
+    def test_new_issue_slack(self):
+        e = SummaryEntry("alert", "New", "— `Test.Foo`",
+                         "https://github.com/o/r/issues/1", "issue")
+        assert e.to_slack() == ":rotating_light: *New* — `Test.Foo` (<https://github.com/o/r/issues/1|issue>)"
+
+    def test_new_issue_github(self):
+        e = SummaryEntry("alert", "New", "— `Test.Foo`",
+                         "https://github.com/o/r/issues/1", "issue")
+        assert e.to_github() == "🚨 **New** — `Test.Foo` ([issue](https://github.com/o/r/issues/1))"
+
+    def test_known_issue_slack(self):
+        e = SummaryEntry("warning", "Known", "— `Test.Bar`",
+                         "https://github.com/o/r/issues/5", "#5")
+        assert e.to_slack() == ":warning: *Known* — `Test.Bar` (<https://github.com/o/r/issues/5|#5>)"
+
+    def test_known_issue_github(self):
+        e = SummaryEntry("warning", "Known", "— `Test.Bar`",
+                         "https://github.com/o/r/issues/5", "#5")
+        assert e.to_github() == "⚠️ **Known** — `Test.Bar` ([#5](https://github.com/o/r/issues/5))"
+
+    def test_timeout_slack(self):
+        e = SummaryEntry("timeout", "Timeout", "",
+                         "https://github.com/o/r/issues/20", "issue")
+        assert e.to_slack() == ":hourglass: *Timeout* (<https://github.com/o/r/issues/20|issue>)"
+
+    def test_timeout_github(self):
+        e = SummaryEntry("timeout", "Timeout", "",
+                         "https://github.com/o/r/issues/20", "issue")
+        assert e.to_github() == "⏳ **Timeout** ([issue](https://github.com/o/r/issues/20))"
+
+    def test_empty_label(self):
+        """Unparseable failures have no label — should not produce empty bold markers."""
+        e = SummaryEntry("question", "", "Could not identify specific failures",
+                         "https://url", "#10")
+        assert e.to_slack() == ":question: Could not identify specific failures (<https://url|#10>)"
+        assert e.to_github() == "❓ Could not identify specific failures ([#10](https://url))"
+
+    def test_grouped_slack(self):
+        e = SummaryEntry("alert", "15 tests failed",
+                         "— likely correlated", "https://url", "issue")
+        assert "*15 tests failed*" in e.to_slack()
+        assert ":rotating_light:" in e.to_slack()
+
+    def test_grouped_github(self):
+        e = SummaryEntry("alert", "15 tests failed",
+                         "— likely correlated", "https://url", "issue")
+        assert "**15 tests failed**" in e.to_github()
+        assert "🚨" in e.to_github()
+        assert "[issue](https://url)" in e.to_github()
 
 
 # ---------------------------------------------------------------------------
@@ -117,8 +191,8 @@ class TestGroupingThreshold:
         mock_create.assert_called_once()
         title = mock_create.call_args[0][1]
         assert title == "Grouped CI test failures"
-        assert len(tracker.slack_lines) == 1
-        assert "15 tests failed" in tracker.slack_lines[0]
+        assert len(tracker.entries) == 1
+        assert "15 tests failed" in tracker.format_summary("slack")
 
     @patch("track_ci_issues.create_issue", return_value="https://github.com/owner/repo/issues/2")
     @patch("track_ci_issues.find_existing_issue", return_value=None)
@@ -134,7 +208,7 @@ class TestGroupingThreshold:
 
         title = mock_create.call_args[0][1]
         assert title == "Grouped CI step failures"
-        assert "20 steps failed" in tracker.slack_lines[0]
+        assert "20 steps failed" in tracker.format_summary("slack")
 
     @patch("track_ci_issues.get_issue_url", return_value="https://github.com/owner/repo/issues/7")
     @patch("track_ci_issues.comment_on_issue")
@@ -150,8 +224,8 @@ class TestGroupingThreshold:
         tracker.create_grouped_issue("test", items)
 
         mock_comment.assert_called_once()
-        assert "#7" in tracker.slack_lines[0]
-        assert "15 tests failed" in tracker.slack_lines[0]
+        assert "#7" in tracker.format_summary("slack")
+        assert "15 tests failed" in tracker.format_summary("slack")
 
 
 # ---------------------------------------------------------------------------
@@ -166,8 +240,11 @@ class TestTrackItem:
 
         mock_find.assert_called_once_with("owner/repo", "flaky-test", "Flaky test: Test.Foo")
         mock_create.assert_called_once()
-        assert ":rotating_light:" in tracker.slack_lines[0]
-        assert "Test.Foo" in tracker.slack_lines[0]
+        assert ":rotating_light:" in tracker.format_summary("slack")
+        assert "Test.Foo" in tracker.format_summary("slack")
+        # GitHub format should use unicode emoji and markdown links
+        assert "🚨" in tracker.format_summary("github")
+        assert "[issue](" in tracker.format_summary("github")
 
     @patch("track_ci_issues.get_issue_url", return_value="https://github.com/owner/repo/issues/5")
     @patch("track_ci_issues.comment_on_issue")
@@ -177,8 +254,8 @@ class TestTrackItem:
         tracker.track_item("Test.Foo", "Flaky test", "flaky-test", "body text")
 
         mock_comment.assert_called_once()
-        assert ":warning:" in tracker.slack_lines[0]
-        assert "#5" in tracker.slack_lines[0]
+        assert ":warning:" in tracker.format_summary("slack")
+        assert "#5" in tracker.format_summary("slack")
 
 
 # ---------------------------------------------------------------------------
@@ -197,8 +274,8 @@ class TestHandleTimeout:
         assert title == "CI timeout"
         body = mock_create.call_args[0][3]
         assert "exceeded its time limit" in body
-        assert ":hourglass:" in tracker.slack_lines[0]
-        assert "Timeout" in tracker.slack_lines[0]
+        assert ":hourglass:" in tracker.format_summary("slack")
+        assert "Timeout" in tracker.format_summary("slack")
 
     @patch("track_ci_issues.get_issue_url", return_value="https://github.com/owner/repo/issues/20")
     @patch("track_ci_issues.comment_on_issue")
@@ -210,5 +287,5 @@ class TestHandleTimeout:
         mock_comment.assert_called_once()
         comment_body = mock_comment.call_args[0][2]
         assert "Another timeout" in comment_body
-        assert ":hourglass:" in tracker.slack_lines[0]
-        assert "#20" in tracker.slack_lines[0]
+        assert ":hourglass:" in tracker.format_summary("slack")
+        assert "#20" in tracker.format_summary("slack")
