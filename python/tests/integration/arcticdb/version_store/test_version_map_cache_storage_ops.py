@@ -1,20 +1,4 @@
-"""
-Tests that verify VERSION key storage read counts for version map cache behavior.
-
-Uses in-memory storage because it is instrumented with query_stats (LMDB and Azure are not).
-S3 is also instrumented but requires external infrastructure. The operation key is Memory_GetObject.
-
-Test dimensions:
-- Version chain shapes (simple, tombstone_all, individual tombstone, append, update, prune)
-- Cache options (no_cache=ReloadInterval 0, cache_on=ReloadInterval MAX)
-- as_of query types (None/LATEST, int/DOWNTO, Timestamp/FROM_TIME, str/SNAPSHOT)
-- Read functions (read, head, tail, read_metadata, has_symbol, batch_read)
-- Write operations (write, append, update, batch_write, batch_append, write_metadata, snapshot)
-"""
-
-import time
 import uuid
-from collections import namedtuple
 
 import pandas as pd
 import pytest
@@ -45,799 +29,383 @@ def get_version_ref_reads(stats):
     return stats.get("storage_operations", {}).get("Memory_GetObject", {}).get("VERSION_REF", {}).get("count", 0)
 
 
-# =============================================================================
-# Chain setup functions
-# =============================================================================
-# Each returns a ChainInfo with metadata about the created version chain.
-
-ChainInfo = namedtuple(
-    "ChainInfo", ["latest_version", "oldest_undeleted_version", "mid_version", "snapshot", "mid_ts", "total_versions"]
-)
+TOMBSTONE_ALL = "tombstone_all"
 
 
 def _ts_from_version_info(version_info):
-    """Convert VersionedItem.timestamp (nanosecond int) to pd.Timestamp for FROM_TIME queries."""
     return pd.Timestamp(version_info.timestamp, unit="ns", tz="UTC")
+
+
+def _iter_versions(chain):
+    """Yield (vinfo, is_deleted) newest-to-oldest"""
+    tombstoned_ids = set()
+    tombstone_all_seen = False
+    for entry in chain:
+        if isinstance(entry, tuple):
+            tombstoned_ids.add(entry[1])
+        elif entry == TOMBSTONE_ALL:
+            tombstone_all_seen = True
+        else:
+            yield entry, entry.version in tombstoned_ids or tombstone_all_seen
+
+
+def _is_tombstone_head(ci):
+    return isinstance(ci[0], tuple) or ci[0] == TOMBSTONE_ALL
+
+
+def _latest_version(ci):
+    return next(v.version for v, deleted in _iter_versions(ci) if not deleted)
+
+
+def _oldest_undeleted(ci):
+    return min(v.version for v, deleted in _iter_versions(ci) if not deleted)
+
+
+def _total_versions(ci):
+    return sum(1 for e in ci if not isinstance(e, tuple) and e != TOMBSTONE_ALL)
+
+
+def _ts_of(ci, version_id):
+    return next(_ts_from_version_info(v) for v, _ in _iter_versions(ci) if v.version == version_id)
+
+
+def _mid_version(ci):
+    undeleted = sorted(v.version for v, deleted in _iter_versions(ci) if not deleted)
+    return undeleted[len(undeleted) // 2]
+
+
+def _is_index_head(ci):
+    return not _is_tombstone_head(ci)
+
+
+def _oldest_loaded_after_cold_read(as_of_type, ci):
+    """Derive oldest_loaded_index_version_ from chain structure and as_of type."""
+    is_idx_head = _is_index_head(ci)
+    undeleted_asc = sorted(v.version for v, deleted in _iter_versions(ci) if not deleted)
+
+    if not is_idx_head or len(undeleted_asc) == 1:
+        if as_of_type in ("latest", "version_latest"):
+            return undeleted_asc[-1]
+        elif as_of_type == "version_neg_1":
+            return _total_versions(ci) - 1
+        elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
+            return _mid_version(ci)
+        elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
+            return undeleted_asc[0]
+    elif len(undeleted_asc) > 1:  # we have penultimate index also cached
+        penultimate = undeleted_asc[-2]
+        if as_of_type in ("latest", "version_latest", "version_neg_1"):
+            return penultimate
+        elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
+            v = _mid_version(ci)
+            return penultimate if v >= penultimate else v
+        elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
+            v = undeleted_asc[0]
+            return penultimate if v >= penultimate else v
+    return None
 
 
 def setup_simple_6(lib, sym):
     """v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
-    vinfos = [lib.write(sym, make_df()) for _ in range(6)]
-    lib.snapshot(sym + "_snap", versions={sym: 3})
-    return ChainInfo(5, 0, 3, sym + "_snap", _ts_from_version_info(vinfos[3]), 6)
+    w = [lib.write(sym, make_df()) for _ in range(6)]
+    return [w[5], w[4], w[3], w[2], w[1], w[0]]
 
 
 def setup_multi_tombstone_all(lib, sym):
     """v4 -> v3 -> v2 -> TOMBSTONE_ALL -> v1 -> TOMBSTONE_ALL -> v0"""
-    lib.write(sym, make_df())
+    v0 = lib.write(sym, make_df())
     lib.delete(sym)
-    lib.write(sym, make_df())
+    v1 = lib.write(sym, make_df())
     lib.delete(sym)
-    vinfos = [lib.write(sym, make_df()) for _ in range(3)]
-    lib.snapshot(sym + "_snap", versions={sym: 3})
-    return ChainInfo(4, 2, 3, sym + "_snap", _ts_from_version_info(vinfos[1]), 5)
+    v2, v3, v4 = lib.write(sym, make_df()), lib.write(sym, make_df()), lib.write(sym, make_df())
+    return [v4, v3, v2, TOMBSTONE_ALL, v1, TOMBSTONE_ALL, v0]
 
 
 def setup_multi_individual_tombstone(lib, sym):
-    """v5 -> TOMBSTONE(v3) -> TOMBSTONE(v1) -> v4 -> v3 -> v2 -> v1 -> v0"""
-    vinfos = [lib.write(sym, make_df()) for _ in range(6)]
+    """("tombstone",3) -> ("tombstone",1) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
+    w = [lib.write(sym, make_df()) for _ in range(6)]
     lib.delete_version(sym, 1)
     lib.delete_version(sym, 3)
-    lib.snapshot(sym + "_snap", versions={sym: 2})
-    return ChainInfo(5, 0, 2, sym + "_snap", _ts_from_version_info(vinfos[2]), 6)
+    return [("tombstone", 3), ("tombstone", 1), w[5], w[4], w[3], w[2], w[1], w[0]]
 
 
 def setup_append_chain(lib, sym):
     """v2 -> v1 -> v0 via write + 2 appends"""
-    vinfos = [
-        lib.write(sym, make_ts_df(0, 2)),
-        lib.append(sym, make_ts_df(2, 2)),
-        lib.append(sym, make_ts_df(4, 2)),
-    ]
-    lib.snapshot(sym + "_snap", versions={sym: 1})
-    return ChainInfo(2, 0, 1, sym + "_snap", _ts_from_version_info(vinfos[1]), 3)
+    w = [lib.write(sym, make_ts_df(0, 2)), lib.append(sym, make_ts_df(2, 2)), lib.append(sym, make_ts_df(4, 2))]
+    return [w[2], w[1], w[0]]
 
 
 def setup_update_chain(lib, sym):
     """v2 -> v1 -> v0 via write + 2 updates"""
-    vinfos = [
-        lib.write(sym, make_ts_df(0, 3)),
-        lib.update(sym, make_ts_df(1, 1)),
-        lib.update(sym, make_ts_df(2, 1)),
-    ]
-    lib.snapshot(sym + "_snap", versions={sym: 1})
-    return ChainInfo(2, 0, 1, sym + "_snap", _ts_from_version_info(vinfos[1]), 3)
+    w = [lib.write(sym, make_ts_df(0, 3)), lib.update(sym, make_ts_df(1, 1)), lib.update(sym, make_ts_df(2, 1))]
+    return [w[2], w[1], w[0]]
 
 
 def setup_prune_chain(lib, sym):
     """v2 only (v0, v1 pruned)"""
-    vinfos = [lib.write(sym, make_df()) for _ in range(3)]
+    w = [lib.write(sym, make_df()) for _ in range(3)]
     lib.prune_previous_versions(sym)
-    lib.snapshot(sym + "_snap", versions={sym: 2})
-    return ChainInfo(2, 2, 2, sym + "_snap", _ts_from_version_info(vinfos[2]), 3)
+    return [w[2], TOMBSTONE_ALL, w[1], w[0]]
 
 
 def setup_tombstone_all_then_writes(lib, sym):
-    """v6 -> v5 -> v4 -> v3 -> v2 ->TOMBSTONE_ALL -> v1 (delete all first, then 6 writes)"""
-    lib.write(sym, make_df())
+    """v6 -> v5 -> v4 -> v3 -> v2 -> v1 -> TOMBSTONE_ALL -> v0"""
+    v0 = lib.write(sym, make_df())
     lib.delete(sym)
-    vinfos = [lib.write(sym, make_df()) for _ in range(6)]
-    lib.snapshot(sym + "_snap", versions={sym: 4})
-    return ChainInfo(6, 1, 4, sym + "_snap", _ts_from_version_info(vinfos[3]), 7)
+    w = [lib.write(sym, make_df()) for _ in range(6)]  # v1..v6
+    return [w[5], w[4], w[3], w[2], w[1], w[0], TOMBSTONE_ALL, v0]
 
 
 def setup_tombstone_latest(lib, sym):
-    """TOMBSTONE(v5) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0 (delete latest version only)"""
-    vinfos = [lib.write(sym, make_df()) for _ in range(6)]
+    """("tombstone",5) -> v5 -> v4 -> v3 -> v2 -> v1 -> v0"""
+    w = [lib.write(sym, make_df()) for _ in range(6)]
     lib.delete_version(sym, 5)
-    lib.snapshot(sym + "_snap", versions={sym: 3})
-    return ChainInfo(4, 0, 3, sym + "_snap", _ts_from_version_info(vinfos[3]), 6)
+    return [("tombstone", 5), w[5], w[4], w[3], w[2], w[1], w[0]]
 
 
 def setup_tombstone_all_every_version(lib, sym):
-    """v11->...->TOMBSTONE_ALL->v5->TOMBSTONE_ALL->...->v0 (delete after each of 6 writes, then 6 more)"""
+    """v11->...->v6 -> TOMBSTONE_ALL->v5->...->TOMBSTONE_ALL->v0"""
+    initial = []
     for _ in range(6):
-        lib.write(sym, make_df())
+        initial.append(lib.write(sym, make_df()))
         lib.delete(sym)
-    vinfos = [lib.write(sym, make_df()) for _ in range(6)]
-    lib.snapshot(sym + "_snap", versions={sym: 9})
-    return ChainInfo(11, 6, 9, sym + "_snap", _ts_from_version_info(vinfos[3]), 12)
+    rest = [lib.write(sym, make_df()) for _ in range(6)]  # v6..v11
+    chain = list(reversed(rest))
+    for v in reversed(initial):
+        chain.extend([TOMBSTONE_ALL, v])
+    return chain
 
 
 def setup_tombstone_even_plus_latest(lib, sym):
-    """TOMBSTONE(v5)->TOMBSTONE(v4)->v5->v4->TOMBSTONE(v2)->v3->v2->TOMBSTONE(v0)->v1->v0"""
-    vinfos = [lib.write(sym, make_df()) for _ in range(6)]
+    """("tombstone",5)->("tombstone",4)->("tombstone",2)->("tombstone",0)->v5->v4->v3->v2->v1->v0"""
+    w = [lib.write(sym, make_df()) for _ in range(6)]
     lib.delete_version(sym, 0)
     lib.delete_version(sym, 2)
     lib.delete_version(sym, 4)
     lib.delete_version(sym, 5)
-    lib.snapshot(sym + "_snap", versions={sym: 3})
-    return ChainInfo(3, 1, 3, sym + "_snap", _ts_from_version_info(vinfos[3]), 6)
+    return [("tombstone", 5), ("tombstone", 4), ("tombstone", 2), ("tombstone", 0), w[5], w[4], w[3], w[2], w[1], w[0]]
 
 
 CHAIN_SETUPS = [
-    pytest.param(setup_simple_6, id="simple_6"),
-    pytest.param(setup_multi_tombstone_all, id="multi_tombstone_all"),
-    pytest.param(setup_multi_individual_tombstone, id="multi_individual_tombstone"),
-    pytest.param(setup_append_chain, id="append_chain"),
-    pytest.param(setup_update_chain, id="update_chain"),
-    pytest.param(setup_prune_chain, id="prune_chain"),
-    pytest.param(setup_tombstone_all_then_writes, id="tombstone_all_then_writes"),
-    pytest.param(setup_tombstone_latest, id="tombstone_latest"),
-    pytest.param(setup_tombstone_all_every_version, id="tombstone_all_every_version"),
-    pytest.param(setup_tombstone_even_plus_latest, id="tombstone_even_plus_latest"),
+    ("simple_6", setup_simple_6),
+    ("multi_tombstone_all", setup_multi_tombstone_all),
+    ("multi_individual_tombstone", setup_multi_individual_tombstone),
+    ("append_chain", setup_append_chain),
+    ("update_chain", setup_update_chain),
+    ("prune_chain", setup_prune_chain),
+    ("tombstone_all_then_writes", setup_tombstone_all_then_writes),
+    ("tombstone_latest", setup_tombstone_latest),
+    ("tombstone_all_every_version", setup_tombstone_all_every_version),
+    ("tombstone_even_plus_latest", setup_tombstone_even_plus_latest),
 ]
 
-# Expected (VERSION_reads, VERSION_REF_reads) for each (chain, cache, as_of) combination.
-# Measured empirically with a fresh library per combination. Snapshot reads always bypass
-# the version map cache (0, 0). Chains with delete/delete_version do a full chain load
-# during setup, so cache_on results are often (0, 0) even for historical reads.
+AS_OF_TYPES = [
+    "latest",
+    "version_latest",
+    "oldest_undeleted_version",
+    "version_mid",
+    "timestamp_mid",
+    "version_neg_1",
+    "version_neg_mid",
+    "version_neg_oldest",
+]
+
+# Expected VERSION key read count for each (chain, as_of) combination on a cold read.
 EXPECTED_COUNTS = {
-    ("simple_6", "no_cache", "latest"): (0, 1),
-    ("simple_6", "no_cache", "version_latest"): (0, 1),
-    ("simple_6", "no_cache", "oldest_undeleted_version"): (6, 1),
-    ("simple_6", "no_cache", "version_mid"): (3, 1),
-    ("simple_6", "no_cache", "timestamp_mid"): (3, 1),
-    ("simple_6", "no_cache", "snapshot"): (0, 0),
-    ("simple_6", "no_cache", "list_versions"): (6, 1),
-    ("simple_6", "cache_on", "latest"): (0, 0),
-    ("simple_6", "cache_on", "version_latest"): (0, 0),
-    ("simple_6", "cache_on", "oldest_undeleted_version"): (6, 1),
-    ("simple_6", "cache_on", "version_mid"): (0, 0),
-    ("simple_6", "cache_on", "timestamp_mid"): (0, 0),
-    ("simple_6", "cache_on", "snapshot"): (0, 0),
-    ("simple_6", "cache_on", "list_versions"): (6, 1),
-    ("multi_tombstone_all", "no_cache", "latest"): (0, 1),
-    ("multi_tombstone_all", "no_cache", "version_latest"): (0, 1),
-    ("multi_tombstone_all", "no_cache", "oldest_undeleted_version"): (3, 1),
-    ("multi_tombstone_all", "no_cache", "version_mid"): (0, 1),
-    ("multi_tombstone_all", "no_cache", "timestamp_mid"): (0, 1),
-    ("multi_tombstone_all", "no_cache", "snapshot"): (0, 0),
-    ("multi_tombstone_all", "no_cache", "list_versions"): (5, 1),
-    ("multi_tombstone_all", "cache_on", "latest"): (0, 0),
-    ("multi_tombstone_all", "cache_on", "version_latest"): (0, 0),
-    ("multi_tombstone_all", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("multi_tombstone_all", "cache_on", "version_mid"): (0, 0),
-    ("multi_tombstone_all", "cache_on", "timestamp_mid"): (0, 0),
-    ("multi_tombstone_all", "cache_on", "snapshot"): (0, 0),
-    ("multi_tombstone_all", "cache_on", "list_versions"): (0, 0),
-    ("multi_individual_tombstone", "no_cache", "latest"): (3, 1),
-    ("multi_individual_tombstone", "no_cache", "version_latest"): (3, 1),
-    ("multi_individual_tombstone", "no_cache", "oldest_undeleted_version"): (8, 1),
-    ("multi_individual_tombstone", "no_cache", "version_mid"): (6, 1),
-    ("multi_individual_tombstone", "no_cache", "timestamp_mid"): (6, 1),
-    ("multi_individual_tombstone", "no_cache", "snapshot"): (0, 0),
-    ("multi_individual_tombstone", "no_cache", "list_versions"): (8, 1),
-    ("multi_individual_tombstone", "cache_on", "latest"): (0, 0),
-    ("multi_individual_tombstone", "cache_on", "version_latest"): (0, 0),
-    ("multi_individual_tombstone", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("multi_individual_tombstone", "cache_on", "version_mid"): (0, 0),
-    ("multi_individual_tombstone", "cache_on", "timestamp_mid"): (0, 0),
-    ("multi_individual_tombstone", "cache_on", "snapshot"): (0, 0),
-    ("multi_individual_tombstone", "cache_on", "list_versions"): (0, 0),
-    ("append_chain", "no_cache", "latest"): (0, 1),
-    ("append_chain", "no_cache", "version_latest"): (0, 1),
-    ("append_chain", "no_cache", "oldest_undeleted_version"): (3, 1),
-    ("append_chain", "no_cache", "version_mid"): (0, 1),
-    ("append_chain", "no_cache", "timestamp_mid"): (0, 1),
-    ("append_chain", "no_cache", "snapshot"): (0, 0),
-    ("append_chain", "no_cache", "list_versions"): (3, 1),
-    ("append_chain", "cache_on", "latest"): (0, 0),
-    ("append_chain", "cache_on", "version_latest"): (0, 0),
-    ("append_chain", "cache_on", "oldest_undeleted_version"): (3, 1),
-    ("append_chain", "cache_on", "version_mid"): (0, 0),
-    ("append_chain", "cache_on", "timestamp_mid"): (0, 0),
-    ("append_chain", "cache_on", "snapshot"): (0, 0),
-    ("append_chain", "cache_on", "list_versions"): (3, 1),
-    ("update_chain", "no_cache", "latest"): (0, 1),
-    ("update_chain", "no_cache", "version_latest"): (0, 1),
-    ("update_chain", "no_cache", "oldest_undeleted_version"): (3, 1),
-    ("update_chain", "no_cache", "version_mid"): (0, 1),
-    ("update_chain", "no_cache", "timestamp_mid"): (0, 1),
-    ("update_chain", "no_cache", "snapshot"): (0, 0),
-    ("update_chain", "no_cache", "list_versions"): (3, 1),
-    ("update_chain", "cache_on", "latest"): (0, 0),
-    ("update_chain", "cache_on", "version_latest"): (0, 0),
-    ("update_chain", "cache_on", "oldest_undeleted_version"): (3, 1),
-    ("update_chain", "cache_on", "version_mid"): (0, 0),
-    ("update_chain", "cache_on", "timestamp_mid"): (0, 0),
-    ("update_chain", "cache_on", "snapshot"): (0, 0),
-    ("update_chain", "cache_on", "list_versions"): (3, 1),
-    ("prune_chain", "no_cache", "latest"): (2, 1),
-    ("prune_chain", "no_cache", "version_latest"): (2, 1),
-    ("prune_chain", "no_cache", "oldest_undeleted_version"): (2, 1),
-    ("prune_chain", "no_cache", "version_mid"): (2, 1),
-    ("prune_chain", "no_cache", "timestamp_mid"): (2, 1),
-    ("prune_chain", "no_cache", "snapshot"): (0, 0),
-    ("prune_chain", "no_cache", "list_versions"): (3, 1),
-    ("prune_chain", "cache_on", "latest"): (0, 0),
-    ("prune_chain", "cache_on", "version_latest"): (0, 0),
-    ("prune_chain", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("prune_chain", "cache_on", "version_mid"): (0, 0),
-    ("prune_chain", "cache_on", "timestamp_mid"): (0, 0),
-    ("prune_chain", "cache_on", "snapshot"): (0, 0),
-    ("prune_chain", "cache_on", "list_versions"): (0, 0),
-    ("tombstone_all_then_writes", "no_cache", "latest"): (0, 1),
-    ("tombstone_all_then_writes", "no_cache", "version_latest"): (0, 1),
-    ("tombstone_all_then_writes", "no_cache", "oldest_undeleted_version"): (6, 1),
-    ("tombstone_all_then_writes", "no_cache", "version_mid"): (3, 1),
-    ("tombstone_all_then_writes", "no_cache", "timestamp_mid"): (3, 1),
-    ("tombstone_all_then_writes", "no_cache", "snapshot"): (0, 0),
-    ("tombstone_all_then_writes", "no_cache", "list_versions"): (8, 1),
-    ("tombstone_all_then_writes", "cache_on", "latest"): (0, 0),
-    ("tombstone_all_then_writes", "cache_on", "version_latest"): (0, 0),
-    ("tombstone_all_then_writes", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("tombstone_all_then_writes", "cache_on", "version_mid"): (0, 0),
-    ("tombstone_all_then_writes", "cache_on", "timestamp_mid"): (0, 0),
-    ("tombstone_all_then_writes", "cache_on", "snapshot"): (0, 0),
-    ("tombstone_all_then_writes", "cache_on", "list_versions"): (0, 0),
-    ("tombstone_latest", "no_cache", "latest"): (3, 1),
-    ("tombstone_latest", "no_cache", "version_latest"): (3, 1),
-    ("tombstone_latest", "no_cache", "oldest_undeleted_version"): (7, 1),
-    ("tombstone_latest", "no_cache", "version_mid"): (4, 1),
-    ("tombstone_latest", "no_cache", "timestamp_mid"): (4, 1),
-    ("tombstone_latest", "no_cache", "snapshot"): (0, 0),
-    ("tombstone_latest", "no_cache", "list_versions"): (7, 1),
-    ("tombstone_latest", "cache_on", "latest"): (0, 0),
-    ("tombstone_latest", "cache_on", "version_latest"): (0, 0),
-    ("tombstone_latest", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("tombstone_latest", "cache_on", "version_mid"): (0, 0),
-    ("tombstone_latest", "cache_on", "timestamp_mid"): (0, 0),
-    ("tombstone_latest", "cache_on", "snapshot"): (0, 0),
-    ("tombstone_latest", "cache_on", "list_versions"): (0, 0),
-    ("tombstone_all_every_version", "no_cache", "latest"): (0, 1),
-    ("tombstone_all_every_version", "no_cache", "version_latest"): (0, 1),
-    ("tombstone_all_every_version", "no_cache", "oldest_undeleted_version"): (6, 1),
-    ("tombstone_all_every_version", "no_cache", "version_mid"): (3, 1),
-    ("tombstone_all_every_version", "no_cache", "timestamp_mid"): (3, 1),
-    ("tombstone_all_every_version", "no_cache", "snapshot"): (0, 0),
-    ("tombstone_all_every_version", "no_cache", "list_versions"): (8, 1),
-    ("tombstone_all_every_version", "cache_on", "latest"): (0, 0),
-    ("tombstone_all_every_version", "cache_on", "version_latest"): (0, 0),
-    ("tombstone_all_every_version", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("tombstone_all_every_version", "cache_on", "version_mid"): (0, 0),
-    ("tombstone_all_every_version", "cache_on", "timestamp_mid"): (0, 0),
-    ("tombstone_all_every_version", "cache_on", "snapshot"): (0, 0),
-    ("tombstone_all_every_version", "cache_on", "list_versions"): (0, 0),
-    ("tombstone_even_plus_latest", "no_cache", "latest"): (7, 1),
-    ("tombstone_even_plus_latest", "no_cache", "version_latest"): (7, 1),
-    ("tombstone_even_plus_latest", "no_cache", "oldest_undeleted_version"): (9, 1),
-    ("tombstone_even_plus_latest", "no_cache", "version_mid"): (7, 1),
-    ("tombstone_even_plus_latest", "no_cache", "timestamp_mid"): (7, 1),
-    ("tombstone_even_plus_latest", "no_cache", "snapshot"): (0, 0),
-    ("tombstone_even_plus_latest", "no_cache", "list_versions"): (10, 1),
-    ("tombstone_even_plus_latest", "cache_on", "latest"): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", "version_latest"): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", "oldest_undeleted_version"): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", "version_mid"): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", "timestamp_mid"): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", "snapshot"): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", "list_versions"): (0, 0),
+    ("simple_6", "latest"): 0,
+    ("simple_6", "version_latest"): 0,
+    ("simple_6", "oldest_undeleted_version"): 6,
+    ("simple_6", "version_mid"): 3,
+    ("simple_6", "timestamp_mid"): 3,
+    ("simple_6", "version_neg_1"): 0,
+    ("simple_6", "version_neg_mid"): 3,
+    ("simple_6", "version_neg_oldest"): 6,
+    ("multi_tombstone_all", "latest"): 0,
+    ("multi_tombstone_all", "version_latest"): 0,
+    ("multi_tombstone_all", "oldest_undeleted_version"): 3,
+    ("multi_tombstone_all", "version_mid"): 0,
+    ("multi_tombstone_all", "timestamp_mid"): 0,
+    ("multi_tombstone_all", "version_neg_1"): 0,
+    ("multi_tombstone_all", "version_neg_mid"): 2,
+    ("multi_tombstone_all", "version_neg_oldest"): 3,
+    ("multi_individual_tombstone", "latest"): 3,
+    ("multi_individual_tombstone", "version_latest"): 3,
+    ("multi_individual_tombstone", "oldest_undeleted_version"): 8,
+    ("multi_individual_tombstone", "version_mid"): 4,
+    ("multi_individual_tombstone", "timestamp_mid"): 4,
+    ("multi_individual_tombstone", "version_neg_1"): 3,
+    ("multi_individual_tombstone", "version_neg_mid"): 4,
+    ("multi_individual_tombstone", "version_neg_oldest"): 8,
+    ("append_chain", "latest"): 0,
+    ("append_chain", "version_latest"): 0,
+    ("append_chain", "oldest_undeleted_version"): 3,
+    ("append_chain", "version_mid"): 0,
+    ("append_chain", "timestamp_mid"): 0,
+    ("append_chain", "version_neg_1"): 0,
+    ("append_chain", "version_neg_mid"): 2,
+    ("append_chain", "version_neg_oldest"): 3,
+    ("update_chain", "latest"): 0,
+    ("update_chain", "version_latest"): 0,
+    ("update_chain", "oldest_undeleted_version"): 3,
+    ("update_chain", "version_mid"): 0,
+    ("update_chain", "timestamp_mid"): 0,
+    ("update_chain", "version_neg_1"): 0,
+    ("update_chain", "version_neg_mid"): 2,
+    ("update_chain", "version_neg_oldest"): 3,
+    ("prune_chain", "latest"): 2,
+    ("prune_chain", "version_latest"): 2,
+    ("prune_chain", "oldest_undeleted_version"): 2,
+    ("prune_chain", "version_mid"): 2,
+    ("prune_chain", "timestamp_mid"): 2,
+    ("prune_chain", "version_neg_1"): 2,
+    ("prune_chain", "version_neg_mid"): 2,
+    ("prune_chain", "version_neg_oldest"): 2,
+    ("tombstone_all_then_writes", "latest"): 0,
+    ("tombstone_all_then_writes", "version_latest"): 0,
+    ("tombstone_all_then_writes", "oldest_undeleted_version"): 6,
+    ("tombstone_all_then_writes", "version_mid"): 3,
+    ("tombstone_all_then_writes", "timestamp_mid"): 3,
+    ("tombstone_all_then_writes", "version_neg_1"): 0,
+    ("tombstone_all_then_writes", "version_neg_mid"): 3,
+    ("tombstone_all_then_writes", "version_neg_oldest"): 6,
+    ("tombstone_latest", "latest"): 3,
+    ("tombstone_latest", "version_latest"): 3,
+    ("tombstone_latest", "oldest_undeleted_version"): 7,
+    ("tombstone_latest", "version_mid"): 5,
+    ("tombstone_latest", "timestamp_mid"): 5,
+    ("tombstone_latest", "version_neg_1"): 2,
+    ("tombstone_latest", "version_neg_mid"): 5,
+    ("tombstone_latest", "version_neg_oldest"): 7,
+    ("tombstone_all_every_version", "latest"): 0,
+    ("tombstone_all_every_version", "version_latest"): 0,
+    ("tombstone_all_every_version", "oldest_undeleted_version"): 6,
+    ("tombstone_all_every_version", "version_mid"): 3,
+    ("tombstone_all_every_version", "timestamp_mid"): 3,
+    ("tombstone_all_every_version", "version_neg_1"): 0,
+    ("tombstone_all_every_version", "version_neg_mid"): 3,
+    ("tombstone_all_every_version", "version_neg_oldest"): 6,
+    ("tombstone_even_plus_latest", "latest"): 7,
+    ("tombstone_even_plus_latest", "version_latest"): 7,
+    ("tombstone_even_plus_latest", "oldest_undeleted_version"): 9,
+    ("tombstone_even_plus_latest", "version_mid"): 7,
+    ("tombstone_even_plus_latest", "timestamp_mid"): 7,
+    ("tombstone_even_plus_latest", "version_neg_1"): 5,
+    ("tombstone_even_plus_latest", "version_neg_mid"): 7,
+    ("tombstone_even_plus_latest", "version_neg_oldest"): 9,
 }
 
-AS_OF_TYPES = ["latest", "version_latest", "oldest_undeleted_version", "version_mid", "timestamp_mid", "snapshot"]
+# Combinations where the negative as_of resolves to a tombstoned version,
+# causing NoSuchVersionException. -1 resolves based on the latest version_id
+# including tombstoned ones (get_first_index(include_deleted=true)).
+EXPECTED_RAISES = {
+    ("tombstone_latest", "version_neg_1"),
+    ("tombstone_even_plus_latest", "version_neg_1"),
+}
 
 
-def resolve_as_of(as_of_type, chain_info):
+def resolve_as_of(as_of_type, ci):
     if as_of_type == "latest":
         return None
     elif as_of_type == "version_latest":
-        return chain_info.latest_version
+        return _latest_version(ci)
     elif as_of_type == "oldest_undeleted_version":
-        return chain_info.oldest_undeleted_version
+        return _oldest_undeleted(ci)
     elif as_of_type == "version_mid":
-        return chain_info.mid_version
+        return _mid_version(ci)
     elif as_of_type == "timestamp_mid":
-        return chain_info.mid_ts
-    elif as_of_type == "snapshot":
-        return chain_info.snapshot
+        return _ts_of(ci, _mid_version(ci))
+    elif as_of_type == "version_neg_1":
+        return -1
+    elif as_of_type == "version_neg_mid":
+        return _mid_version(ci) - _total_versions(ci)
+    elif as_of_type == "version_neg_oldest":
+        return _oldest_undeleted(ci) - _total_versions(ci)
 
 
-# =============================================================================
-# Test 1: Core cross-product — chain × cache × as_of
-# =============================================================================
+def required_version(as_of_type, ci):
+    if as_of_type in ("latest", "version_latest"):
+        return _latest_version(ci)
+    elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
+        return _oldest_undeleted(ci)
+    elif as_of_type in ("version_mid", "version_neg_mid"):
+        return _mid_version(ci)
+    elif as_of_type == "timestamp_mid":
+        return _ts_of(ci, _mid_version(ci))
+    elif as_of_type == "version_neg_1":
+        return _total_versions(ci) - 1
+    return None
 
 
-@pytest.mark.parametrize("chain_setup", CHAIN_SETUPS)
-@pytest.mark.parametrize("reload_interval", [0, MAX_RELOAD_INTERVAL], ids=["no_cache", "cache_on"])
-@pytest.mark.parametrize("as_of_type", AS_OF_TYPES)
-def test_read_version_chain(in_memory_store_factory, clear_query_stats, chain_setup, reload_interval, as_of_type):
-    """Test VERSION/VERSION_REF read counts for read() across all chain shapes, cache states, and as_of types."""
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    cache_id = "no_cache" if reload_interval == 0 else "cache_on"
-    chain_id = chain_setup.__name__.replace("setup_", "")
-
-    with config_context("VersionMap.ReloadInterval", reload_interval):
-        chain_info = chain_setup(lib, sym)
-        as_of = resolve_as_of(as_of_type, chain_info)
-
-        qs.enable()
-        qs.reset_stats()
-        lib.read(sym, as_of=as_of)
-        stats = qs.get_query_stats()
-
-        expected_ver, expected_ref = EXPECTED_COUNTS[(chain_id, cache_id, as_of_type)]
-        assert get_version_reads(stats) == expected_ver
-        assert get_version_ref_reads(stats) == expected_ref
-
-
-# =============================================================================
-# Test 2: list_versions across chains
-# =============================================================================
+def is_cached(chain_id, as_of_type_first_read, as_of_type_second_read, ci):
+    if EXPECTED_COUNTS.get((chain_id, as_of_type_first_read)) is None:
+        return False
+    oldest_loaded = _oldest_loaded_after_cold_read(as_of_type_first_read, ci)
+    req = required_version(as_of_type_second_read, ci)
+    if req is None or oldest_loaded is None:
+        return False
+    if isinstance(req, pd.Timestamp):
+        return req >= _ts_of(ci, oldest_loaded)
+    return req >= oldest_loaded
 
 
 @pytest.mark.parametrize("chain_setup", CHAIN_SETUPS)
-@pytest.mark.parametrize("reload_interval", [0, MAX_RELOAD_INTERVAL], ids=["no_cache", "cache_on"])
-def test_list_versions_chain(in_memory_store_factory, clear_query_stats, chain_setup, reload_interval):
-    """Test VERSION/VERSION_REF read counts for list_versions across all chain shapes."""
-    lib = in_memory_store_factory()
+@pytest.mark.parametrize("as_of_type_first_read", AS_OF_TYPES)
+@pytest.mark.parametrize("as_of_type_second_read", AS_OF_TYPES)
+def test_read_version_chain(
+    in_memory_store_factory, clear_query_stats, chain_setup, as_of_type_first_read, as_of_type_second_read
+):
+    lib_chain_setup = in_memory_store_factory()
+    lib_read = in_memory_store_factory(reuse_name=True)
     sym = f"sym_{uuid.uuid4().hex[:8]}"
-    cache_id = "no_cache" if reload_interval == 0 else "cache_on"
-    chain_id = chain_setup.__name__.replace("setup_", "")
+    chain_id, chain_setup_fn = chain_setup
 
-    with config_context("VersionMap.ReloadInterval", reload_interval):
-        chain_setup(lib, sym) if callable(chain_setup) else chain_setup.values[0](lib, sym)
-
-        qs.enable()
-        qs.reset_stats()
-        lib.list_versions(sym)
-        stats = qs.get_query_stats()
-
-        expected_ver, expected_ref = EXPECTED_COUNTS[(chain_id, cache_id, "list_versions")]
-        assert get_version_reads(stats) == expected_ver
-        assert get_version_ref_reads(stats) == expected_ref
-
-
-# =============================================================================
-# Test 3: Read-like ops equivalence (warm cache)
-# =============================================================================
-# After list_versions warms the cache, all read-like ops should produce 0 VERSION
-# and 0 VERSION_REF reads for version/latest/snapshot as_of queries.
-
-
-@pytest.mark.parametrize(
-    "read_fn",
-    [
-        pytest.param(lambda lib, sym, as_of: lib.read(sym, as_of=as_of), id="read"),
-        pytest.param(lambda lib, sym, as_of: lib.head(sym, 1, as_of=as_of), id="head"),
-        pytest.param(lambda lib, sym, as_of: lib.tail(sym, 1, as_of=as_of), id="tail"),
-        pytest.param(lambda lib, sym, as_of: lib.read_metadata(sym, as_of=as_of), id="read_metadata"),
-        pytest.param(lambda lib, sym, as_of: lib.has_symbol(sym, as_of=as_of), id="has_symbol"),
-        pytest.param(lambda lib, sym, as_of: lib.batch_read([sym], as_ofs=[as_of]), id="batch_read"),
-    ],
-)
-@pytest.mark.parametrize("as_of_type", AS_OF_TYPES)
-def test_read_ops_warm_cache(in_memory_store_factory, clear_query_stats, read_fn, as_of_type):
-    """After list_versions warms the cache, all read-like ops use it."""
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
     with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
-        chain_info = setup_simple_6(lib, sym)
-        lib.list_versions(sym)  # warm cache fully
+        ci = chain_setup_fn(lib_chain_setup, sym)
+        as_of_first_read = resolve_as_of(as_of_type_first_read, ci)
+        key = (chain_id, as_of_type_first_read)
 
-        as_of = resolve_as_of(as_of_type, chain_info)
         qs.enable()
+
+        # No cache reading
         qs.reset_stats()
-        read_fn(lib, sym, as_of)
-        stats = qs.get_query_stats()
-
-        # After list_versions fully warms the cache, all read-like ops
-        # should be cache hits regardless of as_of type
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 0
-
-
-# =============================================================================
-# Test 4: Mutation → read latest (cache hit)
-# =============================================================================
-
-
-def _mut_write(lib, sym):
-    lib.write(sym, make_df())
-
-
-def _mut_append(lib, sym):
-    lib.write(sym, make_ts_df(0))
-    lib.append(sym, make_ts_df(3))
-
-
-def _mut_update(lib, sym):
-    lib.write(sym, make_ts_df(0))
-    lib.update(sym, make_ts_df(1, periods=1))
-
-
-def _mut_batch_write(lib, sym):
-    lib.batch_write([sym], [make_df()])
-
-
-def _mut_batch_append(lib, sym):
-    lib.write(sym, make_ts_df(0))
-    lib.batch_append([sym], [make_ts_df(3)])
-
-
-def _mut_write_metadata(lib, sym):
-    lib.write(sym, make_df())
-    lib.write_metadata(sym, {"key": "value"})
-
-
-def _mut_snapshot(lib, sym):
-    lib.write(sym, make_df())
-    lib.snapshot(sym + "_snap")
-
-
-@pytest.mark.parametrize(
-    "mutation_fn",
-    [
-        pytest.param(_mut_write, id="write"),
-        pytest.param(_mut_append, id="append"),
-        pytest.param(_mut_update, id="update"),
-        pytest.param(_mut_batch_write, id="batch_write"),
-        pytest.param(_mut_batch_append, id="batch_append"),
-        pytest.param(_mut_write_metadata, id="write_metadata"),
-        pytest.param(_mut_snapshot, id="snapshot"),
-    ],
-)
-@pytest.mark.parametrize("reload_interval", [0, MAX_RELOAD_INTERVAL], ids=["no_cache", "cache_on"])
-def test_mutation_then_read_latest(in_memory_store_factory, clear_query_stats, mutation_fn, reload_interval):
-    """After any mutation, reading latest should be a cache hit (cache_on) or 1 VERSION_REF read (no_cache)."""
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    with config_context("VersionMap.ReloadInterval", reload_interval):
-        mutation_fn(lib, sym)
-        qs.enable()
-        qs.reset_stats()
-        lib.read(sym)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        if reload_interval == 0:
-            assert get_version_ref_reads(stats) == 1
+        if key in EXPECTED_RAISES:
+            with pytest.raises(NoSuchVersionException):
+                lib_read.read(sym, as_of=as_of_first_read)
         else:
+            lib_read.read(sym, as_of=as_of_first_read)
+        stats = qs.get_query_stats()
+
+        assert get_version_reads(stats) == EXPECTED_COUNTS[key]
+        assert get_version_ref_reads(stats) == 1
+
+        # Expected cache hit same read
+        qs.reset_stats()
+        if key in EXPECTED_RAISES:
+            with pytest.raises(NoSuchVersionException):
+                lib_read.read(sym, as_of=as_of_first_read)
+        else:
+            lib_read.read(sym, as_of=as_of_first_read)
+        stats = qs.get_query_stats()
+        assert get_version_reads(stats) == 0
+        assert get_version_ref_reads(stats) == 0
+
+        # Cache check with the second as_of type read
+        qs.reset_stats()
+        as_of_second_read = resolve_as_of(as_of_type_second_read, ci)
+        second_read_key = (chain_id, as_of_type_second_read)
+        if second_read_key in EXPECTED_RAISES:
+            with pytest.raises(NoSuchVersionException):
+                lib_read.read(sym, as_of=as_of_second_read)
+        else:
+            lib_read.read(sym, as_of=as_of_second_read)
+        stats = qs.get_query_stats()
+        if is_cached(chain_id, as_of_type_first_read, as_of_type_second_read, ci):
+            assert get_version_reads(stats) == 0
             assert get_version_ref_reads(stats) == 0
+        else:
+            assert get_version_reads(stats) == EXPECTED_COUNTS[second_read_key]
+            assert get_version_ref_reads(stats) == 1
 
-
-# =============================================================================
-# Test 5: TTL Invalidation (standalone, require time.sleep)
-# =============================================================================
-
-
-def test_reload_interval_zero_always_reloads(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    with config_context("VersionMap.ReloadInterval", 0):
-        lib.write(sym, make_df())
-        qs.enable()
-        qs.reset_stats()
-        lib.read(sym)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 1
-        qs.reset_stats()
-        lib.read(sym)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 1
-
-
-def test_cache_expires_after_ttl(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    with config_context("VersionMap.ReloadInterval", 100_000_000):  # 100ms in nanoseconds
-        lib.write(sym, make_df())
-        lib.read(sym)
-        time.sleep(0.2)
-        qs.enable()
-        qs.reset_stats()
-        lib.read(sym)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 1
-
-
-def test_cache_valid_within_ttl(in_memory_store_factory, clear_query_stats):
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
-        lib.write(sym, make_df())
-        lib.read(sym)
-        qs.enable()
-        qs.reset_stats()
-        lib.read(sym)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 0
-
-
-# =============================================================================
-# Test 6: Two-Client Scenarios
-# =============================================================================
-
-
-def test_client_b_sees_stale_cache(in_memory_store_factory, clear_query_stats):
-    lib_a = in_memory_store_factory()
-    lib_b = in_memory_store_factory(reuse_name=True)
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
-        lib_a.write(sym, pd.DataFrame({"col": [0]}))
-        result_b1 = lib_b.read(sym)
-        assert result_b1.data["col"].iloc[0] == 0
-        lib_a.write(sym, pd.DataFrame({"col": [1]}))
-        qs.enable()
-        qs.reset_stats()
-        result_b2 = lib_b.read(sym)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 0
-        assert result_b2.data["col"].iloc[0] == 0
-
-
-def test_client_b_reloads_for_unknown_version(in_memory_store_factory, clear_query_stats):
-    lib_a = in_memory_store_factory()
-    lib_b = in_memory_store_factory(reuse_name=True)
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
-        lib_a.write(sym, pd.DataFrame({"col": [0]}))
-        lib_b.read(sym)
-        lib_a.write(sym, pd.DataFrame({"col": [1]}))
-        qs.enable()
-        qs.reset_stats()
-        result = lib_b.read(sym, as_of=1)
-        stats = qs.get_query_stats()
-        assert get_version_reads(stats) == 0
-        assert get_version_ref_reads(stats) == 1
-        assert result.data["col"].iloc[0] == 1
-
-
-# =============================================================================
-# Test 7: Cross-query-type sequences (timestamp <-> version <-> snapshot)
-# =============================================================================
-# Tests that a first read with one as_of type correctly populates (or doesn't
-# populate) the cache for a second read with a different as_of type.
-# Parametrized across all chain shapes.
-
-
-def _resolve_cross_as_of(label, chain_info):
-    if label == "latest":
-        return None
-    if label == "from_time":
-        return chain_info.mid_ts
-    elif label == "downto_oldest":
-        return chain_info.oldest_undeleted_version
-    elif label == "downto_mid":
-        return chain_info.mid_version
-    elif label == "snapshot":
-        return chain_info.snapshot
-
-
-CROSS_QUERY_SEQUENCES = [
-    pytest.param("latest", "latest", id="latest_then_latest"),
-    pytest.param("downto_oldest", "latest", id="downto_oldest_then_latest"),
-    pytest.param("from_time", "downto_oldest", id="from_time_then_downto_oldest"),
-    pytest.param("from_time", "downto_mid", id="from_time_then_downto_mid"),
-    pytest.param("downto_mid", "from_time", id="downto_mid_then_from_time"),
-    pytest.param("downto_oldest", "from_time", id="downto_oldest_then_from_time"),
-    pytest.param("snapshot", "downto_oldest", id="snapshot_then_downto_oldest"),
-    pytest.param("snapshot", "from_time", id="snapshot_then_from_time"),
-    pytest.param("from_time", "snapshot", id="from_time_then_snapshot"),
-    pytest.param("downto_mid", "snapshot", id="downto_mid_then_snapshot"),
-    pytest.param("snapshot", "snapshot", id="snapshot_then_snapshot"),
-]
-
-# Expected (VERSION_reads, VERSION_REF_reads) for the second read in each
-# (chain, sequence) combination. Measured empirically with a fresh library
-# per combination.
-EXPECTED_CROSS_QUERY_COUNTS = {
-    ("simple_6", "latest_then_latest"): (0, 0),
-    ("simple_6", "downto_oldest_then_latest"): (0, 0),
-    ("simple_6", "from_time_then_downto_oldest"): (6, 1),
-    ("simple_6", "from_time_then_downto_mid"): (0, 0),
-    ("simple_6", "downto_mid_then_from_time"): (0, 0),
-    ("simple_6", "downto_oldest_then_from_time"): (0, 0),
-    ("simple_6", "snapshot_then_downto_oldest"): (6, 1),
-    ("simple_6", "snapshot_then_from_time"): (0, 0),
-    ("simple_6", "from_time_then_snapshot"): (0, 0),
-    ("simple_6", "downto_mid_then_snapshot"): (0, 0),
-    ("simple_6", "snapshot_then_snapshot"): (0, 0),
-    ("multi_tombstone_all", "latest_then_latest"): (0, 0),
-    ("multi_tombstone_all", "downto_oldest_then_latest"): (0, 0),
-    ("multi_tombstone_all", "from_time_then_downto_oldest"): (0, 0),
-    ("multi_tombstone_all", "from_time_then_downto_mid"): (0, 0),
-    ("multi_tombstone_all", "downto_mid_then_from_time"): (0, 0),
-    ("multi_tombstone_all", "downto_oldest_then_from_time"): (0, 0),
-    ("multi_tombstone_all", "snapshot_then_downto_oldest"): (0, 0),
-    ("multi_tombstone_all", "snapshot_then_from_time"): (0, 0),
-    ("multi_tombstone_all", "from_time_then_snapshot"): (0, 0),
-    ("multi_tombstone_all", "downto_mid_then_snapshot"): (0, 0),
-    ("multi_tombstone_all", "snapshot_then_snapshot"): (0, 0),
-    ("multi_individual_tombstone", "latest_then_latest"): (0, 0),
-    ("multi_individual_tombstone", "downto_oldest_then_latest"): (0, 0),
-    ("multi_individual_tombstone", "from_time_then_downto_oldest"): (0, 0),
-    ("multi_individual_tombstone", "from_time_then_downto_mid"): (0, 0),
-    ("multi_individual_tombstone", "downto_mid_then_from_time"): (0, 0),
-    ("multi_individual_tombstone", "downto_oldest_then_from_time"): (0, 0),
-    ("multi_individual_tombstone", "snapshot_then_downto_oldest"): (0, 0),
-    ("multi_individual_tombstone", "snapshot_then_from_time"): (0, 0),
-    ("multi_individual_tombstone", "from_time_then_snapshot"): (0, 0),
-    ("multi_individual_tombstone", "downto_mid_then_snapshot"): (0, 0),
-    ("multi_individual_tombstone", "snapshot_then_snapshot"): (0, 0),
-    ("append_chain", "latest_then_latest"): (0, 0),
-    ("append_chain", "downto_oldest_then_latest"): (0, 0),
-    ("append_chain", "from_time_then_downto_oldest"): (3, 1),
-    ("append_chain", "from_time_then_downto_mid"): (0, 0),
-    ("append_chain", "downto_mid_then_from_time"): (0, 0),
-    ("append_chain", "downto_oldest_then_from_time"): (0, 0),
-    ("append_chain", "snapshot_then_downto_oldest"): (3, 1),
-    ("append_chain", "snapshot_then_from_time"): (0, 0),
-    ("append_chain", "from_time_then_snapshot"): (0, 0),
-    ("append_chain", "downto_mid_then_snapshot"): (0, 0),
-    ("append_chain", "snapshot_then_snapshot"): (0, 0),
-    ("update_chain", "latest_then_latest"): (0, 0),
-    ("update_chain", "downto_oldest_then_latest"): (0, 0),
-    ("update_chain", "from_time_then_downto_oldest"): (3, 1),
-    ("update_chain", "from_time_then_downto_mid"): (0, 0),
-    ("update_chain", "downto_mid_then_from_time"): (0, 0),
-    ("update_chain", "downto_oldest_then_from_time"): (0, 0),
-    ("update_chain", "snapshot_then_downto_oldest"): (3, 1),
-    ("update_chain", "snapshot_then_from_time"): (0, 0),
-    ("update_chain", "from_time_then_snapshot"): (0, 0),
-    ("update_chain", "downto_mid_then_snapshot"): (0, 0),
-    ("update_chain", "snapshot_then_snapshot"): (0, 0),
-    ("prune_chain", "latest_then_latest"): (0, 0),
-    ("prune_chain", "downto_oldest_then_latest"): (0, 0),
-    ("prune_chain", "from_time_then_downto_oldest"): (0, 0),
-    ("prune_chain", "from_time_then_downto_mid"): (0, 0),
-    ("prune_chain", "downto_mid_then_from_time"): (0, 0),
-    ("prune_chain", "downto_oldest_then_from_time"): (0, 0),
-    ("prune_chain", "snapshot_then_downto_oldest"): (0, 0),
-    ("prune_chain", "snapshot_then_from_time"): (0, 0),
-    ("prune_chain", "from_time_then_snapshot"): (0, 0),
-    ("prune_chain", "downto_mid_then_snapshot"): (0, 0),
-    ("prune_chain", "snapshot_then_snapshot"): (0, 0),
-    ("tombstone_all_then_writes", "latest_then_latest"): (0, 0),
-    ("tombstone_all_then_writes", "downto_oldest_then_latest"): (0, 0),
-    ("tombstone_all_then_writes", "from_time_then_downto_oldest"): (0, 0),
-    ("tombstone_all_then_writes", "from_time_then_downto_mid"): (0, 0),
-    ("tombstone_all_then_writes", "downto_mid_then_from_time"): (0, 0),
-    ("tombstone_all_then_writes", "downto_oldest_then_from_time"): (0, 0),
-    ("tombstone_all_then_writes", "snapshot_then_downto_oldest"): (0, 0),
-    ("tombstone_all_then_writes", "snapshot_then_from_time"): (0, 0),
-    ("tombstone_all_then_writes", "from_time_then_snapshot"): (0, 0),
-    ("tombstone_all_then_writes", "downto_mid_then_snapshot"): (0, 0),
-    ("tombstone_all_then_writes", "snapshot_then_snapshot"): (0, 0),
-    ("tombstone_latest", "latest_then_latest"): (0, 0),
-    ("tombstone_latest", "downto_oldest_then_latest"): (0, 0),
-    ("tombstone_latest", "from_time_then_downto_oldest"): (0, 0),
-    ("tombstone_latest", "from_time_then_downto_mid"): (0, 0),
-    ("tombstone_latest", "downto_mid_then_from_time"): (0, 0),
-    ("tombstone_latest", "downto_oldest_then_from_time"): (0, 0),
-    ("tombstone_latest", "snapshot_then_downto_oldest"): (0, 0),
-    ("tombstone_latest", "snapshot_then_from_time"): (0, 0),
-    ("tombstone_latest", "from_time_then_snapshot"): (0, 0),
-    ("tombstone_latest", "downto_mid_then_snapshot"): (0, 0),
-    ("tombstone_latest", "snapshot_then_snapshot"): (0, 0),
-    ("tombstone_all_every_version", "latest_then_latest"): (0, 0),
-    ("tombstone_all_every_version", "downto_oldest_then_latest"): (0, 0),
-    ("tombstone_all_every_version", "from_time_then_downto_oldest"): (0, 0),
-    ("tombstone_all_every_version", "from_time_then_downto_mid"): (0, 0),
-    ("tombstone_all_every_version", "downto_mid_then_from_time"): (0, 0),
-    ("tombstone_all_every_version", "downto_oldest_then_from_time"): (0, 0),
-    ("tombstone_all_every_version", "snapshot_then_downto_oldest"): (0, 0),
-    ("tombstone_all_every_version", "snapshot_then_from_time"): (0, 0),
-    ("tombstone_all_every_version", "from_time_then_snapshot"): (0, 0),
-    ("tombstone_all_every_version", "downto_mid_then_snapshot"): (0, 0),
-    ("tombstone_all_every_version", "snapshot_then_snapshot"): (0, 0),
-    ("tombstone_even_plus_latest", "latest_then_latest"): (0, 0),
-    ("tombstone_even_plus_latest", "downto_oldest_then_latest"): (0, 0),
-    ("tombstone_even_plus_latest", "from_time_then_downto_oldest"): (0, 0),
-    ("tombstone_even_plus_latest", "from_time_then_downto_mid"): (0, 0),
-    ("tombstone_even_plus_latest", "downto_mid_then_from_time"): (0, 0),
-    ("tombstone_even_plus_latest", "downto_oldest_then_from_time"): (0, 0),
-    ("tombstone_even_plus_latest", "snapshot_then_downto_oldest"): (0, 0),
-    ("tombstone_even_plus_latest", "snapshot_then_from_time"): (0, 0),
-    ("tombstone_even_plus_latest", "from_time_then_snapshot"): (0, 0),
-    ("tombstone_even_plus_latest", "downto_mid_then_snapshot"): (0, 0),
-    ("tombstone_even_plus_latest", "snapshot_then_snapshot"): (0, 0),
-}
-
-
-@pytest.mark.parametrize("chain_setup", CHAIN_SETUPS)
-@pytest.mark.parametrize("first_label, second_label", CROSS_QUERY_SEQUENCES)
-def test_cross_query_type_sequence(
-    in_memory_store_factory,
-    clear_query_stats,
-    chain_setup,
-    first_label,
-    second_label,
-):
-    """Test that reads with different as_of types interact correctly with the cache."""
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    chain_id = chain_setup.__name__.replace("setup_", "")
-
-    with config_context("VersionMap.ReloadInterval", MAX_RELOAD_INTERVAL):
-        chain_info = chain_setup(lib, sym)
-        first_as_of = _resolve_cross_as_of(first_label, chain_info)
-        second_as_of = _resolve_cross_as_of(second_label, chain_info)
-
-        # First read (warms cache in some way)
-        lib.read(sym, as_of=first_as_of)
-
-        # Measure second read
-        qs.enable()
-        qs.reset_stats()
-        lib.read(sym, as_of=second_as_of)
-        stats = qs.get_query_stats()
-
-        seq_id = f"{first_label}_then_{second_label}"
-        expected_ver, expected_ref = EXPECTED_CROSS_QUERY_COUNTS[(chain_id, seq_id)]
-        assert get_version_reads(stats) == expected_ver
-        assert get_version_ref_reads(stats) == expected_ref
-
-
-# =============================================================================
-# Test 8: Reading tombstoned versions — exception + storage read counts
-# =============================================================================
-# Verifies that reading a deleted version raises NoSuchVersionException and
-# that the number of VERSION/VERSION_REF reads matches expectations.
-# DOWNTO walks the chain until it finds the requested version or reaches the
-# end; for individually tombstoned versions the walk depth depends on how
-# far down the chain the version sits.
-
-EXPECTED_TOMBSTONED_VERSIONS_COUNTS = {
-    # tombstone_all_every_version: versions 0-5 deleted via tombstone_all after each write,
-    # then 6 more writes (live: 6-11). delete() does LoadType::ALL during setup, so cache_on
-    # has full chain loaded.
-    ("tombstone_all_every_version", "no_cache", 0): (8, 1),
-    ("tombstone_all_every_version", "no_cache", 3): (8, 1),
-    ("tombstone_all_every_version", "no_cache", 5): (8, 1),
-    ("tombstone_all_every_version", "cache_on", 0): (0, 0),
-    ("tombstone_all_every_version", "cache_on", 3): (0, 0),
-    ("tombstone_all_every_version", "cache_on", 5): (0, 0),
-    # tombstone_even_plus_latest: versions 0,2,4,5 deleted via delete_version,
-    # live: 1,3. delete_version() does LoadType::ALL during setup, so cache_on
-    # has full chain loaded. no_cache walks further for older versions.
-    ("tombstone_even_plus_latest", "no_cache", 0): (10, 1),
-    ("tombstone_even_plus_latest", "no_cache", 2): (8, 1),
-    ("tombstone_even_plus_latest", "no_cache", 4): (6, 1),
-    ("tombstone_even_plus_latest", "no_cache", 5): (5, 1),
-    ("tombstone_even_plus_latest", "cache_on", 0): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", 2): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", 4): (0, 0),
-    ("tombstone_even_plus_latest", "cache_on", 5): (0, 0),
-}
-
-
-@pytest.mark.parametrize(
-    "chain_setup, deleted_version",
-    [
-        pytest.param(setup_tombstone_all_every_version, 0, id="tombstone_all_every_version-v0"),
-        pytest.param(setup_tombstone_all_every_version, 3, id="tombstone_all_every_version-v3"),
-        pytest.param(setup_tombstone_all_every_version, 5, id="tombstone_all_every_version-v5"),
-        pytest.param(setup_tombstone_even_plus_latest, 0, id="tombstone_even_plus_latest-v0"),
-        pytest.param(setup_tombstone_even_plus_latest, 2, id="tombstone_even_plus_latest-v2"),
-        pytest.param(setup_tombstone_even_plus_latest, 4, id="tombstone_even_plus_latest-v4"),
-        pytest.param(setup_tombstone_even_plus_latest, 5, id="tombstone_even_plus_latest-v5"),
-    ],
-)
-@pytest.mark.parametrize("reload_interval", [0, MAX_RELOAD_INTERVAL], ids=["no_cache", "cache_on"])
-def test_read_tombstoned_version(
-    in_memory_store_factory, clear_query_stats, chain_setup, deleted_version, reload_interval
-):
-    """Reading a tombstoned version raises NoSuchVersionException with expected storage read counts."""
-    lib = in_memory_store_factory()
-    sym = f"sym_{uuid.uuid4().hex[:8]}"
-    chain_id = chain_setup.__name__.replace("setup_", "")
-    cache_id = "no_cache" if reload_interval == 0 else "cache_on"
-
-    with config_context("VersionMap.ReloadInterval", reload_interval):
-        chain_setup(lib, sym)
-
-        qs.enable()
-        qs.reset_stats()
-        with pytest.raises(NoSuchVersionException):
-            lib.read(sym, as_of=deleted_version)
-        stats = qs.get_query_stats()
-
-        expected_ver, expected_ref = EXPECTED_TOMBSTONED_VERSIONS_COUNTS[(chain_id, cache_id, deleted_version)]
-        assert get_version_reads(stats) == expected_ver
-        assert get_version_ref_reads(stats) == expected_ref
+        # Write the new version and check that it can be loaded despite the cache doesn't have it with as_of
+        vinfo = lib_chain_setup.write(sym, make_df())
+        assert lib_read.read(sym, as_of=vinfo.version).version == vinfo.version
