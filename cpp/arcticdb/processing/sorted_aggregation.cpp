@@ -83,7 +83,13 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
     constexpr auto data_type = DataType::NANOSECONDS_UTC64;
     using IndexTDT = ScalarTagType<DataTypeTag<data_type>>;
 
-    const auto max_index_column_bytes = (bucket_boundaries.size() - 1) * get_type_size(data_type);
+    // The output row count is bounded by both the number of buckets and the number of input rows
+    size_t total_input_rows{0};
+    for (const auto& col : input_index_columns) {
+        total_input_rows += col->row_count();
+    }
+    const auto max_output_rows = std::min(bucket_boundaries.size() - 1, total_input_rows);
+    const auto max_index_column_bytes = max_output_rows * get_type_size(data_type);
     auto output_index_column = std::make_shared<Column>(
             TypeDescriptor(data_type, Dimension::Dim0),
             Sparsity::NOT_PERMITTED,
@@ -94,7 +100,7 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
     size_t output_index_column_row_count{0};
 
     ResampleMapping mapping;
-    mapping.reserve(bucket_boundaries.size());
+    mapping.reserve(max_output_rows + 1);
 
     // Largest value contained in the bucket that ends at `bucket_end_value`.
     // LEFT-closed [_, end) → end - 1; RIGHT-closed (_, end] → end.
