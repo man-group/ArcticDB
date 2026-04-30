@@ -97,30 +97,25 @@ def _oldest_loaded_after_cold_read(as_of_type, chain_info):
     is_idx_head = _is_index_head(chain_info)
     undeleted_asc = sorted(v.version for v, deleted in _iter_versions(chain_info) if not deleted)
 
-    if not is_idx_head or len(undeleted_asc) == 1:
-        if as_of_type in ("latest", "version_latest"):
-            return undeleted_asc[-1]
-        elif as_of_type == "version_neg_1":
-            return _total_versions(chain_info) - 1
-        elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
-            return _mid_version(chain_info)
-        elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
-            return undeleted_asc[0]
-        else:
-            raise Exception("Unexpected as_of_type")
-    elif len(undeleted_asc) > 1:  # we have penultimate index also cached
+    if as_of_type == "oldest":
+        return 0
+
+    if as_of_type in ("latest", "version_latest"):
+        loaded = undeleted_asc[-1]
+    elif as_of_type == "version_neg_1":
+        loaded = _total_versions(chain_info) - 1
+    elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
+        loaded = _mid_version(chain_info)
+    elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
+        loaded = undeleted_asc[0]
+    else:
+        raise Exception("Unexpected as_of_type")
+
+    if is_idx_head and len(undeleted_asc) > 1:  # we have penultimate index also cached
         penultimate = undeleted_asc[-2]
-        if as_of_type in ("latest", "version_latest", "version_neg_1"):
-            return penultimate
-        elif as_of_type in ("version_mid", "version_neg_mid", "timestamp_mid"):
-            v = _mid_version(chain_info)
-            return penultimate if v >= penultimate else v
-        elif as_of_type in ("oldest_undeleted_version", "version_neg_oldest"):
-            v = undeleted_asc[0]
-            return penultimate if v >= penultimate else v
-        else:
-            raise Exception("Unexpected as_of_type")
-    return None
+        return min(loaded, penultimate)
+    else:
+        return loaded
 
 
 def setup_simple_6(lib, sym):
@@ -230,6 +225,7 @@ AS_OF_TYPES = [
     "version_neg_1",
     "version_neg_mid",
     "version_neg_oldest",
+    "oldest",
 ]
 
 # Expected VERSION key read count for each (chain, as_of) combination on a cold read.
@@ -242,6 +238,7 @@ EXPECTED_COUNTS = {
     ("simple_6", "version_neg_1"): 0,
     ("simple_6", "version_neg_mid"): 3,
     ("simple_6", "version_neg_oldest"): 6,
+    ("simple_6", "oldest"): 6,
     ("multi_tombstone_all", "latest"): 0,
     ("multi_tombstone_all", "version_latest"): 0,
     ("multi_tombstone_all", "oldest_undeleted_version"): 3,
@@ -250,6 +247,7 @@ EXPECTED_COUNTS = {
     ("multi_tombstone_all", "version_neg_1"): 0,
     ("multi_tombstone_all", "version_neg_mid"): 2,
     ("multi_tombstone_all", "version_neg_oldest"): 3,
+    ("multi_tombstone_all", "oldest"): 5,
     ("multi_individual_tombstone", "latest"): 3,
     ("multi_individual_tombstone", "version_latest"): 3,
     ("multi_individual_tombstone", "oldest_undeleted_version"): 8,
@@ -258,6 +256,7 @@ EXPECTED_COUNTS = {
     ("multi_individual_tombstone", "version_neg_1"): 3,
     ("multi_individual_tombstone", "version_neg_mid"): 4,
     ("multi_individual_tombstone", "version_neg_oldest"): 8,
+    ("multi_individual_tombstone", "oldest"): 8,
     ("append_chain", "latest"): 0,
     ("append_chain", "version_latest"): 0,
     ("append_chain", "oldest_undeleted_version"): 3,
@@ -266,6 +265,7 @@ EXPECTED_COUNTS = {
     ("append_chain", "version_neg_1"): 0,
     ("append_chain", "version_neg_mid"): 2,
     ("append_chain", "version_neg_oldest"): 3,
+    ("append_chain", "oldest"): 3,
     ("update_chain", "latest"): 0,
     ("update_chain", "version_latest"): 0,
     ("update_chain", "oldest_undeleted_version"): 3,
@@ -274,6 +274,7 @@ EXPECTED_COUNTS = {
     ("update_chain", "version_neg_1"): 0,
     ("update_chain", "version_neg_mid"): 2,
     ("update_chain", "version_neg_oldest"): 3,
+    ("update_chain", "oldest"): 3,
     ("prune_chain", "latest"): 2,
     ("prune_chain", "version_latest"): 2,
     ("prune_chain", "oldest_undeleted_version"): 2,
@@ -282,6 +283,7 @@ EXPECTED_COUNTS = {
     ("prune_chain", "version_neg_1"): 2,
     ("prune_chain", "version_neg_mid"): 2,
     ("prune_chain", "version_neg_oldest"): 2,
+    ("prune_chain", "oldest"): 3,
     ("tombstone_all_then_writes", "latest"): 0,
     ("tombstone_all_then_writes", "version_latest"): 0,
     ("tombstone_all_then_writes", "oldest_undeleted_version"): 6,
@@ -290,6 +292,7 @@ EXPECTED_COUNTS = {
     ("tombstone_all_then_writes", "version_neg_1"): 0,
     ("tombstone_all_then_writes", "version_neg_mid"): 3,
     ("tombstone_all_then_writes", "version_neg_oldest"): 6,
+    ("tombstone_all_then_writes", "oldest"): 8,
     ("tombstone_latest", "latest"): 3,
     ("tombstone_latest", "version_latest"): 3,
     ("tombstone_latest", "oldest_undeleted_version"): 7,
@@ -298,6 +301,7 @@ EXPECTED_COUNTS = {
     ("tombstone_latest", "version_neg_1"): 2,
     ("tombstone_latest", "version_neg_mid"): 5,
     ("tombstone_latest", "version_neg_oldest"): 7,
+    ("tombstone_latest", "oldest"): 7,
     ("tombstone_all_every_version", "latest"): 0,
     ("tombstone_all_every_version", "version_latest"): 0,
     ("tombstone_all_every_version", "oldest_undeleted_version"): 6,
@@ -306,6 +310,7 @@ EXPECTED_COUNTS = {
     ("tombstone_all_every_version", "version_neg_1"): 0,
     ("tombstone_all_every_version", "version_neg_mid"): 3,
     ("tombstone_all_every_version", "version_neg_oldest"): 6,
+    ("tombstone_all_every_version", "oldest"): 8,
     ("tombstone_even_plus_latest", "latest"): 7,
     ("tombstone_even_plus_latest", "version_latest"): 7,
     ("tombstone_even_plus_latest", "oldest_undeleted_version"): 9,
@@ -314,14 +319,21 @@ EXPECTED_COUNTS = {
     ("tombstone_even_plus_latest", "version_neg_1"): 5,
     ("tombstone_even_plus_latest", "version_neg_mid"): 7,
     ("tombstone_even_plus_latest", "version_neg_oldest"): 9,
+    ("tombstone_even_plus_latest", "oldest"): 10,
 }
 
 # Combinations where the negative as_of resolves to a tombstoned version,
 # causing NoSuchVersionException. -1 resolves based on the latest version_id
 # including tombstoned ones (get_first_index(include_deleted=true)).
+# "oldest" (as_of=0) raises when v0 is deleted.
 EXPECTED_RAISES = {
     ("tombstone_latest", "version_neg_1"),
     ("tombstone_even_plus_latest", "version_neg_1"),
+    ("multi_tombstone_all", "oldest"),
+    ("prune_chain", "oldest"),
+    ("tombstone_all_then_writes", "oldest"),
+    ("tombstone_all_every_version", "oldest"),
+    ("tombstone_even_plus_latest", "oldest"),
 }
 
 
@@ -342,6 +354,8 @@ def resolve_as_of(as_of_type, chain_info):
         return _mid_version(chain_info) - _total_versions(chain_info)
     elif as_of_type == "version_neg_oldest":
         return _oldest_undeleted(chain_info) - _total_versions(chain_info)
+    elif as_of_type == "oldest":
+        return 0
 
 
 def required_version(as_of_type, chain_info):
@@ -355,6 +369,8 @@ def required_version(as_of_type, chain_info):
         return _ts_of(chain_info, _mid_version(chain_info))
     elif as_of_type == "version_neg_1":
         return _total_versions(chain_info) - 1
+    elif as_of_type == "oldest":
+        return 0
     return None
 
 
