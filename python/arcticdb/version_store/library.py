@@ -35,6 +35,7 @@ from arcticdb.version_store._store import (
 )
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import (
+    CompactDataInfo,
     DataError,
     StageResult,
     KeyNotFoundInStageResultInfo,
@@ -3186,6 +3187,62 @@ class Library:
             Storage lock required to compact the symbol list could not be acquired
         """
         return self._nvs.compact_symbol_list()
+
+    def compact_data_explain_plan_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+    ) -> CompactDataInfo:
+        """
+        Do a dry run of compact_data_experimental, demonstrating what the impact would be of calling
+        compact_data_experimental without actually modifying any data on disk.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the dry run on.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting.
+
+        Returns
+        -------
+        CompactDataInfo
+            Structure containing information about what the fragmentation of the symbol looks like currently, and what
+            it would look like after a call to compact_data_experimental.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+        >>> compact_data_info.row_slices_before
+        [0, 1000, 2000, ..., 99000, 100000]
+        >>> compact_data_info.row_slices_after
+        [0, 100000]
+        >>> compact_data_info.num_row_slices_before
+        100
+        >>> compact_data_info.num_row_slices_after
+        1
+        >>> compact_data_info.version_id_before
+        99
+        >>> compact_data_info.version_id_after
+        100
+        >>> compact_data_info.will_do_work
+        True
+        """
+        return self._nvs.compact_data_explain_plan_experimental(symbol, rows_per_segment)
 
     def compact_data_experimental(
         self,

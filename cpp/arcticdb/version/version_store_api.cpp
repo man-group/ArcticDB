@@ -1498,6 +1498,12 @@ VersionedItem PythonVersionStore::merge(
     );
 }
 
+CompactDataInfo PythonVersionStore::compact_data_explain_plan(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+) {
+    return compact_data_explain_plan_internal(stream_id, rows_per_segment);
+}
+
 VersionedItem PythonVersionStore::compact_data(
         const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
 ) {

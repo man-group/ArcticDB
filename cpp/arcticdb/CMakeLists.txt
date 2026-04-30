@@ -223,6 +223,7 @@ set(arcticdb_srcs
         column_store/segment_utils.hpp
         column_store/memory_segment_pretty_print.hpp
         entity/atom_key.hpp
+        entity/compact_data_info.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
@@ -466,6 +467,7 @@ set(arcticdb_srcs
         column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
+        entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
         entity/field_collection_proto.cpp

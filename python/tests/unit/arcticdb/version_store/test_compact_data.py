@@ -16,6 +16,7 @@ import pytest
 
 from arcticdb_ext.exceptions import DuplicateKeyException, SchemaException, StorageException
 from arcticdb_ext.storage import KeyType
+from arcticdb_ext.version_store import CompactDataInfo
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
@@ -26,13 +27,45 @@ from tests.util.mark import MACOS, WINDOWS
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
+def check_compact_data_info(
+    compact_data_info, pre_compaction_version, post_compaction_version, pre_compaction_index, post_compaction_index
+):
+    assert compact_data_info.version_id_before == pre_compaction_version
+    assert compact_data_info.version_id_after == post_compaction_version
+    assert compact_data_info.will_do_work == (pre_compaction_version != post_compaction_version)
+    row_slices_before = compact_data_info.row_slices_before
+    assert compact_data_info.num_row_slices_before == max(len(row_slices_before) - 1, 0)
+    for idx, data_key in enumerate(pre_compaction_index.itertuples()):
+        # This relies on the data keys in our index keys being ordered by column slice, and so will need changing if
+        # we switch to the (more sensible) ordering by row slice
+        idx = idx % compact_data_info.num_row_slices_before
+        assert data_key.start_row == row_slices_before[idx]
+        assert data_key.end_row == row_slices_before[idx + 1]
+
+    row_slices_after = compact_data_info.row_slices_after
+    assert compact_data_info.num_row_slices_after == max(len(row_slices_after) - 1, 0)
+    for idx, data_key in enumerate(post_compaction_index.itertuples()):
+        idx = idx % compact_data_info.num_row_slices_after
+        assert data_key.start_row == row_slices_after[idx]
+        assert data_key.end_row == row_slices_after[idx + 1]
+
+
 def generic_compact_data_test(lib, sym, method_arg=None):
     qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
     # Use Polars so that sparse data checking is proper
     vit_before_compaction = lib.read(sym, output_format="POLARS")
     expected = vit_before_compaction.data
-    pre_compaction_data_keys = len(lib.read_index(sym))
+    pre_compaction_index = lib.read_index(sym)
+    pre_compaction_data_keys = len(pre_compaction_index)
+    with qs.query_stats():
+        compact_data_info = lib.compact_data_explain_plan_experimental(sym, rows_per_segment=method_arg)
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    # No data keys read and no keys of any type written
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+    assert "Memory_PutObject" not in stats["storage_operations"]
+
     with qs.query_stats():
         lib.compact_data_experimental(sym, rows_per_segment=method_arg)
         stats = qs.get_query_stats()
@@ -42,13 +75,14 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     )
     if rows_per_segment == 0:
         rows_per_segment = 100_000
-    received = lib.read(sym, output_format="POLARS").data
+    vit_after_compaction = lib.read(sym, output_format="POLARS")
+    received = vit_after_compaction.data
     if pickled:
         assert received == expected
     else:
         assert_frame_equal_pl(expected, received)
-    index = lib.read_index(sym)
-    row_counts = index["end_row"] - index["start_row"]
+    post_compaction_index = lib.read_index(sym)
+    row_counts = post_compaction_index["end_row"] - post_compaction_index["start_row"]
     # Definitions taken from CompactDataClause constructor
     min_rows_per_segment = max((2 * rows_per_segment) // 3, 1)
     max_rows_per_segment = max((4 * rows_per_segment) // 3, rows_per_segment + 1)
@@ -58,11 +92,20 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     assert row_counts.min() >= min_rows_per_segment
     assert row_counts.max() <= max_rows_per_segment
 
-    post_compaction_data_keys = len(index)
-    new_data_keys = len(index[index["version_id"] > vit_before_compaction.version])
+    post_compaction_data_keys = len(post_compaction_index)
+    new_data_keys = len(post_compaction_index[post_compaction_index["version_id"] > vit_before_compaction.version])
     compacted_data_keys = pre_compaction_data_keys - (post_compaction_data_keys - new_data_keys)
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == compacted_data_keys
     assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == new_data_keys
+
+    check_compact_data_info(
+        compact_data_info,
+        vit_before_compaction.version,
+        vit_after_compaction.version,
+        pre_compaction_index,
+        post_compaction_index,
+    )
+
     # Second compaction should always be a no-op
     generic_compact_data_test_noop(lib, sym, rows_per_segment)
 
@@ -73,6 +116,18 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     vit_before_compaction = lib.read(sym, output_format="POLARS")
     expected = vit_before_compaction.data
     pre_compaction_index = lib.read_index(sym)
+    with qs.query_stats():
+        compact_data_info = lib.compact_data_explain_plan_experimental(sym, rows_per_segment=rows_per_segment)
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert compact_data_info.num_row_slices_before == compact_data_info.num_row_slices_after
+    assert compact_data_info.row_slices_before == compact_data_info.row_slices_after
+    assert compact_data_info.version_id_before == compact_data_info.version_id_after
+    assert not compact_data_info.will_do_work
+    # No data keys read and no keys of any type written
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+    assert "Memory_PutObject" not in stats["storage_operations"]
+
     with qs.query_stats():
         compacted_version = lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment).version
         stats = qs.get_query_stats()
@@ -91,8 +146,59 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     # No objects should be written at all in this case
     assert "Memory_PutObject" not in stats["storage_operations"]
 
+    check_compact_data_info(
+        compact_data_info, vit_before_compaction.version, compacted_version, pre_compaction_index, post_compaction_index
+    )
 
-def test_docstring_example_v1(lmdb_version_store_v1):
+
+def test_compact_data_explain_plan(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_compact_data_explain_plan"
+    lib.write(sym, pd.DataFrame({"col": [0, 1, 2, 3, 4]}))
+    lib.append(sym, pd.DataFrame({"col": [5, 6, 7, 8, 9]}))
+    # Run it twice to prove that it isn't compacting anything
+    compact_data_info = lib.compact_data_explain_plan_experimental(sym)
+    compact_data_info_again = lib.compact_data_explain_plan_experimental(sym)
+    # We don't need an equality operator for this class for any other reason, so just compare the repr for this test
+    assert str(compact_data_info) == str(compact_data_info_again)
+    assert isinstance(compact_data_info, CompactDataInfo)
+    assert compact_data_info.num_row_slices_before == 2
+    assert compact_data_info.num_row_slices_after == 1
+    assert compact_data_info.row_slices_before == [0, 5, 10]
+    assert compact_data_info.row_slices_after == [0, 10]
+    assert compact_data_info.version_id_before == 1
+    assert compact_data_info.version_id_after == 2
+    assert compact_data_info.will_do_work
+
+    # After compaction there will be no work to do
+    lib.compact_data_experimental(sym)
+    compact_data_info = lib.compact_data_explain_plan_experimental(sym)
+    assert isinstance(compact_data_info, CompactDataInfo)
+    assert compact_data_info.num_row_slices_before == 1
+    assert compact_data_info.num_row_slices_after == 1
+    assert compact_data_info.row_slices_before == [0, 10]
+    assert compact_data_info.row_slices_after == [0, 10]
+    assert compact_data_info.version_id_before == 2
+    assert compact_data_info.version_id_after == 2
+    assert not compact_data_info.will_do_work
+
+
+def test_compact_data_explain_plan_docstring_example(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": np.arange(100_000)})
+    for idx in range(100):
+        lib.append("sym", df[idx * 1_000 : (idx + 1) * 1_000])
+    compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+    assert compact_data_info.row_slices_before == list(range(0, 101_000, 1_000))
+    assert compact_data_info.row_slices_after == [0, 100_000]
+    assert compact_data_info.num_row_slices_before == 100
+    assert compact_data_info.num_row_slices_after == 1
+    assert compact_data_info.version_id_before == 99
+    assert compact_data_info.version_id_after == 100
+    assert compact_data_info.will_do_work
+
+
+def test_compact_data_docstring_example_v1(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"col": np.arange(100_000)})
     for idx in range(100):
@@ -102,7 +208,7 @@ def test_docstring_example_v1(lmdb_version_store_v1):
     assert len(lib.read_index("sym")) == 1
 
 
-def test_docstring_example_v2(lmdb_library):
+def test_compact_data_docstring_example_v2(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"col": np.arange(100_000)})
     for idx in range(100):

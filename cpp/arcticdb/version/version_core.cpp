@@ -8,6 +8,7 @@
 
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/column_store/column_reslicer.hpp>
 #include <column_stats.pb.h>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
@@ -3143,6 +3144,72 @@ folly::Future<VersionedItem> merge_update_impl(
                         store
                 );
             });
+}
+
+folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, uint64_t rows_per_segment
+) {
+    VersionIdentifier resolved_version = std::make_shared<IndexInformation>(
+            read_index_key_without_column_stats(store, *update_info.previous_index_key_)
+    );
+    return async::submit_io_task(
+                   SetupPipelineContextTask{store, std::move(resolved_version), std::make_shared<ReadQuery>(), {}}
+    ).thenValueInline([update_info, rows_per_segment](auto&& pipeline_context) -> CompactDataInfo {
+        auto ranges_and_keys = generate_ranges_and_keys(*pipeline_context);
+        if (ranges_and_keys.empty()) {
+            return {{}, {}, update_info.previous_index_key_->version_id(), update_info.previous_index_key_->version_id()
+            };
+        }
+        // Extract the unique row ranges
+        std::set<RowRange> row_ranges;
+        std::vector<uint64_t> row_slices_before;
+        for (const auto& range_and_key : ranges_and_keys) {
+            const auto& row_range = range_and_key.row_range();
+            if (row_ranges.insert(row_range).second) {
+                if (row_slices_before.empty()) {
+                    util::check(row_range.first == 0, "Unexpected non-zero first row-range entry {}", row_range.first);
+                    row_slices_before.emplace_back(0);
+                } else {
+                    util::check(
+                            row_range.first == row_slices_before.back(),
+                            "Unexpected mismatch between row ranges {} != {}",
+                            row_range.first,
+                            row_slices_before.back()
+                    );
+                }
+                row_slices_before.emplace_back(row_range.second);
+            }
+        }
+        CompactDataClause clause{rows_per_segment};
+        std::vector<uint64_t> row_slices_after;
+        VersionId version_id_after;
+        // If there is only 1 segment, and it has fewer than min_rows_per_segment, then the compaction will be a no-op
+        if (clause.row_ranges_all_acceptable_lengths(row_ranges) ||
+            (row_ranges.size() == 1 && row_ranges.cbegin()->diff() < clause.min_rows_per_segment_)) {
+            version_id_after = update_info.previous_index_key_->version_id();
+            row_slices_after = row_slices_before;
+        } else {
+            version_id_after = update_info.next_version_id_;
+            auto processing_row_ranges = clause.structure_row_ranges(row_ranges);
+            row_slices_after.emplace_back(0);
+            for (const auto& row_range : processing_row_ranges) {
+                ReslicingInfo reslicing_info(row_range.diff(), clause.max_rows_per_segment_);
+                for (uint64_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+                    row_slices_after.emplace_back(row_slices_after.back() + reslicing_info.rows_in_slice(idx));
+                }
+            }
+        }
+        util::check(
+                row_slices_before.back() == row_slices_after.back(),
+                "Mismatching row counts in compact_data_explain_plan {} != {}",
+                row_slices_before.back(),
+                row_slices_after.back()
+        );
+        return {std::move(row_slices_before),
+                std::move(row_slices_after),
+                update_info.previous_index_key_->version_id(),
+                version_id_after};
+    });
 }
 
 folly::Future<std::optional<VersionedItem>> compact_data_impl(
