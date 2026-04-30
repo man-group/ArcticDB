@@ -60,6 +60,24 @@ def test_append_arrow_with_pandas(lmdb_version_store_arrow):
     assert "arrow table" in str(e.value).lower()
 
 
+def test_write_pandas_df_with_specified_index_column(lmdb_version_store_v1):
+    # index_column value should be ignored when writing as pandas
+    lib = lmdb_version_store_v1
+    sym = "test_write_pandas_df_with_specified_index_column"
+    df = pd.DataFrame({"col": [0, 1]})
+    lib.write(sym, df, index_column=True)
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
+    df.index = pd.date_range("2025-01-01", periods=2)
+    df.index.name = "ts"
+    lib.write(sym, df, index_column=False)
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
+    lib.write(sym, df, index_column=True)
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
+
+
 def test_update_arrow_with_pandas(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_update_arrow_with_pandas"

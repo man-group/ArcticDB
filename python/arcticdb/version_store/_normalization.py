@@ -1867,7 +1867,17 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
             # of duplicating exception messages.
             raise UnsortedDataException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
-    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table) or _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+        if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+            if not _PYARROW_AVAILABLE:
+                raise ModuleNotFoundError(
+                    "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
+                )
+            # PyArrow binary search + slice is benchmarked faster than polars native filtering
+            # (filter/is_between with set_sorted), which materializes a boolean mask over the
+            # entire column. The result is a zero-copy pa.Table view which the caller's
+            # normalizer accepts directly, avoiding a needless round-trip back to polars.
+            data = data.to_arrow()
         check(index_column, "Cannot update with pyarrow Table without specifying index_column=True")
         col_name = data.column_names[0]
         if not data.column(col_name).type.tz:
@@ -1879,17 +1889,6 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         # TODO: Decide on a consistent way to deal with unsorted index column. E.g. a flag `validate_index`
         # which will enable the index sortedness check. (monday ref: 11668250872)
         data = _filter_pyarrow_table_to_date_range(data, col_name, start, end)
-    elif _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
-        check(index_column, "Cannot update with polars DataFrame without specifying index_column=True")
-        col_name = data.columns[0]
-        col_type = data.schema[col_name]
-        if not (hasattr(col_type, "time_zone") and col_type.time_zone):
-            start, end = _strip_tz(start, end)
-        # PyArrow binary search + slice is benchmarked faster than polars native filtering
-        # (filter/is_between with set_sorted), which materializes a boolean mask over the
-        # entire column. The result is a zero-copy pa.Table view which the caller's
-        # normalizer accepts directly, avoiding a needless round-trip back to polars.
-        data = _filter_pyarrow_table_to_date_range(data.to_arrow(), col_name, start, end)
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
