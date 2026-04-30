@@ -365,8 +365,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                     }
             );
         }
-        std::optional<Column> aggregated =
-                aggregator.aggregate(input_index_columns, input_agg_columns, mapping, string_pool);
+        std::optional<Column> aggregated = aggregator.aggregate(input_agg_columns, mapping, string_pool);
         if (aggregated) {
             seg.add_column(
                     scalar_field(aggregated->type().data_type(), aggregator.get_output_column_name().value),

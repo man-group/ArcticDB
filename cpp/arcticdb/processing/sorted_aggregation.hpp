@@ -41,11 +41,10 @@ struct ISortedAggregator {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
         [[nodiscard]] std::optional<Column> aggregate(
-                const std::vector<std::shared_ptr<Column>>& input_index_columns,
                 const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns, const ResampleMapping& mapping,
                 StringPool& string_pool
         ) const {
-            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, mapping, string_pool);
+            return folly::poly_call<2>(*this, input_agg_columns, mapping, string_pool);
         }
         void check_aggregator_supported_with_data_type(DataType data_type) const {
             folly::poly_call<3>(*this, data_type);
@@ -398,7 +397,6 @@ class SortedAggregator {
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
 
     [[nodiscard]] std::optional<Column> aggregate(
-            const std::vector<std::shared_ptr<Column>>& input_index_columns,
             const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns, const ResampleMapping& mapping,
             StringPool& string_pool
     ) const;

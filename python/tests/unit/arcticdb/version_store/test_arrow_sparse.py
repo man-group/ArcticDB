@@ -766,39 +766,70 @@ class TestSparseArrowGroupBy:
         _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns, check_row_order=False)
 
 
-@pytest.mark.xfail(
-    reason="Resample rejects sparse columns. (monday ref: 11679866800)",
-    raises=Exception,
-)
 class TestSparseArrowResample:
     sym = "test_sparse_resample"
 
-    # TODO: Also add testing for:
-    # - Aggregating string, datetime columns
-    # - Other resampling kwargs like offset, origin
+    # TODO: `origin` = one of (start_day, end, end_day, explicit timestamp) doesn't have polars equvalent.
+    # Add sparse coverage for those origin values
+
+    @staticmethod
+    def _polars_agg_expr(col, op, alias=None):
+        # Applys `op` on the resampled column `col` after `drop_nulls()`.
+        # `drop_nulls` is required to match pandas resampling behavior for `first` and `last`.
+        expr = getattr(pl.col(col).drop_nulls(), op)()
+        return expr.alias(alias) if alias is not None else expr
 
     @pytest.fixture(autouse=True)
     def setup(self, in_memory_store_factory):
         self.lib = in_memory_store_factory(segment_row_size=4)
         self.lib.set_output_format(OutputFormat.POLARS)
         self.lib._set_allow_arrow_input()
-        # Bucket 2 (hours 6-8) is fully null for both columns when resampled at 3h
+        # First timestamp is 00:15 (mid-bucket) so `origin="start"` produces different bucket
+        # boundaries than the default `origin="epoch"`.
+        # Bucket 2 (hours 6-8) is fully null for every column when resampled at 3h
+        ts = pd.date_range("2025-01-01", periods=12, freq="h").to_list()
+        ts[0] = pd.Timestamp("2025-01-01 00:15")
         self.pldf = pl.DataFrame(
             {
-                "ts": pd.date_range("2025-01-01", periods=12, freq="h"),
+                "ts": ts,
                 "int_col": [1, None, 3, None, 5, None, None, None, None, None, 11, None],
                 "float_col": [None, 2.0, None, 4.0, None, 6.0, None, None, None, 10.0, None, 12.0],
+                "datetime_col": [
+                    None,
+                    pd.Timestamp("2025-02-02"),
+                    None,
+                    pd.Timestamp("2025-02-04"),
+                    None,
+                    pd.Timestamp("2025-02-06"),
+                    None,
+                    None,
+                    None,
+                    pd.Timestamp("2025-02-10"),
+                    None,
+                    pd.Timestamp("2025-02-12"),
+                ],
+                "str_col": [None, "b", None, "d", None, "f", None, None, None, "j", None, "l"],
             },
-            schema_overrides={"ts": pl.Datetime("ns")},
+            schema_overrides={"ts": pl.Datetime("ns"), "datetime_col": pl.Datetime("ns")},
         )
         self.lib.write(self.sym, self.pldf, index_column=True)
 
     @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "first", "last", "count"])
-    @pytest.mark.parametrize("agg_col", ["int_col", "float_col"])
+    @pytest.mark.parametrize("agg_col", ["int_col", "float_col", "datetime_col"])
     @pytest.mark.parametrize("rule", ["3h", "6h"])
     def test_single_agg(self, agg_op, agg_col, rule):
+        if agg_col == "datetime_col" and agg_op == "sum":
+            pytest.skip("sum is not a valid aggregation on a datetime column")
         q = QueryBuilder().resample(rule).agg({agg_col: agg_op})
-        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(getattr(pl.col(agg_col), agg_op)())
+        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(self._polars_agg_expr(agg_col, agg_op))
+        count_columns = [agg_col] if agg_op == "count" else None
+        _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns)
+
+    @pytest.mark.parametrize("agg_op", ["first", "last"])
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_string_agg(self, agg_op, rule):
+        q = QueryBuilder().resample(rule).agg({"str_col": agg_op})
+        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(self._polars_agg_expr("str_col", agg_op))
         _check_query_result(self.lib, self.sym, q, expected)
 
     @pytest.mark.parametrize("rule", ["3h", "6h"])
@@ -808,17 +839,37 @@ class TestSparseArrowResample:
             "float_max": ("float_col", "max"),
             "int_count": ("int_col", "count"),
             "float_first": ("float_col", "first"),
+            "datetime_mean": ("datetime_col", "mean"),
+            "datetime_first": ("datetime_col", "first"),
+            "str_last": ("str_col", "last"),
         }
         q = QueryBuilder().resample(rule).agg(agg_dict)
-        exprs = [getattr(pl.col(col), op)().alias(name) for name, (col, op) in agg_dict.items()]
+        exprs = [self._polars_agg_expr(col, op, name) for name, (col, op) in agg_dict.items()]
         expected = self.pldf.group_by_dynamic("ts", every=rule).agg(exprs)
-        _check_query_result(self.lib, self.sym, q, expected)
+        count_columns = [name for name, (_, op) in agg_dict.items() if op == "count"] or None
+        _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns)
 
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("label", ["left", "right"])
     def test_closed_label(self, closed, label):
         q = QueryBuilder().resample("3h", closed=closed, label=label).agg({"int_col": "sum"})
         expected = self.pldf.group_by_dynamic("ts", every="3h", closed=closed, label=label).agg(pl.col("int_col").sum())
+        _check_query_result(self.lib, self.sym, q, expected)
+
+    # pandas/arcticdb use "min" as the minute unit; polars uses "m". Same offset, different spelling.
+    @pytest.mark.parametrize("pd_offset,pl_offset", [("30min", "30m"), ("1h", "1h")])
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_offset(self, pd_offset, pl_offset, rule):
+        q = QueryBuilder().resample(rule, offset=pd_offset).agg({"int_col": "sum"})
+        expected = self.pldf.group_by_dynamic("ts", every=rule, offset=pl_offset).agg(pl.col("int_col").sum())
+        _check_query_result(self.lib, self.sym, q, expected)
+
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_origin_start(self, rule):
+        # Uses the shared pldf — its first timestamp is 00:15 so bucket boundaries with
+        # origin="start" (00:15, 03:15, ...) differ from the default origin="epoch" (00:00, 03:00, ...).
+        q = QueryBuilder().resample(rule, origin="start").agg({"int_col": "sum"})
+        expected = self.pldf.group_by_dynamic("ts", every=rule, start_by="datapoint").agg(pl.col("int_col").sum())
         _check_query_result(self.lib, self.sym, q, expected)
 
     def test_with_date_range(self):
@@ -899,10 +950,6 @@ class TestSparseArrowConcat:
         expected = pl.concat([t1, t2])
         polars_assert_frame_equal(received, expected)
 
-    @pytest.mark.xfail(
-        reason="Resample rejects sparse columns: sorted_aggregation.cpp 'Cannot aggregate column as it is sparse'",
-        raises=Exception,
-    )
     def test_concat_with_resample(self):
         t1 = pl.DataFrame(
             {"ts": pd.date_range("2025-01-01", periods=6, freq="h"), "val": [1, None, 3, None, 5, None]},

@@ -67,6 +67,9 @@ SortedAggregatorOutputColumnInfo SortedAggregator<aggregation_operator, closed_b
             auto input_data_type = opt_input_agg_column->column_->type().data_type();
             check_aggregator_supported_with_data_type(input_data_type);
             add_data_type_impl(input_data_type, output_column_info.data_type_);
+            if (opt_input_agg_column->column_->is_sparse()) {
+                output_column_info.maybe_sparse_ = true;
+            }
         } else {
             output_column_info.maybe_sparse_ = true;
         }
@@ -206,6 +209,8 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
         );
     }
 
+    util::BitIndex rs_index;
+    ssize_t rs_index_built_for_idx = -1;
     util::BitSet sparse_map(output_row_count);
     for (int64_t out_row = 0; out_row < output_row_count; ++out_row) {
         const auto& start = mapping[out_row];
@@ -214,7 +219,30 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
         for (size_t col_idx = start.input_column_idx;
              col_idx < last_contributing_exclusive && col_idx < input_agg_columns.size();
              ++col_idx) {
-            if (input_agg_columns[col_idx].has_value()) {
+            const auto& opt_col = input_agg_columns[col_idx];
+            if (!opt_col.has_value()) {
+                continue;
+            }
+            const auto& col = *opt_col->column_;
+            if (!col.is_sparse()) {
+                sparse_map.set(out_row);
+                break;
+            }
+            if (static_cast<ssize_t>(col_idx) != rs_index_built_for_idx) {
+                // Build the rs_index just once per column
+                col.sparse_map().build_rs_index(&rs_index);
+                rs_index_built_for_idx = static_cast<ssize_t>(col_idx);
+            }
+            const size_t range_start = (col_idx == start.input_column_idx) ? start.offset : 0;
+            const size_t range_end_exclusive =
+                    (col_idx == end.input_column_idx) ? end.offset : static_cast<size_t>(col.last_row()) + 1;
+            if (range_start >= range_end_exclusive) {
+                continue;
+            }
+            const auto cnt = col.sparse_map().count_range_no_check(
+                    bv_size(range_start), bv_size(range_end_exclusive - 1), rs_index
+            );
+            if (cnt > 0) {
                 sparse_map.set(out_row);
                 break;
             }
@@ -237,7 +265,6 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
-        const std::vector<std::shared_ptr<Column>>& input_index_columns,
         const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns, const ResampleMapping& mapping,
         StringPool& string_pool
 ) const {
@@ -296,7 +323,6 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                         continue;
                     }
                     const auto& agg_column = *opt_input_agg_column;
-                    const auto& input_index_column = input_index_columns[col_idx];
                     details::visit_type(
                             agg_column.column_->type().data_type(),
                             [&, &agg_column = agg_column](auto input_type_desc_tag) {
@@ -304,39 +330,41 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                 if constexpr (is_aggregation_allowed<input_type_info, output_type_info>(
                                                       aggregation_operator
                                               )) {
-                                    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                                            !agg_column.column_->is_sparse() &&
-                                                    agg_column.column_->row_count() == input_index_column->row_count(),
-                                            "Not implemented yet: Cannot aggregate sparse column '{}' during "
-                                            "resampling.",
-                                            get_input_column_name().value
-                                    );
                                     auto agg_data = agg_column.column_->data();
-                                    auto col_it = agg_data.template cbegin<
-                                            typename input_type_info::TDT,
-                                            IteratorType::ENUMERATED,
-                                            IteratorDensity::DENSE>();
-                                    const auto col_end = agg_data.template cend<
-                                            typename input_type_info::TDT,
-                                            IteratorType::ENUMERATED,
-                                            IteratorDensity::DENSE>();
-                                    for (; col_it != col_end && output_it != output_end; ++col_it) {
-                                        const auto idx = static_cast<size_t>(col_it->idx());
-                                        // After advance_output, the next bucket may not include this column.
-                                        if (col_idx < start_col_idx) {
-                                            break;
+                                    const auto run_iter = [&]<IteratorDensity input_density>() {
+                                        auto col_it = agg_data.template cbegin<
+                                                typename input_type_info::TDT,
+                                                IteratorType::ENUMERATED,
+                                                input_density>();
+                                        const auto col_end = agg_data.template cend<
+                                                typename input_type_info::TDT,
+                                                IteratorType::ENUMERATED,
+                                                input_density>();
+                                        for (; col_it != col_end && output_it != output_end; ++col_it) {
+                                            const auto idx = static_cast<size_t>(col_it->idx());
+                                            // Finalise any buckets whose exclusive end falls at or before this row.
+                                            while (output_it != output_end &&
+                                                   (col_idx > end_col_idx ||
+                                                    (col_idx == end_col_idx && idx >= end_col_offset))) {
+                                                advance_output();
+                                            }
+                                            if (output_it == output_end || col_idx < start_col_idx) {
+                                                break;
+                                            }
+                                            // Skip rows before the bucket's start (e.g., right-closed bucket excluding
+                                            // its leftmost edge, or date_range trimming).
+                                            if (col_idx == start_col_idx && idx < start_col_offset) {
+                                                continue;
+                                            }
+                                            push_to_aggregator<input_type_info::data_type>(
+                                                    bucket_aggregator, col_it->value(), agg_column
+                                            );
                                         }
-                                        // Skip rows before the bucket's start (e.g., right-closed bucket excluding
-                                        // its leftmost edge, or date_range trimming).
-                                        if (col_idx == start_col_idx && idx < start_col_offset) {
-                                            continue;
-                                        }
-                                        push_to_aggregator<input_type_info::data_type>(
-                                                bucket_aggregator, col_it->value(), agg_column
-                                        );
-                                        if (col_idx == end_col_idx && idx + 1 == end_col_offset) {
-                                            advance_output();
-                                        }
+                                    };
+                                    if (agg_column.column_->is_sparse()) {
+                                        run_iter.template operator()<IteratorDensity::SPARSE>();
+                                    } else {
+                                        run_iter.template operator()<IteratorDensity::DENSE>();
                                     }
                                 }
                             }
