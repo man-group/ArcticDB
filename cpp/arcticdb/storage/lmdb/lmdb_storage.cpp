@@ -477,9 +477,22 @@ void LmdbStorage::warn_if_lmdb_already_open() const {
         return;
     }
     if (count_for_pid != 1) {
-        if (warn_setting == "all" ||
-            (warn_setting == "config" && lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos)) {
+        if (warn_setting == "all") {
             print_warning_if_lmdb_already_open();
+        } else if (warn_setting == "config") {
+            if (lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos) {
+                print_warning_if_lmdb_already_open();
+            }
+        } else {
+            static bool wrong_env_warned = false;
+            if (!wrong_env_warned) {
+                log::storage().warn(fmt::format(
+                        "Wrong config map setting: LMDBStorage.WarnIfOpened is set to '{}'. Allowed values are: "
+                        "\"none\", \"config\", \"all\"",
+                        warn_setting
+                ));
+                wrong_env_warned = true;
+            }
         }
     }
 }
