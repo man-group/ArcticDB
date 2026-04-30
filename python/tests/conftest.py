@@ -2152,30 +2152,4 @@ def in_memory_version_store_v1_v2(in_memory_store_factory, encoding_version):
     return in_memory_store_factory(encoding_version=int(encoding_version))
 
 
-@pytest.fixture
-def in_memory_version_store_tiny_segment_v1_v2(in_memory_store_factory, encoding_version):
-    return in_memory_store_factory(
-        column_group_size=2,
-        segment_row_size=2,
-        encoding_version=int(encoding_version),
-    )
-
-
-@pytest.fixture
-def in_memory_version_store_dynamic_schema_v1_v2(in_memory_store_factory, encoding_version):
-    return in_memory_store_factory(
-        dynamic_schema=True,
-        encoding_version=int(encoding_version),
-    )
-
-
-@pytest.fixture
-def in_memory_store_factory_v1_v2(in_memory_store_factory, encoding_version):
-    def factory(*args, **kwargs):
-        kwargs["encoding_version"] = int(encoding_version)
-        return in_memory_store_factory(*args, **kwargs)
-
-    return factory
-
-
 # endregion
