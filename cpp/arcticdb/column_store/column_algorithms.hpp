@@ -8,7 +8,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <concepts>
+#include <functional>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/lambda_inlining.hpp>
 

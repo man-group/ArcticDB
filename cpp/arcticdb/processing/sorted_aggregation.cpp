@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
@@ -95,6 +96,16 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
     ResampleMapping mapping;
     mapping.reserve(bucket_boundaries.size());
 
+    // Largest value contained in the bucket that ends at `bucket_end_value`.
+    // LEFT-closed [_, end) → end - 1; RIGHT-closed (_, end] → end.
+    constexpr auto inclusive_bucket_end = [](timestamp bucket_end_value) {
+        if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+            return bucket_end_value - 1;
+        } else {
+            return bucket_end_value;
+        }
+    };
+
     auto bucket_end_it = std::next(bucket_boundaries.cbegin());
     Bucket<closed_boundary> current_bucket{*std::prev(bucket_end_it), *bucket_end_it};
     bool current_bucket_added_to_index{false};
@@ -105,46 +116,45 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
             break;
         }
         auto index_column_data = input_index_column->data();
-        const auto cend = index_column_data.template cend<IndexTDT>();
-        auto it = index_column_data.template cbegin<IndexTDT>();
-        size_t offset_in_col{0};
-        // In case the passed date_range does not span the whole segment we need to skip the index values
-        // which are before the date range start.
-        while (it != cend && *it < date_range.first) {
+        const auto cend = index_column_data.template cend<IndexTDT, IteratorType::ENUMERATED>();
+        auto it = index_column_data.template cbegin<IndexTDT, IteratorType::ENUMERATED>();
+        // Skip rows before the date range start and rows before the current bucket
+        it = exponential_upper_bound(
+                it, cend, std::max(date_range.first - 1, inclusive_bucket_end(*std::prev(bucket_end_it)))
+        );
+
+        // Advances `it` to beginning of next bucket or first element after `date_range.second`
+        auto advance_it = [&]() {
+            // At the end of `for` it is guaranteed that it points before bucket_end_it, so we need to advance by at
+            // least one.
             ++it;
-            ++offset_in_col;
-        }
-        for (; it != cend && *it <= date_range.second; ++it, ++offset_in_col) {
-            if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
-                if (ARCTICDB_UNLIKELY(!current_bucket_added_to_index)) {
-                    *output_index_column_it++ =
-                            label_boundary == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
-                    ++output_index_column_row_count;
-                    mapping.push_back({col_idx, offset_in_col});
-                    current_bucket_added_to_index = true;
-                }
-            } else {
-                advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_end_it, *it);
-                if (ARCTICDB_UNLIKELY(bucket_end_it == bucket_boundaries.end())) {
-                    close_cursor = {col_idx, offset_in_col};
+            it = exponential_upper_bound(it, cend, std::min(date_range.second, inclusive_bucket_end(*bucket_end_it)));
+        };
+        for (; it != cend && it->value() <= date_range.second; advance_it()) {
+            if (!current_bucket.contains(it->value())) {
+                advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_end_it, it->value());
+
+                if (bucket_end_it == bucket_boundaries.end()) {
+                    close_cursor = {col_idx, static_cast<size_t>(it->idx())};
                     reached_end_of_buckets = true;
                     break;
-                } else {
-                    current_bucket.set_boundaries(*std::prev(bucket_end_it), *bucket_end_it);
-                    current_bucket_added_to_index = false;
-                    if (ARCTICDB_LIKELY(current_bucket.contains(*it))) {
-                        *output_index_column_it++ =
-                                label_boundary == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
-                        ++output_index_column_row_count;
-                        mapping.push_back({col_idx, offset_in_col});
-                        current_bucket_added_to_index = true;
-                    }
                 }
+
+                current_bucket.set_boundaries(*std::prev(bucket_end_it), *bucket_end_it);
+                current_bucket_added_to_index = false;
+            }
+
+            if (!current_bucket_added_to_index) {
+                *output_index_column_it++ =
+                        label_boundary == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
+                ++output_index_column_row_count;
+                mapping.push_back({col_idx, static_cast<size_t>(it->idx())});
+                current_bucket_added_to_index = true;
             }
         }
         if (!reached_end_of_buckets && it != cend) {
-            // Stopped because *it > date_range.second; subsequent values do not feed any bucket.
-            close_cursor = {col_idx, offset_in_col};
+            // Stopped because *it > date_range.second
+            close_cursor = {col_idx, static_cast<size_t>(it->idx())};
             reached_end_of_buckets = true;
         }
     }
