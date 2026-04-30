@@ -9,14 +9,25 @@
 #pragma once
 
 #include <arcticdb/async/base_task.hpp>
+#include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/util/key_utils.hpp>
 
 namespace arcticdb {
+
+/**
+ * Column stats data read from storage, and metadata about the user's query.
+ * `data` is either compressed bytes or an already-decoded SegmentInMemory.
+ */
+struct ColumnStatsSource {
+    std::variant<storage::KeySegmentPair, SegmentInMemory> data;
+    ColumnStatsQueryMetadata query_metadata;
+};
 
 // Similar to PreloadedIndexQuery, but without const fields. Also forces developers to convert a PreloadedIndexQuery
 // to an IndexInformation when it is submitted to our processing engine, so that the query can be safely re-used later.
@@ -24,9 +35,9 @@ namespace arcticdb {
 struct IndexInformation {
     ARCTICDB_MOVE_ONLY_DEFAULT(IndexInformation)
     IndexInformation() = default;
-    IndexInformation(std::pair<VariantKey, SegmentInMemory>&& index, std::optional<SegmentInMemory>&& column_stats);
+    IndexInformation(std::pair<VariantKey, SegmentInMemory>&& index, std::optional<ColumnStatsSource>&& column_stats);
     std::pair<VariantKey, SegmentInMemory> index_;
-    std::optional<SegmentInMemory> column_stats_;
+    std::optional<ColumnStatsSource> column_stats_;
 };
 
 // Uniquely identifies the version to read:

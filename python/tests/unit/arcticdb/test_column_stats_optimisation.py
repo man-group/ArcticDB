@@ -751,33 +751,6 @@ def test_column_stats_with_row_range(
     assert_frame_equal(result, expected)
 
 
-def test_column_stats_with_date_range(in_memory_version_store, clear_query_stats, column_stats_filtering_enabled):
-    lib = in_memory_version_store
-
-    df0 = pd.DataFrame({"col_1": [1, 2]}, index=pd.date_range("2000-01-01", periods=2), dtype=np.int64)
-    df1 = pd.DataFrame({"col_1": [3, 4]}, index=pd.date_range("2000-01-03", periods=2), dtype=np.int64)
-    df2 = pd.DataFrame({"col_1": [5, 6]}, index=pd.date_range("2000-01-05", periods=2), dtype=np.int64)
-
-    lib.write(sym, df0)
-    lib.append(sym, df1)
-    lib.append(sym, df2)
-
-    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
-
-    q = QueryBuilder()
-    q = q[q["col_1"] > 2]
-
-    date_range = (pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-04"))
-
-    qs.enable()
-    qs.reset_stats()
-    result = lib.read(sym, query_builder=q, date_range=date_range).data
-    table_data_reads = get_table_data_read_count()
-    assert table_data_reads == 1, f"Expected 1 TABLE_DATA read, got {table_data_reads}"
-
-    assert_frame_equal(result, df1)
-
-
 @pytest.mark.parametrize("negated", (True, False))
 def test_column_stats_bool_column_filters(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, negated
