@@ -374,6 +374,24 @@ def test_overwrite_append_data(lmdb_version_store_v1):
 
 
 def test_read_descriptor_table_index_key(lmdb_version_store):
+    """
+    This covers a bug with the v2 encoding where we could not read descriptors properly.
+
+    With V2 encoding the header layout is:
+
+    ...
+    SegmentDescriptorMagic segment_descriptor_magic_;
+    SegmentDescriptor segment_descriptor_;
+    SegmentIdentifierHeader identifier_header_;
+    Optional<OpaqueField> identifier_data_;
+    DescriptorFieldsMagic descriptor_magic_;
+    CompressedField<FieldList> descriptor_fields_;
+    ...
+
+    and we had a bug where we were not skipping from the SegmentDescriptor to the descriptor fields.
+
+    See https://github.com/man-group/ArcticDB/pull/3024#discussion_r3166985448
+    """
     lib = lmdb_version_store
     lib_tool = lib.library_tool()
     sym = "sym"
