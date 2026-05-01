@@ -1,11 +1,8 @@
 name: Publish pytest data to S3
-on: 
+on:
   workflow_call:
-    inputs:
-      environment: { type: string, required: true }
   workflow_dispatch:
     inputs:
-      environment: { type: environment, required: true }
       run_id: { type: number, required: true }
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
 permissions:
@@ -33,7 +30,9 @@ jobs:
         id: gather-pytest-xmls
         uses: actions/download-artifact@v8
         with:
-            pattern: "pytest-*"
+            pattern: |
+              pytest-*
+              conda_pytest-*
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
             path: ${{ env.ARTEFACT_PATH }}
