@@ -649,7 +649,6 @@ jobs:
           openssl version -d 
           # list file descriptors and other limits of the runner
           ulimit -a
-          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python
@@ -668,6 +667,8 @@ jobs:
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
+          ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
+          ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

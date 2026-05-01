@@ -21,7 +21,6 @@ if [ "$VERSION_MAP_RELOAD_INTERVAL" != "-1" ]; then
     export ARCTICDB_VersionMap_ReloadInterval_int=$VERSION_MAP_RELOAD_INTERVAL
 fi
 
-export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
 # Enable faulthandler so SIGSEGV/SIGBUS dump tracebacks to stderr
 export PYTHONFAULTHANDLER=1
 # Arm a C-level per-test watchdog that dumps tracebacks and kills the worker
