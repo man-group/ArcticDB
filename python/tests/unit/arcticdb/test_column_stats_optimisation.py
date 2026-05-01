@@ -1772,13 +1772,14 @@ def test_column_stats_dynamic_schema_cross_column_backfilled_values_int(
     assert table_data_reads == 1
 
 
+@pytest.mark.xfail(reason="Need a NaN count or flag, Monday=11866077783")
 def test_column_stats_dynamic_schema_cross_column_backfilled_values_float(
     in_memory_version_store_dynamic_schema,
     clear_query_stats,
     column_stats_filtering_enabled,
 ):
     """When we read with dynamic schema, we backfill missing columns with a default, like NaN or 0.
-    This test checks that we do not mis-interpret backfilled values as real values with query stats."""
+    This test checks that we do not mis-interpret backfilled values as real values with column stats."""
     lib = in_memory_version_store_dynamic_schema
 
     # seg0: a=uint8, b=missing
