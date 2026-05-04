@@ -153,87 +153,31 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output
 ###############################################
 
 
-def test_project_pow_uint_uint(lmdb_version_store_v1, any_output_format):
-    # uint ^ uint -> uint64
+@pytest.mark.parametrize(
+    "base_dtype, exp_dtype, result_dtype",
+    [
+        pytest.param(np.uint16, np.uint8,  np.uint64,  id="uint_uint"),   # uint ^ uint -> uint64
+        pytest.param(np.int32,  np.uint16, np.int64,   id="int_uint"),    # int ^ uint -> int64
+        pytest.param(np.uint16, np.int32,  np.float64, id="uint_int"),    # uint ^ int -> float64 (negative exp)
+        pytest.param(np.int32,  np.int16,  np.float64, id="int_int"),     # int ^ int -> float64 (negative exp)
+    ],
+)
+def test_project_pow_col_col(lmdb_version_store_v1, any_output_format, base_dtype, exp_dtype, result_dtype):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
+    base_vals = np.arange(1, 11) if np.issubdtype(base_dtype, np.unsignedinteger) else np.arange(-5, 5)
+    exp_vals  = np.arange(1, 11) if np.issubdtype(exp_dtype,  np.unsignedinteger) else np.arange(-5, 5)
     df = pd.DataFrame(
-        {
-            "BASE": np.arange(1, 11, dtype=np.uint16),
-            "EXP": np.arange(1, 11, dtype=np.uint8),
-        },
+        {"BASE": base_vals.astype(base_dtype), "EXP": exp_vals.astype(exp_dtype)},
         index=np.arange(10),
     )
-    lib.write("pow_uint_uint", df)
+    lib.write("test_project_pow_col_col", df)
 
     q = QueryBuilder()
     q = q.apply("RESULT", q["BASE"] ** q["EXP"])
-    data = lib.read("pow_uint_uint", query_builder=q).data
+    data = lib.read("test_project_pow_col_col", query_builder=q).data
 
-    df["RESULT"] = df["BASE"].astype(np.uint64) ** df["EXP"].astype(np.uint64)
-    assert_frame_equal(df, data)
-
-
-def test_project_pow_int_uint(lmdb_version_store_v1, any_output_format):
-    # int ^ uint -> int64
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    df = pd.DataFrame(
-        {
-            "BASE": np.arange(-5, 5, dtype=np.int32),
-            "EXP": np.arange(1, 11, dtype=np.uint16),
-        },
-        index=np.arange(10),
-    )
-    lib.write("pow_int_uint", df)
-
-    q = QueryBuilder()
-    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
-    data = lib.read("pow_int_uint", query_builder=q).data
-
-    df["RESULT"] = df["BASE"].astype(np.int64) ** df["EXP"].astype(np.int64)
-    assert_frame_equal(df, data)
-
-
-def test_project_pow_uint_int(lmdb_version_store_v1, any_output_format):
-    # uint ^ int -> double (negative exponent can produce fractional results)
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    df = pd.DataFrame(
-        {
-            "BASE": np.arange(1, 11, dtype=np.uint16),
-            "EXP": np.arange(-5, 5, dtype=np.int32),
-        },
-        index=np.arange(10),
-    )
-    lib.write("pow_uint_int", df)
-
-    q = QueryBuilder()
-    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
-    data = lib.read("pow_uint_int", query_builder=q).data
-
-    df["RESULT"] = df["BASE"].astype(np.float64) ** df["EXP"].astype(np.float64)
-    assert_frame_equal(df, data)
-
-
-def test_project_pow_int_int(lmdb_version_store_v1, any_output_format):
-    # int ^ int -> double (negative exponent can produce fractional results)
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    df = pd.DataFrame(
-        {
-            "BASE": np.arange(-5, 5, dtype=np.int32),
-            "EXP": np.arange(-5, 5, dtype=np.int16),
-        },
-        index=np.arange(10),
-    )
-    lib.write("pow_int_int", df)
-
-    q = QueryBuilder()
-    q = q.apply("RESULT", q["BASE"] ** q["EXP"])
-    data = lib.read("pow_int_int", query_builder=q).data
-
-    df["RESULT"] = df["BASE"].astype(np.float64) ** df["EXP"].astype(np.float64)
+    df["RESULT"] = df["BASE"].astype(result_dtype) ** df["EXP"].astype(result_dtype)
     assert_frame_equal(df, data)
 
 
