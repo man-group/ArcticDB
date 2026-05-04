@@ -275,14 +275,13 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
     return output;
 }
 
-using VersionVectorType = std::vector<SignedVersionId>;
+writeusing VersionVectorType = std::vector<VersionId>;
 
 /**
- * Returns multiple versions for the same symbol
+ * Returns a specific version per symbol.
  * @return Does not guarantee the returned keys actually exist in storage.
- * 
- * Allows requesting both positive and negative versions for the same symbol. If they end up corresponding to the same version they will be deduplicated in the output.
- * For example if symbol has versions `v0, v1, v2 and v3`. And we request both for `[2, -2]`, method will return only `{2: index_key_for_version_2}`
+ *
+ * Only one non-negative version per symbol is supported. Versions that do not exist in storage are silently skipped.
  */
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
@@ -297,7 +296,9 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
             std::move(tasks_input),
             [store, version_map](auto sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
-                LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, first_version};
+                LoadStrategy load_strategy{
+                        LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(first_version)
+                };
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
             },
 
