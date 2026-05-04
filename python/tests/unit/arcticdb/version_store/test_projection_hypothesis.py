@@ -36,7 +36,6 @@ pytestmark = pytest.mark.pipeline
     ),
     val=numeric_type_strategies(),
 )
-
 def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
@@ -170,7 +169,6 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, any_output_forma
     ),
     val=numeric_type_strategies(),
 )
-
 def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1

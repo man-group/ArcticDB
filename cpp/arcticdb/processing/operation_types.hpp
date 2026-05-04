@@ -597,7 +597,7 @@ struct PowOperator {
 
             return result;
         }
-        else if constexptr (std::is_signed_v<T> && std::is_unsigned_v<U>) {
+        else if constexpr (std::is_signed_v<T> && std::is_unsigned_v<U>) {
             int64_t result = 1;
             int64_t base = static_cast<int64_t>(t);
             uint64_t exponent = static_cast<uint64_t>(u);
