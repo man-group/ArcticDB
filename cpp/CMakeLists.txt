@@ -194,11 +194,11 @@ if(WIN32)
         )
     endif()
 
-    # We always generate the debug info on Windows since those are not in the final .dll.
-    # sccache needs the /Z7 format, but the linker will still produce .pdb files.
+    # /Z7 embeds debug info into .obj files; restrict to Debug to avoid bloating the static lib
+    # past the 4 GB MSVC limit (LNK1248) in Release builds.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
-        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
+        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj "$<$<CONFIG:Debug>:/Z7>" /wd4244 /wd4267
     )
 
     if(${ARCTICDB_USING_CONDA})

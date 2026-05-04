@@ -190,7 +190,7 @@ class ExpressionNode:
         return self._rapply(left, _OperationType.DIV)
 
     def __rpow__(self, left):
-         return self._rapply(left, _OperationType.POW)
+        return self._rapply(left, _OperationType.POW)
 
     def __rand__(self, left):
         if left is True:
@@ -1246,7 +1246,14 @@ def create_value(value):
     if isinstance(value, np.floating):
         f = CONSTRUCTOR_MAP.get(value.dtype.kind).get(value.dtype.itemsize)
     elif isinstance(value, np.integer):
-        min_scalar_type = np.min_scalar_type(value)
+        if np.issubdtype(value.dtype, np.signedinteger) and value > 0:
+            min_scalar_type = np.min_scalar_type(-value)
+            if np.iinfo(min_scalar_type).max < value:
+                # -value fits in min_scalar_type but +value exceeds its upper bound
+                # (e.g. int16(128): min_scalar_type(-128)=int8 but int8.max=127 < 128)
+                min_scalar_type = np.dtype(f"i{min_scalar_type.itemsize * 2}")
+        else:
+            min_scalar_type = np.min_scalar_type(value)
         f = CONSTRUCTOR_MAP.get(min_scalar_type.kind).get(min_scalar_type.itemsize)
     elif isinstance(value, supported_time_types):
         value = nanoseconds_from_utc(value)
