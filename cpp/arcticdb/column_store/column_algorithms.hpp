@@ -327,4 +327,207 @@ static void transform(
     inserter.flush();
 }
 
+// ─── Sorted-column search ────────────────────────────────────────────────────────────────────────
+//
+// All four search functions take a [begin, end) iterator pair, mirroring std::lower_bound /
+// std::upper_bound.
+
+// Constraints shared by the four sorted-search functions: scalar type, dense iterator, and a
+// numeric raw type (integers, floats, or timestamps — matches `is_numeric_type` in entity/types.hpp).
+template<typename TDT, IteratorDensity ID>
+concept SortedSearchInputs = util::instantiation_of<TDT, TypeDescriptorTag> && (TDT::dimension() == Dimension::Dim0) &&
+                             (ID == IteratorDensity::DENSE) && is_numeric_type(TDT::DataTypeTag::data_type);
+
+namespace search_detail {
+
+// Iterator-pair binary search.
+// `is_before_answer(probe, value)` returns true while a probe is strictly before the answer (so we move begin past it).
+// For lower_bound that is `probe < value`; for upper_bound it is `probe <= value`.
+// `within_block_bisect` is std::lower_bound or std::upper_bound run on the contiguous block memory.
+template<typename TDT, IteratorType IT, IteratorDensity ID, typename IsBeforeAnswer, typename WithinBlockBisect>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> bound_search(
+        ColumnData::ColumnDataIterator<TDT, IT, ID, true> begin, ColumnData::ColumnDataIterator<TDT, IT, ID, true> end,
+        typename TDT::DataTypeTag::raw_type value, IsBeforeAnswer is_before, WithinBlockBisect bisect
+) {
+    using RawType = typename TDT::DataTypeTag::raw_type;
+    static_assert(ID == IteratorDensity::DENSE, "Sorted search currently supports DENSE only");
+    static_assert(TDT::dimension() == Dimension::Dim0, "Sorted search supports Dim0 only");
+    util::check(begin.parent() == end.parent(), "bound_search: begin and end have different parents");
+
+    const ColumnData* data = begin.parent();
+
+    // Narrow the block range until all possible values sit in the same block.
+    // Use inclusive first_block and inclusive last_block for easier to read binary search condition.
+    auto first_block = begin.current_block_index();
+    auto last_block = end.current_block_index() - (end.current_in_block_offset() == 0);
+    while (first_block < last_block) {
+        const size_t mid_block_idx = (first_block + last_block) / 2;
+        auto mid_block = data->template typed_block_at_position<TDT>(mid_block_idx);
+        ColumnData::ColumnDataIterator<TDT, IT, ID, true> last_in_mid(data, mid_block_idx, mid_block->row_count() - 1);
+        auto first_in_next = last_in_mid;
+        ++first_in_next;
+        if (is_before(*last_in_mid.current_ptr(), value)) {
+            begin = first_in_next;
+            first_block = mid_block_idx + 1;
+        } else {
+            end = first_in_next;
+            last_block = mid_block_idx;
+        }
+    }
+
+    if (begin == end) {
+        return begin;
+    }
+
+    const size_t block_pos = begin.current_block_index();
+    auto block = data->template typed_block_at_position<TDT>(block_pos);
+    const size_t first = begin.current_in_block_offset();
+    const size_t last = (end.current_block_index() == block_pos) ? end.current_in_block_offset() : block->row_count();
+    const RawType* found = bisect(block->data() + first, block->data() + last, value);
+    if (found == block->data() + last) {
+        return end;
+    }
+    return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(
+            data, block_pos, static_cast<size_t>(found - block->data())
+    );
+}
+
+// Gallop forward from `begin` in steps of 2**n until an element after value is reached.
+// Returns the exponential range known to contain the first element for which `!is_before`.
+template<typename TDT, IteratorType IT, IteratorDensity ID, typename IsBeforeAnswer>
+std::pair<ColumnData::ColumnDataIterator<TDT, IT, ID, true>, ColumnData::ColumnDataIterator<TDT, IT, ID, true>>
+gallop_bracket(
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& begin,
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value,
+        IsBeforeAnswer is_before
+) {
+    const ColumnData* data = begin.parent();
+
+    if (begin == end) {
+        return {begin, end};
+    }
+
+    const auto first_block = *begin.current_block();
+    const size_t first_block_idx = begin.current_block_index();
+    const size_t end_block_idx = end.current_block_index();
+
+    auto prev = begin;
+    auto current = begin;
+
+    // Probes at (block_idx, in_block_offset) and returns whether it's before value.
+    // If yes, the element we search for is in range [current, end) and we need to continue galloping.
+    // If not, the element we search for is in range [prev, current) and we can stop galloping.
+    auto probe_and_update_range = [&](size_t block_idx, size_t in_block_offset) {
+        prev = current;
+        current = ColumnData::ColumnDataIterator<TDT, IT, ID, true>(data, block_idx, in_block_offset);
+        auto value_at_current = *current.current_ptr();
+        ++current;
+        return is_before(value_at_current, value);
+    };
+
+    // Probe within first block at first_offset + 2**n
+    const size_t first_offset = begin.current_in_block_offset();
+    const size_t up_to =
+            end_block_idx > first_block_idx ? first_block.row_count() : end.current_in_block_offset();
+    size_t step = 1;
+    for (; first_offset + step < up_to; step *= 2) {
+        if (!probe_and_update_range(first_block_idx, first_offset + step)) {
+            return {prev, current};
+        }
+    }
+
+    if (end_block_idx == first_block_idx) {
+        // If end is in the first block, the resulting range is [current, end)
+        return {current, end};
+    }
+
+    // Probe at the last element of first block
+    if (!probe_and_update_range(first_block_idx, first_block.row_count() - 1)) {
+        return {prev, current};
+    }
+
+    // Answer is beyond the starting block — probe the last elements of blocks at first_idx + 2**n
+    step = 1;
+    for (; first_block_idx + step < end_block_idx; step *= 2) {
+        const size_t block_idx = first_block_idx + step;
+        auto block = data->template typed_block_at_position<TDT>(block_idx);
+        if (!probe_and_update_range(block_idx, block->row_count() - 1)) {
+            return {prev, current};
+        }
+    }
+    return {current, end};
+}
+
+} // namespace search_detail
+
+// Returns an iterator to the first element in [begin, end) that is not less than `value`.
+// Complexity is `O(log(std::distance(begin, end)))`.
+// Mirrors std::lower_bound semantics.
+template<typename TDT, IteratorType IT, IteratorDensity ID>
+requires SortedSearchInputs<TDT, ID>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> lower_bound(
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& begin,
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value
+) {
+    using RawType = typename TDT::DataTypeTag::raw_type;
+    return search_detail::bound_search<TDT, IT, ID>(
+            begin,
+            end,
+            value,
+            [](RawType probe, RawType v) { return probe < v; },
+            [](const RawType* lo, const RawType* hi, RawType v) { return std::lower_bound(lo, hi, v); }
+    );
+}
+
+// Returns an iterator to the first element in [begin, end) that is greater than `value`.
+// Mirrors std::upper_bound semantics.
+template<typename TDT, IteratorType IT, IteratorDensity ID>
+requires SortedSearchInputs<TDT, ID>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> upper_bound(
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& begin,
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value
+) {
+    using RawType = typename TDT::DataTypeTag::raw_type;
+    return search_detail::bound_search<TDT, IT, ID>(
+            begin,
+            end,
+            value,
+            [](RawType probe, RawType v) { return !(v < probe); },
+            [](const RawType* lo, const RawType* hi, RawType v) { return std::upper_bound(lo, hi, v); }
+    );
+}
+
+// Exponential (galloping) lower_bound finds the same answer as lower_bound but first does an exponential scan
+// to find the answer more quickly if near begin.
+// Complexity is `O(log(std::distance(begin, answer)))`.
+// Note that this is faster than regular lower bound when answer is near begin but has a higher constant.
+template<typename TDT, IteratorType IT, IteratorDensity ID>
+requires SortedSearchInputs<TDT, ID>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_lower_bound(
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& begin,
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value
+) {
+    using RawType = typename TDT::DataTypeTag::raw_type;
+    auto [bracket_start, bracket_end] =
+            search_detail::gallop_bracket<TDT, IT, ID>(begin, end, value, [](RawType probe, RawType v) {
+                return probe < v;
+            });
+    return lower_bound<TDT, IT, ID>(bracket_start, bracket_end, value);
+}
+
+// Exponential (galloping) upper_bound.
+template<typename TDT, IteratorType IT, IteratorDensity ID>
+requires SortedSearchInputs<TDT, ID>
+ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_upper_bound(
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& begin,
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value
+) {
+    using RawType = typename TDT::DataTypeTag::raw_type;
+    auto [bracket_start, bracket_end] =
+            search_detail::gallop_bracket<TDT, IT, ID>(begin, end, value, [](RawType probe, RawType v) {
+                return !(v < probe);
+            });
+    return upper_bound<TDT, IT, ID>(bracket_start, bracket_end, value);
+}
+
 } // namespace arcticdb

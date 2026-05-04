@@ -7,11 +7,15 @@
  */
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <numeric>
+#include <vector>
 
 #include <arcticdb/util/test/test_utils.hpp>
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
@@ -400,6 +404,180 @@ TEST(ColumnStats, DoubleColumn) {
     EXPECT_DOUBLE_EQ(stats.get_max<double>(), 20.5);
     EXPECT_EQ(stats.unique_count_, 4);
     EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+// ─── Sorted-column search tests ──────────────────────────────────────────────────────────────────
+
+namespace {
+using namespace arcticdb;
+using SearchTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
+void populate(Column& col, const std::vector<int64_t>& values) {
+    for (size_t i = 0; i < values.size(); ++i) {
+        col.reference_at<int64_t>(i) = values[i];
+    }
+}
+
+// Three column shapes exercise the three random_accessor paths: SINGLE / REGULAR / IRREGULAR.
+Column make_single_block(const std::vector<int64_t>& values) {
+    Column col(
+            static_cast<TypeDescriptor>(SearchTDT{}), values.size(), AllocationType::PRESIZED,
+            Sparsity::NOT_PERMITTED
+    );
+    populate(col, values);
+    return col;
+}
+
+Column make_regular_blocks(const std::vector<int64_t>& values) {
+    Column col(
+            static_cast<TypeDescriptor>(SearchTDT{}), Sparsity::NOT_PERMITTED,
+            ChunkedBuffer::presized_in_blocks(values.size() * sizeof(int64_t))
+    );
+    populate(col, values);
+    return col;
+}
+
+Column make_irregular_blocks(const std::vector<int64_t>& values, const std::vector<size_t>& block_sizes) {
+    Column col(
+            static_cast<TypeDescriptor>(SearchTDT{}), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED
+    );
+    for (size_t block_size : block_sizes) {
+        col.allocate_data(block_size * sizeof(int64_t));
+        col.advance_data(block_size * sizeof(int64_t));
+    }
+    populate(col, values);
+    return col;
+}
+
+// Default irregular pattern: [1, 1, 1, 3, 1, 5, 1, 7, ...] — alternates 1-element and i-element blocks.
+std::vector<size_t> default_irregular_sizes(size_t total) {
+    std::vector<size_t> sizes;
+    size_t remaining = total;
+    for (size_t i = 0; remaining > 0; ++i) {
+        size_t current = i % 2 == 0 ? 1 : i;
+        current = std::min(current, remaining);
+        sizes.push_back(current);
+        remaining -= current;
+    }
+    return sizes;
+}
+
+Column make_irregular_blocks(const std::vector<int64_t>& values) {
+    return make_irregular_blocks(values, default_irregular_sizes(values.size()));
+}
+
+// Cross-checks our search functions against std::lower_bound / upper_bound on the reference vector.
+// from/to (when set) restrict the column-side search via citerator_at; otherwise cbegin/cend are used.
+void check_search_on_column(
+        const std::vector<int64_t>& values, const Column& col, const std::vector<int64_t>& probes,
+        std::string_view label, std::optional<size_t> from = std::nullopt,
+        std::optional<size_t> to = std::nullopt
+) {
+    auto column_data = col.data();
+    const ssize_t total = static_cast<ssize_t>(values.size());
+    auto begin = from.has_value()
+            ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*from)
+            : column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = to.has_value()
+            ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*to)
+            : column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto res_idx = [&](auto& it) { return it.current_block().has_value() ? it->idx() : total; };
+    const auto std_begin = values.begin() + from.value_or(0);
+    const auto std_end = values.begin() + to.value_or(values.size());
+    for (auto v : probes) {
+        auto std_lb = std::lower_bound(std_begin, std_end, v);
+        auto std_ub = std::upper_bound(std_begin, std_end, v);
+        auto lb_it = lower_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        auto ub_it = upper_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        auto ex_lb_it =
+                exponential_lower_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        auto ex_ub_it =
+                exponential_upper_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        ASSERT_EQ(res_idx(lb_it), std_lb - values.begin()) << label << " lower_bound(" << v << ")";
+        ASSERT_EQ(res_idx(ub_it), std_ub - values.begin()) << label << " upper_bound(" << v << ")";
+        ASSERT_EQ(res_idx(ex_lb_it), std_lb - values.begin()) << label << " exponential_lower_bound(" << v << ")";
+        ASSERT_EQ(res_idx(ex_ub_it), std_ub - values.begin()) << label << " exponential_upper_bound(" << v << ")";
+    }
+}
+
+void check_search(
+        const std::vector<int64_t>& values, const std::vector<int64_t>& probes,
+        std::optional<size_t> from = std::nullopt, std::optional<size_t> to = std::nullopt
+) {
+    check_search_on_column(values, make_single_block(values), probes, "single", from, to);
+    check_search_on_column(values, make_regular_blocks(values), probes, "regular", from, to);
+    check_search_on_column(values, make_irregular_blocks(values), probes, "irregular", from, to);
+    check_search_on_column(
+            values, make_irregular_blocks(values, std::vector<size_t>(values.size(), 1)), probes,
+            "all-1-blocks", from, to
+    );
+}
+
+} // namespace
+
+TEST(ColumnSearch, BasicRegular) {
+    std::vector<int64_t> values{0, 5, 10, 15, 20, 20, 25, 25, 30, 35};
+    Column col = make_regular_blocks(values);
+    auto column_data = col.data();
+    auto begin = column_data.cbegin<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    auto end = column_data.cend<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    auto lb = lower_bound<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(*lb, 20);
+    auto ub = upper_bound<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(*ub, 25);
+}
+
+TEST(ColumnSearch, BasicEnumerated) {
+    std::vector<int64_t> values{0, 5, 10, 15, 20, 20, 25, 25, 30, 35};
+    Column col = make_regular_blocks(values);
+    auto column_data = col.data();
+    auto begin = column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto lb = lower_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(lb->idx(), 4);
+    ASSERT_EQ(lb->value(), 20);
+    auto ub = upper_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(ub->idx(), 6);
+    ASSERT_EQ(ub->value(), 25);
+}
+
+TEST(ColumnSearch, BasicCoverage) {
+    // Small column; mix of unique and duplicated values to make lower_bound / upper_bound diverge.
+    std::vector<int64_t> values{0, 1, 2, 2, 2, 5, 7, 7, 9, 10};
+    std::vector<int64_t> probes{-1, 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, SingleElement) {
+    std::vector<int64_t> values{42};
+    std::vector<int64_t> probes{41, 42, 43};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, AllEqual) {
+    std::vector<int64_t> values(64, 5);
+    std::vector<int64_t> probes{4, 5, 6};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, SubRange) {
+    std::vector<int64_t> values(500);
+    std::iota(values.begin(), values.end(), 0);
+    std::vector<int64_t> probes{-1, 0, 99, 100, 200, 399, 400, 500};
+    check_search(values, probes, 100, 400);
+}
+
+TEST(ColumnSearch, EmptySubRange) {
+    std::vector<int64_t> values{1, 2, 3, 4, 5};
+    std::vector<int64_t> probes{0, 3, 6};
+    check_search(values, probes, 2, 2);
+}
+
+TEST(ColumnSearch, SubRangeAtRunOfEquals) {
+    std::vector<int64_t> values{0, 1, 1, 1, 1, 2, 3, 3, 3, 3, 4};
+    std::vector<int64_t> probes{0, 1, 2, 3, 4};
+    check_search(values, probes, 2, 8);
+    check_search(values, probes, 3, 7);
 }
 
 TEST(ColumnStats, MultipleBlocks) {

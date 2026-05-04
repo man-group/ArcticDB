@@ -184,8 +184,8 @@ struct ColumnData {
         ColumnDataIterator() = delete;
 
         // Used to construct [c]begin iterators
-        explicit ColumnDataIterator(const ColumnData* parent) : parent_(parent) {
-            increment_block();
+        explicit ColumnDataIterator(const ColumnData* parent) : parent_(parent), block_pos_(0) {
+            load_current_block();
             if constexpr (iterator_type == IteratorType::ENUMERATED && iterator_density == IteratorDensity::SPARSE) {
                 // idx_ default-constructs to 0, which is correct for dense case
                 data_.idx_ = parent_->bit_vector()->get_first();
@@ -193,8 +193,29 @@ struct ColumnData {
         }
 
         // Used to construct [c]end iterators
-        explicit ColumnDataIterator(const ColumnData* parent, RawType* end_ptr) : parent_(parent) {
+        explicit ColumnDataIterator(const ColumnData* parent, RawType* end_ptr) :
+            parent_(parent),
+            block_pos_(parent->num_blocks()) {
             data_.ptr_ = end_ptr;
+        }
+
+        // Construct an iterator pointing at element `in_block_offset` of block `block_pos`.
+        // Does not support ENUMERATED SPARSE iterators.
+        // TODO: Support enumerated sparse iterators. This will require efficiently caching an rs_index.
+        ColumnDataIterator(const ColumnData* parent, size_t block_pos, size_t in_block_offset) :
+            parent_(parent),
+            block_pos_(block_pos) {
+            load_current_block();
+            remaining_values_in_block_ -= in_block_offset;
+            data_.ptr_ += in_block_offset;
+            if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                if constexpr (iterator_density == IteratorDensity::SPARSE) {
+                    util::raise_rte("ColumnDataIterator at-position constructor not supported for SPARSE iteration");
+                } else {
+                    const size_t block_start_idx = parent_->buffer().block_byte_offset(block_pos) / sizeof(RawType);
+                    data_.idx_ = static_cast<ssize_t>(block_start_idx + in_block_offset);
+                }
+            }
         }
 
         template<bool OtherConst>
@@ -205,13 +226,31 @@ struct ColumnData {
             remaining_values_in_block_(other.remaining_values_in_block_),
             data_(other.data_) {}
 
+        // Minimal accessors used by the search algorithms in column_algorithms.hpp.
+        [[nodiscard]] const ColumnData* parent() const { return parent_; }
+        [[nodiscard]] const std::optional<TypedBlockData<TDT>>& current_block() const { return opt_block_; }
+        [[nodiscard]] const RawType* current_ptr() const { return data_.ptr_; }
+        // Index of the block this iterator currently points into. For end iterators this is num_blocks.
+        [[nodiscard]] size_t current_block_index() const { return block_pos_; }
+        // TODO: Might be better to refactor storing the state as block_pos_ + in_block_offset_
+        // Maybe not because current impl has a very efficient == which just compares a single pair of pointers
+        // Although that has downsides as well (how do you iterate a column with external blocks pointing to the same
+        // memory?!?)
+        [[nodiscard]] size_t current_in_block_offset() const {
+            if (remaining_values_in_block_ == 0) {
+                // True only for end_ptrs
+                return 0;
+            }
+            return data_.ptr_ - opt_block_->data();
+        }
+
       private:
         friend class boost::iterator_core_access;
 
         void increment() {
             ++data_.ptr_;
             if (ARCTICDB_UNLIKELY(--remaining_values_in_block_ == 0)) {
-                increment_block();
+                advance_block();
             }
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 if constexpr (iterator_density == IteratorDensity::SPARSE) {
@@ -222,12 +261,17 @@ struct ColumnData {
             }
         }
 
-        void increment_block() {
-            opt_block_ = parent_->typed_block_at_position<TDT>(block_pos_++);
+        void load_current_block() {
+            opt_block_ = parent_->template typed_block_at_position<TDT>(block_pos_);
             if (ARCTICDB_LIKELY(opt_block_.has_value())) {
                 remaining_values_in_block_ = opt_block_->row_count();
                 data_.ptr_ = const_cast<typename TDT::DataTypeTag::raw_type*>(opt_block_->data());
             }
+        }
+
+        void advance_block() {
+            ++block_pos_;
+            load_current_block();
         }
 
         template<bool OtherConst>
@@ -338,6 +382,45 @@ struct ColumnData {
             end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
         }
         return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this, end_ptr);
+    }
+
+    // Returns a non-const DENSE iterator pointing at element `idx` of the column.
+    // O(1) for single/regular blocks and O(log B) for irregular blocks.
+    // TODO: add a separate sparse_iterator_at(size_t idx, OnMissing{BEFORE or AFTER}) -
+    // will requre logic to cache rs_index.
+    template<typename TDT, IteratorType iterator_type = IteratorType::REGULAR>
+    ColumnDataIterator<TDT, iterator_type, IteratorDensity::DENSE, false> iterator_at(size_t idx) {
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        const size_t total_rows = data_->bytes() / sizeof(RawType);
+        util::check(
+                idx < total_rows,
+                "ColumnData::iterator_at: idx {} out of range for column with {} rows",
+                idx,
+                total_rows
+        );
+        auto resolved = data_->block_and_offset(idx * sizeof(RawType));
+        size_t in_block_elem = resolved.offset_ / sizeof(RawType);
+        return ColumnDataIterator<TDT, iterator_type, IteratorDensity::DENSE, false>(
+                this, resolved.block_index_, in_block_elem
+        );
+    }
+
+    // Const variant of iterator_at.
+    template<typename TDT, IteratorType iterator_type = IteratorType::REGULAR>
+    ColumnDataIterator<TDT, iterator_type, IteratorDensity::DENSE, true> citerator_at(size_t idx) const {
+        using RawType = typename TDT::DataTypeTag::raw_type;
+        const size_t total_rows = data_->bytes() / sizeof(RawType);
+        util::check(
+                idx < total_rows,
+                "ColumnData::citerator_at: idx {} out of range for column with {} rows",
+                idx,
+                total_rows
+        );
+        auto resolved = data_->block_and_offset(idx * sizeof(RawType));
+        size_t in_block_elem = resolved.offset_ / sizeof(RawType);
+        return ColumnDataIterator<TDT, iterator_type, IteratorDensity::DENSE, true>(
+                this, resolved.block_index_, in_block_elem
+        );
     }
 
     [[nodiscard]] TypeDescriptor type() const { return type_; }
