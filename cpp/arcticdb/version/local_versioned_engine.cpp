@@ -2023,17 +2023,54 @@ struct WarnVersionTypeNotHandled {
     }
 };
 
+bool check_if_version_id_already_exists(SignedVersionId version_id, const VersionVectorType& versions) {
+    const auto it = std::find(versions.begin(), versions.end(), static_cast<VersionId>(version_id));
+    return it != versions.end();
+}
+
+void add_version_id_to_sym_versions_map(
+        const StreamId& stream_id, SignedVersionId version_id, std::map<StreamId, VersionVectorType>& sym_versions
+) {
+    auto [it, inserted] = sym_versions.emplace(stream_id, VersionVectorType{});
+
+    if (inserted) {
+        it->second.push_back(static_cast<VersionId>(version_id));
+        return;
+    }
+
+    if (check_if_version_id_already_exists(version_id, it->second)) {
+        return; // exisintg version_id was provided for the symbol -> do nothing
+    }
+
+    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
+    );
+}
+
 std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
     std::map<StreamId, VersionVectorType> sym_versions;
     WarnVersionTypeNotHandled warner;
+
     for (const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index].content_;
-        if (std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
-        else
+
+        if (!std::holds_alternative<SpecificVersionQuery>(query)) {
             warner.warn(*stream_id);
+            continue;
+        }
+
+        const auto version_id = std::get<SpecificVersionQuery>(query).version_id_;
+
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                version_id >= 0,
+                "Negative version numbers are not supported in add_to_snapshot. Got version {} for symbol '{}'",
+                version_id,
+                *stream_id
+        );
+
+        add_version_id_to_sym_versions_map(*stream_id, version_id, sym_versions);
     }
     return sym_versions;
 }
@@ -2081,8 +2118,8 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
         auto restore_fut =
                 async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key->id(), *key, maybe_prev});
         if (maybe_prev && maybe_prev->deleted) {
-            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a symbol
-            // list entry for it
+            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a
+            // symbol list entry for it
             auto overall_fut =
                     std::move(restore_fut).via(&async::io_executor()).thenValue([this](auto&& restore_result) {
                         WriteSymbolTask(store(),
@@ -2287,8 +2324,8 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
-// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
-// operations
+// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
+// listing operations
 static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
@@ -2410,7 +2447,8 @@ VersionedItem LocalVersionedEngine::merge_internal(
         if (source->empty()) {
             ARCTICDB_RUNTIME_DEBUG(
                     log::version(),
-                    "Merging into existing data with an empty source has no effect. \n No new version is being created "
+                    "Merging into existing data with an empty source has no effect. \n No new version is being "
+                    "created "
                     "for symbol='{}', and the last version is returned",
                     stream_id
             );
