@@ -35,7 +35,7 @@ struct RecordBatchData;
 
 std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name);
 
-std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment);
+std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segment);
 
 // It would be cleaner if the index column position finding happened in the Python layer. However, finding a column by
 // name is O(n), and we have to iterate through the columns here anyway

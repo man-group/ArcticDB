@@ -469,23 +469,46 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     );
 }
 
-void LmdbStorage::warn_if_lmdb_already_open() {
-    uint64_t& count_for_pid = ++times_path_opened[lib_dir_.string()];
-    // Only warn for the "base" config library to avoid spamming users with more warnings if they decide to ignore it
-    // and continue
-    if (count_for_pid != 1 && lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos) {
-        std::filesystem::path user_facing_path = lib_dir_;
-        // Strip magic name from warning as it will confuse users
-        user_facing_path.remove_filename();
-        log::storage().warn(fmt::format(
-                "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
-                "You should only open a single Arctic instance over a given LMDB path. "
-                "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
-                "process and then try again. Current process ID=[{}]",
-                user_facing_path.string(),
-                getpid()
-        ));
+void LmdbStorage::warn_if_lmdb_already_open() const {
+    const std::string warn_setting =
+            util::to_lower(ConfigsMap::instance()->get_string("LMDBStorage.WarnIfOpened", "config"));
+    const uint64_t& count_for_pid = ++times_path_opened[lib_dir_.string()];
+    if (warn_setting == "none") {
+        return;
     }
+    if (count_for_pid != 1) {
+        if (warn_setting == "all") {
+            print_warning_if_lmdb_already_open();
+        } else if (warn_setting == "config") {
+            if (lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos) {
+                print_warning_if_lmdb_already_open();
+            }
+        } else {
+            static bool wrong_env_warned = false;
+            if (!wrong_env_warned) {
+                log::storage().warn(fmt::format(
+                        "Wrong config map setting: LMDBStorage.WarnIfOpened is set to '{}'. Allowed values are: "
+                        "\"none\", \"config\", \"all\"",
+                        warn_setting
+                ));
+                wrong_env_warned = true;
+            }
+        }
+    }
+}
+
+void LmdbStorage::print_warning_if_lmdb_already_open() const {
+    std::filesystem::path user_facing_path = lib_dir_;
+    // Strip magic name from warning as it will confuse users
+    user_facing_path.remove_filename();
+    log::storage().warn(fmt::format(
+            "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
+            "You should only open a single Arctic instance over a given LMDB path. "
+            "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
+            "process and then try again. Current process ID=[{}]",
+            user_facing_path.string(),
+            getpid()
+    ));
 }
 
 LmdbStorage::LmdbStorage(LmdbStorage&& other) noexcept :

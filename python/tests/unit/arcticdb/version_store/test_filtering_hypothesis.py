@@ -53,12 +53,15 @@ pytestmark = pytest.mark.pipeline
     ),
     val=numeric_type_strategies(),
 )
-def test_filter_numeric_binary_comparison(lmdb_version_store_v1, any_output_format, df, val):
+def test_filter_numeric_binary_comparison(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, df, val
+):
     assume(not df.empty)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_binary_comparison"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["<", "<=", ">", ">=", "==", "!="]:
@@ -125,12 +128,20 @@ def test_filter_string_binary_comparison(lmdb_version_store_v1, any_output_forma
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_set_membership(lmdb_version_store_v1, any_output_format, df, signed_vals, unsigned_vals):
+def test_filter_numeric_set_membership(
+    lmdb_version_store_v1,
+    any_output_format,
+    column_stats_filtering_enabled_and_disabled,
+    df,
+    signed_vals,
+    unsigned_vals,
+):
     assume(not df.empty)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_set_membership"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:
@@ -166,12 +177,15 @@ def test_filter_string_set_membership(lmdb_version_store_v1, any_output_format, 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframe_strategy([column_strategy("a", supported_integer_dtypes())]))
-def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, any_output_format, df):
+def test_filter_numeric_empty_set_membership(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, df
+):
     assume(not df.empty)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_empty_set_membership"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:
@@ -207,12 +221,15 @@ def test_filter_string_empty_set_membership(lmdb_version_store_v1, any_output_fo
     df_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
     comparison_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
 )
-def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, any_output_format, df_dt, comparison_dt):
+def test_filter_datetime_timezone_aware_hypothesis(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, df_dt, comparison_dt
+):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_timezone_aware_hypothesis"
     df = pd.DataFrame({"a": [df_dt]})
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     for ts in [comparison_dt, pd.Timestamp(comparison_dt)]:
         q = QueryBuilder()
         q = q[q["a"] < ts]
@@ -238,12 +255,15 @@ def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, any_ou
         [column_strategy("a", supported_numeric_dtypes()), column_strategy("b", supported_numeric_dtypes())]
     )
 )
-def test_filter_binary_boolean(lmdb_version_store_v1, any_output_format, df):
+def test_filter_binary_boolean(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, df
+):
     assume(not df.empty)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_binary_boolean"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["&", "|", "^"]:
@@ -266,12 +286,13 @@ def test_filter_binary_boolean(lmdb_version_store_v1, any_output_format, df):
     df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]),
     val=numeric_type_strategies(),
 )
-def test_filter_not(lmdb_version_store_v1, any_output_format, df, val):
+def test_filter_not(lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_not"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     q = QueryBuilder()
     q = q[~(q["a"] < val)]
     expected = df[~(df["a"] < val)]
@@ -346,7 +367,9 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     ),
     val=numeric_type_strategies(),
 )
-def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
+def test_filter_numeric_binary_comparison_dynamic(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, column_stats_filtering_enabled_and_disabled, df, val
+):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -359,6 +382,7 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
     ]
     for slice in slices:
         lib.append(symbol, slice)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}})
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["<", "<=", ">", ">=", "==", "!="]:
@@ -498,7 +522,12 @@ def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_sche
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
 def test_filter_numeric_set_membership_dynamic(
-    lmdb_version_store_dynamic_schema_v1, df, signed_vals, unsigned_vals, any_output_format
+    lmdb_version_store_dynamic_schema_v1,
+    column_stats_filtering_enabled_and_disabled,
+    df,
+    signed_vals,
+    unsigned_vals,
+    any_output_format,
 ):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
@@ -511,6 +540,7 @@ def test_filter_numeric_set_membership_dynamic(
     ]
     for slice in slices:
         lib.append(symbol, slice)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:

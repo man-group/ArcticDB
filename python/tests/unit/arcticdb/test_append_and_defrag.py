@@ -10,7 +10,7 @@ import pandas as pd
 from arcticdb import LibraryOptions
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.append_and_defrag import _generate_levels, _generate_date_to_read_from, _append_and_defrag_idempotent
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 
 
 def test_generate_levels():
@@ -272,16 +272,8 @@ def test_multi_symbol_idempotency(lmdb_library_factory):
 
 
 def assert_data_key_ios(stats, expected_reads, expected_writes):
-    try:
-        read_count = stats["S3_GetObject"]["TABLE_DATA"]["count"]
-    except KeyError:
-        read_count = 0
-    try:
-        write_count = stats["S3_PutObject"]["TABLE_DATA"]["count"]
-    except KeyError:
-        write_count = 0
-    assert read_count == expected_reads
-    assert write_count == expected_writes
+    assert query_stats_operation_count(stats, "S3_GetObject", "TABLE_DATA") == expected_reads
+    assert query_stats_operation_count(stats, "S3_PutObject", "TABLE_DATA") == expected_writes
 
 
 def test_io_count_basic(s3_library_factory):
@@ -299,13 +291,13 @@ def test_io_count_basic(s3_library_factory):
     # sym_1: 0-4
     with qs.query_stats():
         _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
-        stats = qs.get_query_stats()["storage_operations"]
+        stats = qs.get_query_stats()
     qs.reset_stats()
     assert_data_key_ios(stats, 0, 2)
     # Make the same call again - idempotent so no data keys written the second time
     with qs.query_stats():
         _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
-        stats = qs.get_query_stats()["storage_operations"]
+        stats = qs.get_query_stats()
     qs.reset_stats()
     assert_data_key_ios(stats, 0, 0)
     # Second call
@@ -316,7 +308,7 @@ def test_io_count_basic(s3_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     with qs.query_stats():
         _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
-        stats = qs.get_query_stats()["storage_operations"]
+        stats = qs.get_query_stats()
     qs.reset_stats()
     # sym_0 will have to read the existing data key to combine it with the new data
     assert_data_key_ios(stats, 1, 2)
@@ -328,7 +320,7 @@ def test_io_count_basic(s3_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     with qs.query_stats():
         _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
-        stats = qs.get_query_stats()["storage_operations"]
+        stats = qs.get_query_stats()
     qs.reset_stats()
     # No defrag happening so no data keys will be read
     assert_data_key_ios(stats, 0, 2)
@@ -340,7 +332,7 @@ def test_io_count_basic(s3_library_factory):
     df_1 = pd.DataFrame({"col": np.arange(rows_per_df_1)}, index=rows_per_df_1 * [ts])
     with qs.query_stats():
         _append_and_defrag_idempotent(lib, [(sym_0, df_0), (sym_1, df_1)], factor, 1)
-        stats = qs.get_query_stats()["storage_operations"]
+        stats = qs.get_query_stats()
     qs.reset_stats()
     # sym_0 will read 1 data key to defrag
     # sym_1 will read all 3 data keys to defrag
@@ -360,7 +352,7 @@ def test_io_count_many_iterations(s3_library_factory):
             _append_and_defrag_idempotent(lib, [(sym, df)], factor, 1)
             ts += pd.Timedelta(1, unit="days")
             df = pd.DataFrame({"col": np.arange(rows_per_df)}, index=rows_per_df * [ts])
-        stats = qs.get_query_stats()["storage_operations"]
+        stats = qs.get_query_stats()
     qs.reset_stats()
     # Iterations:
     # 0:    read 0 data keys, write 1 data key 0-4

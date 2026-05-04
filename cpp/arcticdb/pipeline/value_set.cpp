@@ -12,6 +12,8 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
+#include <cmath>
+
 namespace arcticdb {
 
 ValueSet::ValueSet(std::vector<std::string>&& value_list) {
@@ -119,4 +121,45 @@ std::shared_ptr<std::unordered_set<std::string>> ValueSet::get_fixed_width_strin
         return typed_set_fixed_width_strings_.at(width);
     }
 }
+void ValueSet::compute_min_max() const {
+    util::variant_match(numeric_base_set_, [this](const auto& set_ptr) {
+        if (!set_ptr || set_ptr->empty()) {
+            return;
+        }
+        using ElemType = typename std::decay_t<decltype(*set_ptr)>::value_type;
+        if constexpr (std::is_floating_point_v<ElemType>) {
+            // NaN never matches isin, so exclude it from the min/max calculation.
+            // std::minmax_element gives non-deterministic results when NaN is present
+            // because NaN comparisons with < are always false.
+            std::optional<ElemType> min_val, max_val;
+            for (const auto& elem : *set_ptr) {
+                if (std::isnan(elem))
+                    continue;
+                if (!min_val || elem < *min_val)
+                    min_val = elem;
+                if (!max_val || elem > *max_val)
+                    max_val = elem;
+            }
+            if (min_val) {
+                cached_min_ = construct_value<ElemType>(*min_val);
+                cached_max_ = construct_value<ElemType>(*max_val);
+            }
+        } else {
+            auto [min_it, max_it] = std::minmax_element(set_ptr->begin(), set_ptr->end());
+            cached_min_ = construct_value<ElemType>(*min_it);
+            cached_max_ = construct_value<ElemType>(*max_it);
+        }
+    });
+}
+
+const std::optional<Value>& ValueSet::min_value() const {
+    std::call_once(min_max_flag_, [this] { compute_min_max(); });
+    return cached_min_;
+}
+
+const std::optional<Value>& ValueSet::max_value() const {
+    std::call_once(min_max_flag_, [this] { compute_min_max(); });
+    return cached_max_;
+}
+
 } // namespace arcticdb

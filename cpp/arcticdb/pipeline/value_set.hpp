@@ -8,8 +8,10 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <variant>
@@ -18,6 +20,7 @@
 #include <pybind11/numpy.h>
 
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/util/preprocess.hpp>
 #include <arcticdb/util/variant.hpp>
 
@@ -41,6 +44,9 @@ class ValueSet {
     bool empty() const;
 
     const entity::TypeDescriptor& base_type() const;
+
+    const std::optional<Value>& min_value() const;
+    const std::optional<Value>& max_value() const;
 
     template<typename T>
     std::shared_ptr<std::unordered_set<T>> get_set() {
@@ -105,6 +111,12 @@ class ValueSet {
     typed_set<float> typed_set_float_;
     typed_set<double> typed_set_double_;
     std::unique_ptr<std::mutex> mutex_ = std::make_unique<std::mutex>();
+
+    mutable std::optional<Value> cached_min_;
+    mutable std::optional<Value> cached_max_;
+    mutable std::once_flag min_max_flag_;
+
+    void compute_min_max() const;
 };
 
 template<>

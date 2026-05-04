@@ -6,25 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ArcticDB is a high-performance, serverless DataFrame database for the Python Data Science ecosystem. It provides a Python API backed by a C++ data-processing and compression engine, supporting S3, LMDB, Azure Blob Storage, and MongoDB backends.
 
-## Claude-Maintained Documentation
+## Documentation
 
-Technical documentation in `docs/claude/` is **owned and maintained by Claude**. Consult these documents when working on related areas.
+**New features must include documentation.** Full requirements and checklists for both
+user-facing docs and Claude-maintained technical docs are in
+[`.claude/skills/update-docs/SKILL.md`](.claude/skills/update-docs/SKILL.md) — read that
+file when adding or modifying public API, and follow its checklists before considering the
+work complete.
 
-### When to Read/Update Documentation
-
-- **Read** the relevant doc when starting work in an area (e.g., read `CACHING.md` before modifying version map cache)
-- **Update** the doc only when making changes to that area
-- Do NOT proactively read or update docs for unrelated areas
-
-### Documentation Style
-
-Keep documentation **high-level and terse**:
-- Reference `file_path:ClassName:method_name` instead of copying code
-- Use tables and bullet points over code blocks
-- Keep conceptual diagrams; remove implementation details
-- Avoid duplicating what's already in source code
-
-### Documentation Index
+### Claude-Maintained Technical Docs (`docs/claude/`)
 
 | Area | Document |
 |------|----------|
@@ -45,8 +35,11 @@ Check `CLAUDE_USER_SETTINGS.md` (git-ignored) for user-specific configuration:
 The vcpkg-based build requires certain system packages that may not be installed by default:
 
 ```bash
-sudo apt install pkg-config flex bison libsasl2-dev -y
+sudo apt install pkg-config flex bison libsasl2-dev ccache -y
 ```
+
+`ccache` is optional but strongly recommended — it is auto-detected and applied to ArcticDB source
+builds, giving ~3–5× faster rebuilds after the first clean build.
 
 Initialize git submodules (required for vcpkg):
 
@@ -68,12 +61,6 @@ If `VIRTUAL_ENV` is not set:
 - Otherwise if it does not already exist, create it, `make setup NAME=<name>`.
 
 Do not warn the user that it will take a while - it's usually fast.
-
-**The venv must be activated before running any make target or command that uses `python`** (protoc, lint, lint-check, test-py, bench-py, wheel). Prefix every such command with activation:
-
-```bash
-source $(make activate NAME=<name>) && make test-py
-```
 
 ### Makefile Targets
 
@@ -99,6 +86,8 @@ A root `Makefile` provides shortcuts for common tasks. User-specific overrides (
 | `make bench-cpp` | Build and run C++ benchmarks | `FILTER=` |
 | `make install-editable` | Install arcticdb in editable mode (no C++ rebuild) | |
 | `make bench-py` | Run ASV Python benchmarks (runs `install-editable` first) | `BENCH=` |
+
+Prefer the `-debug` targets over the release mode targets unless told otherwise.
 
 ### CMake Presets
 
@@ -159,6 +148,38 @@ C++ benchmark sources are in `cpp/arcticdb/*/test/benchmark_*.cpp`. ASV Python b
 When writing or modifying code, follow the standards in [`docs/claude/PR_REVIEW_GUIDELINES.md`](docs/claude/PR_REVIEW_GUIDELINES.md). These cover API stability, memory safety, on-disk format compatibility, concurrency, testing, and other quality gates enforced during PR review.
 
 ## Key Development Guidelines
+
+Stop and ask clarifying questions when you are confused.
+
+It is unlikely you need to catch `std::exception`. Handle less broad exceptions, like `KeyNotFoundException`.
+
+It is important that you do not submit tasks to the threadpools from within a task that is already executing within the
+same threadpool, as this can deadlock. This means you might need to use synchronous APIs like `read_sync` from within tasks.
+
+Do not write comments except where they are very valuable. Keep them as brief as possible. Do not delete existing comments
+unless they are incorrect.
+
+Prefer writing pytests as standalone functions rather than wrapping them in a class.
+
+### Test-Driven Development
+
+**Every code change must be accompanied by a failing test that the change fixes.**
+
+When fixing a bug or adding a feature:
+1. Write a test that demonstrates the bug or missing functionality
+2. Verify the test fails
+3. Implement the fix
+4. Verify the test passes
+
+### Git Workflow
+
+**Always confirm with the developer before committing and pushing changes upstream.**
+
+Wait for explicit confirmation like "commit and push" or "looks good, push it" before pushing to remote.
+
+### Branch Work Logs
+
+When working on a feature branch, maintain a work log in `docs/claude/plans/<branch-name>/branch-work-log.md`. Update it at the end of each task with a few bullet points summarizing what was done. This provides continuity across sessions and helps with PR descriptions.
 
 ### Backwards Compatibility
 

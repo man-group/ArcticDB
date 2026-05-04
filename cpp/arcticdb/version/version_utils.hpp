@@ -47,7 +47,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
             if (!entry.is_tombstoned(key)) {
                 oldest_loaded_undeleted_index = std::min(oldest_loaded_undeleted_index, key.version_id());
-                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_undeleted_timestamp, key.creation_ts());
             }
 
         } else if (key.type() == KeyType::TOMBSTONE) {

@@ -527,7 +527,7 @@ class LazyDataFrame(QueryBuilder):
             iterate_snapshots_if_tombstoned=False,
             include_index_segment=True,
         )
-        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment)
+        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment, dit.column_stats_segment)
         read_request = self._to_read_request()
         return self.lib._nvs._modify_schema(
             self._preloaded_index,
@@ -1750,7 +1750,7 @@ class Library:
         Calling ``finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
         ``get_staged_symbols`` to check if there are staged segments for the symbol.
 
-        Calling ``finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
+        Calling ``finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``UnsortedDataException``.
 
         Parameters
         ----------
@@ -1793,7 +1793,7 @@ class Library:
 
         Raises
         ------
-        SortingException
+        UnsortedDataException
 
             - If any two staged segments for a given symbol have overlapping indexes
             - If any staged segment for a given symbol is not sorted
@@ -1884,7 +1884,7 @@ class Library:
         Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
         ``get_staged_symbols`` to check if there are staged segments for the symbol.
 
-        Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
+        Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``UnsortedDataException``.
 
         Parameters
         ----------
@@ -1923,7 +1923,7 @@ class Library:
 
         Raises
         ------
-        SortingException
+        UnsortedDataException
 
             - If the first index value of the sorted block is not greater or equal than the last index value of
                 the existing data when ``StagedDataFinalizeMethod.APPEND`` is used.
@@ -3204,9 +3204,8 @@ class Library:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            String columns are not yet supported.
-
-            Dynamic schema is not yet supported.
+            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
+            compactions may fail. Additionally, resampling is not yet supported with sparse data.
 
             Sparse data is not yet supported.
 
@@ -3235,8 +3234,7 @@ class Library:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
-            schema enabled, or the data is sparse
+            If the existing data is recursively normalized, or the data is sparse
 
         Examples
         --------
@@ -3395,6 +3393,12 @@ class Library:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+
+            If a column name appears more than once in the source or the target it must not be added in the on
+            parameter.
+
+            In the case of a datetime-indexed DataFrame the on parameter must not contain the name of the datetime
+            index.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
@@ -3417,7 +3421,7 @@ class Library:
             If symbol doesn't exist and `upsert=False`
         UserInputException
             If strategy is not one of the supported strategies listed above
-        SortingException
+        UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
             If dynamic schema is used or if source's schema is incompatible with target's schema

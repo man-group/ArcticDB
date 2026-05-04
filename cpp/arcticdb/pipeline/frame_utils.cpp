@@ -46,6 +46,22 @@ TimeseriesDescriptor make_timeseries_descriptor(
     };
 }
 
+TimeseriesDescriptor make_timeseries_descriptor(
+        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
+        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+) {
+    return make_timeseries_descriptor(
+            total_rows,
+            desc,
+            std::move(norm_meta),
+            std::move(um),
+            std::move(prev_key),
+            std::move(next_key),
+            bucketize_dynamic
+    );
+}
+
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
         const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::optional<AtomKey>&& prev_key,
         bool bucketize_dynamic

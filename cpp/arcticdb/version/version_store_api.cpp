@@ -952,7 +952,7 @@ std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versi
 std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 ) {
 
     auto read_versions_or_errors =
@@ -988,7 +988,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
 ReadResult PythonVersionStore::batch_read_and_join(
         std::shared_ptr<std::vector<StreamId>> stream_ids, std::shared_ptr<std::vector<VersionQuery>> version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
-        std::vector<std::shared_ptr<Clause>>&& clauses, std::any& handler_data
+        std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
 ) {
     auto versions_and_frame = batch_read_and_join_internal(
             std::move(stream_ids),
@@ -1044,7 +1044,7 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
 
 ReadResult PythonVersionStore::read_dataframe_version(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
 
     auto opt_version_and_frame =
@@ -1460,7 +1460,7 @@ void write_dataframe_to_file(
 
 ReadResult read_dataframe_from_file(
         const StreamId& stream_id, const std::string& path, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
 
     auto release_gil = std::make_unique<py::gil_scoped_release>();

@@ -1,11 +1,11 @@
 import pytest
 import pandas as pd
 import random
-from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge
+from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge, query_stats_operation_count
 import arcticdb
 from arcticdb.version_store import VersionedItem
 import numpy as np
-from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, SortingException, StorageException
+from arcticdb.exceptions import StreamDescriptorMismatch, UserInputException, UnsortedDataException, StorageException
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import List, Optional
@@ -85,9 +85,8 @@ class TestStressTimeseriesMergeUpdate:
         "segments_to_update",
         [[0], [9], [5], [8, 9], [0, 1, 2], [2, 3, 4, 5], [0, 2, 4, 6, 8], [1, 3, 5, 7, 9], [1, 4, 5, 6, 9]],
     )
-    def test_merge_update(self, s3_version_store_v1, segments_to_update):
-        qs.reset_stats()
-        lib = s3_version_store_v1
+    def test_merge_update(self, in_memory_store_factory, segments_to_update, clear_query_stats):
+        lib = in_memory_store_factory()
         lib.write("sym", self.__class__.data)
         source = make_matching_source(self.__class__.data, segments_to_update, self.__class__.rows_per_segment)
         strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
@@ -95,10 +94,10 @@ class TestStressTimeseriesMergeUpdate:
             lib.merge_experimental("sym", source, strategy=strategy)
         stats = qs.get_query_stats()
         expected_table_data_read_count = len(segments_to_update) * self.__class__.col_slices
-        assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == expected_table_data_read_count
-        assert stats["storage_operations"]["S3_PutObject"]["TABLE_DATA"]["count"] == expected_table_data_read_count
-        assert stats["storage_operations"]["S3_GetObject"]["TABLE_INDEX"]["count"] == 1
-        assert stats["storage_operations"]["S3_PutObject"]["TABLE_INDEX"]["count"] == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == expected_table_data_read_count
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == expected_table_data_read_count
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
 
         result = lib.read("sym").data
         expected = merge(self.__class__.data, source, strategy=strategy)

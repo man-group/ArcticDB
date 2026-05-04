@@ -37,7 +37,7 @@ from arcticdb.exceptions import (
     ArcticNativeException,
     ArcticDbNotYetImplemented,
     NormalizationException,
-    SortingException,
+    UnsortedDataException,
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
@@ -1870,7 +1870,7 @@ def restrict_data_to_date_range_only(
             # data.loc[...] and let version_core.cpp::sorted_data_check_update handle this, but that will be confusing
             # as the frame input to sorted_data_check_update WILL be sorted. Instead, we fail early here, at the cost
             # of duplicating exception messages.
-            raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
+            raise UnsortedDataException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
     elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
         check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")

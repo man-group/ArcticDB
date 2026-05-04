@@ -4,6 +4,7 @@ FIND_PACKAGE(Protobuf REQUIRED)
 SET(PROTO_IN_FILES
 		utils.proto
         descriptors.proto
+        column_stats.proto
         encoding.proto
         storage.proto
         config.proto

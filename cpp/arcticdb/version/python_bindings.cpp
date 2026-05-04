@@ -188,7 +188,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
     py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
-            .def(py::init<AtomKey, SegmentInMemory>());
+            .def(py::init<AtomKey, SegmentInMemory, std::optional<SegmentInMemory>>(),
+                 py::arg("index_key"),
+                 py::arg("index_seg"),
+                 py::arg("column_stats_seg") = std::nullopt);
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
@@ -233,9 +236,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             "read_dataframe_from_file",
             [](StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
             ) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                auto handler_data = std::make_shared<std::any>(
+                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                );
                 return adapt_read_df(
-                        read_dataframe_from_file(sid, path, read_query, read_options, handler_data), &handler_data
+                        read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
                 );
             }
     );
@@ -329,7 +334,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
             .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
             .def_property_readonly("key", &DescriptorItem::key)
-            .def_property_readonly("index_segment", &DescriptorItem::index_segment);
+            .def_property_readonly("index_segment", &DescriptorItem::index_segment)
+            .def_property_readonly("column_stats_segment", &DescriptorItem::column_stats_segment);
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
@@ -797,11 +803,12 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const VersionQuery& version_query,
                         const std::shared_ptr<ReadQuery>& read_query,
                         const ReadOptions& read_options) {
-                        auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                        );
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
-                                &handler_data
+                                handler_data.get()
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),
@@ -943,13 +950,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const std::vector<VersionQuery>& version_queries,
                         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                         const BatchReadOptions& batch_read_options) {
-                        auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
+                        );
                         return python_util::adapt_read_dfs(
                                 v.batch_read(
                                         stream_ids, version_queries, read_queries, batch_read_options, handler_data
                                 ),
-                                &handler_data
+                                handler_data.get()
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),
@@ -991,7 +999,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                             });
                         }
                         const OutputFormat output_format = read_options.output_format();
-                        auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(output_format)
+                        );
                         return adapt_read_df(
                                 v.batch_read_and_join(
                                         std::make_shared<std::vector<StreamId>>(std::move(stream_ids)),
@@ -1001,7 +1011,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                         std::move(_clauses),
                                         handler_data
                                 ),
-                                &handler_data
+                                handler_data.get()
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),

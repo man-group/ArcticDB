@@ -6,23 +6,26 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from hypothesis import given, settings
+from hypothesis import given, settings, assume
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb_ext.exceptions import SchemaException, StorageException
+from arcticdb_ext.exceptions import DuplicateKeyException, SchemaException, StorageException
 from arcticdb_ext.storage import KeyType
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
 )
-from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
+from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count, random_strings_of_length
+from tests.util.mark import MACOS, WINDOWS
+from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
 def generic_compact_data_test(lib, sym, method_arg=None):
+    qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
     vit_before_compaction = lib.read(sym)
     expected = vit_before_compaction.data
@@ -62,6 +65,7 @@ def generic_compact_data_test(lib, sym, method_arg=None):
 
 
 def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
+    qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
     vit_before_compaction = lib.read(sym)
     expected = vit_before_compaction.data
@@ -142,13 +146,16 @@ def test_compact_data_explicit_rows_per_segment(
     in_memory_store_factory, clear_query_stats, lib_config_value, method_arg
 ):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=lib_config_value)
+    lib = in_memory_store_factory(segment_row_size=lib_config_value, dynamic_strings=True)
     sym = "test_compact_data_explicit_rows_per_segment"
     df = pd.DataFrame(
         {
             "ints": np.arange(30, dtype=np.int64),
             "floats": np.arange(30, 60, dtype=np.float32),
             "bools": rng.random(30) > 0.5,
+            # Include multiple string columns with overlap of the values to test string pool construction
+            "strings_1": 6 * ["hello", None, "gutentag", np.nan, "konichiwa"],
+            "strings_2": 6 * ["hello", "bonjour", "gutentag", "nihao", "konichiwa"],
         }
     )
     lib.write(sym, df)
@@ -158,13 +165,14 @@ def test_compact_data_explicit_rows_per_segment(
 @pytest.mark.parametrize("method_argument", [1, 8, 10, 13, 100])
 def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_query_stats, method_argument):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=100)
+    lib = in_memory_store_factory(segment_row_size=100, dynamic_strings=True)
     sym = "test_compact_data_widely_varying_row_counts"
     df = pd.DataFrame(
         {
             "ints": np.arange(303, dtype=np.int64),
             "floats": np.arange(303, dtype=np.float32),
             "bools": rng.random(303) > 0.5,
+            "strings": 101 * ["hello", "bonjour", "gutentag"],
         }
     )
     # Produce alternating 100 and 1 row segments
@@ -182,13 +190,15 @@ def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_q
 @pytest.mark.parametrize("append_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, append_rows):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_append"
+    string_values = random_strings_of_length(5, 5, True)
     df = pd.DataFrame(
         {
             "ints": np.arange(initial_rows + append_rows, dtype=np.int64),
             "floats": np.arange(initial_rows + append_rows, 2 * (initial_rows + append_rows), dtype=np.int64),
             "bools": rng.random(initial_rows + append_rows) > 0.5,
+            "strings": rng.choice(string_values, initial_rows + append_rows),
         }
     )
     lib.write(sym, df[:initial_rows])
@@ -201,13 +211,15 @@ def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_pe
 @pytest.mark.parametrize("update_rows", [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
 def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, update_rows):
     rng = np.random.default_rng()
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_update"
+    string_values = random_strings_of_length(5, 5, True)
     write_df = pd.DataFrame(
         {
             "ints": np.arange(initial_rows, dtype=np.int64),
             "floats": np.arange(initial_rows, 2 * initial_rows, dtype=np.float32),
             "bools": rng.random(initial_rows) > 0.5,
+            "strings": rng.choice(string_values, initial_rows),
         },
         index=pd.date_range("2026-01-01", periods=initial_rows),
     )
@@ -217,6 +229,7 @@ def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_pe
             "ints": np.arange(initial_rows, initial_rows + update_rows, dtype=np.int64),
             "floats": np.arange(initial_rows, initial_rows + update_rows, dtype=np.float32),
             "bools": rng.random(update_rows) > 0.5,
+            "strings": rng.choice(string_values, update_rows),
         },
         index=pd.date_range("2026-01-15", periods=update_rows),
     )
@@ -239,12 +252,14 @@ def test_compact_data_column_slicing(in_memory_store_factory, clear_query_stats,
 @pytest.mark.parametrize("names", [None, ["ts", None], [None, "level 2"], ["ts", "level 2"]])
 def test_compact_data_multiindex(in_memory_store_factory, clear_query_stats, names):
     rows_per_segment = 100
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_multiindex"
     num_rows = rows_per_segment
     df = pd.DataFrame(
         {"col": np.arange(num_rows)},
-        index=pd.MultiIndex.from_product([pd.date_range("2026-01-01", periods=num_rows // 2), [10, 20]], names=names),
+        index=pd.MultiIndex.from_product(
+            [pd.date_range("2026-01-01", periods=num_rows // 2), ["GOOG", "AAPL"]], names=names
+        ),
     )
     lib.write(sym, df[: num_rows // 2])
     lib.append(sym, df[num_rows // 2 :])
@@ -253,9 +268,9 @@ def test_compact_data_multiindex(in_memory_store_factory, clear_query_stats, nam
 
 @pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
 def test_compact_data_many_appends(in_memory_store_factory, clear_query_stats, rows_per_segment):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_many_appends"
-    df = pd.DataFrame({"col": np.arange(50)})
+    df = pd.DataFrame({"ints": np.arange(50), "strings": 10 * ["hello", None, "gutentag", np.nan, "konichiwa"]})
     for i in range(50):
         lib.append(sym, df[i : i + 1])
     generic_compact_data_test(lib, sym)
@@ -306,11 +321,13 @@ def test_compact_data_read_previous_version(in_memory_store_factory):
 
 @pytest.mark.parametrize("rows_per_segment", [3, 7, 10])
 def test_compact_data_date_range_read(in_memory_store_factory, rows_per_segment):
-    lib = in_memory_store_factory(segment_row_size=rows_per_segment)
+    lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
     sym = "test_compact_data_date_range_read"
     num_rows = 100
     index = pd.date_range("2026-01-01", periods=num_rows)
-    df = pd.DataFrame({"col": np.arange(num_rows)}, index=index)
+    df = pd.DataFrame(
+        {"ints": np.arange(num_rows), "strings": 20 * ["hello", None, "gutentag", np.nan, "konichiwa"]}, index=index
+    )
     for i in range(20):
         lib.append(sym, df[i * 5 : (i + 1) * 5])
     mid = index[num_rows // 2]
@@ -366,6 +383,50 @@ def test_compact_data_column_filtered_read(in_memory_store_factory, clear_query_
     assert_frame_equal(expected_col_bc, lib.read(sym, columns=["col_b", "col_c"]).data)
 
 
+def test_compact_data_fixed_width_strings(in_memory_store_factory):
+    lib = in_memory_store_factory()
+    sym = "test_compact_data_fixed_width_strings"
+    assert not lib.lib_cfg().lib_desc.version.write_options.dynamic_strings
+    lib.write(sym, pd.DataFrame({"col": ["a", "bb", "ccc"]}))
+    lib.append(sym, pd.DataFrame({"col": ["dddd", "eeeee"]}))
+    generic_compact_data_test(lib, sym)
+
+
+@pytest.mark.parametrize("dynamic_strings_first", [True, False])
+def test_compact_data_fixed_width_and_dynamic_strings(in_memory_store_factory, dynamic_strings_first):
+    lib = in_memory_store_factory()
+    sym = "test_compact_data_fixed_width_and_dynamic_strings"
+    # Include two segments with different widths of strings
+    lib.write(sym, pd.DataFrame({"col": ["a", "bb", "ccc"]}), dynamic_strings=dynamic_strings_first)
+    lib.append(sym, pd.DataFrame({"col": ["dddd", "eeeee"]}), dynamic_strings=dynamic_strings_first)
+    lib.append(sym, pd.DataFrame({"col": ["f", "gg"]}), dynamic_strings=not dynamic_strings_first)
+    lib.append(sym, pd.DataFrame({"col": ["hhhhhhhhhhhhhh", "i"]}), dynamic_strings=not dynamic_strings_first)
+    generic_compact_data_test(lib, sym)
+
+
+@pytest.mark.parametrize("dynamic_strings_first", [True, False])
+@pytest.mark.parametrize("operation", ["combine", "split"])
+def test_compact_data_blns(in_memory_store_factory, dynamic_strings_first, operation):
+    lib = in_memory_store_factory()
+    sym = "test_compact_data_blns"
+    df = pd.DataFrame({"col": read_big_list_of_naughty_strings()})
+    lib.write(sym, df[: len(df) // 2], dynamic_strings=dynamic_strings_first)
+    lib.append(sym, df[len(df) // 2 :], dynamic_strings=not dynamic_strings_first)
+    generic_compact_data_test(lib, sym, len(df) if operation == "combine" else len(df) // 4)
+
+
+def test_compact_data_string_none_nan_handling(in_memory_store_factory):
+    lib = in_memory_store_factory(dynamic_strings=True)
+    sym = "test_compact_data_string_none_nan_handling"
+    # Combine string columns with only Nones and NaNs
+    lib.write(sym, pd.DataFrame({"col": [None, np.nan, np.nan, None, None]}), coerce_columns={"col": object})
+    lib.append(sym, pd.DataFrame({"col": [None, np.nan, np.nan, None, None]}), coerce_columns={"col": object})
+    generic_compact_data_test(lib, sym)
+    # Split a string column so that one segment gets all the strings, and the other gets only Nones and NaNs
+    lib.write(sym, pd.DataFrame({"col": ["a", "b", "c", "d", "e", None, np.nan, np.nan, None, None]}))
+    generic_compact_data_test(lib, sym, method_arg=5)
+
+
 def test_compact_pickled_data(in_memory_store_factory, clear_query_stats):
     lib = in_memory_store_factory(segment_row_size=1000)
     sym = "test_compact_pickled_data"
@@ -387,18 +448,6 @@ def test_compact_recursively_normalized_data(lmdb_version_store_v1):
     assert "recursive" in str(e.value) and sym in str(e.value)
 
 
-def test_compact_data_string_column(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_compact_data_string_column"
-    write_df = pd.DataFrame({"col": ["hello"]})
-    append_df = pd.DataFrame({"col": ["bonjour"]})
-    lib.write(sym, write_df)
-    lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "string" in str(e.value)
-
-
 def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     sym = "test_compact_sparse_data"
@@ -411,95 +460,148 @@ def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
     assert "sparse" in str(e.value)
 
 
-def test_compact_data_dynamic_schema_changing_types(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_compact_data_dynamic_schema_changing_types"
-    write_df = pd.DataFrame({"col": np.arange(10, dtype=np.int32)})
-    append_df = pd.DataFrame({"col": np.arange(10, dtype=np.int64)})
-    lib.write(sym, write_df)
-    lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "dynamic" in str(e.value)
-
-
-def test_compact_data_dynamic_schema_changing_column_names(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_compact_data_dynamic_schema_changing_column_names"
-    write_df = pd.DataFrame({"col1": np.arange(10, dtype=np.int64)})
-    append_df = pd.DataFrame({"col2": np.arange(10, dtype=np.int64)})
-    lib.write(sym, write_df)
-    lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "dynamic" in str(e.value)
-
-
-# We are more interested in the slicing than the data, so the parameters are for:
-# - number of rows and columns
-# - library slicing settings
-@use_of_function_scoped_fixtures_in_hypothesis_checked
-@settings(deadline=None)
-@given(
-    # Making these parameters too large results in all the time being spent in numpy generating random numbers
-    num_rows=st.integers(1, 2_000),
-    num_cols=st.integers(1, 20),
-    # The more interesting cases are when num_rows > rows_per_segment
-    rows_per_segment=st.integers(1, 100),
-    cols_per_segment=st.integers(1, 20),
+@pytest.mark.parametrize(
+    "first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
 )
-def test_compact_data_hypothesis_general(
-    in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment
-):
-    rng = np.random.default_rng(42)
-    lib_sliced = in_memory_store_factory(
-        column_group_size=cols_per_segment, segment_row_size=rows_per_segment, name="_unique_"
+@pytest.mark.parametrize(
+    "second_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
+)
+def test_compact_data_dynamic_schema_changing_types(in_memory_store_factory, first_type, second_type):
+    if (first_type == "uint64" and second_type.startswith("int")) or (
+        second_type == "uint64" and first_type.startswith("int")
+    ):
+        pytest.skip("uint64 cannot be combined with signed int types at write time")
+    lib = in_memory_store_factory(dynamic_schema=True)
+    sym = "test_compact_data_dynamic_schema_changing_types"
+    df0 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(first_type))})
+    df1 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(second_type))})
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    generic_compact_data_test(lib, sym)
+
+
+def test_compact_data_dynamic_schema_changing_types_three_slices(in_memory_store_factory):
+    # See comment in test_compact_data_output_column_missing_from_slice_constant_types as to why this input slicing is
+    # interesting
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10, prune_previous_version=True)
+    sym = "test_compact_data_dynamic_schema_changing_types_three_slices"
+    df0 = pd.DataFrame({"col": np.arange(5, dtype=np.int64)})
+    df1 = pd.DataFrame({"col": np.arange(5, 15, dtype=np.int8)})
+    df2 = pd.DataFrame({"col": np.arange(15, 20, dtype=np.int8)})
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    generic_compact_data_test(lib, sym)
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 2
+    # These aren't in any particular order
+    types_0 = [field.type for field in lib_tool.read_descriptor(data_keys[0]).fields()]
+    types_1 = [field.type for field in lib_tool.read_descriptor(data_keys[1]).fields()]
+    assert len(types_0) == 1
+    assert len(types_1) == 1
+    assert "INT64" in str(types_0)
+    assert "INT64" in str(types_1)
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.RangeIndex(20),
+        pd.date_range("2026-01-01", periods=20),
+        pd.MultiIndex.from_product([pd.date_range("2026-01-01", periods=4), ["a", "b", "c", "d", "e"]]),
+    ],
+)
+def test_compact_data_dynamic_schema_missing_columns(in_memory_store_factory, index):
+    lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
+    sym = "test_compact_data_dynamic_schema_missing_columns"
+    # Columns that appear in multiple segments appear in different orders each time. generic_compact_data_test will
+    # verify that the order when read after compaction matches the order before compaction
+    df_0 = pd.DataFrame(
+        {
+            "col1": ["a", "b", "c", "d", "e"],
+            "col2": np.arange(5, 10, dtype=np.float64),
+            "col3": np.arange(10, 15, dtype=np.float64),
+        },
+        index=index[:5],
     )
-    lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, name="_unique_")
-    sym = "test_compact_data_hypothesis_general"
-    supported_types = [
-        np.uint8,
-        np.uint16,
-        np.uint32,
-        np.uint64,
-        np.int8,
-        np.int16,
-        np.int32,
-        np.int64,
-        np.float32,
-        np.float64,
-        bool,
-        np.datetime64,
-    ]
-    col_types = rng.choice(supported_types, num_cols)
-    data = {}
-    for idx in range(num_cols):
-        col_name = f"col_{idx}"
-        col_type = col_types[idx]
-        if np.issubdtype(col_type, np.integer):
-            arr = rng.integers(np.iinfo(col_type).min, np.iinfo(col_type).max, num_rows, col_type, True)
-        elif np.issubdtype(col_type, np.floating):
-            arr = rng.random(num_rows, col_type)
-        elif col_type == bool:
-            arr = rng.random(num_rows) > 0.5
-        else:
-            # datetime
-            arr = pd.date_range("2026-01-01", freq="s", periods=num_rows).values
-            rng.shuffle(arr)
-        data[col_name] = arr
-    df = pd.DataFrame(data)
-    # Do one version where we write with the slicing policy and then compact
-    lib_sliced.write(sym, df)
-    generic_compact_data_test(lib_sliced, sym)
-    # Do another version where we append random numbers of rows between 1 and 2 * rows_per_segment and then compact with
-    # an explicit argument
-    remaining_rows = num_rows
-    while remaining_rows > 0:
-        rows_to_take = rng.integers(1, 2 * rows_per_segment)
-        lib_unsliced.append(sym, df[:rows_to_take])
-        df = df[rows_to_take:]
-        remaining_rows -= rows_to_take
-    generic_compact_data_test(lib_unsliced, sym, rows_per_segment)
+    df_1 = pd.DataFrame(
+        {
+            "col3": np.arange(15, 20, dtype=np.float64),
+            "col2": np.arange(15, 20, dtype=np.float64),
+            "col4": np.arange(20, 25, dtype=np.float64),
+        },
+        index=index[5:10],
+    )
+    df_2 = pd.DataFrame(
+        {
+            "col4": np.arange(30, 35, dtype=np.float64),
+            "col5": np.arange(35, 40, dtype=np.float64),
+            "col1": ["e", "d", "1", "2", "3"],
+        },
+        index=index[10:15],
+    )
+    df_3 = pd.DataFrame(
+        {
+            "col6": np.arange(50, 55, dtype=np.float64),
+            "col5": np.arange(45, 50, dtype=np.float64),
+            "col4": np.arange(40, 45, dtype=np.float64),
+        },
+        index=index[15:],
+    )
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+    lib.append(sym, df_3)
+    generic_compact_data_test(lib, sym)
+
+
+def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_store_factory):
+    # Prune previous as we're going to look at the data segment descriptors post-compaction
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10, prune_previous_version=True)
+    sym = "test_compact_data_output_column_missing_from_slice_constant_types"
+    # This configuration tests the right thing because:
+    # - we start with row-slices of 5, 10, and 5 rows respectively
+    # - with segment_row_size=10, the acceptable range of row-slice length is [6, 13]
+    # - this means that structure_for_processing will put all segments together for processing
+    # - the column reslicer will then split these 20 rows into 2 segments of 10
+    # - Therefore, present_in_first will be missing from the second slice, and present_in_last will be missing from the
+    #   first slice in the resulting segments written to disk
+    lib.write(sym, pd.DataFrame({"present_in_all": np.arange(5), "present_in_first": np.arange(5)}))
+    lib.append(sym, pd.DataFrame({"present_in_all": np.arange(5, 15)}))
+    lib.append(sym, pd.DataFrame({"present_in_all": np.arange(15, 20), "present_in_last": np.arange(15, 20)}))
+    generic_compact_data_test(lib, sym)
+    lib_tool = lib.library_tool()
+    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    assert len(data_keys) == 2
+    # These aren't in any particular order
+    data_key_0 = [key for key in data_keys if key.start_index == 0][0]
+    data_key_1 = [key for key in data_keys if key.start_index == 10][0]
+    fields_0 = [field.name for field in lib_tool.read_descriptor(data_key_0).fields()]
+    fields_1 = [field.name for field in lib_tool.read_descriptor(data_key_1).fields()]
+    assert len(fields_0) == 2
+    assert len(fields_1) == 2
+    assert fields_0 == ["present_in_all", "present_in_first"]
+    assert fields_1 == ["present_in_all", "present_in_last"]
+
+
+# Like the test above, but with type promotion as well to force use of the iteration code-path, rather than the memcpy
+# implementation
+def test_compact_data_output_column_missing_from_slice_changing_types(in_memory_store_factory):
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
+    sym = "test_compact_data_output_column_missing_from_slice_changing_types"
+    lib.write(sym, pd.DataFrame({"present_in_all": np.arange(2), "present_in_first": np.arange(2, dtype=np.int8)}))
+    lib.append(
+        sym, pd.DataFrame({"present_in_all": np.arange(2, 5), "present_in_first": np.arange(2, 5, dtype=np.int16)})
+    )
+    lib.append(sym, pd.DataFrame({"present_in_all": np.arange(5, 15)}))
+    lib.append(
+        sym, pd.DataFrame({"present_in_all": np.arange(15, 18), "present_in_last": np.arange(15, 18, dtype=np.float32)})
+    )
+    lib.append(
+        sym, pd.DataFrame({"present_in_all": np.arange(18, 20), "present_in_last": np.arange(18, 20, dtype=np.float64)})
+    )
+    generic_compact_data_test(lib, sym)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -511,6 +613,14 @@ def test_compact_data_hypothesis_general(
     large_num_rows_0=st.integers(150, 200),
     large_num_rows_1=st.integers(150, 200),
     large_num_rows_2=st.integers(150, 200),
+)
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
 )
 def test_compact_data_hypothesis_small_and_large_segments(
     in_memory_store_factory,
@@ -533,3 +643,151 @@ def test_compact_data_hypothesis_small_and_large_segments(
     lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_2)}))
     lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_2)}))
     generic_compact_data_test(lib, sym)
+
+
+# We are more interested in the slicing than the data, so the parameters are for:
+# - number of rows and columns
+# - library slicing settings
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    # Making these parameters too large results in all the time being spent in numpy generating random numbers
+    num_rows=st.integers(1, 2_000),
+    num_cols=st.integers(1, 20),
+    # The more interesting cases are when num_rows > rows_per_segment
+    rows_per_segment=st.integers(1, 100),
+    cols_per_segment=st.integers(1, 20),
+)
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
+)
+def test_compact_data_hypothesis_static_schema(
+    in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment
+):
+    rng = np.random.default_rng(42)
+    lib_sliced = in_memory_store_factory(
+        column_group_size=cols_per_segment, segment_row_size=rows_per_segment, dynamic_strings=True, name="_unique_"
+    )
+    lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, dynamic_strings=True, name="_unique_")
+    sym = "test_compact_data_hypothesis_static_schema"
+    supported_types = [
+        np.uint8,
+        np.uint16,
+        np.uint32,
+        np.uint64,
+        np.int8,
+        np.int16,
+        np.int32,
+        np.int64,
+        np.float32,
+        np.float64,
+        bool,
+        str,
+        np.datetime64,
+    ]
+    col_types = rng.choice(supported_types, num_cols)
+    data = {}
+    string_values = random_strings_of_length(10, 5, True)
+    for idx in range(num_cols):
+        col_name = f"col_{idx}"
+        col_type = col_types[idx]
+        if np.issubdtype(col_type, np.integer):
+            arr = rng.integers(np.iinfo(col_type).min, np.iinfo(col_type).max, num_rows, col_type, True)
+        elif np.issubdtype(col_type, np.floating):
+            arr = rng.random(num_rows, col_type)
+        elif col_type == bool:
+            arr = rng.random(num_rows) > 0.5
+        elif col_type == str:
+            arr = rng.choice(string_values, num_rows)
+        else:
+            # datetime
+            arr = pd.date_range("2026-01-01", freq="s", periods=num_rows).values
+            rng.shuffle(arr)
+        data[col_name] = arr
+    df = pd.DataFrame(data)
+    # Do one version where we write with the slicing policy and then compact
+    lib_sliced.write(sym, df)
+    generic_compact_data_test(lib_sliced, sym)
+    # Do another version where we append random numbers of rows between 1 and 2 * rows_per_segment and then compact with
+    # an explicit argument
+    remaining_rows = num_rows
+    while remaining_rows > 0:
+        rows_to_take = rng.integers(1, 2 * rows_per_segment)
+        lib_unsliced.append(sym, df[:rows_to_take])
+        df = df[rows_to_take:]
+        remaining_rows -= rows_to_take
+    generic_compact_data_test(lib_unsliced, sym, rows_per_segment)
+
+
+# We are more interested in the slicing than the data, so the parameters are for:
+# - number of rows
+# - library slicing settings
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    # Making these parameters too large results in all the time being spent in numpy generating random numbers
+    num_rows=st.integers(1, 2_000),
+    # The more interesting cases are when num_rows > rows_per_segment
+    rows_per_segment=st.integers(1, 100),
+)
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
+)
+def test_compact_data_hypothesis_dynamic_schema(in_memory_store_factory, clear_query_stats, num_rows, rows_per_segment):
+    rng = np.random.default_rng(42)
+    lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True, name="_unique_")
+    sym = "test_compact_data_hypothesis_dynamic_schema"
+    unsigned_int_types = [np.uint8, np.uint16, np.uint32, np.uint64]
+    signed_int_types = [np.int8, np.int16, np.int32, np.int64]
+    float_types = [np.float32, np.float64]
+    # Two string columns as stringpool dedup make them more complicated
+    cols = {
+        "unsigned_ints": unsigned_int_types,
+        "signed_ints": signed_int_types,
+        "floats": float_types,
+        # Exclude uint64 as it cannot be combined with signed int types at write time
+        "numeric": unsigned_int_types[:3] + signed_int_types + float_types,
+        "bools": [bool],
+        "timestamps": [np.datetime64],
+        "strings_1": [str],
+        "strings_2": [str],
+    }
+    all_col_names = list(cols.keys())
+    string_values = random_strings_of_length(10, 5, True)
+    # Append random numbers of rows between 1 and 2 * rows_per_segment and then compact with an explicit argument
+    remaining_rows = num_rows
+    while remaining_rows > 0:
+        rows_to_take = rng.integers(1, 2 * rows_per_segment)
+        # Pick a subset of columns
+        num_columns = rng.integers(1, len(cols) + 1)
+        col_names = rng.choice(all_col_names, num_columns, False)
+        data = {}
+        for col_name in col_names:
+            col_type = rng.choice(cols[col_name])
+            if np.issubdtype(col_type, np.integer):
+                arr = rng.integers(np.iinfo(col_type).min, np.iinfo(col_type).max, rows_to_take, col_type, True)
+            elif np.issubdtype(col_type, np.floating):
+                arr = rng.random(rows_to_take, col_type)
+            elif col_type == bool:
+                arr = rng.random(rows_to_take) > 0.5
+            elif col_type == str:
+                arr = rng.choice(string_values, rows_to_take)
+            else:
+                # datetime
+                arr = pd.date_range("2026-01-01", freq="s", periods=rows_to_take).values
+                rng.shuffle(arr)
+            data[col_name] = arr
+        df = pd.DataFrame(data)
+        lib.append(sym, df)
+        remaining_rows -= rows_to_take
+    generic_compact_data_test(lib, sym, rows_per_segment)
