@@ -109,6 +109,7 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output
     df["ADJUSTED"] = df["ASK"] * df["VOL_ACC"] + 7
     assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
 
+
 ###############################################
 # POW OPERATOR TESTS                          #
 ###############################################
@@ -117,17 +118,17 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output
 @pytest.mark.parametrize(
     "base_dtype, exp_dtype, result_dtype",
     [
-        pytest.param(np.uint16, np.uint8,  np.uint64,  id="uint_uint"),   # uint ^ uint -> uint64
-        pytest.param(np.int32,  np.uint16, np.int64,   id="int_uint"),    # int ^ uint -> int64
-        pytest.param(np.uint16, np.int32,  np.float64, id="uint_int"),    # uint ^ int -> float64 (negative exp)
-        pytest.param(np.int32,  np.int16,  np.float64, id="int_int"),     # int ^ int -> float64 (negative exp)
+        pytest.param(np.uint16, np.uint8, np.uint64, id="uint_uint"),  # uint ^ uint -> uint64
+        pytest.param(np.int32, np.uint16, np.int64, id="int_uint"),  # int ^ uint -> int64
+        pytest.param(np.uint16, np.int32, np.float64, id="uint_int"),  # uint ^ int -> float64 (negative exp)
+        pytest.param(np.int32, np.int16, np.float64, id="int_int"),  # int ^ int -> float64 (negative exp)
     ],
 )
 def test_project_pow_col_col(lmdb_version_store_v1, any_output_format, base_dtype, exp_dtype, result_dtype):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     base_vals = np.arange(1, 11) if np.issubdtype(base_dtype, np.unsignedinteger) else np.arange(-5, 5)
-    exp_vals  = np.arange(1, 11) if np.issubdtype(exp_dtype,  np.unsignedinteger) else np.arange(-5, 5)
+    exp_vals = np.arange(1, 11) if np.issubdtype(exp_dtype, np.unsignedinteger) else np.arange(-5, 5)
     df = pd.DataFrame(
         {"BASE": base_vals.astype(base_dtype), "EXP": exp_vals.astype(exp_dtype)},
         index=np.arange(10),
@@ -216,7 +217,10 @@ def test_project_pow_float_exponent_raises(lmdb_version_store_v1, any_output_for
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_pow_float_exponent_raises"
-    lib.write(symbol, pd.DataFrame({"num": np.array([1, 2, 3], dtype=np.int32), "f": np.array([1.0, 2.0, 3.0], dtype=np.float64)}))
+    lib.write(
+        symbol,
+        pd.DataFrame({"num": np.array([1, 2, 3], dtype=np.int32), "f": np.array([1.0, 2.0, 3.0], dtype=np.float64)}),
+    )
 
     q = QueryBuilder()
     q = q.apply("result", q["num"] ** q["f"])
@@ -251,7 +255,10 @@ def test_project_pow_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_fo
     q = q.apply("RESULT", q["BASE"] ** q["EXP"])
     vit = lib.read(symbol, query_builder=q)
 
-    expected["RESULT"] = expected["BASE"].astype(np.uint64) ** expected["EXP"].astype(np.uint64)
+    expected["RESULT"] = expected["BASE"].astype(np.float64) ** expected["EXP"].astype(np.float64)
+    # ArcticDB propagates NaN for sparse (missing) column values; IEEE 754 has special cases like
+    # 1^NaN=1 and x^0=1 that pandas uses but ArcticDB does not (it treats missing as NULL).
+    expected.loc[expected["BASE"].isna() | expected["EXP"].isna(), "RESULT"] = np.nan
     received = regularize_dataframe(vit.data)
     expected = regularize_dataframe(expected)
     assert_frame_equal(expected, received)
