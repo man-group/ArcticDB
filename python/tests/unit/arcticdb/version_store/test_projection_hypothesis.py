@@ -17,6 +17,7 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     supported_numeric_dtypes,
     supported_floating_dtypes,
+    supported_integer_dtypes,
     dataframe_strategy,
     column_strategy,
     numeric_type_strategies,
@@ -243,3 +244,45 @@ def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_sche
     df["c"] = -df["a"]
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(df, received, check_dtype=False)
+
+
+# Float base so backfilled missing rows produce NaN (clean pandas behaviour).
+# Integer exponent so the float-exponent restriction is never hit.
+# Only "a" (base) is dropped across slices so "b" (exponent) stays integer-typed.
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=dataframe_strategy(
+        [
+            column_strategy("a", supported_floating_dtypes(), restrict_range=True),
+            column_strategy("b", supported_integer_dtypes(), restrict_range=True),
+        ],
+    ),
+)
+def test_project_pow_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df):
+    assume(len(df) >= 2)
+    assume(df["b"].abs().max() < 50)
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_project_pow_numeric_binary_operation_dynamic"
+    lib.delete(symbol)
+    slices = [
+        df[: len(df) // 2],
+        df[len(df) // 2 :].drop(columns=["a"]),
+    ]
+    for s in slices:
+        lib.append(symbol, s)
+    df = pd.concat(slices)
+    q = QueryBuilder()
+    q = q.apply("c", q["a"] ** q["b"])
+    df["c"] = df["a"].astype(np.float64) ** df["b"].astype(np.float64)
+    received = lib.read(symbol, query_builder=q).data
+    try:
+        assert_frame_equal(df, received, check_dtype=False)
+    except AssertionError as e:
+        original_df = lib.read(symbol).data
+        print(
+            f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{q}"""
+            f"""\nPandas result:\n{df}\nArcticDB result:\n{received}"""
+        )
+        raise e
