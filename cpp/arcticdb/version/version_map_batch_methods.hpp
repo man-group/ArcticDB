@@ -275,7 +275,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
     return output;
 }
 
-writeusing VersionVectorType = std::vector<VersionId>;
+using VersionVectorType = std::vector<VersionId>;
 
 /**
  * Returns a specific version per symbol.
