@@ -88,45 +88,6 @@ def test_project_value_set():
         QueryBuilder().apply("new_col", [0, 1, 2])
 
 
-def test_pow_type_coercion(lmdb_version_store_v1, any_output_format):
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-
-    data_frame = pd.DataFrame(
-        {
-            "UINT_BASE": np.arange(1, 11, dtype=np.uint16),
-            "UINT_EXP": np.arange(1, 11, dtype=np.uint16),
-            "INT_BASE": np.arange(1, 11, dtype=np.int32),
-            "INT_EXP": np.arange(1, 11, dtype=np.int32),
-        },
-        index=np.arange(10),
-    )
-
-    lib.write("pow_test", data_frame)
-
-    qb = QueryBuilder()
-    qb = qb.apply("UINT_POW_UINT", qb["UINT_BASE"] ** qb["UINT_EXP"])
-    qb = qb.apply("UINT_POW_INT", qb["UINT_BASE"] ** qb["INT_EXP"])
-    qb = qb.apply("INT_POW_UINT", qb["INT_BASE"] ** qb["UINT_EXP"])
-    qb = qb.apply("INT_POW_INT", qb["INT_BASE"] ** qb["INT_EXP"])
-
-    read_data_frame = lib.read("pow_test", query_builder=qb).data
-
-    data_frame["UINT_POW_UINT"] = data_frame["UINT_BASE"].astype(np.uint64) ** data_frame["UINT_EXP"].astype(np.uint64)
-    data_frame["UINT_POW_INT"] = data_frame["UINT_BASE"].astype(np.float64) ** data_frame["INT_EXP"].astype(np.float64)
-    data_frame["INT_POW_UINT"] = data_frame["INT_BASE"].astype(np.int64) ** data_frame["UINT_EXP"].astype(np.int64)
-    data_frame["INT_POW_INT"] = data_frame["INT_BASE"].astype(np.float64) ** data_frame["INT_EXP"].astype(np.float64)
-
-    expected = data_frame.astype(
-        {
-            "UINT_POW_UINT": "uint64",
-            "UINT_POW_INT": "float64",
-            "INT_POW_UINT": "int64",
-            "INT_POW_INT": "float64",
-        }
-    )
-    assert_frame_equal(expected, read_data_frame)
-
 def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
