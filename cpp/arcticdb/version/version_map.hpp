@@ -854,30 +854,20 @@ class VersionMapImpl {
      * @return true if and only if entry already contains data at least as far back as load_param requests
      */
     bool loaded_as_far_as_version_id(const VersionMapEntry& entry, SignedVersionId requested_version_id) const {
-        if (requested_version_id >= 0) {
-            if (entry.load_progress_.oldest_loaded_index_version_ <= static_cast<VersionId>(requested_version_id)) {
-                ARCTICDB_DEBUG(
-                        log::version(),
-                        "Loaded as far as required value {}, have {}",
-                        requested_version_id,
-                        entry.load_progress_.oldest_loaded_index_version_
-                );
-                return true;
-            }
-        } else {
-            auto opt_version_id = resolve_version_id(requested_version_id, entry);
-            
-            if (opt_version_id.has_value() && entry.load_progress_.oldest_loaded_index_version_ <= *opt_version_id) {
-                ARCTICDB_DEBUG(
-                        log::version(),
-                        "Loaded as far as required value {}, have {}",
-                        requested_version_id,
-                        entry.load_progress_.oldest_loaded_index_version_
-                );
-                return true;
-            }
-        }
-        return false;
+        auto opt_version_id = resolve_version_id(requested_version_id, entry);
+
+        if (!opt_version_id.has_value() || entry.load_progress_.oldest_loaded_index_version_ > *opt_version_id)
+            return false;
+
+        ARCTICDB_DEBUG(
+                log::version(),
+                "Loaded as far as required value {}, have {} (latest version: {})",
+                requested_version_id,
+                entry.load_progress_.oldest_loaded_index_version_,
+                opt_version_id.value()
+        );
+
+        return true;
     }
 
     std::shared_ptr<VersionMapEntry>& get_entry(const StreamId& stream_id) {
