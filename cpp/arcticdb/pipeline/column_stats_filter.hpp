@@ -13,7 +13,6 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
-#include <arcticdb/util/bitset.hpp>
 
 #include <memory>
 #include <optional>
@@ -21,8 +20,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include <gtest/gtest_prod.h>
-#include <column_stats.pb.h>
 
 namespace arcticdb {
 
@@ -49,15 +46,14 @@ struct ColumnStatsValues {
     };
 };
 
-struct StatsIndexAndType {
-    size_t segment_col_idx;
-    arcticc::pb2::column_stats_pb2::ColumnStatsType stat_type;
-};
-
-struct StatsMetadataForColumn {
-    std::string col_name;
-    DataType data_type{DataType::UNKNOWN};
-    std::vector<StatsIndexAndType> entries;
+/**
+ * Represents column statistics for a single row-slice.
+ */
+struct ColumnStatsRow {
+    timestamp start_index;
+    timestamp end_index;
+    // Map from column name to its stats
+    std::unordered_map<std::string, ColumnStatsValues> stats_for_column;
 };
 
 /**
@@ -79,54 +75,20 @@ class ColumnStatsData {
     ARCTICDB_MOVE_ONLY_DEFAULT(ColumnStatsData)
 
     /**
-     * Find the row index for a given row-slice identified by start_index and end_index.
-     * Returns nullopt if no matching stats found.
+     * Find the column stats for a given row-slice identified by start_index and end_index.
+     * Returns nullptr if no matching stats found.
      */
-    std::optional<size_t> find_row(timestamp start_index, timestamp end_index) const;
+    const ColumnStatsRow* find_stats(timestamp start_index, timestamp end_index) const;
 
-    bool empty() const { return num_rows_ == 0; }
-
-    std::optional<size_t> slot_for_column(const std::string& col_name) const;
-
-    /**
-     * Materialize ColumnStatsValues for the requested slot at each row index in row_indices.
-     */
-    std::vector<ColumnStatsValues> materialize_slot(size_t slot, const std::vector<std::optional<size_t>>& row_indices)
-            const;
+    bool empty() const { return rows_.empty(); }
 
   private:
-    static constexpr size_t BYTES_PER_CELL = 8;
-    FRIEND_TEST(ColumnStatsDataTest, FindStatsAllRowsPresent);
-    FRIEND_TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows);
-    FRIEND_TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows);
-    FRIEND_TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly);
-
-    ColumnStatsValues stats_for(size_t slot, size_t row) const;
-
-    /**
-     * Storage layout is flat columnar: we keep a typed raw buffer for min and max.
-     * This gives us a single big allocation rather than one vector per row, and
-     * avoids the per-cell Value wrapper construction when constructing this object.
-     */
-    struct SlotInfo {
-        DataType data_type;
-        // Bit per row indicating whether that row has a value for the statistic.
-        // nullopt means the source column was dense and every row has a value.
-        std::optional<util::BitSet> min_set;
-        std::optional<util::BitSet> max_set;
-    };
-
-    size_t num_rows_{0};
-    size_t num_slots_{0};
-    std::vector<timestamp> start_indices_; // size = num_rows_
-    std::vector<timestamp> end_indices_;   // size = num_rows_
-    std::vector<SlotInfo> slots_;          // size = num_slots_
-    std::vector<uint8_t> min_data_;        // size = num_slots_ * num_rows_ * BYTES_PER_CELL
-    std::vector<uint8_t> max_data_;        // size = num_slots_ * num_rows_ * BYTES_PER_CELL
-
+    std::vector<ColumnStatsRow> rows_;
     // (start_index, end_index) -> row index. The index values are rowcounts for string-indexed symbols.
     std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
-    std::unordered_map<std::string, size_t> col_name_to_slot_;
+    // Keys that appeared more than once in the stats segment. Entries for these keys are removed, forcing the segments
+    // to be read without pruning.
+    std::unordered_set<std::pair<timestamp, timestamp>, util::PairHasher> duplicate_keys_;
 };
 
 struct ColumnStatsQueryMetadata {

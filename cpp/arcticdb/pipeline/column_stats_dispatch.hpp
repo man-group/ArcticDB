@@ -34,14 +34,10 @@ using StatsVariantData = std::variant<
         // A value set from an isin/isnotin expression
         std::shared_ptr<ValueSet>>;
 
-// One entry per index segment row: the matching ColumnStatsData row index, or nullopt when no
-// stats row matches (or when the row is already pruned). Materialisation of stats values happens
-// downstream via ColumnStatsData::materialize_slot.
-using StatsRowIndices = std::vector<std::optional<size_t>>;
+using StatsRowVector = std::vector<const ColumnStatsRow*>;
 
 StatsVariantData evaluate_ast_node_against_stats(
-        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
+        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows
 );
 
 StatsVariantData dispatch_binary_stats(
@@ -49,8 +45,7 @@ StatsVariantData dispatch_binary_stats(
 );
 
 StatsVariantData compute_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
+        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowVector& stats_rows
 );
 
 namespace column_stats_detail {

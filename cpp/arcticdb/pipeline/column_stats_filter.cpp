@@ -30,28 +30,40 @@ bool ColumnStatsQueryMetadata::should_try_column_stats_read() const {
 }
 
 StatsVariantData evaluate_ast_node_against_stats(
-        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
+        const VariantNode& node, const ExpressionContext& expression_context, const StatsRowVector& stats_rows
 ) {
     return util::variant_match(
             node,
             [&](const ColumnName& column_name) -> StatsVariantData {
-                if (auto slot = column_stats.slot_for_column(column_name.value); slot.has_value()) {
-                    return column_stats.materialize_slot(*slot, row_indices);
+                std::vector<ColumnStatsValues> result;
+                result.reserve(stats_rows.size());
+                for (const auto& row : stats_rows) {
+                    if (!row) {
+                        result.emplace_back(std::nullopt, std::nullopt);
+                        continue;
+                    }
+                    if (auto it = row->stats_for_column.find(column_name.value); it != row->stats_for_column.end()) {
+                        result.push_back(it->second);
+                    } else {
+                        result.emplace_back(std::nullopt, std::nullopt);
+                    }
                 }
-                return std::vector<ColumnStatsValues>(row_indices.size());
+                util::check(
+                        result.size() == stats_rows.size(), "Expected the result to have the same size as stats_rows"
+                );
+                return result;
             },
             [&](const ValueName& value_name) -> StatsVariantData {
                 return expression_context.values_.get_value(value_name.value);
             },
             [&](const ExpressionName& expression_name) -> StatsVariantData {
                 auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
-                return compute_stats(expression_context, *expr, row_indices, column_stats);
+                return compute_stats(expression_context, *expr, stats_rows);
             },
             [&](const ValueSetName& value_set_name) -> StatsVariantData {
                 return expression_context.value_sets_.get_value(value_set_name.value);
             },
-            [&](const auto&) -> StatsVariantData { return std::vector(row_indices.size(), StatsComparison::UNKNOWN); }
+            [&](const auto&) -> StatsVariantData { return std::vector(stats_rows.size(), StatsComparison::UNKNOWN); }
     );
 }
 
@@ -113,20 +125,29 @@ StatsVariantData dispatch_unary_stats(const StatsVariantData& left, OperationTyp
 }
 
 StatsVariantData compute_stats(
-        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowIndices& row_indices,
-        const ColumnStatsData& column_stats
+        const ExpressionContext& expression_context, const ExpressionNode& node, const StatsRowVector& stats_rows
 ) {
     if (is_binary_operation(node.operation_type_)) {
-        auto left = evaluate_ast_node_against_stats(node.left_, expression_context, row_indices, column_stats);
-        auto right = evaluate_ast_node_against_stats(node.right_, expression_context, row_indices, column_stats);
+        auto left = evaluate_ast_node_against_stats(node.left_, expression_context, stats_rows);
+        auto right = evaluate_ast_node_against_stats(node.right_, expression_context, stats_rows);
         return dispatch_binary_stats(left, right, node.operation_type_);
     }
     if (is_unary_operation(node.operation_type_)) {
-        auto left = evaluate_ast_node_against_stats(node.left_, expression_context, row_indices, column_stats);
+        auto left = evaluate_ast_node_against_stats(node.left_, expression_context, stats_rows);
         return dispatch_unary_stats(left, node.operation_type_);
     }
-    return std::vector(row_indices.size(), StatsComparison::UNKNOWN);
+    return std::vector(stats_rows.size(), StatsComparison::UNKNOWN);
 }
+
+namespace {
+
+struct StatsColumnEntry {
+    size_t segment_col_idx;
+    arcticc::pb2::column_stats_pb2::ColumnStatsType stat_type;
+    DataType data_type;
+};
+
+} // anonymous namespace
 
 ColumnStatsData::ColumnStatsData(
         SegmentInMemory&& segment, const TimeseriesDescriptor& tsd,
@@ -157,52 +178,40 @@ ColumnStatsData::ColumnStatsData(
         return;
     }
 
-    // For each column in the read query with any stats we register a slot and remember the segment column indices to
-    // read from.
-    std::vector<StatsMetadataForColumn> stats_metadata;
-    stats_metadata.reserve(header.stats_by_column().size());
+    // For each user column with stats: resolve its segment column indices by name. Column lookup
+    // (rather than the in-header offset) tolerates partial decode where unrelated columns may have
+    // been dropped.
+    std::vector<std::pair<std::string, std::vector<StatsColumnEntry>>> entries_by_column;
+    entries_by_column.reserve(header.stats_by_column().size());
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
-        StatsMetadataForColumn stats_metadata_for_column;
-        stats_metadata_for_column.col_name = std::string{tsd.fields().at(data_col_offset).name()};
+        std::string col_name{tsd.fields().at(data_col_offset).name()};
+        std::vector<StatsColumnEntry> entries;
         for (const auto& entry : entry_list.entries()) {
             if (entry.type() != MIN_V1 && entry.type() != MAX_V1) {
                 log::version().warn(
-                        "Unknown column stats type {} for column {}, skipping",
-                        static_cast<int>(entry.type()),
-                        stats_metadata_for_column.col_name
+                        "Unknown column stats type {} for column {}, skipping", static_cast<int>(entry.type()), col_name
                 );
                 continue;
             }
-            const auto field_name = to_segment_column_name(stats_metadata_for_column.col_name, entry.type());
+            const auto field_name = to_segment_column_name(col_name, entry.type());
             const auto col_index = segment.column_index(field_name);
             if (!col_index.has_value()) {
                 // Column was filtered out at decode time, or never present in this segment.
                 continue;
             }
-            const auto entry_data_type = fields.at(*col_index).type().data_type();
-            if (stats_metadata_for_column.data_type == DataType::UNKNOWN) {
-                stats_metadata_for_column.data_type = entry_data_type;
-            } else {
-                util::check(
-                        stats_metadata_for_column.data_type == entry_data_type,
-                        "MIN/MAX stats columns for {} disagree on data type",
-                        stats_metadata_for_column.col_name
-                );
-            }
-            stats_metadata_for_column.entries.push_back({*col_index, entry.type()});
+            entries.push_back({static_cast<size_t>(*col_index), entry.type(), fields.at(*col_index).type().data_type()}
+            );
         }
-        if (!stats_metadata_for_column.entries.empty()) {
-            stats_metadata.emplace_back(std::move(stats_metadata_for_column));
+        if (!entries.empty()) {
+            entries_by_column.emplace_back(std::move(col_name), std::move(entries));
         }
     }
 
-    // Construct start_indices and end_indices with date range pruning.
-    // Also construct the interval [first_kept, last_kept_excl) to quickly skip stats for row ranges
-    // we are not interested in when we read the statistics themselves.
+    // Build rows for the contiguous kept range [first_kept, first_kept + rows_.size()). Because
+    // both start_index and end_index are monotonically nondecreasing, the date-range filter only
+    // strips a prefix and a suffix; there are no interior gaps.
     size_t first_kept = segment_row_count;
-    size_t last_kept_excl = 0;
-    start_indices_.reserve(segment_row_count);
-    end_indices_.reserve(segment_row_count);
+    rows_.reserve(segment_row_count);
     using TsTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     auto start_it = start_index_col.begin<TsTDT>();
     auto end_it = end_index_col.begin<TsTDT>();
@@ -232,143 +241,94 @@ ColumnStatsData::ColumnStatsData(
         if (first_kept == segment_row_count) {
             first_kept = r;
         }
-        last_kept_excl = r + 1;
-        start_indices_.push_back(start_index_ts);
-        end_indices_.push_back(end_index_ts);
+        ColumnStatsRow stats_row;
+        stats_row.start_index = start_index_ts;
+        stats_row.end_index = end_index_ts;
+        // Pre-populate so the column_absent post-pass marks columns whose source segment had no
+        // values for any kept row.
+        for (const auto& [col_name, _] : entries_by_column) {
+            stats_row.stats_for_column.emplace(col_name, ColumnStatsValues{});
+        }
+        rows_.push_back(std::move(stats_row));
     }
-    num_rows_ = start_indices_.size();
-    if (num_rows_ == 0) {
+    if (rows_.empty()) {
         return;
     }
 
-    num_slots_ = stats_metadata.size();
-    slots_.resize(num_slots_);
-    min_data_.assign(num_slots_ * num_rows_ * BYTES_PER_CELL, 0);
-    max_data_.assign(num_slots_ * num_rows_ * BYTES_PER_CELL, 0);
-
-    for (size_t slot = 0; slot < num_slots_; ++slot) {
-        auto& stats_metadata_for_column = stats_metadata.at(slot);
-        col_name_to_slot_.emplace(stats_metadata_for_column.col_name, slot);
-        auto& slot_info = slots_[slot];
-        slot_info.data_type = stats_metadata_for_column.data_type;
-
-        details::visit_type(stats_metadata_for_column.data_type, [&](auto tag) {
-            using type_info = ScalarTypeInfo<decltype(tag)>;
-            if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
-                          is_bool_type(type_info::data_type)) {
-                using RawType = typename type_info::RawType;
-                static_assert(sizeof(RawType) <= BYTES_PER_CELL, "RawType wider than per-cell slot");
-
-                for (const auto& entry : stats_metadata_for_column.entries) {
-                    const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
-                    const bool is_min = entry.stat_type == MIN_V1;
-                    uint8_t* dest = (is_min ? min_data_.data() : max_data_.data()) + slot * num_rows_ * BYTES_PER_CELL;
-                    auto& set_bits = is_min ? slot_info.min_set : slot_info.max_set;
-
+    // Populate stats column-wise: one pass per (column, MIN/MAX) entry rather than per row.
+    const size_t kept_count = rows_.size();
+    for (const auto& [col_name, entries] : entries_by_column) {
+        for (const auto& entry : entries) {
+            const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
+            details::visit_type(entry.data_type, [&](auto tag) {
+                using type_info = ScalarTypeInfo<decltype(tag)>;
+                if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
+                              is_bool_type(type_info::data_type)) {
+                    using RawType = typename type_info::RawType;
+                    auto write = [&](size_t kept_idx, RawType raw) {
+                        auto& stats = rows_[kept_idx].stats_for_column.at(col_name);
+                        Value v{raw, type_info::data_type};
+                        if (entry.stat_type == MIN_V1) {
+                            stats.min = std::move(v);
+                        } else {
+                            stats.max = std::move(v);
+                        }
+                    };
                     if (!column.is_sparse() && static_cast<size_t>(column.row_count()) == segment_row_count) {
-                        // Dense
                         auto it = column.begin<typename type_info::TDT>();
                         std::advance(it, static_cast<ssize_t>(first_kept));
-                        for (size_t r = first_kept; r < last_kept_excl; ++r, ++it) {
-                            const size_t kept = r - first_kept; // index in to the output buffer dest
-                            // Write *it in to the dest buffer
-                            *reinterpret_cast<RawType*>(dest + kept * BYTES_PER_CELL) = *it;
+                        for (size_t kept_idx = 0; kept_idx < kept_count; ++kept_idx, ++it) {
+                            write(kept_idx, *it);
                         }
                     } else {
-                        // Sparse
-                        set_bits.emplace(static_cast<util::BitSetSizeType>(num_rows_));
-                        for (size_t r = first_kept; r < last_kept_excl; ++r) {
-                            if (auto opt_val = column.scalar_at<RawType>(static_cast<position_t>(r));
-                                opt_val.has_value()) {
-                                const size_t kept = r - first_kept;
-                                *reinterpret_cast<RawType*>(dest + kept * BYTES_PER_CELL) = *opt_val;
-                                set_bits->set(static_cast<util::BitSetSizeType>(kept));
+                        for (size_t kept_idx = 0; kept_idx < kept_count; ++kept_idx) {
+                            const size_t src_row = first_kept + kept_idx;
+                            if (auto opt = column.scalar_at<RawType>(static_cast<position_t>(src_row));
+                                opt.has_value()) {
+                                write(kept_idx, *opt);
                             }
                         }
                     }
                 }
-            }
-        });
-    }
-
-    index_to_row_.reserve(num_rows_);
-    std::unordered_set<std::pair<timestamp, timestamp>, util::PairHasher> duplicate_keys;
-    for (size_t r = 0; r < num_rows_; ++r) {
-        auto key = std::make_pair(start_indices_.at(r), end_indices_.at(r));
-        if (auto [_, inserted] = index_to_row_.emplace(key, r); !inserted) {
-            // Duplicate (start_index, end_index) — can happen with timestamp indices when multiple
-            // segments span the same time range.
-            duplicate_keys.insert(key);
+            });
         }
     }
-    for (const auto& key : duplicate_keys) {
+
+    // If a column's MIN and MAX are both absent (sparse bitmap), the column was not present in
+    // the data segment for that row.
+    for (auto& row : rows_) {
+        for (auto& [col_name, stats] : row.stats_for_column) {
+            util::check(
+                    stats.min.has_value() == stats.max.has_value(),
+                    "MIN and MAX should both be present or both be absent, col_name={}",
+                    col_name
+            );
+            if (!stats.min) {
+                stats.column_absent = true;
+            }
+        }
+    }
+
+    index_to_row_.reserve(rows_.size());
+    for (size_t r = 0; r < rows_.size(); ++r) {
+        auto key = std::make_pair(rows_[r].start_index, rows_[r].end_index);
+        if (auto [_, inserted] = index_to_row_.emplace(key, r); !inserted) {
+            // Duplicate (start_index, end_index) — can happen with timestamp indices when
+            // multiple segments span the same time range.
+            duplicate_keys_.insert(key);
+        }
+    }
+    for (const auto& key : duplicate_keys_) {
         log::version().debug("Duplicate key detected in column stats - dropping {}", key);
         index_to_row_.erase(key);
     }
 }
 
-std::optional<size_t> ColumnStatsData::find_row(timestamp start_index, timestamp end_index) const {
+const ColumnStatsRow* ColumnStatsData::find_stats(timestamp start_index, timestamp end_index) const {
     if (auto it = index_to_row_.find({start_index, end_index}); it != index_to_row_.end()) {
-        return it->second;
+        return &rows_[it->second];
     }
-    return std::nullopt;
-}
-
-std::optional<size_t> ColumnStatsData::slot_for_column(const std::string& col_name) const {
-    if (auto it = col_name_to_slot_.find(col_name); it != col_name_to_slot_.end()) {
-        return it->second;
-    }
-    return std::nullopt;
-}
-
-std::vector<ColumnStatsValues> ColumnStatsData::materialize_slot(
-        size_t slot, const std::vector<std::optional<size_t>>& row_indices
-) const {
-    std::vector<ColumnStatsValues> result(row_indices.size());
-    if (slot >= num_slots_ || num_rows_ == 0) {
-        return result;
-    }
-
-    const auto& info = slots_[slot];
-    const uint8_t* min_buf = min_data_.data() + slot * num_rows_ * BYTES_PER_CELL;
-    const uint8_t* max_buf = max_data_.data() + slot * num_rows_ * BYTES_PER_CELL;
-
-    details::visit_type(info.data_type, [&](auto tag) {
-        using type_info = ScalarTypeInfo<decltype(tag)>;
-        if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
-                      is_bool_type(type_info::data_type)) {
-            using RawType = typename type_info::RawType;
-            const bool min_dense = !info.min_set.has_value();
-            const bool max_dense = !info.max_set.has_value();
-            for (size_t i = 0; i < row_indices.size(); ++i) {
-                const auto& maybe_row = row_indices[i];
-                if (!maybe_row.has_value()) {
-                    continue; // already default-constructed empty
-                }
-                const size_t r = *maybe_row;
-                const bool min_set = min_dense || info.min_set->test(static_cast<util::BitSetSizeType>(r));
-                const bool max_set = max_dense || info.max_set->test(static_cast<util::BitSetSizeType>(r));
-                if (min_set) {
-                    RawType raw = *reinterpret_cast<const RawType*>(min_buf + r * BYTES_PER_CELL);
-                    result[i].min = Value{raw, type_info::data_type};
-                }
-                if (max_set) {
-                    RawType raw = *reinterpret_cast<const RawType*>(max_buf + r * BYTES_PER_CELL);
-                    result[i].max = Value{raw, type_info::data_type};
-                }
-                util::check(min_set == max_set, "MIN and MAX should both be present or both be absent");
-                if (!min_set) {
-                    result[i].column_absent = true;
-                }
-            }
-        }
-    });
-    return result;
-}
-
-ColumnStatsValues ColumnStatsData::stats_for(size_t slot, size_t row) const {
-    auto v = materialize_slot(slot, {std::optional<size_t>{row}});
-    return v.empty() ? ColumnStatsValues{} : std::move(v[0]);
+    return nullptr;
 }
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
@@ -390,26 +350,25 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         auto start_index_col = isr.column(Fields::start_index).begin<stream::TimeseriesIndex::TypeDescTag>();
         auto end_index_col = isr.column(Fields::end_index).begin<stream::TimeseriesIndex::TypeDescTag>();
 
-        StatsRowIndices row_indices;
-        row_indices.reserve(isr.size());
+        StatsRowVector stats_rows;
+        stats_rows.reserve(isr.size());
         [[maybe_unused]] size_t total_count = 0; // for debug logging only, unused in release build
         for (size_t row = 0; row < isr.size(); ++row) {
             if (!res->get_bit(row)) {
                 // Don't bother - we already know we don't need to look at the segment
-                row_indices.emplace_back(std::nullopt);
+                stats_rows.push_back(nullptr);
                 continue;
             }
             total_count++;
             timestamp start_idx = *(start_index_col + row);
             timestamp end_idx = *(end_index_col + row);
-            row_indices.emplace_back(column_stats_data.find_row(start_idx, end_idx));
+            stats_rows.push_back(column_stats_data.find_stats(start_idx, end_idx));
         }
-        util::check(row_indices.size() == isr.size(), "Expected row_indices.size() == isr.size()");
+        util::check(stats_rows.size() == isr.size(), "Expected stats_rows.size() == isr.size()");
 
         // Evaluate the AST
-        StatsVariantData result = evaluate_ast_node_against_stats(
-                expression_context.root_node_name_, expression_context, row_indices, column_stats_data
-        );
+        StatsVariantData result =
+                evaluate_ast_node_against_stats(expression_context.root_node_name_, expression_context, stats_rows);
         util::check(
                 std::holds_alternative<std::vector<StatsComparison>>(result),
                 "evaluate_ast_node_against_stats should evaluate to a vector<StatsComparison>"

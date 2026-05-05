@@ -4,7 +4,8 @@
 #include <arcticdb/util/constants.hpp>
 #include <google/protobuf/any.pb.h>
 
-namespace arcticdb {
+using namespace arcticdb;
+
 // Helper to build a column stats SegmentInMemory with the expected schema:
 //   col 0: "start_index" (NANOSECONDS_UTC64)
 //   col 1: "end_index"   (NANOSECONDS_UTC64)
@@ -85,8 +86,8 @@ SegmentInMemory build_stats_segment(const std::vector<StatsSegmentRow>& rows) {
     return seg;
 }
 
-// When all rows have valid index values, find_row should return the correct stats for each row.
-TEST(ColumnStatsDataTest, FindStatsAllRowsPresent) {
+// When all rows have valid index values, find_stats should return the correct stats for each row.
+TEST(ColumnStatsData, FindStatsAllRowsPresent) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
             {300, 400, 30, 40},
@@ -97,25 +98,24 @@ TEST(ColumnStatsDataTest, FindStatsAllRowsPresent) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto slot = data.slot_for_column("price");
-    ASSERT_TRUE(slot.has_value());
+    auto* row0 = data.find_stats(100, 200);
+    ASSERT_NE(row0, nullptr);
+    auto it0 = row0->stats_for_column.find("price");
+    ASSERT_NE(it0, row0->stats_for_column.end());
+    ASSERT_EQ(it0->second.min->get<int64_t>(), 10);
+    ASSERT_EQ(it0->second.max->get<int64_t>(), 20);
 
-    auto row0 = data.find_row(100, 200);
-    ASSERT_TRUE(row0.has_value());
-    auto v0 = data.stats_for(*slot, *row0);
-    ASSERT_EQ(v0.min->get<int64_t>(), 10);
-    ASSERT_EQ(v0.max->get<int64_t>(), 20);
-
-    auto row2 = data.find_row(500, 600);
-    ASSERT_TRUE(row2.has_value());
-    auto v2 = data.stats_for(*slot, *row2);
-    ASSERT_EQ(v2.min->get<int64_t>(), 50);
-    ASSERT_EQ(v2.max->get<int64_t>(), 60);
+    auto* row2 = data.find_stats(500, 600);
+    ASSERT_NE(row2, nullptr);
+    auto it2 = row2->stats_for_column.find("price");
+    ASSERT_NE(it2, row2->stats_for_column.end());
+    ASSERT_EQ(it2->second.min->get<int64_t>(), 50);
+    ASSERT_EQ(it2->second.max->get<int64_t>(), 60);
 }
 
 // A malformed row (absent start_index) causes the entire ColumnStatsData to be discarded,
 // even if valid rows were already parsed.
-TEST(ColumnStatsDataTest, MalformedMiddleRowDiscardsAll) {
+TEST(ColumnStatsData, MalformedMiddleRowDiscardsAll) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},          // valid
             {std::nullopt, 400, 30, 40}, // malformed — absent start_index
@@ -125,12 +125,12 @@ TEST(ColumnStatsDataTest, MalformedMiddleRowDiscardsAll) {
     auto tsd = build_test_tsd();
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
-    ASSERT_FALSE(data.find_row(100, 200).has_value());
-    ASSERT_FALSE(data.find_row(500, 600).has_value());
+    ASSERT_EQ(data.find_stats(100, 200), nullptr);
+    ASSERT_EQ(data.find_stats(500, 600), nullptr);
 }
 
 // Absent end_index also triggers discard.
-TEST(ColumnStatsDataTest, MalformedEndIndexDiscardsAll) {
+TEST(ColumnStatsData, MalformedEndIndexDiscardsAll) {
     auto seg = build_stats_segment({
             {100, std::nullopt, 10, 20},
     });
@@ -140,33 +140,33 @@ TEST(ColumnStatsDataTest, MalformedEndIndexDiscardsAll) {
     ASSERT_TRUE(data.empty());
 }
 
-// Lookup with non-existent indices returns nullopt.
-TEST(ColumnStatsDataTest, FindStatsNonExistentIndex) {
+// Lookup with non-existent indices returns nullptr.
+TEST(ColumnStatsData, FindStatsNonExistentIndex) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
     });
 
     auto tsd = build_test_tsd();
     ColumnStatsData data(std::move(seg), tsd);
-    ASSERT_FALSE(data.find_row(999, 888).has_value());
+    ASSERT_EQ(data.find_stats(999, 888), nullptr);
 }
 
 // An empty segment produces empty ColumnStatsData.
-TEST(ColumnStatsDataTest, EmptySegment) {
+TEST(ColumnStatsData, EmptySegment) {
     auto seg = build_stats_segment({});
 
     auto tsd = build_test_tsd();
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_TRUE(data.empty());
-    ASSERT_FALSE(data.find_row(0, 0).has_value());
+    ASSERT_EQ(data.find_stats(0, 0), nullptr);
 }
 
 // Two row-slices with the same (start_index, end_index) but different min/max stats.
 // This can happen with timestamp-indexed symbols when two segments span identical timestamp ranges
 // (e.g. segments where all rows share the same timestamp).
-// Both entries are dropped from the lookup so that find_row returns nullopt, forcing the
+// Both entries are dropped from the lookup so that find_stats returns nullptr, forcing the
 // segments to be read without pruning rather than using the wrong stats.
-TEST(ColumnStatsDataTest, DuplicateIndexPairDropsBothRows) {
+TEST(ColumnStatsData, DuplicateIndexPairDropsBothRows) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20}, // row 0: price in [10, 20]
             {100, 200, 50, 60}, // row 1: same index range, price in [50, 60]
@@ -176,11 +176,11 @@ TEST(ColumnStatsDataTest, DuplicateIndexPairDropsBothRows) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    // Neither row is reachable via find_row because the key is ambiguous.
-    ASSERT_FALSE(data.find_row(100, 200).has_value());
+    // Neither row is reachable via find_stats because the key is ambiguous.
+    ASSERT_EQ(data.find_stats(100, 200), nullptr);
 }
 
-TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows) {
+TEST(ColumnStatsData, DateRangePrunesNonOverlappingRows) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
             {300, 400, 30, 40},
@@ -192,26 +192,21 @@ TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows) {
     ColumnStatsData data(std::move(seg), tsd, std::make_pair<timestamp, timestamp>(250, 650));
     ASSERT_FALSE(data.empty());
 
-    auto slot = data.slot_for_column("price");
-    ASSERT_TRUE(slot.has_value());
+    ASSERT_EQ(data.find_stats(100, 200), nullptr);
+    ASSERT_EQ(data.find_stats(700, 800), nullptr);
 
-    ASSERT_FALSE(data.find_row(100, 200).has_value());
-    ASSERT_FALSE(data.find_row(700, 800).has_value());
+    auto* row1 = data.find_stats(300, 400);
+    ASSERT_NE(row1, nullptr);
+    ASSERT_EQ(row1->stats_for_column.at("price").min->get<int64_t>(), 30);
+    ASSERT_EQ(row1->stats_for_column.at("price").max->get<int64_t>(), 40);
 
-    auto row1 = data.find_row(300, 400);
-    ASSERT_TRUE(row1.has_value());
-    auto v1 = data.stats_for(*slot, *row1);
-    ASSERT_EQ(v1.min->get<int64_t>(), 30);
-    ASSERT_EQ(v1.max->get<int64_t>(), 40);
-
-    auto row2 = data.find_row(500, 600);
-    ASSERT_TRUE(row2.has_value());
-    auto v2 = data.stats_for(*slot, *row2);
-    ASSERT_EQ(v2.min->get<int64_t>(), 50);
-    ASSERT_EQ(v2.max->get<int64_t>(), 60);
+    auto* row2 = data.find_stats(500, 600);
+    ASSERT_NE(row2, nullptr);
+    ASSERT_EQ(row2->stats_for_column.at("price").min->get<int64_t>(), 50);
+    ASSERT_EQ(row2->stats_for_column.at("price").max->get<int64_t>(), 60);
 }
 
-TEST(ColumnStatsDataTest, DateRangeBoundariesAreInclusive) {
+TEST(ColumnStatsData, DateRangeBoundariesAreInclusive) {
     auto seg = build_stats_segment({
             {100, 200, 10, 20},
             {300, 400, 30, 40},
@@ -223,14 +218,14 @@ TEST(ColumnStatsDataTest, DateRangeBoundariesAreInclusive) {
     ColumnStatsData data(std::move(seg), tsd, std::make_pair<timestamp, timestamp>(200, 500));
     ASSERT_FALSE(data.empty());
 
-    ASSERT_TRUE(data.find_row(100, 200).has_value());
-    ASSERT_TRUE(data.find_row(300, 400).has_value());
-    ASSERT_TRUE(data.find_row(500, 600).has_value());
-    ASSERT_FALSE(data.find_row(700, 800).has_value());
+    ASSERT_NE(data.find_stats(100, 200), nullptr);
+    ASSERT_NE(data.find_stats(300, 400), nullptr);
+    ASSERT_NE(data.find_stats(500, 600), nullptr);
+    ASSERT_EQ(data.find_stats(700, 800), nullptr);
 }
 
 // Duplicate keys are dropped but non-duplicate keys in the same segment are unaffected.
-TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
+TEST(ColumnStatsData, DuplicateIndexPairDoesNotAffectOtherRows) {
     auto seg = build_stats_segment({
             {100, 300, 10, 20}, // row 0: unique key
             {300, 400, 30, 40}, // row 1: duplicate key (first)
@@ -242,29 +237,24 @@ TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto slot = data.slot_for_column("price");
-    ASSERT_TRUE(slot.has_value());
-
     // Unique rows are still reachable.
-    auto row0 = data.find_row(100, 300);
-    ASSERT_TRUE(row0.has_value());
-    auto v0 = data.stats_for(*slot, *row0);
-    ASSERT_EQ(v0.min->get<int64_t>(), 10);
-    ASSERT_EQ(v0.max->get<int64_t>(), 20);
+    auto* row0 = data.find_stats(100, 300);
+    ASSERT_NE(row0, nullptr);
+    ASSERT_EQ(row0->stats_for_column.at("price").min->get<int64_t>(), 10);
+    ASSERT_EQ(row0->stats_for_column.at("price").max->get<int64_t>(), 20);
 
-    auto row3 = data.find_row(400, 600);
-    ASSERT_TRUE(row3.has_value());
-    auto v3 = data.stats_for(*slot, *row3);
-    ASSERT_EQ(v3.min->get<int64_t>(), 70);
-    ASSERT_EQ(v3.max->get<int64_t>(), 80);
+    auto* row3 = data.find_stats(400, 600);
+    ASSERT_NE(row3, nullptr);
+    ASSERT_EQ(row3->stats_for_column.at("price").min->get<int64_t>(), 70);
+    ASSERT_EQ(row3->stats_for_column.at("price").max->get<int64_t>(), 80);
 
     // Duplicate key is not reachable.
-    ASSERT_FALSE(data.find_row(300, 400).has_value());
+    ASSERT_EQ(data.find_stats(300, 400), nullptr);
 }
 
 // Build a two-column stats segment where "volume" is absent (sparse) for certain rows.
-// Verify that materialize_slot reports column_absent = true for those entries.
-TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
+// Verify that ColumnStatsData marks those entries as column_absent = true.
+TEST(ColumnStatsData, SparseColumnAbsentMarkedCorrectly) {
     using namespace arcticc::pb2::column_stats_pb2;
 
     // Two data columns: price (offset 1) and volume (offset 2) in the TSD.
@@ -347,33 +337,33 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto price_slot = data.slot_for_column("price");
-    auto vol_slot = data.slot_for_column("volume");
-    ASSERT_TRUE(price_slot.has_value());
-    ASSERT_TRUE(vol_slot.has_value());
+    // Row 0: both columns present, neither absent
+    auto* row0 = data.find_stats(100, 200);
+    ASSERT_NE(row0, nullptr);
+    auto price0_it = row0->stats_for_column.find("price");
+    ASSERT_NE(price0_it, row0->stats_for_column.end());
+    ASSERT_TRUE(price0_it->second.min.has_value());
+    ASSERT_EQ(price0_it->second.min->get<int64_t>(), 10);
+    ASSERT_FALSE(price0_it->second.column_absent);
 
-    auto row0 = data.find_row(100, 200);
-    ASSERT_TRUE(row0.has_value());
-    auto p0 = data.stats_for(*price_slot, *row0);
-    ASSERT_TRUE(p0.min.has_value());
-    ASSERT_EQ(p0.min->get<int64_t>(), 10);
-    ASSERT_FALSE(p0.column_absent);
+    auto vol0_it = row0->stats_for_column.find("volume");
+    ASSERT_NE(vol0_it, row0->stats_for_column.end());
+    ASSERT_TRUE(vol0_it->second.min.has_value());
+    ASSERT_EQ(vol0_it->second.min->get<int64_t>(), 100);
+    ASSERT_FALSE(vol0_it->second.column_absent);
 
-    auto v0 = data.stats_for(*vol_slot, *row0);
-    ASSERT_TRUE(v0.min.has_value());
-    ASSERT_EQ(v0.min->get<int64_t>(), 100);
-    ASSERT_FALSE(v0.column_absent);
+    // Row 1: price present, volume absent
+    auto* row1 = data.find_stats(300, 400);
+    ASSERT_NE(row1, nullptr);
+    auto price1_it = row1->stats_for_column.find("price");
+    ASSERT_NE(price1_it, row1->stats_for_column.end());
+    ASSERT_TRUE(price1_it->second.min.has_value());
+    ASSERT_EQ(price1_it->second.min->get<int64_t>(), 30);
+    ASSERT_FALSE(price1_it->second.column_absent);
 
-    auto row1 = data.find_row(300, 400);
-    ASSERT_TRUE(row1.has_value());
-    auto p1 = data.stats_for(*price_slot, *row1);
-    ASSERT_TRUE(p1.min.has_value());
-    ASSERT_EQ(p1.min->get<int64_t>(), 30);
-    ASSERT_FALSE(p1.column_absent);
-
-    auto v1 = data.stats_for(*vol_slot, *row1);
-    ASSERT_FALSE(v1.min.has_value());
-    ASSERT_FALSE(v1.max.has_value());
-    ASSERT_TRUE(v1.column_absent);
+    auto vol1_it = row1->stats_for_column.find("volume");
+    ASSERT_NE(vol1_it, row1->stats_for_column.end());
+    ASSERT_FALSE(vol1_it->second.min.has_value());
+    ASSERT_FALSE(vol1_it->second.max.has_value());
+    ASSERT_TRUE(vol1_it->second.column_absent);
 }
-} // namespace arcticdb
