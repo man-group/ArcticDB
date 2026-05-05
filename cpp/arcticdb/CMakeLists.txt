@@ -511,6 +511,8 @@ set(arcticdb_srcs
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
+        processing/clause_merge_update.cpp
+        processing/clause_resample.cpp
         processing/clause_utils.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
@@ -1059,6 +1061,7 @@ if(${TEST})
             pipeline/test/test_value.cpp
             pipeline/test/test_column_stats_data.cpp
             pipeline/test/test_column_stats_dispatch.cpp
+            pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp

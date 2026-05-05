@@ -320,6 +320,20 @@ void compact_row_slices(std::span<SliceAndKey> slices) {
         previous_col_slice_end = slice.slice().col_range.end();
     }
 }
+
+bool is_fake_index_name(const arcticc::pb2::descriptors_pb2::NormalizationMetadata& normalization_metadata) {
+    const auto& common = normalization_metadata.has_df() ? normalization_metadata.df().common()
+                                                         : normalization_metadata.series().common();
+    const bool is_fake_datetime_index_name = common.has_index() && common.index().fake_name();
+    const bool is_fake_mutliindex_name =
+            common.has_multi_index() &&
+            ranges::find(common.multi_index().fake_field_pos(), 0) != common.multi_index().fake_field_pos().end();
+    // We store "fakeness" in two separate places. If the dataframe/series was originally datetime indexed we will store
+    // it in the "index" protobuf message. If the dataframe was a multiindex we will store the positions of all fake
+    // names in the "multi_index" protobuf message and not touch the fake_name property of "index".
+    return is_fake_datetime_index_name || is_fake_mutliindex_name;
+}
+
 } // namespace
 
 VersionedItem delete_range_impl(
@@ -1942,7 +1956,8 @@ void create_column_stats_impl(
     auto index_future = store->read(versioned_item.key_);
 
     using OptionalSeg = std::optional<SegmentInMemory>;
-    auto column_stats_future = store->read(column_stats_key)
+    storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
+    auto column_stats_future = store->read(column_stats_key, stats_read_opts)
                                        .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalSeg {
                                            return std::move(key_seg.second);
                                        });
@@ -2158,6 +2173,16 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
     try {
         auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
         auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
+        const auto num_rows = segment_in_memory.row_count();
+        for (auto i = 0u; i < segment_in_memory.num_columns(); ++i) {
+            auto& column = segment_in_memory.column(static_cast<position_t>(i));
+            if (column.is_sparse()) {
+                auto sparse_map = column.sparse_map();
+                sparse_map.resize(num_rows);
+                column.unsparsify(num_rows);
+                create_dense_bitmap_if_any_nulls(0, sparse_map, column);
+            }
+        }
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
@@ -2774,8 +2799,9 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
     folly::Future<OptionalKeySeg> column_stats_future = folly::makeFuture<OptionalKeySeg>(std::nullopt);
     if (need_column_stats) {
         auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
+        storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
         column_stats_future =
-                store->read(column_stats_key)
+                store->read(column_stats_key, stats_read_opts)
                         .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalKeySeg {
                             return std::move(key_seg.second);
                         });
@@ -2837,18 +2863,6 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
                 util::raise_rte("setup_pipeline_context should not receive a bare VersionedItem; "
                                 "callers must resolve to IndexInformation first");
             },
-            [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
-                pipeline_context->stream_id_ = preloaded_index_query->index_key_.id();
-                // The PreloadedIndexQuery should be reusable if collect() is called multiple times on the same lazy
-                // dataframe, hence the clone
-                auto missing_stats_seg = std::nullopt; // TODO aseaton support column stats with preloaded index reads,
-                                                       // for Polars plugin Monday: 11526152128
-                IndexInformation cloned_index{
-                        {preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
-                        missing_stats_seg
-                };
-                read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, cloned_index);
-            },
             [&](const std::shared_ptr<IndexInformation>& index_info) {
                 pipeline_context->stream_id_ = to_atom(index_info->index_.first).id();
                 read_indexed_keys_to_pipeline(pipeline_context, read_query, read_options, *index_info);
@@ -2903,9 +2917,6 @@ VersionedItem generate_result_versioned_item(const VersionIdentifier& version_in
                                              .build<KeyType::TABLE_INDEX>(stream_id));
             },
             [](const VersionedItem& versioned_item) { return versioned_item; },
-            [](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) {
-                return VersionedItem(preloaded_index_query->index_key_);
-            },
             [](const std::shared_ptr<IndexInformation>& index_info) {
                 return VersionedItem(to_atom(index_info->index_.first));
             }
@@ -3062,7 +3073,8 @@ folly::Future<VersionedItem> merge_update_impl(
 ) {
     auto read_query = std::make_shared<ReadQuery>();
     const StreamDescriptor& source_descriptor = source->desc();
-    read_query->clauses_.push_back(std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source)));
+    auto merge_update_clause = std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source));
+    read_query->clauses_.push_back(merge_update_clause);
     VersionIdentifier resolved = version_info;
     if (auto* vi = std::get_if<VersionedItem>(&resolved)) {
         resolved = std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, vi->key_));
@@ -3088,14 +3100,16 @@ folly::Future<VersionedItem> merge_update_impl(
                     index_type == IndexDescriptor::Type::ROWCOUNT,
             "Merge update supports only ascending indexed data and row count indexed data"
     );
+    folly::poly_cast<MergeUpdateClause>(*merge_update_clause).fake_index_name_ =
+            index_type == IndexDescriptor::Type::TIMESTAMP && is_fake_index_name(*pipeline_context->norm_meta_);
     return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
             .thenValue([pipeline_context = std::move(pipeline_context),
                         store,
                         write_options,
                         source = std::move(source),
                         target_partial_index_key](std::vector<SliceAndKey>&& data_keys_and_slices) {
-                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can create
-                // new segments and shift row slices.
+                // TODO: This needs to be changed to account for the INSERT option of merge update. Insert can
+                // create new segments and shift row slices.
                 ranges::sort(data_keys_and_slices);
                 std::vector<SliceAndKey> merged_ranges_and_keys;
                 auto new_slice = data_keys_and_slices.begin();

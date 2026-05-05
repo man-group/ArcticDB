@@ -10,6 +10,7 @@
 
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/storage/library.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>

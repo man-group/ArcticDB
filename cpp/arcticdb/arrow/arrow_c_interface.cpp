@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/arrow/arrow_c_interface.hpp>
+#include <arcticdb/util/allocator.hpp>
 
 #include <vector>
 
@@ -16,30 +17,21 @@ namespace arcticdb {
 
 RecordBatchData::RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
 
-ArrowOutputFrame::ArrowOutputFrame(std::shared_ptr<std::vector<sparrow::record_batch>>&& data) :
-    data_(std::move(data)) {}
+ArrowOutputFrame::ArrowOutputFrame(std::vector<sparrow::record_batch>&& data) : data_(std::move(data)) {}
 
-size_t ArrowOutputFrame::num_blocks() const {
-    if (!data_ || data_->empty())
-        return 0;
-
-    return data_->size();
-}
+size_t ArrowOutputFrame::num_blocks() const { return data_.size(); }
 
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     std::vector<RecordBatchData> output;
-    if (!data_) {
-        return output;
-    }
-    output.reserve(data_->size());
+    output.reserve(data_.size());
 
-    for (auto& batch : *data_) {
+    for (auto& batch : data_) {
         auto struct_array = sparrow::array{batch.extract_struct_array()};
         auto [arr, schema] = sparrow::extract_arrow_structures(std::move(struct_array));
 
         output.emplace_back(arr, schema);
     }
-
+    data_.clear();
     return output;
 }
 

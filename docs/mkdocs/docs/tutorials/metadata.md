@@ -60,7 +60,7 @@ variable `ARCTICDB_PickledMetadata_loglevel_str` to `DEBUG`. The log message loo
 Pickling metadata - may not be readable by other clients
 ```
 
-The metadata may be up to 4GB in size.
+The metadata may be up to 16MB in size.
 
 ### Practical example - using metadata to track vendor timelines
 

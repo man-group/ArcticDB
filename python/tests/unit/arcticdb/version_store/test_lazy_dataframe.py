@@ -13,7 +13,8 @@ import pickle
 import pytest
 
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
-from arcticdb.util.test import assert_frame_equal
+import arcticdb.toolbox.query_stats as qs
+from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count
 
 pytestmark = pytest.mark.pipeline
 
@@ -91,6 +92,50 @@ class TestLazyDataFrame:
         received = lazy_df.collect().data
 
         assert_frame_equal(expected, received)
+
+    @pytest.mark.parametrize("create_column_stats", [True, False])
+    def test_lazy_filter_column_stats(self, mem_library, any_output_format, collect_schema_first, create_column_stats):
+        lib = mem_library
+        lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
+        sym = "test_lazy_filter_column_stats"
+        # Two segments so column stats pruning can eliminate one
+        df0 = pd.DataFrame(
+            {"col1": np.arange(5, dtype=np.int64), "col2": np.arange(100, 105, dtype=np.int64)},
+            index=pd.date_range("2000-01-01", periods=5),
+        )
+        df1 = pd.DataFrame(
+            {"col1": np.arange(5, 10, dtype=np.int64), "col2": np.arange(105, 110, dtype=np.int64)},
+            index=pd.date_range("2000-01-06", periods=5),
+        )
+        df0.index.name = "ts"
+        df1.index.name = "ts"
+        lib.write(sym, df0)
+        lib.append(sym, df1)
+        full_df = pd.concat([df0, df1])
+
+        if create_column_stats:
+            lib._nvs.create_column_stats(sym, {"col1": {"MINMAX"}})
+
+        with config_context("ColumnStats.UseForQueries", int(create_column_stats)):
+            lazy_df = lib.read(sym, lazy=True)
+            lazy_df = lazy_df[lazy_df["col1"] > 4]
+            expected = full_df[full_df["col1"] > 4]
+            if collect_schema_first:
+                schema = lazy_df._collect_schema()
+                assert schema == pl.from_pandas(expected, include_index=True).schema
+            qs.reset_stats()
+            with qs.query_stats():
+                received = lazy_df.collect().data
+                stats = qs.get_query_stats()
+
+        assert_frame_equal(expected, received)
+
+        table_data_reads = query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA")
+        if create_column_stats:
+            # Segment 0 (col1 max=4) should be pruned by the col1 > 4 filter
+            assert table_data_reads == 1
+        else:
+            assert table_data_reads == 2
 
     def test_lazy_head(self, lmdb_library, any_output_format, collect_schema_first):
         lib = lmdb_library

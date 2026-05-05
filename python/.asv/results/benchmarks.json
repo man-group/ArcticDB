@@ -80,6 +80,68 @@
         "version": "4f701aa9e985db8b2016003d360f4a80c8c9ebfcd7dd2161dde1343bd90e2597",
         "warmup_time": -1
     },
+    "arrow.ArrowBools.time_read_row_range_byte_aligned": {
+        "code": "class ArrowBools:\n    def time_read_row_range_byte_aligned(self, rows, sparsity):\n        # Should read the first two blocks and truncate both to a byte aligned offsets\n        self.lib.read(self.sym, row_range=(8, 100_008))\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "min_run_count": 2,
+        "name": "arrow.ArrowBools.time_read_row_range_byte_aligned",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "sparsity"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "0.0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:205",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0a102aaa27b19ead63222b6f362b13a5c015336d61b8bbe836dcae369ba74e01",
+        "warmup_time": -1
+    },
+    "arrow.ArrowBools.time_read_row_range_byte_unaligned": {
+        "code": "class ArrowBools:\n    def time_read_row_range_byte_unaligned(self, rows, sparsity):\n        # Should read the first two blocks and truncate both to a byte unaligned offsets\n        self.lib.read(self.sym, row_range=(5, 100_005))\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
+        "min_run_count": 2,
+        "name": "arrow.ArrowBools.time_read_row_range_byte_unaligned",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "sparsity"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ],
+            [
+                "0.0",
+                "0.1",
+                "0.5",
+                "0.9"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:205",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "889a0c61937149674aa4a9ab2dfb453d545ca30c1fada06fbcf331311ae90266",
+        "warmup_time": -1
+    },
     "arrow.ArrowBools.time_write": {
         "code": "class ArrowBools:\n    def time_write(self, rows, sparsity):\n        self.fresh_lib.write(self.sym, self.table)\n\n    def setup(self, rows, sparsity):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, sparsity)\n        self.sym = self.symbol_name(rows, sparsity)\n\n    def setup_cache(self):\n        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        num_rows_list, sparsity_list = self.params\n        ac.delete_library(self.lib_name_prewritten)\n        lib = ac.create_library(self.lib_name_prewritten)\n        lib._nvs._set_allow_arrow_input()\n        for rows in num_rows_list:\n            for sparsity in sparsity_list:\n                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))",
         "min_run_count": 2,
@@ -460,7 +522,7 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:263",
+        "setup_cache_key": "arrow:271",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -495,7 +557,7 @@
                 "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:263",
+        "setup_cache_key": "arrow:271",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -535,7 +597,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:263",
+        "setup_cache_key": "arrow:271",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -576,7 +638,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:263",
+        "setup_cache_key": "arrow:271",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -971,7 +1033,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "f4a967266cd6ea1d0d981ad126d561f2f00dbb8eeab69cc3e865dffa411e06f7"
@@ -998,7 +1060,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "c0ae8f163bf19c07653b6f60ab6e995158aa563e662c2d8ccd347a5ba505688c"
@@ -1025,7 +1087,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "d362cfb67572e9f68968dfe29777803a15c4691f01653af49ea32bdb7c158b01"
@@ -1057,7 +1119,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "9c67c6ac2385d57d12dc1d8d49b7a0d0711d60e36d0e7d6a99a23e5fcc7cfbb5",
@@ -1090,7 +1152,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "a93ba8dc7f258d45759f62c1d3d2a48bcf6ea4d091a58f36008ed020b4eeefb9",
@@ -1123,7 +1185,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "64aec41d93970093050e6a4b50565a81f071487c2b3a63f9e6fabe9afe0b0f7f",
@@ -1156,7 +1218,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:269",
+        "setup_cache_key": "basic_functions:313",
         "type": "time",
         "unit": "seconds",
         "version": "f2cdd6b45cd2d49f2358097a18969b2ad5f2efc6cf26a854ab889d6b23fc4c4f",
@@ -1184,7 +1246,7 @@
                 "<Storage.AMAZON: 1>"
             ]
         ],
-        "setup_cache_key": "basic_functions:227",
+        "setup_cache_key": "basic_functions:271",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "434b63682c3d0bae77a89fe975756e348383dffe6c1f6a37b8149c6342e38e26"
@@ -1216,10 +1278,58 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.1,
-        "setup_cache_key": "basic_functions:227",
+        "setup_cache_key": "basic_functions:271",
         "type": "time",
         "unit": "seconds",
         "version": "5f2cd16f87dc39fde97363a9689a3c011855cb7b83e7af0c50d3403c655e0ff8",
+        "warmup_time": -1
+    },
+    "basic_functions.ShortWideBatchRead.peakmem_read_batch": {
+        "code": "class ShortWideBatchRead:\n    def peakmem_read_batch(self, *args):\n        self.lib.read_batch(self.read_reqs)\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.read_reqs = [ReadRequest(f\"sym_{i}\") for i in range(ShortWideBatchRead.NUM_SYMBOLS)]\n\n    def setup_cache(self):\n        libs_for_storage = dict()\n        library_names = [_lib_name(rows) for rows in ShortWideBatchRead.rows]\n    \n        for storage in STORAGES:\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n    \n        for rows in ShortWideBatchRead.rows:\n            df = generate_random_floats_dataframe(rows, ShortWideBatchRead.COLS)\n            lib_name = _lib_name(rows)\n            for storage in STORAGES:\n                lib = libs_for_storage[storage][lib_name]\n                if not lib:\n                    continue\n                for i in range(ShortWideBatchRead.NUM_SYMBOLS):\n                    lib.write(f\"sym_{i}\", df)\n    \n        return libs_for_storage",
+        "name": "basic_functions.ShortWideBatchRead.peakmem_read_batch",
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "basic_functions:223",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "789687592daeaac9b7b0f25842c3980faea1e93a89568d5f4a53a47e9cd28f49"
+    },
+    "basic_functions.ShortWideBatchRead.time_read_batch": {
+        "code": "class ShortWideBatchRead:\n    def time_read_batch(self, *args):\n        self.lib.read_batch(self.read_reqs)\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.read_reqs = [ReadRequest(f\"sym_{i}\") for i in range(ShortWideBatchRead.NUM_SYMBOLS)]\n\n    def setup_cache(self):\n        libs_for_storage = dict()\n        library_names = [_lib_name(rows) for rows in ShortWideBatchRead.rows]\n    \n        for storage in STORAGES:\n            libraries = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libraries))\n    \n        for rows in ShortWideBatchRead.rows:\n            df = generate_random_floats_dataframe(rows, ShortWideBatchRead.COLS)\n            lib_name = _lib_name(rows)\n            for storage in STORAGES:\n                lib = libs_for_storage[storage][lib_name]\n                if not lib:\n                    continue\n                for i in range(ShortWideBatchRead.NUM_SYMBOLS):\n                    lib.write(f\"sym_{i}\", df)\n    \n        return libs_for_storage",
+        "min_run_count": 2,
+        "name": "basic_functions.ShortWideBatchRead.time_read_batch",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "basic_functions:223",
+        "type": "time",
+        "unit": "seconds",
+        "version": "879b8cf644f777b80f8f519d95fe4325809abc992d4294bba75e1e5c7ec39e29",
         "warmup_time": -1
     },
     "basic_functions.ShortWideRead.peakmem_read": {
@@ -1409,12 +1519,40 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "column_stats:369",
+        "setup_cache_key": "column_stats:383",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "c51e2ca01ec0f6d1877864ce47df2839c806106a3f0008eb023ef306fc5859ef",
         "warmup_time": 0
+    },
+    "column_stats.ColumnStatsDynamicSchema.time_filter_col_col_sometimes_missing": {
+        "code": "class ColumnStatsDynamicSchema:\n    def time_filter_col_col_sometimes_missing(self, *args):\n        # Prunes 50% of segments: even chunks prune via column_absent on sometimes_missing_col\n        # odd chunks have max(sometimes_missing) < min(uint64) so those segments are still read.\n        q = QueryBuilder()\n        q = q[q[\"sometimes_missing_col\"] < q[\"uint64_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + [\"sometimes_missing_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"dynamic_schema\"\n    \n        # sometimes_missing_col has values 0..(5*ROWS_PER_CHUNK - 1) across the 5 odd chunks\n        total_sometimes_missing_rows = self.NUM_ROWS // 2\n        self.sometimes_missing_low = total_sometimes_missing_rows // 10\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(dynamic_schema=True))\n            lib_for_storage[storage] = lib\n    \n            sym = \"dynamic_schema\"\n            rows_per_chunk = self.ROWS_PER_CHUNK\n            sometimes_missing_counter = 0\n    \n            for chunk_idx in range(self.NUM_CHUNKS):\n                offset = chunk_idx * rows_per_chunk\n                timestamps = pd.date_range(\n                    start=pd.Timestamp(\"2020-01-01\") + pd.Timedelta(seconds=offset),\n                    periods=rows_per_chunk,\n                    freq=\"s\",\n                )\n                datetime_start = pd.Timestamp(\"2000-01-01\")\n                data = {\n                    \"uint64_col\": np.arange(offset, offset + rows_per_chunk, dtype=np.uint64),\n                    \"float_col\": np.linspace(chunk_idx * 100.0, (chunk_idx + 1) * 100.0, rows_per_chunk),\n                    \"bool_col\": np.zeros(rows_per_chunk, dtype=bool),\n                    \"datetime_col\": pd.date_range(\n                        start=datetime_start + pd.Timedelta(seconds=offset),\n                        periods=rows_per_chunk,\n                        freq=\"s\",\n                    ),\n                }\n                # Odd-numbered chunks include sometimes_missing_col with monotonically increasing values\n                if chunk_idx % 2 == 1:\n                    data[\"sometimes_missing_col\"] = np.arange(\n                        sometimes_missing_counter, sometimes_missing_counter + rows_per_chunk, dtype=np.uint64\n                    )\n                    sometimes_missing_counter += rows_per_chunk\n    \n                df = pd.DataFrame(data)\n                _add_extra_columns(df, rows_per_chunk, ordered=True)\n                df.index = timestamps\n                df.index.name = \"ts\"\n    \n                lib.append(sym, df)\n                self.logger.info(f\"Wrote chunk {chunk_idx} for {sym}\")\n    \n            lib._nvs.create_column_stats(sym, {\"sometimes_missing_col\": {\"MINMAX\"}, **COLUMN_STATS})\n            self.logger.info(f\"Created column stats for {sym}\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsDynamicSchema.time_filter_col_col_sometimes_missing",
+        "number": 0,
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:285",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "6526966f22906a4145297899a41adf3eaafd3489d8301c95aa8671117101fdeb",
+        "warmup_time": 0.5
     },
     "column_stats.ColumnStatsDynamicSchema.time_filter_sometimes_missing_column": {
         "code": "class ColumnStatsDynamicSchema:\n    def time_filter_sometimes_missing_column(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"sometimes_missing_col\"] < self.sometimes_missing_low]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + [\"sometimes_missing_col\"], query_builder=q)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"dynamic_schema\"\n    \n        # sometimes_missing_col has values 0..(5*ROWS_PER_CHUNK - 1) across the 5 odd chunks\n        total_sometimes_missing_rows = self.NUM_ROWS // 2\n        self.sometimes_missing_low = total_sometimes_missing_rows // 10\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(dynamic_schema=True))\n            lib_for_storage[storage] = lib\n    \n            sym = \"dynamic_schema\"\n            rows_per_chunk = self.ROWS_PER_CHUNK\n            sometimes_missing_counter = 0\n    \n            for chunk_idx in range(self.NUM_CHUNKS):\n                offset = chunk_idx * rows_per_chunk\n                timestamps = pd.date_range(\n                    start=pd.Timestamp(\"2020-01-01\") + pd.Timedelta(seconds=offset),\n                    periods=rows_per_chunk,\n                    freq=\"s\",\n                )\n                datetime_start = pd.Timestamp(\"2000-01-01\")\n                data = {\n                    \"uint64_col\": np.arange(offset, offset + rows_per_chunk, dtype=np.uint64),\n                    \"float_col\": np.linspace(chunk_idx * 100.0, (chunk_idx + 1) * 100.0, rows_per_chunk),\n                    \"bool_col\": np.zeros(rows_per_chunk, dtype=bool),\n                    \"datetime_col\": pd.date_range(\n                        start=datetime_start + pd.Timedelta(seconds=offset),\n                        periods=rows_per_chunk,\n                        freq=\"s\",\n                    ),\n                }\n                # Odd-numbered chunks include sometimes_missing_col with monotonically increasing values\n                if chunk_idx % 2 == 1:\n                    data[\"sometimes_missing_col\"] = np.arange(\n                        sometimes_missing_counter, sometimes_missing_counter + rows_per_chunk, dtype=np.uint64\n                    )\n                    sometimes_missing_counter += rows_per_chunk\n    \n                df = pd.DataFrame(data)\n                _add_extra_columns(df, rows_per_chunk, ordered=True)\n                df.index = timestamps\n                df.index.name = \"ts\"\n    \n                lib.append(sym, df)\n                self.logger.info(f\"Wrote chunk {chunk_idx} for {sym}\")\n    \n            lib._nvs.create_column_stats(sym, {\"sometimes_missing_col\": {\"MINMAX\"}, **COLUMN_STATS})\n            self.logger.info(f\"Created column stats for {sym}\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -1437,96 +1575,12 @@
         ],
         "rounds": 1,
         "sample_time": 0.5,
-        "setup_cache_key": "column_stats:278",
+        "setup_cache_key": "column_stats:285",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
         "version": "e0bd464c72351dcd285e0786572502d94664b47b402a8e95b9f340a32ab3e0c3",
         "warmup_time": 0.5
-    },
-    "column_stats.ColumnStatsManagement.time_drop_column_stats": {
-        "code": "class ColumnStatsManagement:\n    def time_drop_column_stats(self, *args):\n        self.nvs.drop_column_stats(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsManagement.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsManagement.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
-        "min_run_count": 2,
-        "name": "column_stats.ColumnStatsManagement.time_drop_column_stats",
-        "number": 1,
-        "param_names": [
-            "num_rows",
-            "storage"
-        ],
-        "params": [
-            [
-                "10000000"
-            ],
-            [
-                "<Storage.LMDB: 2>",
-                "<Storage.AMAZON: 1>"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "column_stats:413",
-        "timeout": 600,
-        "type": "time",
-        "unit": "seconds",
-        "version": "f7b8086b0d2fab81473eca52142c0cd835608f3888f51f851ccb69fdce77bbc1",
-        "warmup_time": 0
-    },
-    "column_stats.ColumnStatsManagement.time_get_column_stats_info": {
-        "code": "class ColumnStatsManagement:\n    def time_get_column_stats_info(self, *args):\n        self.nvs.get_column_stats_info(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsManagement.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsManagement.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
-        "min_run_count": 2,
-        "name": "column_stats.ColumnStatsManagement.time_get_column_stats_info",
-        "number": 1,
-        "param_names": [
-            "num_rows",
-            "storage"
-        ],
-        "params": [
-            [
-                "10000000"
-            ],
-            [
-                "<Storage.LMDB: 2>",
-                "<Storage.AMAZON: 1>"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "column_stats:413",
-        "timeout": 600,
-        "type": "time",
-        "unit": "seconds",
-        "version": "44a4a1153711f89d882106fc441a74b6863335873662091f49e8594995b34f54",
-        "warmup_time": 0
-    },
-    "column_stats.ColumnStatsManagement.time_read_column_stats": {
-        "code": "class ColumnStatsManagement:\n    def time_read_column_stats(self, *args):\n        self.nvs.read_column_stats(self.symbol)\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.nvs = self.lib._nvs\n        self.symbol = _symbol_name(num_rows, ordered=True)\n        self.nvs.create_column_stats(self.symbol, COLUMN_STATS)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        for storage in ColumnStatsManagement.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsManagement.num_rows:\n                df = _generate_column_stats_dataframe(rows)\n                sym = _symbol_name(rows, ordered=True)\n                self.logger.info(f\"Writing {sym} with {rows} rows\")\n                lib.write(sym, df)\n                lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
-        "min_run_count": 2,
-        "name": "column_stats.ColumnStatsManagement.time_read_column_stats",
-        "number": 1,
-        "param_names": [
-            "num_rows",
-            "storage"
-        ],
-        "params": [
-            [
-                "10000000"
-            ],
-            [
-                "<Storage.LMDB: 2>",
-                "<Storage.AMAZON: 1>"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "column_stats:413",
-        "timeout": 600,
-        "type": "time",
-        "unit": "seconds",
-        "version": "9caa2c6bf8e784be62da33ef74b0296b37b7980e99494920dd8b61643fdab7fa",
-        "warmup_time": 0
     },
     "column_stats.ColumnStatsQueryPerformance.time_filter_bool": {
         "code": "class ColumnStatsQueryPerformance:\n    def time_filter_bool(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"bool_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
@@ -1563,6 +1617,43 @@
         "type": "time",
         "unit": "seconds",
         "version": "191f87da766de9c93e59f255863048c358389c34a8a0e0ea31c53dfd898a4188",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsQueryPerformance.time_filter_col_col": {
+        "code": "class ColumnStatsQueryPerformance:\n    def time_filter_col_col(self, *args):\n        # uint64_col spans 0..n-1, float_col spans 0..1000, so min(uint64) > max(float) for\n        # every segment past the first. Therefore we prune ~99% of segments.\n        q = QueryBuilder()\n        q = q[q[\"uint64_col\"] < q[\"float_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsQueryPerformance.time_filter_col_col",
+        "number": 0,
+        "param_names": [
+            "num_rows",
+            "column_stats_enabled",
+            "data_ordered",
+            "storage"
+        ],
+        "params": [
+            [
+                "10000000"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:137",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e6b512006ed8735ffd7ab0a43094e246c0c1e860b19c027afc0e32dd8d65ad40",
         "warmup_time": 0.5
     },
     "column_stats.ColumnStatsQueryPerformance.time_filter_combined_and": {
@@ -1919,7 +2010,7 @@
         ],
         "rounds": 1,
         "sample_time": 0.5,
-        "setup_cache_key": "column_stats:475",
+        "setup_cache_key": "column_stats:439",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -2518,6 +2609,55 @@
         "unit": "seconds",
         "version": "eee3f8539d658de25ad38be90b670970a13fc5030a402331fbe2e1a191fe18ff",
         "warmup_time": 0
+    },
+    "nonreg_random_read.NonRegRandomRead.peakmem_read": {
+        "code": "class NonRegRandomRead:\n    def peakmem_read(self, libs_for_storage, rows, storage):\n        self.lib.read(self.symbol).data\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = {}\n        library_names = [_lib_name(self.num_rows)]\n        df = _generate_random(self.num_rows)\n        for storage in STORAGES:\n            libs = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libs))\n            lib = libs_for_storage[storage][library_names[0]]\n            if lib is None:\n                continue\n            lib.write(_symbol(self.num_rows), df)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "name": "nonreg_random_read.NonRegRandomRead.peakmem_read",
+        "param_names": [
+            "rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "nonreg_random_read:91",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "69353e7df39440ffe03bf80d85c4752a1f1db28aca80f47928408b8dc9b45451"
+    },
+    "nonreg_random_read.NonRegRandomRead.time_read": {
+        "code": "class NonRegRandomRead:\n    def time_read(self, libs_for_storage, rows, storage):\n        self.lib.read(self.symbol).data\n\n    def setup(self, libs_for_storage, rows, storage):\n        self.lib = libs_for_storage[storage][_lib_name(rows)]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol(rows)\n\n    def setup_cache(self):\n        start = time.time()\n        libs_for_storage = {}\n        library_names = [_lib_name(self.num_rows)]\n        df = _generate_random(self.num_rows)\n        for storage in STORAGES:\n            libs = create_libraries(storage, library_names)\n            libs_for_storage[storage] = dict(zip(library_names, libs))\n            lib = libs_for_storage[storage][library_names[0]]\n            if lib is None:\n                continue\n            lib.write(_symbol(self.num_rows), df)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")\n        return libs_for_storage",
+        "min_run_count": 2,
+        "name": "nonreg_random_read.NonRegRandomRead.time_read",
+        "number": 0,
+        "param_names": [
+            "rows",
+            "storage"
+        ],
+        "params": [
+            [
+                "1000000"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 2,
+        "sample_time": 2,
+        "setup_cache_key": "nonreg_random_read:91",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "54d190c55702975510edf47cdb800becc58916ede08d29d59d38870213dabcae",
+        "warmup_time": 0.2
     },
     "query_builder.QueryBuilderFunctions.peakmem_filtering_numeric": {
         "code": "class QueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, *args):\n        self._filtering_numeric()\n\n    def setup(self, lib_for_storage, num_rows, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows)\n        self.null_symbol = _null_symbol_name(num_rows)\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n    \n        for rows in QueryBuilderFunctions.num_rows:\n            df = generate_benchmark_df(rows)\n            sym = _symbol_name(rows)\n    \n            df_with_nulls = df.copy()\n    \n            # Null out 90% of the id1 column, but make sure the first row has non-null id001 so the\n            # equality benchmark does return something\n            df_with_nulls.iloc[0, df_with_nulls.columns.get_loc(\"id1\")] = \"id001\"\n            null_mask = np.random.random(len(df_with_nulls)) < 0.9\n            null_mask[0] = False\n            df_with_nulls.loc[null_mask, \"id1\"] = None\n            null_sym = _null_symbol_name(rows)\n    \n            for storage in QueryBuilderFunctions.storages:\n                if not is_storage_enabled(storage):\n                    continue\n                lib = lib_for_storage[storage]\n                self.logger.info(f\"writing {df.shape} under {sym}\")\n                lib.write(sym, df)\n                self.logger.info(f\"writing {df_with_nulls.shape} under {null_sym}\")\n                lib.write(null_sym, df_with_nulls)\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",

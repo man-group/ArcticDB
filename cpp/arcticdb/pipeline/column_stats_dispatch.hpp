@@ -14,7 +14,9 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
 
 #include <memory>
@@ -50,6 +52,25 @@ namespace column_stats_detail {
 
 size_t stats_variant_size(const StatsVariantData& v);
 
+template<DataType StatsType, DataType ValType>
+void check_no_mixed_bool_comparison(const Value& stats_val, const Value& query_val) {
+    constexpr bool stats_is_bool = is_bool_type(StatsType);
+    constexpr bool val_is_bool = is_bool_type(ValType);
+    if constexpr (stats_is_bool && !val_is_bool) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Invalid comparison: cannot compare bool column ({}) with non-bool value ({})",
+                get_user_friendly_type_string(stats_val.descriptor()),
+                get_user_friendly_type_string(query_val.descriptor())
+        );
+    } else if constexpr (!stats_is_bool && val_is_bool) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Invalid comparison: cannot compare non-bool column ({}) with bool value ({})",
+                get_user_friendly_type_string(stats_val.descriptor()),
+                get_user_friendly_type_string(query_val.descriptor())
+        );
+    }
+}
+
 template<typename Func>
 struct FlippedComparator;
 
@@ -80,7 +101,10 @@ struct FlippedComparator<NotEqualsOperator> {
 
 template<typename Func>
 StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value& val_rhs, Func&& func) {
-    if (!stats_lhs.min || !stats_lhs.max) {
+    if (stats_lhs.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
+    if (!stats_lhs.min) {
         return StatsComparison::UNKNOWN;
     }
 
@@ -90,11 +114,17 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
         return details::visit_type(val_rhs.data_type(), [&](auto val_tag) -> StatsComparison {
             using ValTag = std::remove_reference_t<decltype(val_tag)>;
 
-            // bools are disabled in this part of the grammar at the moment, Monday: 11292565671
             // Monday: 8065794446 we should disallow comparing time types to non-time numeric types
             // This is also wrong downstream in the rest of the processing pipeline
-            if constexpr ((is_numeric_type(StatsTag::data_type) || is_time_type(StatsTag::data_type)) &&
-                          (is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type))) {
+            constexpr bool stats_supported = is_numeric_type(StatsTag::data_type) ||
+                                             is_time_type(StatsTag::data_type) || is_bool_type(StatsTag::data_type);
+            constexpr bool val_supported = is_numeric_type(ValTag::data_type) || is_time_type(ValTag::data_type) ||
+                                           is_bool_type(ValTag::data_type);
+            // Mixed bool/non-bool comparisons are rejected at runtime by check_no_mixed_bool_comparison.
+            // MSVC C4804 treats `numeric > bool` as an error.
+            constexpr bool bool_compatible = is_bool_type(StatsTag::data_type) == is_bool_type(ValTag::data_type);
+            check_no_mixed_bool_comparison<StatsTag::data_type, ValTag::data_type>(*stats_lhs.min, val_rhs);
+            if constexpr (stats_supported && val_supported && bool_compatible) {
                 using StatsRawType = StatsTag::raw_type;
                 using ValRawType = ValTag::raw_type;
                 using comp = Comparable<StatsRawType, ValRawType>;
@@ -102,6 +132,41 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                 auto max_val = static_cast<comp::left_type>(stats_lhs.max->get<StatsRawType>());
                 auto query_value = static_cast<comp::right_type>(val_rhs.get<ValRawType>());
                 return func(ValueRange<typename comp::left_type>{min_val, max_val}, query_value);
+            }
+
+            return StatsComparison::UNKNOWN;
+        });
+    });
+}
+
+template<typename Func>
+StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const ColumnStatsValues& stats_rhs, Func&& func) {
+    if (stats_lhs.column_absent || stats_rhs.column_absent) {
+        return StatsComparison::NONE_MATCH;
+    }
+    if (!stats_lhs.min || !stats_rhs.min) {
+        return StatsComparison::UNKNOWN;
+    }
+
+    return details::visit_type(stats_lhs.min->data_type(), [&](auto lhs_tag) -> StatsComparison {
+        using LhsTag = std::remove_reference_t<decltype(lhs_tag)>;
+
+        return details::visit_type(stats_rhs.min->data_type(), [&](auto rhs_tag) -> StatsComparison {
+            using RhsTag = std::remove_reference_t<decltype(rhs_tag)>;
+
+            if constexpr ((is_numeric_type(LhsTag::data_type) || is_time_type(LhsTag::data_type)) &&
+                          (is_numeric_type(RhsTag::data_type) || is_time_type(RhsTag::data_type))) {
+                using LhsRawType = LhsTag::raw_type;
+                using RhsRawType = RhsTag::raw_type;
+                using comp = Comparable<LhsRawType, RhsRawType>;
+                auto lhs_min = static_cast<typename comp::left_type>(stats_lhs.min->get<LhsRawType>());
+                auto lhs_max = static_cast<typename comp::left_type>(stats_lhs.max->get<LhsRawType>());
+                auto rhs_min = static_cast<typename comp::right_type>(stats_rhs.min->get<RhsRawType>());
+                auto rhs_max = static_cast<typename comp::right_type>(stats_rhs.max->get<RhsRawType>());
+                return func(
+                        ValueRange<typename comp::left_type>{lhs_min, lhs_max},
+                        ValueRange<typename comp::right_type>{rhs_min, rhs_max}
+                );
             }
 
             return StatsComparison::UNKNOWN;
@@ -135,6 +200,21 @@ std::vector<StatsComparison> visit_binary_comparator_stats(
                         }
                         return result;
                     },
+                    [](const std::vector<ColumnStatsValues>& l,
+                       const std::vector<ColumnStatsValues>& r) -> std::vector<StatsComparison> {
+                        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                                l.size() == r.size(),
+                                "Column stats vectors must have the same size, got {} and {}",
+                                l.size(),
+                                r.size()
+                        );
+                        std::vector<StatsComparison> result;
+                        result.reserve(l.size());
+                        for (size_t i = 0; i < l.size(); ++i) {
+                            result.emplace_back(stats_comparator(l.at(i), r.at(i), FuncType{}));
+                        }
+                        return result;
+                    },
                     [&left, &right](const auto&, const auto&) -> std::vector<StatsComparison> {
                         size_t sz = std::max(stats_variant_size(left), stats_variant_size(right));
                         return std::vector(sz, StatsComparison::UNKNOWN);
@@ -144,6 +224,9 @@ std::vector<StatsComparison> visit_binary_comparator_stats(
             right
     );
 }
+
+StatsComparison to_stats_comparison_for_boolean(const ColumnStatsValues& csv);
+StatsComparison to_stats_comparison_for_boolean(const Value& val);
 
 StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, ValueSet& value_set, OperationType op);
 

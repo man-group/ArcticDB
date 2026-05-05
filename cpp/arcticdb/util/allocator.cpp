@@ -13,7 +13,6 @@
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/thread_cached_int.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
 
 #if defined(__linux__) && defined(__GLIBC__)
@@ -142,19 +141,36 @@ bool InMemoryTracingPolicy::deallocated() {
 
 void InMemoryTracingPolicy::clear() { data().clear(); }
 
-namespace {
-template<typename TracingPolicy, typename ClockType>
-auto& free_count_of() {
-    static ThreadCachedInt<uint32_t> free_count;
-    return free_count;
-};
-} // namespace
-
 template<typename TracingPolicy, typename ClockType>
 std::shared_ptr<AllocatorImpl<TracingPolicy, ClockType>> AllocatorImpl<TracingPolicy, ClockType>::instance_;
 
 template<typename TracingPolicy, typename ClockType>
 std::once_flag AllocatorImpl<TracingPolicy, ClockType>::init_flag_;
+
+#if defined(__linux__) && defined(__GLIBC__)
+template<typename TracingPolicy, typename ClockType>
+ThreadCachedInt<uint32_t> AllocatorImpl<TracingPolicy, ClockType>::free_count_;
+
+template<typename TracingPolicy, typename ClockType>
+std::atomic<entity::timestamp> AllocatorImpl<TracingPolicy, ClockType>::last_trim_time_ms_ = 0;
+
+template<class TracingPolicy, class ClockType>
+void AllocatorImpl<TracingPolicy, ClockType>::maybe_trim() {
+    // Moving this to a static member of AllocatorImpl would subtly change the initialisation time in a way that could
+    // break existing usage. Initalise trim_min_interval_ms at the same time for consistency.
+    static const uint32_t trim_count = ConfigsMap::instance()->get_int("Allocator.TrimCount", 250);
+    static const entity::timestamp trim_min_interval_ms =
+            ConfigsMap::instance()->get_int("Allocator.TrimMinIntervalMs", 10'000);
+    if (free_count_.readFast() > trim_count && free_count_.readFastAndReset() > trim_count) {
+        auto last_trim_time_ms = last_trim_time_ms_.load();
+        auto now_ms = util::SysClock::coarse_nanos_since_epoch() / 1'000'000;
+        if (now_ms - last_trim_time_ms > trim_min_interval_ms &&
+            last_trim_time_ms_.compare_exchange_strong(last_trim_time_ms, now_ms, std::memory_order_relaxed)) {
+            trim();
+        }
+    }
+}
+#endif
 
 template<class TracingPolicy, class ClockType>
 uint8_t* AllocatorImpl<TracingPolicy, ClockType>::get_alignment(size_t size) {
@@ -202,8 +218,10 @@ void AllocatorImpl<TracingPolicy, ClockType>::internal_free(uint8_t* p) {
     }
 #else
     std::free(p);
-    free_count_of<TracingPolicy, ClockType>().increment(1);
+#if defined(__linux__) && defined(__GLIBC__)
+    free_count_.increment(1);
     maybe_trim();
+#endif
 #endif
 }
 
@@ -274,14 +292,6 @@ void AllocatorImpl<TracingPolicy, ClockType>::trim() {
 #if defined(__linux__) && defined(__GLIBC__)
     malloc_trim(0);
 #endif
-}
-
-template<class TracingPolicy, class ClockType>
-void AllocatorImpl<TracingPolicy, ClockType>::maybe_trim() {
-    static const uint32_t trim_count = ConfigsMap::instance()->get_int("Allocator.TrimCount", 250);
-    if (free_count_of<TracingPolicy, ClockType>().readFast() > trim_count &&
-        free_count_of<TracingPolicy, ClockType>().readFastAndReset() > trim_count)
-        trim();
 }
 
 template<typename TracingPolicy, typename ClockType>

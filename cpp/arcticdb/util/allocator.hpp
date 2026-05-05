@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/util/clock.hpp>
+#include <arcticdb/util/thread_cached_int.hpp>
 #include <memory>
 
 #if USE_SLAB_ALLOCATOR
@@ -141,6 +142,12 @@ class AllocatorImpl {
     static void internal_free(uint8_t* p);
     static uint8_t* internal_realloc(uint8_t* p, std::size_t size);
 
+#if defined(__linux__) && defined(__GLIBC__)
+    static ThreadCachedInt<uint32_t> free_count_;
+    static std::atomic<entity::timestamp> last_trim_time_ms_;
+    static void maybe_trim();
+#endif
+
   public:
     static std::shared_ptr<AllocatorImpl> instance_;
     static std::once_flag init_flag_;
@@ -150,7 +157,6 @@ class AllocatorImpl {
     static void destroy_instance();
     static std::pair<uint8_t*, entity::timestamp> alloc(size_t size, bool no_realloc ARCTICDB_UNUSED = false);
     static void trim();
-    static void maybe_trim();
     static std::pair<uint8_t*, entity::timestamp> aligned_alloc(size_t size, bool no_realloc = false);
     static std::pair<uint8_t*, entity::timestamp> realloc(std::pair<uint8_t*, entity::timestamp> ptr, size_t size);
     static void free(std::pair<uint8_t*, entity::timestamp> ptr);

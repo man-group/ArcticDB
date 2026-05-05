@@ -241,6 +241,14 @@ class ArrowBools:
     def time_read(self, rows, sparsity):
         self.lib.read(self.sym)
 
+    def time_read_row_range_byte_aligned(self, rows, sparsity):
+        # Should read the first two blocks and truncate both to a byte aligned offsets
+        self.lib.read(self.sym, row_range=(8, 100_008))
+
+    def time_read_row_range_byte_unaligned(self, rows, sparsity):
+        # Should read the first two blocks and truncate both to a byte unaligned offsets
+        self.lib.read(self.sym, row_range=(5, 100_005))
+
     def peakmem_read(self, rows, sparsity):
         self.lib.read(self.sym)
 

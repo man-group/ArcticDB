@@ -20,7 +20,7 @@ from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
 )
 from arcticdb.util.test import assert_frame_equal, config_context, query_stats_operation_count, random_strings_of_length
-from tests.util.mark import MACOS
+from tests.util.mark import MACOS, WINDOWS
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
@@ -614,6 +614,14 @@ def test_compact_data_output_column_missing_from_slice_changing_types(in_memory_
     large_num_rows_1=st.integers(150, 200),
     large_num_rows_2=st.integers(150, 200),
 )
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
+)
 def test_compact_data_hypothesis_small_and_large_segments(
     in_memory_store_factory,
     clear_query_stats,
@@ -627,20 +635,14 @@ def test_compact_data_hypothesis_small_and_large_segments(
     rng = np.random.default_rng(42)
     lib = in_memory_store_factory(segment_row_size=100, name="_unique_")
     sym = "test_compact_data_hypothesis_small_and_large_segments"
-    try:
-        # We will create small and large segments in the following order: S S L L S L
-        lib.write(sym, pd.DataFrame({"col": rng.random(small_num_rows_0)}))
-        lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_1)}))
-        lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_0)}))
-        lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_1)}))
-        lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_2)}))
-        lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_2)}))
-        generic_compact_data_test(lib, sym)
-    except DuplicateKeyException:
-        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if not MACOS:
-            raise
-        assume(False)
+    # We will create small and large segments in the following order: S S L L S L
+    lib.write(sym, pd.DataFrame({"col": rng.random(small_num_rows_0)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_1)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_0)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_1)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(small_num_rows_2)}))
+    lib.append(sym, pd.DataFrame({"col": rng.random(large_num_rows_2)}))
+    generic_compact_data_test(lib, sym)
 
 
 # We are more interested in the slicing than the data, so the parameters are for:
@@ -655,6 +657,14 @@ def test_compact_data_hypothesis_small_and_large_segments(
     # The more interesting cases are when num_rows > rows_per_segment
     rows_per_segment=st.integers(1, 100),
     cols_per_segment=st.integers(1, 20),
+)
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
 )
 def test_compact_data_hypothesis_static_schema(
     in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment
@@ -700,27 +710,18 @@ def test_compact_data_hypothesis_static_schema(
             rng.shuffle(arr)
         data[col_name] = arr
     df = pd.DataFrame(data)
-    try:
-        # Do one version where we write with the slicing policy and then compact
-        lib_sliced.write(sym, df)
-        generic_compact_data_test(lib_sliced, sym)
-        # Do another version where we append random numbers of rows between 1 and 2 * rows_per_segment and then compact with
-        # an explicit argument
-        remaining_rows = num_rows
-        while remaining_rows > 0:
-            rows_to_take = rng.integers(1, 2 * rows_per_segment)
-            lib_unsliced.append(sym, df[:rows_to_take])
-            df = df[rows_to_take:]
-            remaining_rows -= rows_to_take
-        generic_compact_data_test(lib_unsliced, sym, rows_per_segment)
-    except DuplicateKeyException:
-        # On macOS the low timestamp resolution can cause duplicate keys when
-        # compaction creates a new version within the same second as the write.
-        # Skip this example instead of failing the whole test suite.
-        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if not MACOS:
-            raise
-        assume(False)
+    # Do one version where we write with the slicing policy and then compact
+    lib_sliced.write(sym, df)
+    generic_compact_data_test(lib_sliced, sym)
+    # Do another version where we append random numbers of rows between 1 and 2 * rows_per_segment and then compact with
+    # an explicit argument
+    remaining_rows = num_rows
+    while remaining_rows > 0:
+        rows_to_take = rng.integers(1, 2 * rows_per_segment)
+        lib_unsliced.append(sym, df[:rows_to_take])
+        df = df[rows_to_take:]
+        remaining_rows -= rows_to_take
+    generic_compact_data_test(lib_unsliced, sym, rows_per_segment)
 
 
 # We are more interested in the slicing than the data, so the parameters are for:
@@ -733,6 +734,14 @@ def test_compact_data_hypothesis_static_schema(
     num_rows=st.integers(1, 2_000),
     # The more interesting cases are when num_rows > rows_per_segment
     rows_per_segment=st.integers(1, 100),
+)
+@pytest.mark.skipif(
+    WINDOWS or MACOS,
+    reason="""
+        On macOS/Windows the low timestamp resolution can cause duplicate keys when
+        successive operations land within the same clock tick.
+        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
+""",
 )
 def test_compact_data_hypothesis_dynamic_schema(in_memory_store_factory, clear_query_stats, num_rows, rows_per_segment):
     rng = np.random.default_rng(42)
@@ -757,34 +766,28 @@ def test_compact_data_hypothesis_dynamic_schema(in_memory_store_factory, clear_q
     string_values = random_strings_of_length(10, 5, True)
     # Append random numbers of rows between 1 and 2 * rows_per_segment and then compact with an explicit argument
     remaining_rows = num_rows
-    try:
-        while remaining_rows > 0:
-            rows_to_take = rng.integers(1, 2 * rows_per_segment)
-            # Pick a subset of columns
-            num_columns = rng.integers(1, len(cols) + 1)
-            col_names = rng.choice(all_col_names, num_columns, False)
-            data = {}
-            for col_name in col_names:
-                col_type = rng.choice(cols[col_name])
-                if np.issubdtype(col_type, np.integer):
-                    arr = rng.integers(np.iinfo(col_type).min, np.iinfo(col_type).max, rows_to_take, col_type, True)
-                elif np.issubdtype(col_type, np.floating):
-                    arr = rng.random(rows_to_take, col_type)
-                elif col_type == bool:
-                    arr = rng.random(rows_to_take) > 0.5
-                elif col_type == str:
-                    arr = rng.choice(string_values, rows_to_take)
-                else:
-                    # datetime
-                    arr = pd.date_range("2026-01-01", freq="s", periods=rows_to_take).values
-                    rng.shuffle(arr)
-                data[col_name] = arr
-            df = pd.DataFrame(data)
-            lib.append(sym, df)
-            remaining_rows -= rows_to_take
-        generic_compact_data_test(lib, sym, rows_per_segment)
-    except DuplicateKeyException:
-        # TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-        if not MACOS:
-            raise
-        assume(False)
+    while remaining_rows > 0:
+        rows_to_take = rng.integers(1, 2 * rows_per_segment)
+        # Pick a subset of columns
+        num_columns = rng.integers(1, len(cols) + 1)
+        col_names = rng.choice(all_col_names, num_columns, False)
+        data = {}
+        for col_name in col_names:
+            col_type = rng.choice(cols[col_name])
+            if np.issubdtype(col_type, np.integer):
+                arr = rng.integers(np.iinfo(col_type).min, np.iinfo(col_type).max, rows_to_take, col_type, True)
+            elif np.issubdtype(col_type, np.floating):
+                arr = rng.random(rows_to_take, col_type)
+            elif col_type == bool:
+                arr = rng.random(rows_to_take) > 0.5
+            elif col_type == str:
+                arr = rng.choice(string_values, rows_to_take)
+            else:
+                # datetime
+                arr = pd.date_range("2026-01-01", freq="s", periods=rows_to_take).values
+                rng.shuffle(arr)
+            data[col_name] = arr
+        df = pd.DataFrame(data)
+        lib.append(sym, df)
+        remaining_rows -= rows_to_take
+    generic_compact_data_test(lib, sym, rows_per_segment)

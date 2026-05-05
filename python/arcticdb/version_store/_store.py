@@ -1309,7 +1309,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
+    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> "pa.Table":
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -1322,12 +1322,12 @@ class NativeVersionStore:
 
         Returns
         -------
-        `pandas.DataFrame`
-            DataFrame representing the stored column statistics for each row-slice in a human-readable format.
+        `pyarrow.Table`
+            Table representing the stored column statistics for each row-slice in a human-readable format.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
-        return data
+        read_result = ReadResult(*self.version_store.read_column_stats_version(symbol, version_query))
+        return self._arrow_output_frame_to_table(read_result.frame_data)
 
     def get_column_stats_info(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
@@ -2882,16 +2882,19 @@ class NativeVersionStore:
 
         return index_columns
 
+    @staticmethod
+    def _arrow_output_frame_to_table(frame_data: ArrowOutputFrame) -> "pa.Table":
+        record_batches = [
+            pa.RecordBatch._import_from_c(rb.array(), rb.schema()) for rb in frame_data.extract_record_batches()
+        ]
+        if len(record_batches) == 0:
+            # We get an empty list of record batches when output has no columns
+            return pa.Table.from_arrays([])
+        return pa.Table.from_batches(record_batches)
+
     def _adapt_frame_data(self, frame_data, norm, output_format):
         if isinstance(frame_data, ArrowOutputFrame):
-            record_batches = []
-            for record_batch in frame_data.extract_record_batches():
-                record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            if len(record_batches) == 0:
-                # We get an empty list of record batches when output has no columns
-                table = pa.Table.from_arrays([])
-            else:
-                table = pa.Table.from_batches(record_batches)
+            table = self._arrow_output_frame_to_table(frame_data)
             data = self._normalizer.denormalize(table, norm)
             if norm.HasField("custom"):
                 raise ArcticDbNotYetImplemented(
@@ -4208,6 +4211,12 @@ class NativeVersionStore:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+
+            If a column name appears more than once in the source or the target it must not be added in the on
+            parameter.
+
+            In the case of a datetime-indexed DataFrame the on parameter must not contain the name of the datetime
+            index.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False

@@ -12,6 +12,7 @@
 #include <arcticdb/storage/coalesced/multi_segment_header.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/codec/segment.hpp>

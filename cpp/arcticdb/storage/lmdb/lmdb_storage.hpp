@@ -73,7 +73,12 @@ class LmdbStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final { return {}; };
 
-    void warn_if_lmdb_already_open();
+    /// Checks the config map for LMDBStorage.WarnIfOpened and warns if the same LMDB path is opened more than once
+    /// by the same process based on it. LMDBStorage.WarnIfOpened has three values: none - don't warn, config (default)
+    /// warn only for the "base" config library to avoid spamming users, all - warn for any lmdb library opened more
+    /// than once.
+    void warn_if_lmdb_already_open() const;
+    void print_warning_if_lmdb_already_open() const;
 
     // _internal methods assume the write mutex is already held
     void do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn);

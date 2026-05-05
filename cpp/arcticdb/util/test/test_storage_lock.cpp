@@ -17,7 +17,7 @@ using namespace arcticdb;
 using namespace folly;
 
 TEST(StorageLock, SingleThreaded) {
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock1{StringId{"test_lock"}};
     StorageLock lock2{StringId{"test_lock"}};
@@ -34,7 +34,7 @@ TEST(StorageLock, SingleThreaded) {
 }
 
 TEST(StorageLock, Timeout) {
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     auto store = std::make_shared<InMemoryStore>();
     StorageLock lock{"test_lock"};
     StorageLock lock2{"test_lock"};
@@ -93,7 +93,7 @@ struct LockTaskWithoutRetry {
 };
 
 TEST(StorageLock, Contention) {
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -196,7 +196,7 @@ struct OptimisticForceReleaseLockTask {
 };
 
 TEST(StorageLock, Wait) {
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -213,7 +213,7 @@ TEST(StorageLock, Wait) {
 }
 
 TEST(StorageLock, Timeouts) {
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -244,7 +244,7 @@ TEST(StorageLock, ForceReleaseLock) {
     // on the TTL expiring to be able to acquire the lock.
     // Initially take the lock, so that the first thread also has to wait for the TTL of that lock
     // to expire.
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -293,7 +293,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     // on the TTL expiring to be able to acquire the lock.
     // Initially take the lock using the lock() method, so that the first thread also has to
     // wait for the TTL of that lock to expire.
-    SKIP_MAC("StorageLock is not supported");
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     using namespace arcticdb;
 
     auto lock_data = std::make_shared<LockData>(4);
@@ -352,6 +352,7 @@ class StorageLockWithAndWithoutRetry : public ::testing::TestWithParam<bool> {
 };
 
 TEST(StorageLock, ConcurrentWritesWithRetrying) {
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     constexpr size_t num_writers = 3;
 
     auto lock_data = std::make_shared<LockData>(1);
@@ -367,6 +368,7 @@ TEST(StorageLock, ConcurrentWritesWithRetrying) {
 }
 
 TEST_P(StorageLockWithAndWithoutRetry, StressManyWriters) {
+    SKIP_MAC("Flaky: StorageLock unreliable on Mac due to lower precision clock");
     const StorageFailureSimulator::ParamActionSequence SLOW_ACTIONS = {
             action_factories::slow_action(0.3, 600, 1100),
     };
