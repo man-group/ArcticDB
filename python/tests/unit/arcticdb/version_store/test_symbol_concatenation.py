@@ -823,7 +823,7 @@ class TestMixedArrowPandasConcat:
             }
         )
         pandas_df = pd.DataFrame({"val": [4, 5, 6]}, index=pd.DatetimeIndex(dates2, name="ts"))
-        self.lib.write("arrow_sym", arrow_table, index_column="ts")
+        self.lib.write("arrow_sym", arrow_table, index_column=True)
         self.lib.write("pandas_sym", pandas_df)
         symbols = ["arrow_sym", "pandas_sym"] if arrow_first else ["pandas_sym", "arrow_sym"]
         result = concat(self.lib.read_batch(symbols, lazy=True)).collect().data
@@ -851,7 +851,7 @@ class TestMixedArrowPandasConcat:
             }
         )
         pandas_df = pd.DataFrame({"val": [4, 5, 6]})
-        self.lib.write("arrow_sym", arrow_table, index_column="ts")
+        self.lib.write("arrow_sym", arrow_table, index_column=True)
         self.lib.write("pandas_sym", pandas_df)
         with pytest.raises(SchemaException):
             concat(self.lib.read_batch(["arrow_sym", "pandas_sym"], lazy=True)).collect()
@@ -898,8 +898,8 @@ class TestMixedArrowPandasConcat:
         t2 = pa.table(
             {"ts": pa.Array.from_pandas(dates2, type=pa.timestamp("ns")), "val": pa.array([4, 5, 6], pa.int64())}
         )
-        self.lib.write("sym1", t1, index_column="ts")
-        self.lib.write("sym2", t2, index_column="ts")
+        self.lib.write("sym1", t1, index_column=True)
+        self.lib.write("sym2", t2, index_column=True)
         result = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect().data
         expected = pd.concat([t1.to_pandas().set_index("ts"), t2.to_pandas().set_index("ts")])
         assert_frame_equal(result, expected)
