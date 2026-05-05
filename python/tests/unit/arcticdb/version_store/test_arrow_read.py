@@ -187,7 +187,9 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
 @pytest.mark.parametrize("segment_size", [None, 1, 2, 1000])
 @pytest.mark.parametrize("use_query_builder", [False, True])
 def test_datetime_col_with_nats(version_store_factory, row_range, segment_size, use_query_builder):
-    slicing_params = {"segment_row_size": segment_size, "column_group_size": segment_size} if segment_size is not None else {}
+    slicing_params = (
+        {"segment_row_size": segment_size, "column_group_size": segment_size} if segment_size is not None else {}
+    )
     lib = version_store_factory(**slicing_params, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
@@ -250,7 +252,10 @@ def test_datetime_col_with_nats_and_sparse(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     lib.set_output_format(OutputFormat.PYARROW)
     nat_sentinel = np.iinfo(np.int64).min
-    timestamps = pa.array([pd.Timestamp("2025-01-01").value, nat_sentinel, None, nat_sentinel, pd.Timestamp("2025-01-02").value, None], type=pa.int64())
+    timestamps = pa.array(
+        [pd.Timestamp("2025-01-01").value, nat_sentinel, None, nat_sentinel, pd.Timestamp("2025-01-02").value, None],
+        type=pa.int64(),
+    )
     timestamps = timestamps.cast(pa.timestamp("ns"))
     table = pa.table({"x": timestamps, "y": pa.array([1, 2, 3, 4, 5, 6])})
     lib.write("arrow", table)

@@ -606,7 +606,6 @@ void ArrowTimestampHandler::
         validity.invert();
     }
 
-
     if (validity.count() != validity.size()) {
         create_dense_bitmap(positions.extra_buffer_position, validity, dest_column, AllocationType::DETACHABLE);
     }
