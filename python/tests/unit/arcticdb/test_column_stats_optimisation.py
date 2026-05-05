@@ -39,10 +39,15 @@ sym = "sym"
     ids=["gt_2", "gt_4", "lt_2", "eq_3", "gte_1"],
 )
 def test_column_stats_query_optimisation(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+    in_memory_store_factory,
+    encoding_version,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+    query_expr,
+    expected_reads,
 ):
     """Test that column stats are used to optimize QueryBuilder queries by pruning segments."""
-    lib = in_memory_version_store
+    lib = in_memory_store_factory(encoding_version=int(encoding_version))
 
     df0 = pd.DataFrame({"col_1": [1, 2], "col_2": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_1": [3, 4], "col_2": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
@@ -304,7 +309,12 @@ def test_column_stats_query_optimisation_with_date_range(
     ],
 )
 def test_column_stats_and_filter_one_column_with_stats(
-    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, col_stats, filter_exprs, expected_reads
+    in_memory_version_store,
+    clear_query_stats,
+    column_stats_filtering_enabled,
+    col_stats,
+    filter_exprs,
+    expected_reads,
 ):
     lib = in_memory_version_store
 
