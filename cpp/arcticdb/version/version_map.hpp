@@ -868,7 +868,7 @@ class VersionMapImpl {
             return false;
         }
 
-        if (resolved_version_id <= opt_latest->version_id() &&
+        if (*resolved_version_id <= opt_latest->version_id() &&
             (entry.load_progress_.oldest_loaded_index_version_ <= resolved_version_id || has_loaded_earliest)) {
             ARCTICDB_DEBUG(
                     log::version(),

@@ -278,7 +278,7 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific
 using VersionVectorType = std::vector<VersionId>;
 
 /**
- * Returns a specific version per symbol.
+ * Returns multiple versions for the same symbol
  * @return Does not guarantee the returned keys actually exist in storage.
  *
  * Only one non-negative version per symbol is supported. Versions that do not exist in storage are silently skipped.
