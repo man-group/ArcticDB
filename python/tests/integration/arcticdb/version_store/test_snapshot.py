@@ -422,17 +422,14 @@ def test_add_to_snapshot_duplicate_symbol_different_versions_raises(basic_store_
 
 
 @pytest.mark.storage
-def test_add_to_snapshot_duplicate_symbol_same_version_is_idempotent(basic_store_tombstone_and_pruning):
+def test_add_to_snapshot_duplicate_symbol_same_version_raises(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
     lib.write("s1", 2)
     lib.snapshot("snap")
-    lib.write("s1", 3)
 
-    lib.add_to_snapshot("snap", ["s1", "s1"], as_ofs=[2, 2])
-    lib.write("s1", 99)
-
-    assert lib.read("s1", as_of="snap").data == 3  # v2 (0-indexed) holds data=3
+    with pytest.raises(UserInputException, match="appears more than once"):
+        lib.add_to_snapshot("snap", ["s1", "s1"], as_ofs=[2, 2])
 
 
 @pytest.mark.storage
