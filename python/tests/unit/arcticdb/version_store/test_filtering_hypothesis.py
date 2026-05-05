@@ -310,12 +310,15 @@ def test_filter_not(lmdb_version_store_v1, any_output_format, column_stats_filte
         ]
     ),
 )
-def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_segment, any_output_format, df):
+def test_filter_more_columns_than_fit_in_one_segment(
+    lmdb_version_store_tiny_segment, any_output_format, column_stats_filtering_enabled_and_disabled, df
+):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_more_columns_than_fit_in_one_segment"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
     q = QueryBuilder()
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
     expected = df[(df["a"] < df["c"]) | (df["a"] < df["b"]) | (df["b"] < df["c"])]
@@ -333,11 +336,12 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
         ]
     ),
 )
-def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
+def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, column_stats_filtering_enabled_and_disabled, df):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
     symbol = "test_filter_with_column_filtering"
     lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}, "b": {"MINMAX"}, "c": {"MINMAX"}})
     q = QueryBuilder()
     q = q[(q["a"] < q["c"]) | (q["a"] < q["b"]) | (q["b"] < q["c"])]
     expected = df[(df["a"] < df["c"]) | (df["a"] < df["b"]) | (df["b"] < df["c"])].drop(columns=["b"])

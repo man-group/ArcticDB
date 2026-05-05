@@ -215,9 +215,7 @@ void encode_variable_length(
     handle_truncation(dest_bitset, mapping.truncate_);
     handle_truncation(dest_column, mapping.truncate_);
 
-    if (dest_bitset.count() != dest_bitset.size()) {
-        create_dense_bitmap(positions.extra_buffer_position, dest_bitset, dest_column, AllocationType::DETACHABLE);
-    } // else there weren't any missing values
+    create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
 
     if (dest_bitset.count() > 0) {
         auto& string_buffer = dest_column.create_extra_buffer(
@@ -366,9 +364,7 @@ void encode_dictionary(
     handle_truncation(dest_bitset, mapping.truncate_);
     handle_truncation(dest_column, mapping);
 
-    if (dest_bitset.count() != dest_bitset.size()) {
-        create_dense_bitmap(positions.extra_buffer_position, dest_bitset, dest_column, AllocationType::DETACHABLE);
-    } // else there weren't any missing values
+    create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
 
     // bitset.count() == 0 is the special case where all the rows were missing. In this case, do not create
     // the extra string and offset buffers. string_dict_from_block will then do the right thing and call
