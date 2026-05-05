@@ -13,7 +13,7 @@ import random
 import re
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
-from arcticdb.exceptions import UserInputException,ArcticNativeException
+from arcticdb.exceptions import UserInputException, ArcticNativeException
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException

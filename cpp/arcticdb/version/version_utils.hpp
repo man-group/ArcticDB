@@ -208,7 +208,7 @@ inline std::optional<VersionId> resolve_version_id(SignedVersionId signed_versio
         return static_cast<VersionId>(signed_version_id);
 
     auto opt_latest = entry.get_first_index(true).first;
-    
+
     if (!opt_latest.has_value())
         return std::nullopt;
 

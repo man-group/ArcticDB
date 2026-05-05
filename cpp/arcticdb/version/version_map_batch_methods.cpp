@@ -56,7 +56,7 @@ std::optional<AtomKey> get_specific_version_from_entry(
 
     if (!opt_version_id.has_value())
         return std::nullopt;
-        
+
     return find_index_key_for_version_id(*opt_version_id, version_map_entry, include_deleted);
 }
 
