@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException
+from arcticdb_ext.exceptions import UnsortedDataException, ArcticException as ArcticNativeException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
@@ -81,7 +81,7 @@ def test_write_not_sorted_exception(lmdb_version_store):
     df = pd.DataFrame({"c": np.arange(0, num_rows, dtype=np.int64)}, index=dtidx)
     assert df.index.is_monotonic_increasing == False
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.write(symbol, df, validate_index=True)
 
 
@@ -112,7 +112,7 @@ def test_write_not_sorted_multi_index_exception(lmdb_version_store):
     assert isinstance(df.index, MultiIndex) == True
     assert df.index.is_monotonic_increasing == False
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.write(symbol, df, validate_index=True)
 
 

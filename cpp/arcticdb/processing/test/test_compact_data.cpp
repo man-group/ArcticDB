@@ -57,7 +57,7 @@ INSTANTIATE_TEST_SUITE_P(
         CompactDataStructureRowRanges, CompactDataStructureRowRangesFixture, ::testing::ValuesIn(parameters)
 );
 
-TEST(CompactData, StructureForProcessingBasic) {
+TEST(CompactData, StructureForProcessingStaticSchemaOneColumnSLice) {
     ColRange col_range{1, 2};
     // First 2 row slices need no compaction, last 2 will be combined
     RangesAndKey first({0, 10}, col_range, {});
@@ -75,7 +75,7 @@ TEST(CompactData, StructureForProcessingBasic) {
     ASSERT_EQ(expected_proc_unit_ids, proc_unit_ids);
 }
 
-TEST(CompactData, StructureForProcessingColumnSlicing) {
+TEST(CompactData, StructureForProcessingTwoColumnSlices) {
     ColRange col_range_1{1, 2};
     ColRange col_range_2{2, 4};
     // First 2 row slices need combining, as do the third and fourth. Fifth row slice does not
@@ -111,5 +111,23 @@ TEST(CompactData, StructureForProcessingColumnSlicing) {
     ASSERT_EQ(ranges_and_keys[7], eighth);
 
     std::vector<std::vector<size_t>> expected_proc_unit_ids{{0, 1}, {2, 3}, {4, 5}, {6, 7}};
+    ASSERT_EQ(expected_proc_unit_ids, proc_unit_ids);
+}
+
+TEST(CompactData, StructureForProcessingDynamicSchema) {
+    // First 2 row slices need no compaction, last 2 will be combined
+    // All will have different numbers of columns
+    RangesAndKey first({0, 10}, {0, 17}, {});
+    RangesAndKey second({10, 20}, {0, 200}, {});
+    RangesAndKey third({20, 30}, {0, 1}, {});
+    RangesAndKey fourth({30, 35}, {0, 1'000'000}, {});
+    // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
+    std::vector<RangesAndKey> ranges_and_keys{third, second, fourth, first};
+    CompactDataClause clause{10};
+    auto proc_unit_ids = clause.structure_for_processing(ranges_and_keys);
+    ASSERT_EQ(ranges_and_keys.size(), 2);
+    ASSERT_EQ(ranges_and_keys[0], third);
+    ASSERT_EQ(ranges_and_keys[1], fourth);
+    std::vector<std::vector<size_t>> expected_proc_unit_ids{{0, 1}};
     ASSERT_EQ(expected_proc_unit_ids, proc_unit_ids);
 }

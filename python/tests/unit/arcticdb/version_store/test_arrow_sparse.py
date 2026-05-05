@@ -14,10 +14,15 @@ import pytest
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.pandas import columns, data_frames
 
-from arcticdb.options import OutputFormat
+import polars as pl
+from polars.testing import assert_frame_equal as polars_assert_frame_equal
+
+from arcticdb import concat
+from arcticdb.options import LibraryOptions, OutputFormat
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal_with_arrow_for_sparse
 from arcticdb.version_store.processing import QueryBuilder
+from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format, undictionarify_table
 
 # In all tests in this file we test all string formats as part of a single table.
 # Since arrow writes do not support writing categorical columns we write `cat_str_col` as `large_string`
@@ -27,14 +32,6 @@ STRING_FORMAT_PER_COLUMN = {
     "large_str_col": pa.large_string(),
     "cat_str_col": pa.dictionary(pa.int32(), pa.large_string()),
 }
-
-
-def undictionarify_table(table):
-    for i, name in enumerate(table.column_names):
-        typ = table.column(i).type
-        if pa.types.is_dictionary(typ):
-            table = table.set_column(i, name, table.column(i).cast(typ.value_type))
-    return table
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -111,7 +108,7 @@ def test_sparse_arrow_date_range(
             "cat_str_col": pa.array(str_data, pa.large_string()),
         }
     )
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table, index_column=True)
     date_range = (date_range_start, date_range_start + pd.Timedelta(days=date_range_width - 1))
     offset = (date_range_start - pd.Timestamp("2025-01-01")).days
     expected = table.slice(offset=offset, length=date_range_width)
@@ -176,7 +173,7 @@ def test_sparse_arrow_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, u
 
 @pytest.mark.parametrize("column_group_size", [1, 2, 3])
 @pytest.mark.parametrize("use_row_range", [False, True])
-@pytest.mark.parametrize("index_column", [None, "ts"])
+@pytest.mark.parametrize("index_column", [False, True])
 @pytest.mark.parametrize(
     "columns",
     [
@@ -189,27 +186,34 @@ def test_sparse_column_selection(version_store_factory, column_group_size, use_r
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_col_selection"
-    table = pa.table(
-        {
-            "a": pa.array([1, None, 3, None, 5], pa.int64()),
-            "b": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
-            "c": pa.array([True, None, False, None, True], pa.bool_()),
-        }
-    )
-    if index_column is not None:
+    if index_column:
         ts = pa.Array.from_pandas(pd.date_range("2025-01-01", periods=5), type=pa.timestamp("ns"))
-        table = table.append_column(index_column, ts)
+        table = pa.table(
+            {
+                "ts": ts,
+                "a": pa.array([1, None, 3, None, 5], pa.int64()),
+                "b": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
+                "c": pa.array([True, None, False, None, True], pa.bool_()),
+            }
+        )
+    else:
+        table = pa.table(
+            {
+                "a": pa.array([1, None, 3, None, 5], pa.int64()),
+                "b": pa.array([None, 2.0, None, 4.0, None], pa.float64()),
+                "c": pa.array([True, None, False, None, True], pa.bool_()),
+            }
+        )
     lib.write(sym, table, index_column=index_column)
     row_range = (1, 4) if use_row_range else None
-    # The index column should always be included in the result
-    expected_columns = ([index_column] if index_column is not None else []) + columns
+    expected_columns = (["ts"] if index_column else []) + columns
     expected_table = table.select(expected_columns)
     if use_row_range:
         expected_table = expected_table.slice(offset=1, length=3)
     received = lib.read(sym, columns=columns, row_range=row_range).data
     assert expected_table.equals(received)
     received_pandas = lib.read(sym, columns=columns, row_range=row_range, output_format="PANDAS").data
-    if index_column is not None:
+    if index_column:
         received_pandas = received_pandas.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected_table, received_pandas)
 
@@ -227,7 +231,7 @@ class TestSparseArrowQueryBuilder:
                 "float_col": pa.array([None, 2.0, None, 4.0, None, 6.0, None, 8.0], pa.float64()),
             }
         )
-        lib.write(self.sym, self.table, index_column="ts")
+        lib.write(self.sym, self.table, index_column=True)
 
     def test_filter_isnull(self, lmdb_version_store_arrow):
         q = QueryBuilder()
@@ -384,7 +388,7 @@ class TestSparseArrowQueryBuilder:
 
 @pytest.mark.parametrize("write_sparse", [True, False])
 @pytest.mark.parametrize("append_sparse", [True, False])
-def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_sparse):
+def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_sparse, arrow_output_format):
     lib = lmdb_version_store_arrow
     sym = "test_sparse_append_roundtrip"
     if write_sparse:
@@ -435,11 +439,15 @@ def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_
                 "cat_str_col": pa.array(str_data_2, pa.large_string()),
             }
         )
-    lib.write(sym, t1)
-    lib.append(sym, t2)
-    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
+    lib.write(sym, to_format(t1, arrow_output_format))
+    lib.append(sym, to_format(t2, arrow_output_format))
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, per_column=STRING_FORMAT_PER_COLUMN),
+    ).data
     expected = pa.concat_tables([t1, t2])
-    assert expected.equals(undictionarify_table(received))
+    assert_arrow_equal(expected, undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
@@ -471,7 +479,9 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
         ),
     ],
 )
-def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_sparse, date_range):
+def test_sparse_update_roundtrip(
+    lmdb_version_store_arrow, write_sparse, update_sparse, date_range, arrow_output_format
+):
     lib = lmdb_version_store_arrow
     sym = "test_sparse_update_roundtrip"
     dates = pd.date_range("2025-01-01", periods=6)
@@ -528,8 +538,8 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
                 "cat_str_col": pa.array(update_str_data, pa.large_string()),
             }
         )
-    lib.write(sym, write_table, index_column="ts")
-    lib.update(sym, update_table, index_column="ts", date_range=date_range)
+    lib.write(sym, to_format(write_table, arrow_output_format), index_column=True)
+    lib.update(sym, to_format(update_table, arrow_output_format), index_column=True, date_range=date_range)
 
     # Compute expected
     start = date_range[0] if date_range is not None else update_dates[0]
@@ -541,8 +551,12 @@ def test_sparse_update_roundtrip(lmdb_version_store_arrow, write_sparse, update_
     applied_update = update_table.filter(pa.array([start <= t <= end for t in update_ts]))
     expected = pa.concat_tables([write_before, applied_update, write_after])
 
-    received = lib.read(sym, arrow_string_format_per_column=STRING_FORMAT_PER_COLUMN).data
-    assert expected.equals(undictionarify_table(received))
+    received = lib.read(
+        sym,
+        output_format=arrow_output_format,
+        **string_format_kwargs(arrow_output_format, per_column=STRING_FORMAT_PER_COLUMN),
+    ).data
+    assert_arrow_equal(expected, undictionarify_table(received))
     received_pandas = lib.read(sym, output_format="PANDAS").data.reset_index()
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
@@ -557,7 +571,7 @@ def test_sparse_update_all_nulls(lmdb_version_store_arrow):
             "col": pa.array([1, 2, 3, 4], pa.int64()),
         }
     )
-    lib.write(sym, write_table, index_column="ts")
+    lib.write(sym, write_table, index_column=True)
     update_dates = pd.date_range("2025-01-02", periods=2)
     update_table = pa.table(
         {
@@ -565,7 +579,7 @@ def test_sparse_update_all_nulls(lmdb_version_store_arrow):
             "col": pa.array([None, None], pa.int64()),
         }
     )
-    lib.update(sym, update_table, index_column="ts")
+    lib.update(sym, update_table, index_column=True)
     received = lib.read(sym).data
     expected = pa.table(
         {
@@ -643,7 +657,9 @@ def test_sparse_dynamic_schema_combined(version_store_factory):
     ],
 )
 @pytest.mark.parametrize("row_range", [None, (2, 6)])
-def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, append_type, result_type, row_range):
+def test_sparse_dynamic_schema_type_upgrade(
+    version_store_factory, write_type, append_type, result_type, row_range, arrow_output_format
+):
     lib = version_store_factory(dynamic_schema=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib._set_allow_arrow_input()
@@ -656,8 +672,8 @@ def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, a
     t1 = pa.table({"col": make_array([1, 2, 3, 4], [False, True, False, True], write_type)})
     t2 = pa.table({"col": make_array([10, 20, 30, 40], [True, False, True, False], append_type)})
 
-    lib.write(sym, t1)
-    lib.append(sym, t2)
+    lib.write(sym, to_format(t1, arrow_output_format))
+    lib.append(sym, to_format(t2, arrow_output_format))
 
     expected = pa.table(
         {
@@ -669,8 +685,238 @@ def test_sparse_dynamic_schema_type_upgrade(version_store_factory, write_type, a
     if row_range is not None:
         expected = expected.slice(offset=row_range[0], length=row_range[1] - row_range[0])
 
-    received = lib.read(sym, row_range=row_range).data
-    assert received.schema.field("col").type == result_type
-    assert expected.equals(received)
+    received = lib.read(sym, row_range=row_range, output_format=arrow_output_format).data
+    received_arrow = to_format(received, OutputFormat.PYARROW)
+    assert received_arrow.schema.field("col").type == result_type
+    assert_arrow_equal(expected, received)
     received_pandas = lib.read(sym, row_range=row_range, output_format="PANDAS").data
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
+
+
+def _assert_polars_equal_for_aggregation(received, expected, count_columns=None, check_row_order=True):
+    if count_columns:
+        # Polars groupby behaves differently to arcticdb groupby in two ways:
+        # - Polars uses uint32 for counts where arcticdb uses uint64
+        # - Polars returns 0 vs arcticdb returns null for group filled with only `null`s
+        for col in count_columns:
+            expected = expected.with_columns(
+                pl.when(pl.col(col) == 0).then(None).otherwise(pl.col(col)).cast(pl.UInt64).alias(col)
+            )
+    # We use check_column_order=False because arcticdb and polars order aggregated columns differently.
+    # We use check_dtypes=False because sum in polars can have different dtype to arcticdb.
+    polars_assert_frame_equal(
+        received, expected, check_row_order=check_row_order, check_column_order=False, check_dtypes=False
+    )
+
+
+def _check_query_result(lib, sym, q, expected, count_columns=None, check_row_order=True, **read_kwargs):
+    received = lib.read(sym, query_builder=q, **read_kwargs).data
+    _assert_polars_equal_for_aggregation(
+        received, expected, count_columns=count_columns, check_row_order=check_row_order
+    )
+    received_pd = lib.read(sym, query_builder=q, output_format="PANDAS", **read_kwargs).data
+    if not check_row_order:
+        expected = expected.sort(expected.columns[0])
+        received_pd = received_pd.sort_index()
+    assert_frame_equal_with_arrow_for_sparse(
+        expected.to_arrow(), received_pd.reset_index(), check_dtype=False, check_like=True
+    )
+
+
+class TestSparseArrowGroupBy:
+    sym = "test_sparse_groupby"
+
+    @pytest.fixture(autouse=True)
+    def setup(self, version_store_factory):
+        self.lib = version_store_factory(segment_row_size=3)
+        self.lib.set_output_format(OutputFormat.POLARS)
+        self.lib._set_allow_arrow_input()
+        self.pldf = pl.DataFrame(
+            {
+                "group_str": ["a", "a", "b", "b", "b", "a", "all_null", "all_null"],
+                "group_int": [1, 1, 2, 2, 2, 1, 3, 3],
+                "int_col": [10, None, 30, None, 50, None, None, None],
+                "float_col": [None, 2.0, None, 4.0, None, 6.0, None, None],
+                "bool_col": [True, None, False, None, True, None, None, None],
+            }
+        )
+        self.lib.write(self.sym, self.pldf)
+
+    @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "count"])
+    @pytest.mark.parametrize("group_col", ["group_str", "group_int"])
+    @pytest.mark.parametrize("agg_col", ["int_col", "float_col", "bool_col"])
+    def test_single_agg(self, agg_op, group_col, agg_col):
+        q = QueryBuilder().groupby(group_col).agg({agg_col: agg_op})
+        expected = self.pldf.group_by(group_col).agg(getattr(pl.col(agg_col), agg_op)())
+        count_columns = [agg_col] if agg_op == "count" else None
+        _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns, check_row_order=False)
+
+    @pytest.mark.parametrize("group_col", ["group_str", "group_int"])
+    def test_named_aggs(self, group_col):
+        agg_dict = {
+            "int_sum": ("int_col", "sum"),
+            "int_max": ("int_col", "max"),
+            "float_mean": ("float_col", "mean"),
+            "float_count": ("float_col", "count"),
+        }
+        q = QueryBuilder().groupby(group_col).agg(agg_dict)
+        exprs = [getattr(pl.col(col), op)().alias(name) for name, (col, op) in agg_dict.items()]
+        expected = self.pldf.group_by(group_col).agg(exprs)
+        count_columns = [name for name, (_, op) in agg_dict.items() if op == "count"]
+        _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns, check_row_order=False)
+
+
+@pytest.mark.xfail(
+    reason="Resample rejects sparse columns. (monday ref: 11679866800)",
+    raises=Exception,
+)
+class TestSparseArrowResample:
+    sym = "test_sparse_resample"
+
+    # TODO: Also add testing for:
+    # - Aggregating string, datetime columns
+    # - Other resampling kwargs like offset, origin
+
+    @pytest.fixture(autouse=True)
+    def setup(self, version_store_factory):
+        self.lib = version_store_factory(segment_row_size=4)
+        self.lib.set_output_format(OutputFormat.POLARS)
+        self.lib._set_allow_arrow_input()
+        # Bucket 2 (hours 6-8) is fully null for both columns when resampled at 3h
+        self.pldf = pl.DataFrame(
+            {
+                "ts": pd.date_range("2025-01-01", periods=12, freq="h"),
+                "int_col": [1, None, 3, None, 5, None, None, None, None, None, 11, None],
+                "float_col": [None, 2.0, None, 4.0, None, 6.0, None, None, None, 10.0, None, 12.0],
+            },
+            schema_overrides={"ts": pl.Datetime("ns")},
+        )
+        self.lib.write(self.sym, self.pldf, index_column=True)
+
+    @pytest.mark.parametrize("agg_op", ["sum", "mean", "min", "max", "first", "last", "count"])
+    @pytest.mark.parametrize("agg_col", ["int_col", "float_col"])
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_single_agg(self, agg_op, agg_col, rule):
+        q = QueryBuilder().resample(rule).agg({agg_col: agg_op})
+        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(getattr(pl.col(agg_col), agg_op)())
+        _check_query_result(self.lib, self.sym, q, expected)
+
+    @pytest.mark.parametrize("rule", ["3h", "6h"])
+    def test_named_aggs(self, rule):
+        agg_dict = {
+            "int_sum": ("int_col", "sum"),
+            "float_max": ("float_col", "max"),
+            "int_count": ("int_col", "count"),
+            "float_first": ("float_col", "first"),
+        }
+        q = QueryBuilder().resample(rule).agg(agg_dict)
+        exprs = [getattr(pl.col(col), op)().alias(name) for name, (col, op) in agg_dict.items()]
+        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(exprs)
+        _check_query_result(self.lib, self.sym, q, expected)
+
+    @pytest.mark.parametrize("closed", ["left", "right"])
+    @pytest.mark.parametrize("label", ["left", "right"])
+    def test_closed_label(self, closed, label):
+        q = QueryBuilder().resample("3h", closed=closed, label=label).agg({"int_col": "sum"})
+        expected = self.pldf.group_by_dynamic("ts", every="3h", closed=closed, label=label).agg(pl.col("int_col").sum())
+        _check_query_result(self.lib, self.sym, q, expected)
+
+    def test_with_date_range(self):
+        start, end = pd.Timestamp("2025-01-01 03:00"), pd.Timestamp("2025-01-01 08:00")
+        q = QueryBuilder().date_range((start, end)).resample("3h").agg({"int_col": "sum"})
+        sliced = self.pldf.filter(pl.col("ts").is_between(start, end, closed="both"))
+        expected = sliced.group_by_dynamic("ts", every="3h").agg(pl.col("int_col").sum())
+        _check_query_result(self.lib, self.sym, q, expected)
+
+
+class TestSparseArrowConcat:
+    @pytest.fixture(autouse=True)
+    def setup(self, lmdb_library_factory):
+        self.lib = lmdb_library_factory(LibraryOptions())
+        self.lib._nvs.set_output_format(OutputFormat.POLARS)
+        self.lib._nvs._set_allow_arrow_input()
+
+    @pytest.mark.parametrize(
+        "t1,t2",
+        [
+            (
+                pl.DataFrame({"int_col": [1, None, 3], "float_col": [None, 2.0, None]}),
+                pl.DataFrame({"int_col": [None, 5, None], "float_col": [4.0, None, 6.0]}),
+            ),
+            (
+                pl.DataFrame({"a": [None, None, None], "b": [1.0, None, 3.0]}, schema_overrides={"a": pl.Int64}),
+                pl.DataFrame({"a": [4, None, 6], "b": [None, None, None]}, schema_overrides={"b": pl.Float64}),
+            ),
+            (
+                pl.DataFrame({"bool_col": [True, None, False], "str_col": [None, "b", None]}),
+                pl.DataFrame({"bool_col": [None, True, None], "str_col": ["d", None, "f"]}),
+            ),
+        ],
+        ids=["int_float", "all_sparse", "bool_string"],
+    )
+    def test_basic_concat(self, t1, t2):
+        self.lib.write("sym1", t1)
+        self.lib.write("sym2", t2)
+        received = concat(self.lib.read_batch(["sym1", "sym2"], lazy=True)).collect().data
+        expected = pl.concat([t1, t2])
+        polars_assert_frame_equal(received, expected)
+
+    @pytest.mark.parametrize("join", ["inner", "outer"])
+    @pytest.mark.parametrize(
+        "type1,type2",
+        [
+            pytest.param(pl.Float64, pl.Float64, id="same_type"),
+            pytest.param(pl.Int32, pl.Int64, id="int32_and_int64"),
+            pytest.param(pl.Int16, pl.Float32, id="int16_and_float32"),
+            pytest.param(pl.Int64, pl.Float32, id="int64_and_float32"),
+        ],
+    )
+    def test_different_columns(self, join, type1, type2):
+        t1 = pl.DataFrame({"a": [1, None], "b": [None, 2]}, schema_overrides={"b": type1})
+        t2 = pl.DataFrame({"b": [3, None], "c": [None, 4]}, schema_overrides={"b": type2})
+        self.lib.write("s1", t1)
+        self.lib.write("s2", t2)
+        received = concat(self.lib.read_batch(["s1", "s2"], lazy=True), join).collect().data
+        if join == "outer":
+            expected = pl.concat([t1, t2], how="diagonal_relaxed")
+        else:
+            common = set(t1.columns) & set(t2.columns)
+            expected = pl.concat([t1.select(common), t2.select(common)], how="vertical_relaxed")
+        polars_assert_frame_equal(received, expected)
+
+    def test_concat_with_index(self):
+        t1 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01", periods=3, freq="h"), "val": [1, None, 3]},
+            schema_overrides={"ts": pl.Datetime("ns")},
+        )
+        t2 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01T03:00:00", periods=3, freq="h"), "val": [None, 5, None]},
+            schema_overrides={"ts": pl.Datetime("ns")},
+        )
+        self.lib.write("s1", t1, index_column=True)
+        self.lib.write("s2", t2, index_column=True)
+        received = concat(self.lib.read_batch(["s1", "s2"], lazy=True)).collect().data
+        expected = pl.concat([t1, t2])
+        polars_assert_frame_equal(received, expected)
+
+    @pytest.mark.xfail(
+        reason="Resample rejects sparse columns: sorted_aggregation.cpp 'Cannot aggregate column as it is sparse'",
+        raises=Exception,
+    )
+    def test_concat_with_resample(self):
+        t1 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01", periods=6, freq="h"), "val": [1, None, 3, None, 5, None]},
+            schema_overrides={"ts": pl.Datetime("ns")},
+        )
+        t2 = pl.DataFrame(
+            {"ts": pd.date_range("2025-01-01T06:00:00", periods=6, freq="h"), "val": [None, 8, None, 10, None, 12]},
+            schema_overrides={"ts": pl.Datetime("ns")},
+        )
+        self.lib.write("r1", t1, index_column=True)
+        self.lib.write("r2", t2, index_column=True)
+        received = (
+            concat(self.lib.read_batch(["r1", "r2"], lazy=True)).resample("3h").agg({"val": "sum"}).collect().data
+        )
+        combined = pl.concat([t1, t2]).sort("ts")
+        expected = combined.group_by_dynamic("ts", every="3h").agg(pl.col("val").sum())
+        polars_assert_frame_equal(received, expected)

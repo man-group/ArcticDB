@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa, polars as pl
+from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
@@ -198,7 +198,7 @@ class WritePayload:
     """
 
     def __init__(
-        self, symbol: str, data: Union[Any, NormalizableType], metadata: Any = None, index_column: Optional[str] = None
+        self, symbol: str, data: Union[Any, NormalizableType], metadata: Any = None, index_column: bool = False
     ):
         """
         Constructor.
@@ -212,9 +212,9 @@ class WritePayload:
             Data to be written. If data is not of NormalizableType then it will be pickled.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         See Also
         --------
@@ -228,7 +228,7 @@ class WritePayload:
     def __repr__(self):
         res = f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
-        res += f", index_column={self.index_column}" if self.index_column is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column else ""
         res += ")"
         return res
 
@@ -237,7 +237,7 @@ class WritePayload:
         yield self.data
         if self.metadata is not None:
             yield self.metadata
-        if self.index_column is not None:
+        if self.index_column:
             yield self.index_column
 
 
@@ -402,7 +402,7 @@ class UpdatePayload:
         data: NormalizableType,
         metadata: Any = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ):
         """
         Constructor.
@@ -419,9 +419,9 @@ class UpdatePayload:
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
             Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
             side of the range open-ended.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         """
         self.symbol = symbol
         self.data = data
@@ -433,7 +433,7 @@ class UpdatePayload:
         res = f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
         res += f", date_range={self.date_range}" if self.date_range is not None else ""
-        res += f", index_column={self.index_column}" if self.index_column is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column else ""
         res += ")"
         return res
 
@@ -527,7 +527,7 @@ class LazyDataFrame(QueryBuilder):
             iterate_snapshots_if_tombstoned=False,
             include_index_segment=True,
         )
-        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment)
+        self._preloaded_index = _PreloadedIndexQuery(dit.key, dit.index_segment, dit.column_stats_segment)
         read_request = self._to_read_request()
         return self.lib._nvs._modify_schema(
             self._preloaded_index,
@@ -921,12 +921,14 @@ class Library:
         return self.has_symbol(symbol)
 
     def _allowed_input_type(self, data) -> bool:
-        if isinstance(data, NORMALIZABLE_TYPES) or (
-            _PYARROW_AVAILABLE and isinstance(data, pa.Table) and self._nvs._allow_arrow_input
-        ):
+        if isinstance(data, NORMALIZABLE_TYPES):
             return True
-        else:
-            return False
+        if self._nvs._allow_arrow_input:
+            if _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+                return True
+            if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+                return True
+        return False
 
     def options(self) -> LibraryOptions:
         """Library options set on this library. See also `enterprise_options`."""
@@ -953,7 +955,7 @@ class Library:
         validate_index=True,
         sort_on_index=False,
         sort_columns: List[str] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> StageResult:
         """
         Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
@@ -978,9 +980,9 @@ class Library:
             index will be used as the primary sort column, and the others as secondaries.
         sort_columns:
             Sort the data by specific columns prior to writing.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1015,7 +1017,7 @@ class Library:
         prune_previous_versions: bool = False,
         staged=False,
         validate_index=True,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
@@ -1062,9 +1064,9 @@ class Library:
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
             Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         recursive_normalizers: bool, default None
             Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
             If None, falls back to the corresponding setting in the library configuration. For libraries created with < v6.4.0,
@@ -1362,7 +1364,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = False,
         validate_index: bool = True,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> VersionedItem:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
@@ -1393,9 +1395,9 @@ class Library:
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
             Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1513,7 +1515,7 @@ class Library:
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
         prune_previous_versions: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index
@@ -1554,9 +1556,9 @@ class Library:
             modified, even if ``data`` covers a wider date range.
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1750,7 +1752,7 @@ class Library:
         Calling ``finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
         ``get_staged_symbols`` to check if there are staged segments for the symbol.
 
-        Calling ``finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
+        Calling ``finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``UnsortedDataException``.
 
         Parameters
         ----------
@@ -1793,7 +1795,7 @@ class Library:
 
         Raises
         ------
-        SortingException
+        UnsortedDataException
 
             - If any two staged segments for a given symbol have overlapping indexes
             - If any staged segment for a given symbol is not sorted
@@ -1884,7 +1886,7 @@ class Library:
         Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
         ``get_staged_symbols`` to check if there are staged segments for the symbol.
 
-        Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
+        Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``UnsortedDataException``.
 
         Parameters
         ----------
@@ -1923,7 +1925,7 @@ class Library:
 
         Raises
         ------
-        SortingException
+        UnsortedDataException
 
             - If the first index value of the sorted block is not greater or equal than the last index value of
                 the existing data when ``StagedDataFinalizeMethod.APPEND`` is used.
@@ -3204,9 +3206,8 @@ class Library:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            String columns are not yet supported.
-
-            Dynamic schema is not yet supported.
+            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
+            compactions may fail. Additionally, resampling is not yet supported with sparse data.
 
             Sparse data is not yet supported.
 
@@ -3235,8 +3236,7 @@ class Library:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, the data contains string columns, the library has dynamic
-            schema enabled, or the data is sparse
+            If the existing data is recursively normalized, or the data is sparse
 
         Examples
         --------
@@ -3395,6 +3395,12 @@ class Library:
                 - In float columns, NaN is considered equal to NaN.
                 - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
                   and None == NaN all evaluate to True.
+
+            If a column name appears more than once in the source or the target it must not be added in the on
+            parameter.
+
+            In the case of a datetime-indexed DataFrame the on parameter must not contain the name of the datetime
+            index.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
@@ -3417,7 +3423,7 @@ class Library:
             If symbol doesn't exist and `upsert=False`
         UserInputException
             If strategy is not one of the supported strategies listed above
-        SortingException
+        UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
             If dynamic schema is used or if source's schema is incompatible with target's schema

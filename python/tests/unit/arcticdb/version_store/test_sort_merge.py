@@ -6,7 +6,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.exceptions import (
     UserInputException,
-    SortingException,
+    UnsortedDataException,
     StreamDescriptorMismatch,
     InternalException,
     SchemaException,
@@ -279,7 +279,7 @@ class TestMergeSortAppend:
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
-        with pytest.raises(SortingException) as exception_info:
+        with pytest.raises(UnsortedDataException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 "sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure
             )
@@ -707,7 +707,7 @@ class TestNatInIndexNotAllowed:
 
     @classmethod
     def assert_nat_not_allowed(cls, lib, symbol, mode, delete_staged_data_on_failure):
-        with pytest.raises(SortingException) as exception_info:
+        with pytest.raises(UnsortedDataException) as exception_info:
             lib.sort_and_finalize_staged_data(
                 symbol, mode=mode, delete_staged_data_on_failure=delete_staged_data_on_failure
             )

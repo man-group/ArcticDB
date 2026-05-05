@@ -7,17 +7,11 @@
  */
 #pragma once
 
-#include <memory>
 #include <vector>
 
 #include <sparrow/c_interface.hpp>
+#include <sparrow/record_batch.hpp>
 #include <arcticdb/util/constructors.hpp>
-
-// Anything that transitively includes sparrow.array.hpp takes ages to build the (unused by us) std::format impl
-// So avoid including sparrow in headers where possible until this is resolved
-namespace sparrow {
-class record_batch;
-}
 
 namespace arcticdb {
 
@@ -60,9 +54,11 @@ struct RecordBatchData {
 struct ArrowOutputFrame {
     ArrowOutputFrame() = default;
 
-    ArrowOutputFrame(std::shared_ptr<std::vector<sparrow::record_batch>>&& data);
+    ARCTICDB_MOVE_ONLY_DEFAULT(ArrowOutputFrame);
 
-    std::shared_ptr<std::vector<sparrow::record_batch>> data_;
+    ArrowOutputFrame(std::vector<sparrow::record_batch>&& data);
+
+    std::vector<sparrow::record_batch> data_;
 
     std::vector<RecordBatchData> extract_record_batches();
 

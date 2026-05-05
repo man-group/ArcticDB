@@ -106,6 +106,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(7006, E_SORT_ON_SPARSE)                                                                                 \
     ERROR_CODE(7007, E_EMPTY_NAME)                                                                                     \
     ERROR_CODE(7008, E_STAGE_RESULT_WITH_INCORRECT_SYMBOL)                                                             \
+    ERROR_CODE(7009, E_DUPLICATE_COLUMN)                                                                               \
     ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION)                                                              \
     ERROR_CODE(9000, E_DECODE_ERROR)                                                                                   \
     ERROR_CODE(9001, E_UNKNOWN_CODEC)                                                                                  \

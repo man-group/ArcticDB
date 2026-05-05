@@ -209,6 +209,50 @@ class ShortWideRead:
         self.lib.read(f"sym")
 
 
+class ShortWideBatchRead:
+    rows = [1]
+    COLS = 30_000
+    NUM_SYMBOLS = 5
+
+    params = [rows, STORAGES]
+    param_names = ["num_rows", "storage"]
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def setup_cache(self):
+        libs_for_storage = dict()
+        library_names = [_lib_name(rows) for rows in ShortWideBatchRead.rows]
+
+        for storage in STORAGES:
+            libraries = create_libraries(storage, library_names)
+            libs_for_storage[storage] = dict(zip(library_names, libraries))
+
+        for rows in ShortWideBatchRead.rows:
+            df = generate_random_floats_dataframe(rows, ShortWideBatchRead.COLS)
+            lib_name = _lib_name(rows)
+            for storage in STORAGES:
+                lib = libs_for_storage[storage][lib_name]
+                if not lib:
+                    continue
+                for i in range(ShortWideBatchRead.NUM_SYMBOLS):
+                    lib.write(f"sym_{i}", df)
+
+        return libs_for_storage
+
+    def setup(self, libs_for_storage, rows, storage):
+        self.lib = libs_for_storage[storage][_lib_name(rows)]
+        if self.lib is None:
+            raise SkipNotImplemented
+        self.read_reqs = [ReadRequest(f"sym_{i}") for i in range(ShortWideBatchRead.NUM_SYMBOLS)]
+
+    def time_read_batch(self, *args):
+        self.lib.read_batch(self.read_reqs)
+
+    def peakmem_read_batch(self, *args):
+        self.lib.read_batch(self.read_reqs)
+
+
 class BatchWrite:
     rounds = 1
     sample_time = 0.1

@@ -44,8 +44,10 @@ def query_stats() -> Iterator[None]:
         # This will prohibit the unsupported nested context managers usage
         raise UserInputException("Query Stats is already enabled")
     enable()
-    yield
-    disable()
+    try:
+        yield
+    finally:
+        disable()
 
 
 def get_query_stats() -> Dict[str, Any]:

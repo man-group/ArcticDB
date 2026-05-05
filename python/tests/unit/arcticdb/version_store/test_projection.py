@@ -110,6 +110,99 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output
     assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
 
 
+###############################################
+# TIMESTAMP / NUMERIC TYPE MISMATCH TESTS    #
+###############################################
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_project_datetime_col_with_numeric_scalar(dtype, op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    value = dtype(1)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(value))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_project_numeric_col_with_datetime_scalar(dtype, op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": np.array([0, 1], dtype=dtype)})
+    lib.write(symbol, df)
+    value = pd.Timestamp(1)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(value))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_project_datetime_col_with_numeric_col(dtype, op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)], "b": np.array([0, 1], dtype=dtype)})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(q["b"]))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("dtype", (np.int64, np.uint64, np.float64, np.float32))
+@pytest.mark.parametrize("op", ("__add__", "__sub__", "__mul__", "__truediv__"))
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_project_numeric_col_with_datetime_col(dtype, op, lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": np.array([0, 1], dtype=dtype), "b": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", getattr(q["a"], op)(q["b"]))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_project_abs_datetime_col(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", abs(q["a"]))
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.xfail(reason="Bug - see 8065794446")
+def test_project_neg_datetime_col(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "sym"
+    df = pd.DataFrame({"a": [pd.Timestamp(0), pd.Timestamp(1)]})
+    lib.write(symbol, df)
+    q = QueryBuilder()
+    q = q.apply("result", -q["a"])
+    with pytest.raises(UserInputException):
+        lib.read(symbol, query_builder=q)
+
+
 ##################################
 # DYNAMIC SCHEMA TESTS FROM HERE #
 ##################################

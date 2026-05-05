@@ -527,8 +527,8 @@ class InMemoryStore : public Store {
         return folly::makeFuture(std::move(components));
     }
 
-    folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>>
-    read_timeseries_descriptor(const entity::VariantKey& key, storage::ReadKeyOpts /*opts*/) override {
+    std::pair<VariantKey, arcticdb::TimeseriesDescriptor>
+    read_timeseries_descriptor_sync(const entity::VariantKey& key, storage::ReadKeyOpts /*opts*/) override {
         auto failure_sim = StorageFailureSimulator::instance();
         failure_sim->go(FailureType::READ);
         return util::variant_match(
@@ -548,6 +548,12 @@ class InMemoryStore : public Store {
                     return std::make_pair(key, it->second->index_descriptor());
                 }
         );
+    }
+
+    folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>> read_timeseries_descriptor(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts
+    ) override {
+        return folly::makeFuture(read_timeseries_descriptor_sync(key, opts));
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator&) override {}

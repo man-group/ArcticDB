@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 
 import arcticdb.toolbox.query_stats as qs
+from arcticdb.util.test import query_stats_operation_count
 from arcticdb_ext.exceptions import KeyNotFoundException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 
@@ -137,24 +138,20 @@ def test_list_versions_deleted_symbols_alive_in_snapshot(lmdb_version_store_v1):
 # 1 argument
 
 
-def test_list_versions_deleted_symbols_alive_in_snapshot_skip_snapshots(s3_version_store_v1, clear_query_stats):
+def test_list_versions_deleted_symbols_alive_in_snapshot_skip_snapshots(in_memory_store_factory, clear_query_stats):
     """Should not look in snapshots at all, even if the symbol is deleted."""
-    lib = s3_version_store_v1
+    lib = in_memory_store_factory()
     lib.write("sym", 1)
     lib.snapshot("snap")
     lib.delete("sym")
 
-    qs.enable()
+    with qs.query_stats():
+        res = lib.list_versions(skip_snapshots=True)
+        stats = qs.get_query_stats()
     qs.reset_stats()
-    res = lib.list_versions(skip_snapshots=True)
-
     assert res == []
-
-    stats = qs.get_query_stats()
-    storage_ops = stats["storage_operations"]
-
-    assert "SNAPSHOT_REF" not in storage_ops["S3_ListObjectsV2"]
-    assert "SNAPSHOT_REF" not in storage_ops["S3_GetObject"]
+    assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT_REF") == 0
+    assert query_stats_operation_count(stats, "Memory_GetObject", "SNAPSHOT_REF") == 0
 
 
 @pytest.mark.parametrize("symbol", [None, "sym"])
@@ -396,8 +393,8 @@ def test_broken_version_chain(lmdb_version_store_v1, latest_only):
     assert broken_sym in str(e.value)
 
 
-def test_list_versions_specific_snapshot_should_not_list_snapshots(s3_version_store_v1, clear_query_stats):
-    lib = s3_version_store_v1
+def test_list_versions_specific_snapshot_should_not_list_snapshots(in_memory_store_factory, clear_query_stats):
+    lib = in_memory_store_factory()
     num_snapshots = 5
 
     for i in range(num_snapshots):
@@ -411,18 +408,15 @@ def test_list_versions_specific_snapshot_should_not_list_snapshots(s3_version_st
     lib.list_versions(snapshot="snap0", skip_snapshots=True)
 
     stats = qs.get_query_stats()
-    storage_ops = stats["storage_operations"]
 
     # Should not list snapshots when user specifies a particular snapshot
-    assert "S3_ListObjectsV2" not in storage_ops
-    snapshot_read_count = storage_ops["S3_GetObject"]["SNAPSHOT_REF"]["count"]
-    assert snapshot_read_count == 1
+    assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT_REF") == 0
+    assert query_stats_operation_count(stats, "Memory_GetObject", "SNAPSHOT_REF") == 1
 
-    # Reasonableness check that "S3_ListObjectsV2" can be in the output
+    # Reasonableness check that "Memory_ListObjects" can be in the output
     lib.list_snapshots()
     stats = qs.get_query_stats()
-    storage_ops = stats["storage_operations"]
-    assert "S3_ListObjectsV2" in storage_ops
+    assert query_stats_operation_count(stats, "Memory_ListObjects", "SNAPSHOT_REF") == 1
 
 
 def test_list_versions_specific_snapshot_all_symbols(lmdb_version_store_v1):

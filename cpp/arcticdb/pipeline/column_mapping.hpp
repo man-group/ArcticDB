@@ -99,4 +99,6 @@ void create_dense_bitmap_all_zeros(
         size_t offset, size_t num_bits, Column& dest_column, entity::AllocationType allocation_type
 );
 
+void create_dense_bitmap_if_any_nulls(size_t offset, const util::BitSet& bv, Column& dest_column);
+
 } // namespace arcticdb

@@ -20,7 +20,7 @@ from arcticdb.util.test import (
     random_floats,
     assert_frame_equal,
 )
-from arcticdb.exceptions import InternalException, SortingException, NormalizationException, SchemaException
+from arcticdb.exceptions import InternalException, UnsortedDataException, NormalizationException, SchemaException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
@@ -546,7 +546,7 @@ def test_update_sortedness_checks(
         lib.update(symbol, update_df, date_range=date_range)
         assert lib.get_info(symbol)["sorted"] == "ASCENDING"
     else:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.update(symbol, update_df, date_range=date_range)
 
 
@@ -576,7 +576,7 @@ def test_update_not_sorted_input_multi_index_exception(lmdb_version_store):
     assert isinstance(df.index, MultiIndex) == True
     assert df.index.is_monotonic_increasing == False
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.update(symbol, df)
 
 
@@ -606,7 +606,7 @@ def test_update_not_sorted_existing_multi_index_exception(lmdb_version_store):
     assert isinstance(df.index, MultiIndex) == True
     assert df.index.is_monotonic_increasing == True
 
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lmdb_version_store.update(symbol, df)
 
 

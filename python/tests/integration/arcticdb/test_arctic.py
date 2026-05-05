@@ -21,7 +21,7 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
+from arcticdb_ext.exceptions import InternalException, UnsortedDataException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
@@ -441,10 +441,10 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
     lib.write(sym, df_1, staged=True)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(sym, finalize_method)
     elif validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(sym, finalize_method, validate_index=True)
     else:
         lib.finalize_staged_data(sym, finalize_method, validate_index=False)
@@ -476,7 +476,7 @@ class TestAppendStagedData:
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
-        with pytest.raises(SortingException) as exception_info:
+        with pytest.raises(UnsortedDataException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 

@@ -16,7 +16,7 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import (
     InternalException,
     NormalizationException,
-    SortingException,
+    UnsortedDataException,
 )
 
 

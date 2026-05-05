@@ -9,8 +9,8 @@
 #pragma once
 
 #include <arcticdb/version/version_map.hpp>
-#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/storage/common.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
@@ -89,7 +89,7 @@ class VersionedEngine {
 
     virtual ReadVersionWithNodesOutput read_dataframe_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-            const ReadOptions& read_options, std::any& handler_data
+            const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
     ) = 0;
 
     virtual VersionedItem read_modify_write_internal(

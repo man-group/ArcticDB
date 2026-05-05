@@ -11,6 +11,7 @@
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <column_stats.pb.h>
 
 #include <cmath>
 
@@ -23,8 +24,16 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [this](auto value) {
+            [[maybe_unused]] bool any_nan{false};
+            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
                 const auto& curr = static_cast<RawType>(value);
+                if constexpr (is_floating_point_type(type_info::data_type)) {
+                    // We skip nan as it doesn't generate a stable ordering
+                    if (std::isnan(curr)) {
+                        any_nan = true;
+                        return;
+                    }
+                }
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
                     min_ = Value{curr, type_info::data_type};
                     max_ = Value{curr, type_info::data_type};
@@ -33,6 +42,13 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     max_->set(std::max(max_->get<RawType>(), curr));
                 }
             });
+            if constexpr (is_floating_point_type(type_info::data_type)) {
+                if (any_nan && !min_) {
+                    // Everything in the block is NaN, reflect this in the stats
+                    min_ = Value{std::numeric_limits<RawType>::quiet_NaN(), type_info::data_type};
+                    max_ = Value{std::numeric_limits<RawType>::quiet_NaN(), type_info::data_type};
+                }
+            }
         } else {
             schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                     "Minmax column stat generation not supported with string types"
@@ -48,8 +64,9 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             output_column_names.size()
     );
     SegmentInMemory seg;
+    arcticc::pb2::column_stats_pb2::ColumnStatsHeader header;
     if (min_.has_value()) {
-        details::visit_type(min_->data_type(), [&output_column_names, &seg, this](auto col_tag) {
+        details::visit_type(min_->data_type(), [&output_column_names, &seg, &header, this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
             auto min_col = std::make_shared<Column>(make_scalar_type(min_->data_type()), Sparsity::PERMITTED);
             min_col->push_back<RawType>(min_->get<RawType>());
@@ -57,10 +74,23 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
             max_col->push_back<RawType>(max_->get<RawType>());
 
+            auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
+            auto* min_entry = entry_list.add_entries();
+            min_entry->set_stats_seg_offset(0);
+            min_entry->set_type(arcticc::pb2::column_stats_pb2::MIN_V1);
+            auto* max_entry = entry_list.add_entries();
+            max_entry->set_stats_seg_offset(1);
+            max_entry->set_type(arcticc::pb2::column_stats_pb2::MAX_V1);
+
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
         });
     }
+
+    google::protobuf::Any any;
+    bool packed = any.PackFrom(header);
+    util::check(packed, "Failed to pack header in to Any?");
+    seg.set_metadata(std::move(any));
     return seg;
 }
 

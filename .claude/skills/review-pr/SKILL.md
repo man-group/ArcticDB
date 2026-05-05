@@ -94,6 +94,8 @@ Post only on lines present in the **delta diff**, subject to the deduplication r
 
 ### Summary checklist
 
+Only ever mention points that need attention in the summary checklist, not notes that things are fine.
+
 **If `EVENT_ACTION` is `synchronize` and a previous sticky summary exists:**
 
 - Evaluate only the **delta diff** against the guidelines.

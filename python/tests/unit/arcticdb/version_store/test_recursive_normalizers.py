@@ -59,9 +59,7 @@ class AlmostAListNormalizer(CustomNormalizer):
 @pytest.mark.parametrize("staged", (True, False, None))
 @pytest.mark.parametrize("lib_option", (True, False, None))
 @pytest.mark.parametrize("recursive_normalizers", (True, False, None))
-def test_v2_api(
-    arctic_client_lmdb_v1_only, sym, recursive_normalizers, clear_query_stats, lib_name, lib_option, staged
-):
+def test_v2_api(arctic_client_lmdb_v1_only, sym, recursive_normalizers, lib_name, lib_option, staged):
     if lib_option is None:
         lib = arctic_client_lmdb_v1_only.create_library(lib_name)
     else:
