@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <algorithm>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
@@ -2059,25 +2060,6 @@ bool check_if_version_id_already_exists(SignedVersionId version_id, const Versio
     return it != versions.end();
 }
 
-void add_version_id_to_sym_versions_map(
-        const StreamId& stream_id, SignedVersionId version_id, std::map<StreamId, VersionVectorType>& sym_versions
-) {
-    auto [it, inserted] = sym_versions.emplace(stream_id, VersionVectorType{});
-
-    if (inserted) {
-        it->second.push_back(static_cast<VersionId>(version_id));
-        return;
-    }
-
-    if (check_if_version_id_already_exists(version_id, it->second)) {
-        return; // exisintg version_id was provided for the symbol -> do nothing
-    }
-
-    user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
-    );
-}
-
 std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
@@ -2101,7 +2083,7 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
                 *stream_id
         );
 
-        add_version_id_to_sym_versions_map(*stream_id, version_id, sym_versions);
+        sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
     }
     return sym_versions;
 }
@@ -2200,7 +2182,19 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
     std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> specific_versions;
     if (!version_queries.empty()) {
         auto sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
-        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
+
+        auto symbol_with_more_than_one_version =
+                std::ranges::find_if(sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
+
+        if (symbol_with_more_than_one_version != sym_versions.end()) {
+            auto stream_id = symbol_with_more_than_one_version->first;
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
+            );
+        }
+        §
+
+                specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
         std::vector<StreamId> latest_ids;
         std::copy_if(
                 std::begin(stream_ids),
