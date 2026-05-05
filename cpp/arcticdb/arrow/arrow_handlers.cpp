@@ -565,14 +565,15 @@ void ArrowTimestampHandler::
     const auto end_idx = positions.end_idx_after_truncation.value_or(m.num_rows_);
     using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     util::BitSet validity;
+    validity.resize(end_idx - first_idx);
     util::BitSet::bulk_insert_iterator inserter(validity);
 
     if (is_sparse) {
         for_each_enumerated_flattened<TimestampTag>(
                 source_column,
                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                    dest[en.idx()] = en.value();
                     if (en.value() != NaT) {
+                        dest[en.idx()] = en.value();
                         inserter = en.idx() - first_idx;
                     }
                 },
@@ -605,7 +606,6 @@ void ArrowTimestampHandler::
         validity.invert();
     }
 
-    validity.resize(end_idx - first_idx);
 
     if (validity.count() != validity.size()) {
         create_dense_bitmap(positions.extra_buffer_position, validity, dest_column, AllocationType::DETACHABLE);
