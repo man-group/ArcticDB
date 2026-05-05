@@ -280,8 +280,7 @@ using VersionVectorType = std::vector<VersionId>;
 /**
  * Returns multiple versions for the same symbol
  * @return Does not guarantee the returned keys actually exist in storage.
- *
- * Only one non-negative version per symbol is supported. Versions that do not exist in storage are silently skipped.
+ * Only non-negative version per symbol is supported. Versions that do not exist in storage are silently skipped.
  */
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
