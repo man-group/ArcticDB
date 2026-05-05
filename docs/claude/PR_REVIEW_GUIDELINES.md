@@ -324,6 +324,8 @@ Key areas to verify:
 
 ## REVIEW SUMMARY CHECKLIST
 
+In your reviews only include items that need attention from the below, do not mention items that are fine.
+
 ```markdown
 ## ArcticDB Code Review Summary
 
