@@ -2192,9 +2192,8 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
                     "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
             );
         }
-        §
-
-                specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
+        
+        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
         std::vector<StreamId> latest_ids;
         std::copy_if(
                 std::begin(stream_ids),
