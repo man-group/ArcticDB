@@ -13,7 +13,7 @@ import random
 import re
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import UserInputException,ArcticNativeException
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
@@ -442,7 +442,7 @@ def test_add_to_snapshot_mismatched_symbols_and_versions_raises(basic_store_tomb
     lib.snapshot("snap")
     lib.write("s2", 2)
 
-    with pytest.raises(Exception):
+    with pytest.raises(ArcticNativeException):
         lib.add_to_snapshot("snap", ["s1"], as_ofs=[2, 3])
 
 
