@@ -75,15 +75,30 @@ def parse_gtest_failures(log_text: str) -> set[str]:
     return results
 
 
+def strip_parametrize(test_id: str) -> str:
+    """Strip pytest parametrize suffix ``[...]`` from a test node ID.
+
+    ``tests/test_foo.py::test_bar[nfs_backed_s3--prefix]``
+    → ``tests/test_foo.py::test_bar``
+
+    This groups all parametrizations of the same test into a single
+    tracking issue.
+    """
+    return re.sub(r"\[.*\]$", "", test_id)
+
+
 def parse_pytest_failures(log_text: str) -> set[str]:
     """Extract pytest failures and errors from the summary section.
 
     Matches both:
       FAILED path/to/test.py::TestClass::test_method
       ERROR  path/to/test.py::test_name - FixtureError: ...
+
+    Parametrize suffixes (``[...]``) are stripped so that all
+    parametrizations of the same test are grouped together.
     """
     pattern = r"(?:FAILED|ERROR)\s+(\S+::\S+)"
-    return {m.group(1) for m in re.finditer(pattern, log_text)}
+    return {strip_parametrize(m.group(1)) for m in re.finditer(pattern, log_text)}
 
 
 def filter_infra_steps(all_steps: list[str]) -> list[str]:

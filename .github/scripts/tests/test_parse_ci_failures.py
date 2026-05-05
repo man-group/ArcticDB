@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from parse_ci_failures import (
     parse_gtest_failures,
     parse_pytest_failures,
+    strip_parametrize,
     filter_infra_steps,
 )
 
@@ -89,10 +90,21 @@ class TestParsePytestFailures:
         log = "PASSED tests/test_foo.py::test_method\n3 passed in 1.5s"
         assert parse_pytest_failures(log) == set()
 
-    def test_parametrized(self):
+    def test_parametrized_suffix_stripped(self):
         log = "FAILED tests/test_foo.py::test_method[param1-param2]"
         assert parse_pytest_failures(log) == {
-            "tests/test_foo.py::test_method[param1-param2]"
+            "tests/test_foo.py::test_method"
+        }
+
+    def test_multiple_parametrizations_deduplicated(self):
+        """Different parametrizations of the same test should produce one entry."""
+        log = (
+            "FAILED tests/test_foo.py::test_method[s3--prefix]\n"
+            "FAILED tests/test_foo.py::test_method[nfs_backed_s3--prefix]\n"
+            "FAILED tests/test_foo.py::test_method[gcp-suffix-prefix]\n"
+        )
+        assert parse_pytest_failures(log) == {
+            "tests/test_foo.py::test_method"
         }
 
     def test_error_lines(self):
@@ -157,3 +169,29 @@ class TestFilterInfraSteps:
     def test_case_insensitive(self):
         steps = ["Run Tests", "Install"]
         assert filter_infra_steps(steps) == ["Install"]
+
+
+# ---------------------------------------------------------------------------
+# strip_parametrize
+# ---------------------------------------------------------------------------
+class TestStripParametrize:
+    def test_strips_simple_params(self):
+        assert strip_parametrize("tests/test_foo.py::test_bar[param1]") == \
+            "tests/test_foo.py::test_bar"
+
+    def test_strips_complex_params(self):
+        assert strip_parametrize(
+            "tests/compat/arcticdb/test_lib_naming.py::test_create_library_with_all_chars[nfs_backed_s3--prefix]"
+        ) == "tests/compat/arcticdb/test_lib_naming.py::test_create_library_with_all_chars"
+
+    def test_no_params_unchanged(self):
+        assert strip_parametrize("tests/test_foo.py::test_bar") == \
+            "tests/test_foo.py::test_bar"
+
+    def test_nested_brackets(self):
+        assert strip_parametrize("tests/test_foo.py::test_bar[a[b]-c]") == \
+            "tests/test_foo.py::test_bar"
+
+    def test_empty_params(self):
+        assert strip_parametrize("tests/test_foo.py::test_bar[]") == \
+            "tests/test_foo.py::test_bar"
