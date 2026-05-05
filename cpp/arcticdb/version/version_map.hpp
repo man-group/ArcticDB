@@ -865,7 +865,7 @@ class VersionMapImpl {
         auto resolved_version_id = resolve_version_id(requested_version_id, entry);
 
         if (!resolved_version_id.has_value()) {
-            return false
+            return false;
         }
 
         if (resolved_version_id <= opt_latest->version_id() &&
