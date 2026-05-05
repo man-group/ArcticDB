@@ -310,16 +310,11 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                 const auto& versions = sym_it->second;
 
                 for (auto version : versions) {
-                    auto opt_resolved = resolve_version_id(version, *entry);
-
-                    if (!opt_resolved.has_value())
-                        continue;
-
-                    auto index_key = find_index_key_for_version_id(*opt_resolved, entry, include_deleted);
+                    auto index_key = find_index_key_for_version_id(version, entry, include_deleted);
 
                     if (index_key) {
                         std::lock_guard lock{*mutex};
-                        (*output)[std::pair(sym_version.first, *opt_resolved)] = *index_key;
+                        (*output)[std::pair(sym_version.first, version)] = *index_key;
                     }
                 }
             }
