@@ -817,7 +817,8 @@ struct WriteClause {
     std::shared_ptr<Store> store_;
 
     WriteClause(
-            const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+            const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
+            ProcessingStructure input_processing_structure
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 

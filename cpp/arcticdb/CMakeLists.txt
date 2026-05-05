@@ -1235,6 +1235,7 @@ if(${TEST})
             arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
+            column_store/test/benchmark_column_reslicer.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp

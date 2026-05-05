@@ -26,7 +26,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneStatic) {
     auto type_descriptor = make_scalar_type(data_type_from_raw_type<RawType>());
     uint64_t total_rows{12};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{{0, 0, 1, 1}, {1, 0, 1}, {1, 0, 0, 0, 1}};
         for (const auto& data : input_data) {
@@ -74,7 +74,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     uint64_t total_rows{12};
     uint64_t value_count{8};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         // Missing first row slice with 4 rows
         reslicer.push_back(4);
@@ -147,7 +147,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     uint64_t total_rows{12};
     uint64_t value_count{9};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<uint8_t> input_data{0, 0, 1, 1};
         Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
@@ -209,7 +209,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     uint64_t total_rows{14};
     uint64_t value_count{9};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{4, reslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<uint8_t> input_data{0, 0, 1, 1};
         Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
@@ -299,7 +299,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineIntoOneDynamicMissi
     uint64_t total_rows{12};
     uint64_t value_count{7};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<uint8_t> input_data{0, 0, 1, 1};
         Column col{type_descriptor, input_data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
@@ -373,7 +373,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, SplitInTwoStatic) {
     size_t total_rows{7};
     uint64_t max_rows_per_slice{4};
     ReslicingInfo reslicing_info{total_rows, max_rows_per_slice};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{1, reslicing_info};
     Column input_col{type_descriptor, total_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<uint8_t> input_data{0, 0, 1, 0, 1, 1, 1};
@@ -421,7 +421,7 @@ TYPED_TEST(ColumnReslicerDenseNumericSameTypeFixture, CombineThreeIntoTwoStatic)
     uint64_t total_rows{30};
     uint64_t max_rows_per_slice{15};
     ReslicingInfo reslicing_info{total_rows, max_rows_per_slice};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
 
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<uint8_t>> input_data{
@@ -486,7 +486,7 @@ TEST(ColumnReslicerDenseNumericStaticSchema, MultiBlockColumns) {
     uint64_t total_rows{3000};
     uint64_t max_rows_per_slice{total_rows / 2};
     ReslicingInfo reslicing_info{total_rows, max_rows_per_slice};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
     input_data.resize(total_rows);
     std::iota(input_data.begin(), input_data.end(), 42);
     std::vector<Column> input_columns;
@@ -543,7 +543,7 @@ TYPED_TEST(ColumnReslicerSparseNumericSameTypeFixture, CombineIntoOneStatic) {
     uint64_t total_rows{12};
     uint64_t total_values{7};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{3, reslicing_info};
     if constexpr (std::is_same_v<RawType, bool>) {
         std::vector<std::vector<std::optional<bool>>> input_data{
                 {false, std::nullopt, std::nullopt, true},
@@ -619,7 +619,7 @@ TYPED_TEST(ColumnReslicerSparseNumericSameTypeFixture, SplitInThreeStatic) {
     ARCTICDB_UNUSED uint64_t total_values{6};
     uint64_t max_rows_per_slice{4};
     ReslicingInfo reslicing_info{total_rows, max_rows_per_slice};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{1, reslicing_info};
     // First slice will be dense, second slice will have no values, third slice will be sparse
     const auto input_data = []() {
         if constexpr (std::is_same_v<RawType, bool>) {
@@ -742,7 +742,7 @@ TEST_F(ColumnReslicerDenseStringStaticSchema, CombineIntoOne) {
     using RawType = StringPool::offset_t;
     uint64_t total_rows{12};
     ReslicingInfo reslicing_info{total_rows, total_rows};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{4, reslicing_info};
     // Combine columns of each of the 4 supported string types into a single column
     std::vector<ColumnWithStrings> input_columns;
     // "hello" appears in all columns
@@ -813,7 +813,7 @@ TEST_P(ColumnReslicerDenseStringStaticSchemaSplit, SplitInTwoTest) {
     uint64_t max_rows_per_slice{4};
     ReslicingInfo reslicing_info{total_rows, max_rows_per_slice};
     uint64_t rows_in_first_slice{total_rows - max_rows_per_slice};
-    ColumnReslicer reslicer{reslicing_info};
+    ColumnReslicer reslicer{1, reslicing_info};
 
     const std::vector<std::string> input_data{"hello", "gutentag", "hello", "bonjour", "bonjour", "hello", "nihao"};
     auto col_with_strings = std::make_optional<ColumnWithStrings>(column_with_strings(input_data, GetParam()));

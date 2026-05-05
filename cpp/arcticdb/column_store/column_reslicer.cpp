@@ -15,7 +15,10 @@
 
 namespace arcticdb {
 
-ColumnReslicer::ColumnReslicer(const ReslicingInfo& reslicing_info) : reslicing_info_(reslicing_info) {}
+ColumnReslicer::ColumnReslicer(const size_t num_input_slices, const ReslicingInfo& reslicing_info) :
+    reslicing_info_(reslicing_info) {
+    cols_or_row_counts_.reserve(num_input_slices);
+}
 
 void ColumnReslicer::push_back(std::shared_ptr<Column> column, std::shared_ptr<StringPool> string_pool) {
     if (column->is_sparse()) {
@@ -174,6 +177,9 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
         for (auto& col_or_row_count : cols_or_row_counts_) {
             if (auto* col_with_strings = std::get_if<ColumnWithStrings>(&col_or_row_count)) {
                 details::visit_type(col_with_strings->column_->type().data_type(), [&](auto input_tag) {
+                    // Maps offsets in the input string pool to offsets in the output string pool
+                    // Provides a small speed boost for low cardinality string columns
+                    ankerl::unordered_dense::map<StringPool::offset_t, StringPool::offset_t> offsets_map;
                     using input_type_info = ScalarTypeInfo<decltype(input_tag)>;
                     auto input_data = col_with_strings->column_->data();
                     auto input_end_it = input_data.cend<typename input_type_info::TDT>();
@@ -183,6 +189,7 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
                             ++output_col;
                             ++string_pool;
                             advance_output_col();
+                            offsets_map.clear();
                             if (output_col != output_columns.end()) {
                                 output_data = output_col->data();
                                 output_it = output_data.begin<typename output_type_info::TDT>();
@@ -190,29 +197,35 @@ std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>
                             }
                         }
                         if constexpr (is_sequence_type(output_type_info::data_type)) {
-                            // Trailing nulls are stripped in utf32_to_u8, so we only need to strip them for
-                            // fixed-width ASCII
-                            auto opt_str = col_with_strings->string_at_offset(
-                                    *input_it, input_type_info::data_type == DataType::ASCII_FIXED64
-                            );
-                            if (opt_str.has_value()) {
-                                if constexpr (is_fixed_string_type(input_type_info::data_type) &&
-                                              is_utf_type(input_type_info::data_type)) {
-                                    auto utf8_str = util::utf32_to_u8(*opt_str);
-                                    *output_it = string_pool->get(utf8_str).offset();
-                                } else {
-                                    *output_it = string_pool->get(*opt_str).offset();
-                                }
+                            if (auto offsets_map_it = offsets_map.find(*input_it);
+                                offsets_map_it != offsets_map.end()) {
+                                *output_it = offsets_map_it->second;
                             } else {
-                                // This is only possible if the input column has a dynamic string type, and so
-                                // *input_it will represent either None or NaN
-                                ARCTICDB_DEBUG_CHECK(
-                                        ErrorCode::E_ASSERTION_FAILURE,
-                                        !is_a_string(*input_it),
-                                        "Invalid non-string offset {}",
-                                        *input_it
+                                // Trailing nulls are stripped in utf32_to_u8, so we only need to strip them for
+                                // fixed-width ASCII
+                                auto opt_str = col_with_strings->string_at_offset(
+                                        *input_it, input_type_info::data_type == DataType::ASCII_FIXED64
                                 );
-                                *output_it = *input_it;
+                                if (opt_str.has_value()) {
+                                    if constexpr (is_fixed_string_type(input_type_info::data_type) &&
+                                                  is_utf_type(input_type_info::data_type)) {
+                                        auto utf8_str = util::utf32_to_u8(*opt_str);
+                                        *output_it = string_pool->get(utf8_str).offset();
+                                    } else {
+                                        *output_it = string_pool->get(*opt_str).offset();
+                                    }
+                                } else {
+                                    // This is only possible if the input column has a dynamic string type, and so
+                                    // *input_it will represent either None or NaN
+                                    ARCTICDB_DEBUG_CHECK(
+                                            ErrorCode::E_ASSERTION_FAILURE,
+                                            !is_a_string(*input_it),
+                                            "Invalid non-string offset {}",
+                                            *input_it
+                                    );
+                                    *output_it = *input_it;
+                                }
+                                offsets_map.emplace(*input_it, *output_it);
                             }
                         } else { // Numeric, datetime, or bool
                             *output_it = static_cast<output_type_info::RawType>(*input_it);
@@ -267,9 +280,7 @@ std::vector<Column> ColumnReslicer::initialise_output_columns() const {
                                 inserter = *set_bit + idx;
                             }
                         } else {
-                            for (auto local_idx = 0; local_idx < col.last_row() + 1; ++local_idx) {
-                                inserter = local_idx + idx;
-                            }
+                            bitset.set_range(idx, idx + col.last_row());
                         }
                         idx += col.last_row() + 1;
                     },

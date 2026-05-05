@@ -2017,6 +2017,188 @@
         "version": "41803cb351c8642d01cb2d0408295179cc4b2d24992efcda84a315e8d23b5237",
         "warmup_time": 0.5
     },
+    "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data": {
+        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self._peakmem_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        num_rows, initial_rows_per_segment, _ = row_params\n        num_row_slices = num_rows // initial_rows_per_segment\n        column_names = [f\"col_{idx}\" for idx in range(num_columns)]\n        dfs = []\n        for _ in range(num_row_slices):\n            columns = rng.choice(column_names, num_columns // 2, replace=False)\n            dfs.append(pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns}))\n        self._setup(row_params, num_columns, False, dfs)\n\nclass CompactDataBase:\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data",
+        "param_names": [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns"
+        ],
+        "params": [
+            [
+                "(1000, 10, 1000)"
+            ],
+            [
+                "100",
+                "1000",
+                "10000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:36",
+        "timeout": 500,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "6b91a7c92884f698fd82b8a3a00a16b920d260f4ec6988afefacd92e69d30c5f"
+    },
+    "compact_data.CompactDataNumericDynamicSchema.time_compact_data": {
+        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        self._time_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        num_rows, initial_rows_per_segment, _ = row_params\n        num_row_slices = num_rows // initial_rows_per_segment\n        column_names = [f\"col_{idx}\" for idx in range(num_columns)]\n        dfs = []\n        for _ in range(num_row_slices):\n            columns = rng.choice(column_names, num_columns // 2, replace=False)\n            dfs.append(pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns}))\n        self._setup(row_params, num_columns, False, dfs)\n\nclass CompactDataBase:\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.CompactDataNumericDynamicSchema.time_compact_data",
+        "number": 1,
+        "param_names": [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns"
+        ],
+        "params": [
+            [
+                "(1000, 10, 1000)"
+            ],
+            [
+                "100",
+                "1000",
+                "10000"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:36",
+        "timeout": 500,
+        "type": "time",
+        "unit": "seconds",
+        "version": "53b5d377abf2d9bc64f1dd845207a5ea67c41a9058de12b8e9030a09af10f603",
+        "warmup_time": -1
+    },
+    "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data": {
+        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        self._peakmem_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        num_rows = row_params[0]\n        df = pd.DataFrame({f\"col_{i}\": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\nclass CompactDataBase:\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data",
+        "param_names": [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns",
+            "column_slicing"
+        ],
+        "params": [
+            [
+                "(1000000, 10000, 100000)"
+            ],
+            [
+                "2",
+                "10",
+                "100"
+            ],
+            [
+                "False",
+                "True"
+            ]
+        ],
+        "setup_cache_key": "compact_data:36",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "fb1878968d8d26cb176db924f129c6773b0ad0ae2f063a24064376640b8cd93f"
+    },
+    "compact_data.CompactDataNumericStaticSchema.time_compact_data": {
+        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        self._time_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        num_rows = row_params[0]\n        df = pd.DataFrame({f\"col_{i}\": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\nclass CompactDataBase:\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.CompactDataNumericStaticSchema.time_compact_data",
+        "number": 1,
+        "param_names": [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns",
+            "column_slicing"
+        ],
+        "params": [
+            [
+                "(1000000, 10000, 100000)"
+            ],
+            [
+                "2",
+                "10",
+                "100"
+            ],
+            [
+                "False",
+                "True"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:36",
+        "type": "time",
+        "unit": "seconds",
+        "version": "82a8f8b92ece14dcc1e8552770d6b58b039e87af0c06cc96a8d8ad9fb6442d88",
+        "warmup_time": -1
+    },
+    "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data": {
+        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._peakmem_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        num_rows = row_params[0]\n        unique_strings = self.unique_strings[:num_unique_strings]\n        df = pd.DataFrame({f\"col_{i}\": rng.choice(unique_strings, num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\nclass CompactDataBase:\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data",
+        "param_names": [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns",
+            "column_slicing",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 10000, 100000)"
+            ],
+            [
+                "2",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "2",
+                "10",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "compact_data:36",
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "9159963b64f381de71b18d055211d9781bb121e2fb2876490754aed5f7e736c7"
+    },
+    "compact_data.CompactDataStringsStaticSchema.time_compact_data": {
+        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._time_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        num_rows = row_params[0]\n        unique_strings = self.unique_strings[:num_unique_strings]\n        df = pd.DataFrame({f\"col_{i}\": rng.choice(unique_strings, num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\nclass CompactDataBase:\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "compact_data.CompactDataStringsStaticSchema.time_compact_data",
+        "number": 1,
+        "param_names": [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns",
+            "column_slicing",
+            "num_unique_strings"
+        ],
+        "params": [
+            [
+                "(1000000, 10000, 100000)"
+            ],
+            [
+                "2",
+                "10"
+            ],
+            [
+                "False",
+                "True"
+            ],
+            [
+                "2",
+                "10",
+                "100000"
+            ]
+        ],
+        "repeat": 5,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "compact_data:36",
+        "type": "time",
+        "unit": "seconds",
+        "version": "7a6ddcbf9b2a99dbc67db59cd22f88508aa0770958e2ec35a4887d7342d2c32f",
+        "warmup_time": -1
+    },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
         "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, *args):\n        staged_symbols = self.lib.get_staged_symbols()\n        assert self.symbol + \"-mem\" in staged_symbols\n        self.lib.finalize_staged_data(self.symbol + \"-mem\", mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, lib_for_storage, num_chunks, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n    \n        assert len(self.lib.list_symbols()) == 0  # check we are in a clean state\n        initial_timestamp = TimestampNumber(0, self.df_generator.TIME_UNIT)\n    \n        list_of_chunks = [10_000] * num_chunks\n    \n        for suffix in (\"-time\", \"-mem\"):\n            symbol = _symbol_name(num_chunks) + suffix\n            stage_chunks(self.lib, symbol, self.df_generator, initial_timestamp, list_of_chunks)\n            self.logger.info(f\"Created Symbol: {symbol}\")\n        self.symbol = _symbol_name(num_chunks)\n\n    def setup_cache(self):\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        return lib_for_storage",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",

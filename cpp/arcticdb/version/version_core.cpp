@@ -3002,9 +3002,12 @@ folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context
 ) {
-    read_query->clauses_.push_back(
-            std::make_shared<Clause>(WriteClause(target_partial_index_key, std::make_shared<DeDupMap>(), store))
-    );
+    auto write_clause_processing_structure = read_query->clauses_.empty()
+                                                     ? ProcessingStructure::ROW_SLICE
+                                                     : read_query->clauses_.back()->clause_info().output_structure_;
+    read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
+            target_partial_index_key, std::make_shared<DeDupMap>(), store, write_clause_processing_structure
+    )));
 
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)

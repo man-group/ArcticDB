@@ -1149,20 +1149,23 @@ OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schema
 std::string ConcatClause::to_string() const { return "CONCAT"; }
 
 WriteClause::WriteClause(
-        const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+        const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
+        ProcessingStructure input_processing_structure
 ) :
     index_partial_key_(index_partial_key),
     dedup_map_(std::move(dedup_map)),
-    store_(std::move(store)) {}
+    store_(std::move(store)) {
+    clause_info_.input_structure_ = input_processing_structure;
+    clause_info_.output_structure_ = clause_info_.input_structure_;
+    clause_info_.can_combine_with_column_selection_ = false;
+}
 
 std::vector<std::vector<size_t>> WriteClause::structure_for_processing(std::vector<RangesAndKey>&) {
     internal::raise<ErrorCode::E_ASSERTION_FAILURE>("WriteClause should never be first in the pipeline");
 }
 
-std::vector<std::vector<EntityId>> WriteClause::structure_for_processing(
-        std::vector<std::vector<EntityId>>&& entity_ids_vec
-) {
-    return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
+std::vector<std::vector<EntityId>> WriteClause::structure_for_processing(std::vector<std::vector<EntityId>>&&) {
+    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("WriteClause should never restructure entities");
 }
 
 std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) const {
@@ -1240,6 +1243,9 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
     min_rows_per_segment_ = std::max((2 * rows_per_segment_) / 3, uint64_t(1));
     // If rows_per_segment_ == 2 max_rows_per_segment_ would be 2 without the std::max
     max_rows_per_segment_ = std::max((4 * rows_per_segment_) / 3, rows_per_segment_ + 1);
+    clause_info_.input_structure_ = ProcessingStructure::SINGLE_COLUMN_MULTI_ROW_SLICES;
+    clause_info_.output_structure_ = ProcessingStructure::SINGLE_COLUMN_MULTI_ROW_SLICES;
+    clause_info_.can_combine_with_column_selection_ = false;
 }
 
 bool CompactDataClause::row_ranges_all_acceptable_lengths(const std::set<RowRange>& row_ranges) const {
