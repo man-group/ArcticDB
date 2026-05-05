@@ -2055,11 +2055,6 @@ struct WarnVersionTypeNotHandled {
     }
 };
 
-bool check_if_version_id_already_exists(SignedVersionId version_id, const VersionVectorType& versions) {
-    const auto it = std::find(versions.begin(), versions.end(), static_cast<VersionId>(version_id));
-    return it != versions.end();
-}
-
 std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
@@ -2192,7 +2187,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
                     "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
             );
         }
-        
+
         specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
         std::vector<StreamId> latest_ids;
         std::copy_if(
