@@ -36,7 +36,7 @@ using StatsVariantData = std::variant<
 
 // One entry per index segment row: the matching ColumnStatsData row index, or nullopt when no
 // stats row matches (or when the row is already pruned). Stats values are read out
-// downstream via ColumnStatsData::values_at_slot.
+// downstream via ColumnStatsData::values_for_column.
 using StatsRowIndices = std::vector<std::optional<size_t>>;
 
 StatsVariantData evaluate_ast_node_against_stats(

@@ -97,18 +97,15 @@ TEST(ColumnStatsDataTest, FindStatsAllRowsPresent) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto slot = data.slot_for_column("price");
-    ASSERT_TRUE(slot.has_value());
-
     auto row0 = data.find_row(100, 200);
     ASSERT_TRUE(row0.has_value());
-    auto v0 = data.stats_for(*slot, *row0);
+    auto v0 = data.stats_for("price", *row0);
     ASSERT_EQ(v0.min->get<int64_t>(), 10);
     ASSERT_EQ(v0.max->get<int64_t>(), 20);
 
     auto row2 = data.find_row(500, 600);
     ASSERT_TRUE(row2.has_value());
-    auto v2 = data.stats_for(*slot, *row2);
+    auto v2 = data.stats_for("price", *row2);
     ASSERT_EQ(v2.min->get<int64_t>(), 50);
     ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
@@ -192,21 +189,18 @@ TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows) {
     ColumnStatsData data(std::move(seg), tsd, std::make_pair<timestamp, timestamp>(250, 650));
     ASSERT_FALSE(data.empty());
 
-    auto slot = data.slot_for_column("price");
-    ASSERT_TRUE(slot.has_value());
-
     ASSERT_FALSE(data.find_row(100, 200).has_value());
     ASSERT_FALSE(data.find_row(700, 800).has_value());
 
     auto row1 = data.find_row(300, 400);
     ASSERT_TRUE(row1.has_value());
-    auto v1 = data.stats_for(*slot, *row1);
+    auto v1 = data.stats_for("price", *row1);
     ASSERT_EQ(v1.min->get<int64_t>(), 30);
     ASSERT_EQ(v1.max->get<int64_t>(), 40);
 
     auto row2 = data.find_row(500, 600);
     ASSERT_TRUE(row2.has_value());
-    auto v2 = data.stats_for(*slot, *row2);
+    auto v2 = data.stats_for("price", *row2);
     ASSERT_EQ(v2.min->get<int64_t>(), 50);
     ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
@@ -242,19 +236,16 @@ TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto slot = data.slot_for_column("price");
-    ASSERT_TRUE(slot.has_value());
-
     // Unique rows are still reachable.
     auto row0 = data.find_row(100, 300);
     ASSERT_TRUE(row0.has_value());
-    auto v0 = data.stats_for(*slot, *row0);
+    auto v0 = data.stats_for("price", *row0);
     ASSERT_EQ(v0.min->get<int64_t>(), 10);
     ASSERT_EQ(v0.max->get<int64_t>(), 20);
 
     auto row3 = data.find_row(400, 600);
     ASSERT_TRUE(row3.has_value());
-    auto v3 = data.stats_for(*slot, *row3);
+    auto v3 = data.stats_for("price", *row3);
     ASSERT_EQ(v3.min->get<int64_t>(), 70);
     ASSERT_EQ(v3.max->get<int64_t>(), 80);
 
@@ -263,7 +254,7 @@ TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
 }
 
 // Build a two-column stats segment where "volume" is absent (sparse) for certain rows.
-// Verify that values_at_slot reports column_absent = true for those entries.
+// Verify that values_for_column reports column_absent = true for those entries.
 TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     using namespace arcticc::pb2::column_stats_pb2;
 
@@ -347,31 +338,26 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     ColumnStatsData data(std::move(seg), tsd);
     ASSERT_FALSE(data.empty());
 
-    auto price_slot = data.slot_for_column("price");
-    auto vol_slot = data.slot_for_column("volume");
-    ASSERT_TRUE(price_slot.has_value());
-    ASSERT_TRUE(vol_slot.has_value());
-
     auto row0 = data.find_row(100, 200);
     ASSERT_TRUE(row0.has_value());
-    auto p0 = data.stats_for(*price_slot, *row0);
+    auto p0 = data.stats_for("price", *row0);
     ASSERT_TRUE(p0.min.has_value());
     ASSERT_EQ(p0.min->get<int64_t>(), 10);
     ASSERT_FALSE(p0.column_absent);
 
-    auto v0 = data.stats_for(*vol_slot, *row0);
+    auto v0 = data.stats_for("volume", *row0);
     ASSERT_TRUE(v0.min.has_value());
     ASSERT_EQ(v0.min->get<int64_t>(), 100);
     ASSERT_FALSE(v0.column_absent);
 
     auto row1 = data.find_row(300, 400);
     ASSERT_TRUE(row1.has_value());
-    auto p1 = data.stats_for(*price_slot, *row1);
+    auto p1 = data.stats_for("price", *row1);
     ASSERT_TRUE(p1.min.has_value());
     ASSERT_EQ(p1.min->get<int64_t>(), 30);
     ASSERT_FALSE(p1.column_absent);
 
-    auto v1 = data.stats_for(*vol_slot, *row1);
+    auto v1 = data.stats_for("volume", *row1);
     ASSERT_FALSE(v1.min.has_value());
     ASSERT_FALSE(v1.max.has_value());
     ASSERT_TRUE(v1.column_absent);

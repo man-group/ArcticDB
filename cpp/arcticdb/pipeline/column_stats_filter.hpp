@@ -86,13 +86,13 @@ class ColumnStatsData {
 
     bool empty() const { return num_rows_ == 0; }
 
-    std::optional<size_t> slot_for_column(const std::string& col_name) const;
-
     /**
-     * Return the min/max ColumnStatsValues for the requested slot at each row index in row_indices.
+     * Return the min/max ColumnStatsValues for the requested column at each row index in row_indices.
+     * Returns a vector of default-constructed (absent) entries if the column has no stats.
      */
-    std::vector<ColumnStatsValues> values_at_slot(size_t slot, const std::vector<std::optional<size_t>>& row_indices)
-            const;
+    std::vector<ColumnStatsValues> values_for_column(
+            const std::string& col_name, const std::vector<std::optional<size_t>>& row_indices
+    ) const;
 
   private:
     FRIEND_TEST(ColumnStatsDataTest, FindStatsAllRowsPresent);
@@ -100,22 +100,20 @@ class ColumnStatsData {
     FRIEND_TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows);
     FRIEND_TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly);
 
-    ColumnStatsValues stats_for(size_t slot, size_t row) const;
+    ColumnStatsValues stats_for(const std::string& col_name, size_t row) const;
 
-    struct SlotData {
+    struct StatsForColumn {
         std::vector<std::optional<Value>> mins;  // size == num_rows_
         std::vector<std::optional<Value>> maxes; // size == num_rows_
     };
 
     size_t num_rows_{0};
-    size_t num_slots_{0};
     std::vector<timestamp> start_indices_; // size = num_rows_
     std::vector<timestamp> end_indices_;   // size = num_rows_
-    std::vector<SlotData> slots_;          // size = num_slots_
+    std::unordered_map<std::string, StatsForColumn> stats_by_column_;
 
     // (start_index, end_index) -> row index. The index values are rowcounts for string-indexed symbols.
     std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;
-    std::unordered_map<std::string, size_t> col_name_to_slot_;
 };
 
 struct ColumnStatsQueryMetadata {

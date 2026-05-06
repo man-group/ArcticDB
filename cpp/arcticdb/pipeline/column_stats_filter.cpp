@@ -36,10 +36,7 @@ StatsVariantData evaluate_ast_node_against_stats(
     return util::variant_match(
             node,
             [&](const ColumnName& column_name) -> StatsVariantData {
-                if (auto slot = column_stats.slot_for_column(column_name.value); slot.has_value()) {
-                    return column_stats.values_at_slot(*slot, row_indices);
-                }
-                return std::vector<ColumnStatsValues>(row_indices.size());
+                return column_stats.values_for_column(column_name.value, row_indices);
             },
             [&](const ValueName& value_name) -> StatsVariantData {
                 return expression_context.values_.get_value(value_name.value);
@@ -157,8 +154,7 @@ ColumnStatsData::ColumnStatsData(
         return;
     }
 
-    // For each column in the read query with any stats we register a slot and remember the segment column indices to
-    // read from.
+    // Gather metadata about the statistics we're interested in
     std::vector<StatsMetadataForColumn> stats_metadata;
     stats_metadata.reserve(header.stats_by_column().size());
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
@@ -241,17 +237,11 @@ ColumnStatsData::ColumnStatsData(
         return;
     }
 
-    num_slots_ = stats_metadata.size();
-    slots_.resize(num_slots_);
-    for (auto& slot_data : slots_) {
-        slot_data.mins.resize(num_rows_);
-        slot_data.maxes.resize(num_rows_);
-    }
-
-    for (size_t slot = 0; slot < num_slots_; ++slot) {
-        auto& stats_metadata_for_column = stats_metadata.at(slot);
-        col_name_to_slot_.emplace(stats_metadata_for_column.col_name, slot);
-        auto& slot_data = slots_.at(slot);
+    // Store statistics in the stats_by_column_ map
+    for (auto& stats_metadata_for_column : stats_metadata) {
+        StatsForColumn stats_for_column;
+        stats_for_column.mins.resize(num_rows_);
+        stats_for_column.maxes.resize(num_rows_);
 
         details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
             using type_info = ScalarTypeInfo<T>;
@@ -262,7 +252,7 @@ ColumnStatsData::ColumnStatsData(
                 for (const auto& entry : stats_metadata_for_column.entries) {
                     const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
                     const bool is_min = entry.stat_type == MIN_V1;
-                    auto& dest = is_min ? slot_data.mins : slot_data.maxes;
+                    auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
 
                     if (!column.is_sparse() && static_cast<size_t>(column.row_count()) == segment_row_count) {
                         // Dense
@@ -285,6 +275,8 @@ ColumnStatsData::ColumnStatsData(
                 }
             }
         });
+
+        stats_by_column_.emplace(std::move(stats_metadata_for_column.col_name), std::move(stats_for_column));
     }
 
     index_to_row_.reserve(num_rows_);
@@ -310,35 +302,31 @@ std::optional<size_t> ColumnStatsData::find_row(timestamp start_index, timestamp
     return std::nullopt;
 }
 
-std::optional<size_t> ColumnStatsData::slot_for_column(const std::string& col_name) const {
-    if (auto it = col_name_to_slot_.find(col_name); it != col_name_to_slot_.end()) {
-        return it->second;
-    }
-    return std::nullopt;
-}
-
-std::vector<ColumnStatsValues> ColumnStatsData::values_at_slot(
-        size_t slot, const std::vector<std::optional<size_t>>& row_indices
+std::vector<ColumnStatsValues> ColumnStatsData::values_for_column(
+        const std::string& col_name, const std::vector<std::optional<size_t>>& row_indices
 ) const {
     std::vector<ColumnStatsValues> result(row_indices.size());
-    if (slot >= num_slots_ || num_rows_ == 0) {
+    if (num_rows_ == 0) {
         return result;
     }
-
-    const auto& slot_data = slots_.at(slot);
+    auto it = stats_by_column_.find(col_name);
+    if (it == stats_by_column_.end()) {
+        return result;
+    }
+    const auto& stats = it->second;
     for (size_t i = 0; i < row_indices.size(); ++i) {
         const auto& maybe_row = row_indices.at(i);
         if (!maybe_row.has_value()) {
             continue;
         }
         const size_t r = *maybe_row;
-        const bool min_set = slot_data.mins.at(r).has_value();
-        const bool max_set = slot_data.maxes.at(r).has_value();
+        const bool min_set = stats.mins.at(r).has_value();
+        const bool max_set = stats.maxes.at(r).has_value();
         util::check(min_set == max_set, "MIN and MAX should both be present or both be absent");
         auto& result_entry = result.at(i);
         if (min_set) {
-            result_entry.min = slot_data.mins.at(r);
-            result_entry.max = slot_data.maxes.at(r);
+            result_entry.min = stats.mins.at(r);
+            result_entry.max = stats.maxes.at(r);
         } else {
             result_entry.column_absent = true;
         }
@@ -346,8 +334,8 @@ std::vector<ColumnStatsValues> ColumnStatsData::values_at_slot(
     return result;
 }
 
-ColumnStatsValues ColumnStatsData::stats_for(size_t slot, size_t row) const {
-    auto v = values_at_slot(slot, {std::optional<size_t>{row}});
+ColumnStatsValues ColumnStatsData::stats_for(const std::string& col_name, size_t row) const {
+    auto v = values_for_column(col_name, {std::optional<size_t>{row}});
     return v.empty() ? ColumnStatsValues{} : std::move(v.at(0));
 }
 
