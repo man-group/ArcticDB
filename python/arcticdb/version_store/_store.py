@@ -2902,7 +2902,10 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if (
+                output_format.lower() == OutputFormat.POLARS.lower()
+                and not norm.WhichOneof("input_type") == "msg_pack_frame"
+            ):
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -3987,10 +3990,8 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
-            compactions may fail. Additionally, resampling is not yet supported with sparse data.
-
-            Sparse data is not yet supported.
+            Note that compacting dynamic schema data can produce sparse data, even if the input data was dense, and
+            resampling does not yet support sparse data.
 
         Parameters
         ----------
@@ -4016,7 +4017,7 @@ class NativeVersionStore:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, or the data is sparse
+            If the existing data is recursively normalized
 
         Examples
         --------
