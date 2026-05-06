@@ -30,8 +30,7 @@ jobs:
         id: gather-pytest-xmls
         uses: actions/download-artifact@v8
         with:
-            pattern: |
-              "*pytest-*"
+            pattern: "*pytest-*"
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
             path: ${{ env.ARTEFACT_PATH }}
