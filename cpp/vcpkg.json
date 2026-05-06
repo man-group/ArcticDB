@@ -51,10 +51,6 @@
     "boost-optional",
     "boost-multiprecision",
     "bitmagic",
-    {
-      "name": "libiconv",
-      "platform": "!linux"
-    },
     "openssl",
     "double-conversion",
     "libevent",
@@ -114,7 +110,6 @@
     { "name": "gtest", "version": "1.12.1" },
     { "name": "libbson", "version": "1.30.3" },
     { "name": "libevent", "version": "2.1.12#7" },
-    { "name": "libiconv", "version": "1.17#0" },
     { "name": "lz4", "version": "1.9.3#4" },
     { "name": "mongo-c-driver", "version": "1.28.0" },
     { "name": "mongo-cxx-driver", "version": "3.10.2#1" },
