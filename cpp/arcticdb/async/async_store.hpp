@@ -427,14 +427,16 @@ class AsyncStore : public Store {
             std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
     ) override {
         ARCTICDB_RUNTIME_DEBUG(log::version(), "Reading {} keys", ranges_and_keys.size());
-        std::vector<folly::Future<pipelines::SegmentAndSlice>> output;
-        for (auto&& ranges_and_key : ranges_and_keys) {
-            const auto key = ranges_and_key.key_;
-            output.emplace_back(read_and_continue(
-                    key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
-            ));
-        }
-        return output;
+        return folly::window(
+                std::move(ranges_and_keys),
+                [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {
+                    const auto key = ranges_and_key.key_;
+                    return read_and_continue(
+                            key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
+                    );
+                },
+                2 * async::TaskScheduler::instance()->io_thread_count()
+                );
     }
 
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
