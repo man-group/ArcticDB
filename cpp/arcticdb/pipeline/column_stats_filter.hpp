@@ -89,13 +89,12 @@ class ColumnStatsData {
     std::optional<size_t> slot_for_column(const std::string& col_name) const;
 
     /**
-     * Materialize ColumnStatsValues for the requested slot at each row index in row_indices.
+     * Return the min/max ColumnStatsValues for the requested slot at each row index in row_indices.
      */
-    std::vector<ColumnStatsValues> materialize_slot(size_t slot, const std::vector<std::optional<size_t>>& row_indices)
+    std::vector<ColumnStatsValues> values_at_slot(size_t slot, const std::vector<std::optional<size_t>>& row_indices)
             const;
 
   private:
-    static constexpr size_t BYTES_PER_CELL = 8;
     FRIEND_TEST(ColumnStatsDataTest, FindStatsAllRowsPresent);
     FRIEND_TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows);
     FRIEND_TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows);
@@ -103,26 +102,16 @@ class ColumnStatsData {
 
     ColumnStatsValues stats_for(size_t slot, size_t row) const;
 
-    /**
-     * Storage layout is flat columnar: we keep a typed raw buffer for min and max.
-     * This gives us a single big allocation rather than one vector per row, and
-     * avoids the per-cell Value wrapper construction when constructing this object.
-     */
-    struct SlotInfo {
-        DataType data_type;
-        // Bit per row indicating whether that row has a value for the statistic.
-        // nullopt means the source column was dense and every row has a value.
-        std::optional<util::BitSet> min_set;
-        std::optional<util::BitSet> max_set;
+    struct SlotData {
+        std::vector<std::optional<Value>> mins;  // size == num_rows_
+        std::vector<std::optional<Value>> maxes; // size == num_rows_
     };
 
     size_t num_rows_{0};
     size_t num_slots_{0};
     std::vector<timestamp> start_indices_; // size = num_rows_
     std::vector<timestamp> end_indices_;   // size = num_rows_
-    std::vector<SlotInfo> slots_;          // size = num_slots_
-    std::vector<uint8_t> min_data_;        // size = num_slots_ * num_rows_ * BYTES_PER_CELL
-    std::vector<uint8_t> max_data_;        // size = num_slots_ * num_rows_ * BYTES_PER_CELL
+    std::vector<SlotData> slots_;          // size = num_slots_
 
     // (start_index, end_index) -> row index. The index values are rowcounts for string-indexed symbols.
     std::unordered_map<std::pair<timestamp, timestamp>, size_t, util::PairHasher> index_to_row_;

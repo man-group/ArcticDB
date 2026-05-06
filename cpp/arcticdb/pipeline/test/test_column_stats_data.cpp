@@ -263,7 +263,7 @@ TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
 }
 
 // Build a two-column stats segment where "volume" is absent (sparse) for certain rows.
-// Verify that materialize_slot reports column_absent = true for those entries.
+// Verify that values_at_slot reports column_absent = true for those entries.
 TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
     using namespace arcticc::pb2::column_stats_pb2;
 

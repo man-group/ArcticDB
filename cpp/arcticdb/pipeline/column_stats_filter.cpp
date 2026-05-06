@@ -37,7 +37,7 @@ StatsVariantData evaluate_ast_node_against_stats(
             node,
             [&](const ColumnName& column_name) -> StatsVariantData {
                 if (auto slot = column_stats.slot_for_column(column_name.value); slot.has_value()) {
-                    return column_stats.materialize_slot(*slot, row_indices);
+                    return column_stats.values_at_slot(*slot, row_indices);
                 }
                 return std::vector<ColumnStatsValues>(row_indices.size());
             },
@@ -241,49 +241,44 @@ ColumnStatsData::ColumnStatsData(
         return;
     }
 
-    // Write the statistics to the flat buffers
     num_slots_ = stats_metadata.size();
     slots_.resize(num_slots_);
-    min_data_.assign(num_slots_ * num_rows_ * BYTES_PER_CELL, 0);
-    max_data_.assign(num_slots_ * num_rows_ * BYTES_PER_CELL, 0);
+    for (auto& slot_data : slots_) {
+        slot_data.mins.resize(num_rows_);
+        slot_data.maxes.resize(num_rows_);
+    }
 
     for (size_t slot = 0; slot < num_slots_; ++slot) {
         auto& stats_metadata_for_column = stats_metadata.at(slot);
         col_name_to_slot_.emplace(stats_metadata_for_column.col_name, slot);
-        auto& slot_info = slots_.at(slot);
-        slot_info.data_type = stats_metadata_for_column.data_type;
+        auto& slot_data = slots_.at(slot);
 
         details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
             using type_info = ScalarTypeInfo<T>;
             if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
                           is_bool_type(type_info::data_type)) {
                 using RawType = type_info::RawType;
-                static_assert(sizeof(RawType) <= BYTES_PER_CELL, "RawType wider than per-cell slot");
 
                 for (const auto& entry : stats_metadata_for_column.entries) {
                     const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
                     const bool is_min = entry.stat_type == MIN_V1;
-                    uint8_t* dest = (is_min ? min_data_.data() : max_data_.data()) + slot * num_rows_ * BYTES_PER_CELL;
-                    auto& set_bits = is_min ? slot_info.min_set : slot_info.max_set;
+                    auto& dest = is_min ? slot_data.mins : slot_data.maxes;
 
                     if (!column.is_sparse() && static_cast<size_t>(column.row_count()) == segment_row_count) {
                         // Dense
                         auto it = column.begin<typename type_info::TDT>();
                         std::advance(it, static_cast<ssize_t>(first_kept));
                         for (size_t r = first_kept; r < last_kept_excl; ++r, ++it) {
-                            const size_t kept = r - first_kept; // index in to the output buffer dest
-                            // Write *it in to the dest buffer
-                            *reinterpret_cast<RawType*>(dest + kept * BYTES_PER_CELL) = *it;
+                            const size_t kept = r - first_kept;
+                            dest.at(kept) = Value{*it, type_info::data_type};
                         }
                     } else {
                         // Sparse
-                        set_bits.emplace(static_cast<util::BitSetSizeType>(num_rows_));
                         for (size_t r = first_kept; r < last_kept_excl; ++r) {
                             if (auto opt_val = column.scalar_at<RawType>(static_cast<position_t>(r));
                                 opt_val.has_value()) {
                                 const size_t kept = r - first_kept;
-                                *reinterpret_cast<RawType*>(dest + kept * BYTES_PER_CELL) = *opt_val;
-                                set_bits->set(static_cast<util::BitSetSizeType>(kept));
+                                dest.at(kept) = Value{*opt_val, type_info::data_type};
                             }
                         }
                     }
@@ -322,7 +317,7 @@ std::optional<size_t> ColumnStatsData::slot_for_column(const std::string& col_na
     return std::nullopt;
 }
 
-std::vector<ColumnStatsValues> ColumnStatsData::materialize_slot(
+std::vector<ColumnStatsValues> ColumnStatsData::values_at_slot(
         size_t slot, const std::vector<std::optional<size_t>>& row_indices
 ) const {
     std::vector<ColumnStatsValues> result(row_indices.size());
@@ -330,44 +325,30 @@ std::vector<ColumnStatsValues> ColumnStatsData::materialize_slot(
         return result;
     }
 
-    const auto& info = slots_[slot];
-    const uint8_t* min_buf = min_data_.data() + slot * num_rows_ * BYTES_PER_CELL;
-    const uint8_t* max_buf = max_data_.data() + slot * num_rows_ * BYTES_PER_CELL;
-
-    details::visit_type(info.data_type, [&](auto tag) {
-        using type_info = ScalarTypeInfo<decltype(tag)>;
-        if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
-                      is_bool_type(type_info::data_type)) {
-            using RawType = type_info::RawType;
-            const bool min_dense = !info.min_set.has_value();
-            const bool max_dense = !info.max_set.has_value();
-            for (size_t i = 0; i < row_indices.size(); ++i) {
-                const auto& maybe_row = row_indices.at(i);
-                if (!maybe_row.has_value()) {
-                    continue;
-                }
-                const size_t r = *maybe_row;
-                const bool min_set = min_dense || info.min_set->test(static_cast<util::BitSetSizeType>(r));
-                const bool max_set = max_dense || info.max_set->test(static_cast<util::BitSetSizeType>(r));
-                util::check(min_set == max_set, "MIN and MAX should both be present or both be absent");
-                auto& result_entry = result.at(i);
-                if (min_set) {
-                    RawType raw_min = *reinterpret_cast<const RawType*>(min_buf + r * BYTES_PER_CELL);
-                    result_entry.min = Value{raw_min, type_info::data_type};
-                    RawType raw_max = *reinterpret_cast<const RawType*>(max_buf + r * BYTES_PER_CELL);
-                    result_entry.max = Value{raw_max, type_info::data_type};
-                } else {
-                    result_entry.column_absent = true;
-                }
-            }
+    const auto& slot_data = slots_.at(slot);
+    for (size_t i = 0; i < row_indices.size(); ++i) {
+        const auto& maybe_row = row_indices.at(i);
+        if (!maybe_row.has_value()) {
+            continue;
         }
-    });
+        const size_t r = *maybe_row;
+        const bool min_set = slot_data.mins.at(r).has_value();
+        const bool max_set = slot_data.maxes.at(r).has_value();
+        util::check(min_set == max_set, "MIN and MAX should both be present or both be absent");
+        auto& result_entry = result.at(i);
+        if (min_set) {
+            result_entry.min = slot_data.mins.at(r);
+            result_entry.max = slot_data.maxes.at(r);
+        } else {
+            result_entry.column_absent = true;
+        }
+    }
     return result;
 }
 
 ColumnStatsValues ColumnStatsData::stats_for(size_t slot, size_t row) const {
-    auto v = materialize_slot(slot, {std::optional<size_t>{row}});
-    return v.empty() ? ColumnStatsValues{} : std::move(v[0]);
+    auto v = values_at_slot(slot, {std::optional<size_t>{row}});
+    return v.empty() ? ColumnStatsValues{} : std::move(v.at(0));
 }
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(

@@ -35,8 +35,8 @@ using StatsVariantData = std::variant<
         std::shared_ptr<ValueSet>>;
 
 // One entry per index segment row: the matching ColumnStatsData row index, or nullopt when no
-// stats row matches (or when the row is already pruned). Materialisation of stats values happens
-// downstream via ColumnStatsData::materialize_slot.
+// stats row matches (or when the row is already pruned). Stats values are read out
+// downstream via ColumnStatsData::values_at_slot.
 using StatsRowIndices = std::vector<std::optional<size_t>>;
 
 StatsVariantData evaluate_ast_node_against_stats(
