@@ -359,11 +359,16 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_termination_handler();
     Py_AtExit(shutdown_globals);
 
-    m.def("shutdown", &shutdown_globals,
-        "Stop background thread pools and release global resources.\n\n"
-        "Called automatically during normal interpreter shutdown via Py_AtExit,\n"
-        "and before os._exit() via the arcticdb os._exit wrapper."
-    );
+    m.def("shutdown", [] {
+        shutdown_globals();
+        // join() blocks until threads have fully exited, which is needed
+        // on Windows before os._exit() to prevent the ExitProcess deadlock.
+        // shutdown_globals() only calls stop() which is best-effort.
+        // Use instance_ directly to avoid re-initialization via instance().
+        if (async::TaskScheduler::instance_) {
+            (*async::TaskScheduler::instance_)->join();
+        }
+    });
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;
