@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/compact_data_info.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -199,6 +200,10 @@ folly::Future<VersionedItem> merge_update_impl(
         const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
         std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
+);
+
+folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, uint64_t rows_per_segment
 );
 
 folly::Future<std::optional<VersionedItem>> compact_data_impl(

@@ -969,7 +969,8 @@ struct CompactDataClause {
 
     [[nodiscard]] std::string to_string() const;
 
-    // Public only for testing purposes
+    [[nodiscard]] bool row_ranges_all_acceptable_lengths(const std::set<RowRange>& row_ranges) const;
+
     [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
 };
 } // namespace arcticdb
