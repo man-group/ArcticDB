@@ -359,6 +359,12 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_termination_handler();
     Py_AtExit(shutdown_globals);
 
+    m.def("shutdown", &shutdown_globals,
+        "Stop background thread pools and release global resources.\n\n"
+        "Called automatically during normal interpreter shutdown via Py_AtExit,\n"
+        "and before os._exit() via the arcticdb os._exit wrapper."
+    );
+
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;
 #else
