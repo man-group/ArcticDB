@@ -29,6 +29,7 @@ def test_raise(code, exception):
 
 @pytest.mark.parametrize("exception_type", all_exception_types)
 def test_base_exception(exception_type):
+    assert False # Temp to check that conda is publishing results
     assert issubclass(exception_type, ArcticException)
 
 
