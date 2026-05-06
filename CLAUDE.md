@@ -190,6 +190,8 @@ When working on a feature branch, maintain a work log in `docs/claude/plans/<bra
 
 Code style is enforced by `make lint` **Always run `make lint` after making code changes.**
 
+Prefer `vec.at(i)` over `vec[i]` for `std::vector` and `std::array` access.
+
 ### Git Commits
 
 - Do not add "Generated with AI" or "Co-Authored-By" lines to commit messages
