@@ -32,7 +32,6 @@ jobs:
         with:
             pattern: |
               pytest-*
-              conda_pytest-*
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
             path: ${{ env.ARTEFACT_PATH }}
