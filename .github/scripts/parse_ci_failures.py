@@ -75,6 +75,16 @@ def parse_gtest_failures(log_text: str) -> set[str]:
     return results
 
 
+def normalise_path_separators(test_id: str) -> str:
+    """Normalise Windows backslash path separators to forward slashes.
+
+    Windows CI runners produce paths like ``tests\\stress\\arcticdb\\...``
+    while Linux/macOS produce ``tests/stress/arcticdb/...``. Normalising
+    ensures the same test produces the same ID regardless of platform.
+    """
+    return test_id.replace("\\", "/")
+
+
 def strip_parametrize(test_id: str) -> str:
     """Strip pytest parametrize suffix ``[...]`` from a test node ID.
 
@@ -98,7 +108,8 @@ def parse_pytest_failures(log_text: str) -> set[str]:
     parametrizations of the same test are grouped together.
     """
     pattern = r"(?:FAILED|ERROR)\s+(\S+::\S+)"
-    return {strip_parametrize(m.group(1)) for m in re.finditer(pattern, log_text)}
+    return {normalise_path_separators(strip_parametrize(m.group(1)))
+            for m in re.finditer(pattern, log_text)}
 
 
 def filter_infra_steps(all_steps: list[str]) -> list[str]:
