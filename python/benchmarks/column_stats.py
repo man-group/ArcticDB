@@ -537,3 +537,93 @@ class ColumnStatsWideFilter:
     def time_filter_wide(self, *args):
         """Filter with 201 OR'd conditions forcing decode of 200 extra columns."""
         self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=self.query)
+
+
+class ColumnStatsManySegmentsZeroMatch:
+    """Benchmark stats pruning with a large column stats key and where we can prune every data block.
+
+    Writes 10k rows with rows_per_segment=2 so the symbol has ~5k segments and the column
+    stats key holds one row per segment.
+    """
+
+    sample_time = 0.5
+    rounds = 1
+    repeat = (2, 3, 5.0)
+    warmup_time = 0.5
+    timeout = 600
+
+    column_stats_enabled = [True, False]
+    storages = STORAGES
+
+    params = [column_stats_enabled, storages]
+    param_names = ["column_stats_enabled", "storage"]
+
+    NUM_ROWS = 10_000
+    ROWS_PER_SEGMENT = 2
+    NUM_COLS = 100
+    NUM_FILTER_COLS = 10
+
+    def __init__(self):
+        self.logger = get_logger()
+
+    def setup_cache(self):
+        start = time.time()
+        lib_for_storage = {}
+        for storage in self.storages:
+            if not is_storage_enabled(storage):
+                lib_for_storage[storage] = None
+                continue
+            lib = create_library(storage, LibraryOptions(rows_per_segment=self.ROWS_PER_SEGMENT))
+            lib_for_storage[storage] = lib
+
+            sym = "many_segments_zero_match"
+            n = self.NUM_ROWS
+            timestamps = pd.date_range(end="1/1/2023", periods=n, freq="s")
+            data = {f"float_{i}": np.linspace(1.0 + i, 1000.0 + i, n) for i in range(self.NUM_COLS)}
+            df = pd.DataFrame(data)
+            df.index = timestamps
+            df.index.name = "ts"
+
+            lib.write(sym, df)
+            stats = {f"float_{i}": {"MINMAX"} for i in range(self.NUM_COLS)}
+            lib._nvs.create_column_stats(sym, stats)
+            self.logger.info(f"Wrote {sym} with {n} rows and created column stats")
+
+        self.logger.info(f"setup_cache time: {time.time() - start}")
+        return lib_for_storage
+
+    def setup(self, lib_for_storage, column_stats_enabled, storage):
+        self.lib = lib_for_storage[storage]
+        if self.lib is None:
+            raise SkipNotImplemented
+        self.symbol = "many_segments_zero_match"
+        self.read_columns = [f"float_{i}" for i in range(self.NUM_COLS)]
+
+        # Every float column has positive values, so < 0 prunes everything.
+        q = QueryBuilder()
+        expr = q["float_0"] < 0.0
+        for i in range(1, self.NUM_FILTER_COLS):
+            expr = expr | (q[f"float_{i}"] < 0.0)
+        self.query = q[expr]
+
+        index_end = pd.Timestamp("2023-01-01")
+        self.date_range_half = (index_end - pd.Timedelta(seconds=self.NUM_ROWS // 2), index_end)
+
+        if column_stats_enabled:
+            set_config_int("ColumnStats.UseForQueries", 1)
+        else:
+            unset_config_int("ColumnStats.UseForQueries")
+
+    def teardown(self, *args):
+        unset_config_int("ColumnStats.UseForQueries")
+
+    def time_filter_10_columns_zero_match(self, *args):
+        self.lib.read(self.symbol, columns=self.read_columns, query_builder=self.query)
+
+    def time_filter_10_columns_zero_match_with_date_range(self, *args):
+        self.lib.read(
+            self.symbol,
+            columns=self.read_columns,
+            date_range=self.date_range_half,
+            query_builder=self.query,
+        )
