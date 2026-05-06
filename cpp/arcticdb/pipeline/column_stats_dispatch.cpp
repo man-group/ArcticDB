@@ -80,6 +80,17 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                 auto set_min_raw = static_cast<RightType>(set_min->get<SetRawType>());
                 auto set_max_raw = static_cast<RightType>(set_max->get<SetRawType>());
 
+                if constexpr (is_time_type(StatsTag::data_type)) {
+                    const bool nat_in_set = static_cast<timestamp>(set_min_raw) == NaT;
+                    const bool stats_all_nat = static_cast<timestamp>(stats_max) == NaT;
+                    if (stats_all_nat) {
+                        return is_isin == nat_in_set ? StatsComparison::ALL_MATCH : StatsComparison::NONE_MATCH;
+                    }
+                    if (nat_in_set) {
+                        return StatsComparison::UNKNOWN;
+                    }
+                }
+
                 // Do one pass where we evaluate stats against the min and max values in the set.
                 // If this gives an ambiguous result, do a second pass where we evaluate stats against each element in
                 // the set.

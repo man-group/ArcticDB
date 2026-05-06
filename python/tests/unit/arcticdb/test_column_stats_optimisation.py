@@ -935,6 +935,55 @@ def test_column_stats_nat_values(in_memory_version_store, clear_query_stats, col
 
 
 @pytest.mark.parametrize(
+    "query_expr,expected_reads",
+    [
+        # df0 = mixed (Timestamp + NaT), df1 = all non-NaT in 2025, df2 = all NaT
+        pytest.param(lambda q: q["col"] == pd.NaT, 0, id="eq_nat"),
+        pytest.param(lambda q: q["col"] != pd.NaT, 3, id="ne_nat"),
+        pytest.param(lambda q: q["col"] > pd.Timestamp("2024-01-01"), 1, id="gt_ts"),
+        pytest.param(lambda q: q["col"] < pd.Timestamp("2024-01-01"), 1, id="lt_ts"),
+        pytest.param(lambda q: q["col"] >= pd.Timestamp("2024-01-01"), 1, id="ge_ts"),
+        pytest.param(lambda q: q["col"] <= pd.Timestamp("2024-01-01"), 1, id="le_ts"),
+    ],
+)
+def test_column_stats_nat_filter(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame(
+        {"col": [pd.Timestamp("2020-01-01"), pd.NaT]},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"col": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-06-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+    df2 = pd.DataFrame(
+        {"col": [pd.NaT, pd.NaT]},
+        index=pd.date_range("2000-01-05", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1, df2])
+    expected = full_df[query_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
     "col_dtype,col_values_seg0,col_values_seg1,filter_val",
     [
         (np.int32, [1, 2], [3, 4], 2.5),
@@ -1529,22 +1578,19 @@ def test_column_stats_cross_column_comparison_nan_neq(
     [
         # seg0: a=[NaT, NaT] b=[ts3, ts4]
         # seg1: a=[ts5, ts6], b=[NaT, NaT]
-        # The ranges for a and b are disjoint across segments
-        pytest.param(lambda q: q["a"] < q["b"], 1, id="lt_nat_prunes_seg1"),
-        pytest.param(lambda q: q["a"] > q["b"], 1, id="gt_nat_prunes_seg0"),
+        # ordering / equality op prunes both segments, and != reads both.
+        pytest.param(lambda q: q["a"] < q["b"], 0, id="lt_nat_prunes_both"),
+        pytest.param(lambda q: q["a"] > q["b"], 0, id="gt_nat_prunes_both"),
         pytest.param(lambda q: q["a"] == q["b"], 0, id="eq_nat_prunes_both"),
         pytest.param(lambda q: q["a"] != q["b"], 2, id="neq_nat_no_pruning"),
-        pytest.param(lambda q: q["a"] <= q["b"], 1, id="lte_nat_prunes_seg1"),
-        pytest.param(lambda q: q["a"] >= q["b"], 1, id="gte_nat_prunes_seg0"),
+        pytest.param(lambda q: q["a"] <= q["b"], 0, id="lte_nat_prunes_both"),
+        pytest.param(lambda q: q["a"] >= q["b"], 0, id="gte_nat_prunes_both"),
     ],
 )
 def test_column_stats_cross_column_comparison_nat(
     in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, expected_reads
 ):
-    """Test that NaT is treated as a normal value (int64_min) for column-vs-column stats pruning.
-
-    ArcticDB treats NaT as int64_min in all comparisons (unlike Pandas which treats NaT as missing).
-    """
+    """Column-vs-column stats pruning when one side is entirely NaT in a slice."""
     lib = in_memory_version_store
 
     ts3 = pd.Timestamp("2000-01-03")

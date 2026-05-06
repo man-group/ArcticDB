@@ -10,6 +10,7 @@
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <column_stats.pb.h>
 
@@ -24,12 +25,31 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
+            auto is_nan = [](RawType v) {
+                if constexpr (is_floating_point_type(type_info::data_type)) {
+                    return std::isnan(v);
+                } else if constexpr (is_time_type(type_info::data_type)) {
+                    return v == NaT;
+                } else {
+                    (void)v;
+                    return false;
+                }
+            };
+            auto missing_value = []() -> RawType {
+                if constexpr (is_floating_point_type(type_info::data_type)) {
+                    return std::numeric_limits<RawType>::quiet_NaN();
+                } else if constexpr (is_time_type(type_info::data_type)) {
+                    return static_cast<RawType>(NaT);
+                } else {
+                    return RawType{};
+                }
+            };
             [[maybe_unused]] bool any_nan{false};
             arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
                 const auto& curr = static_cast<RawType>(value);
-                if constexpr (is_floating_point_type(type_info::data_type)) {
-                    // We skip nan as it doesn't generate a stable ordering
-                    if (std::isnan(curr)) {
+                if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
+                    // Skip NaN/NaT as they don't generate a stable ordering
+                    if (is_nan(curr)) {
                         any_nan = true;
                         return;
                     }
@@ -42,11 +62,11 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     max_->set(std::max(max_->get<RawType>(), curr));
                 }
             });
-            if constexpr (is_floating_point_type(type_info::data_type)) {
+            if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
                 if (any_nan && !min_) {
-                    // Everything in the block is NaN, reflect this in the stats
-                    min_ = Value{std::numeric_limits<RawType>::quiet_NaN(), type_info::data_type};
-                    max_ = Value{std::numeric_limits<RawType>::quiet_NaN(), type_info::data_type};
+                    // Everything in the block is NaN/NaT, reflect this in the stats
+                    min_ = Value{missing_value(), type_info::data_type};
+                    max_ = Value{missing_value(), type_info::data_type};
                 }
             }
         } else {
