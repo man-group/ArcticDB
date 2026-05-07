@@ -506,7 +506,7 @@ folly::Future<entity::AtomKey> write_frame(
             });
 }
 
-folly::Future<entity::AtomKey> append_frame(
+folly::Future<AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
         index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema,
         bool ignore_sort_order
@@ -545,16 +545,12 @@ folly::Future<entity::AtomKey> append_frame(
                 std::make_move_iterator(std::begin(slice_and_keys_to_append)),
                 std::make_move_iterator(std::end(slice_and_keys_to_append))
         );
-        std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-        auto tsd = index::get_merged_tsd(
+        ranges::sort(slices_to_write);
+        const auto tsd = index::get_merged_tsd(
                 frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame
         );
         return index::write_index(
-                stream::index_type_from_descriptor(tsd.as_stream_descriptor()),
-                tsd,
-                std::move(slices_to_write),
-                key,
-                store
+                index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store
         );
     });
 }

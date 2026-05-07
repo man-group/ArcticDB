@@ -8,11 +8,18 @@
 
 #pragma once
 
-#include <arcticdb/util/error_code.hpp>
+#include <vector>
+#include <unordered_set>
 
 namespace arcticdb {
 
-using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;
+namespace proto {
+namespace descriptors = arcticc::pb2::descriptors_pb2;
+} // namespace proto
+
+namespace entity {
+struct OutputSchema;
+}
 
 namespace pipelines {
 struct InputFrame;
@@ -26,5 +33,9 @@ struct IndexSegmentReader;
  */
 void fix_normalization_or_throw(
         bool is_append, const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputFrame& new_frame
+);
+
+proto::descriptors::NormalizationMetadata generate_norm_meta(
+        const std::vector<entity::OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
 );
 } // namespace arcticdb

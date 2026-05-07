@@ -1,7 +1,7 @@
 #pragma once
 
 #include <arcticdb/pipeline/input_frame.hpp>
-#include <arcticdb/python/normalization_checks.hpp>
+#include <arcticdb/python/normalization_utils.hpp>
 
 namespace arcticdb {
 

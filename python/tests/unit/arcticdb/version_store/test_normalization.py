@@ -26,7 +26,7 @@ if sys.version_info >= (3, 9):
 from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, concat
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticException
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
@@ -1383,3 +1383,78 @@ def test_unnamed_multiindex_clashing_column_name(lmdb_version_store_v1):
     lib.write(sym, df)
     received = lib.read(sym).data
     assert_frame_equal(df, received)
+
+
+@pytest.mark.parametrize(
+    "to_write",
+    [
+        pd.DataFrame({}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({None: [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({100: [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({"": [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({"col": [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({"col": [1.0, 2.0, 3.0], None: [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({"col": [1.0, 2.0, 3.0], 100: [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+        pd.DataFrame({"col": [1.0, 2.0, 3.0], "": [1.0, 2.0, 3.0]}, index=pd.date_range("2025-1-1", periods=3)),
+    ],
+)
+@pytest.mark.parametrize(
+    "to_add",
+    [
+        pd.DataFrame({}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({None: [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({100: [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({"": [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({"col": [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({"col": [4.0, 5.0, 6.0], None: [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({"col": [4.0, 5.0, 6.0], 100: [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+        pd.DataFrame({"col": [4.0, 5.0, 6.0], "": [4.0, 5.0, 6.0]}, index=pd.date_range("2025-1-4", periods=3)),
+    ],
+)
+class TestNonStringColumnNameNormalization:
+    @staticmethod
+    def concat(df1, df2):
+        if set(df1.columns) | set(df2.columns) == {100, None}:
+            # With these column names pandas creates an index that is of dtype=float64 and casts the column names to float
+            # so they become 100.0 and np.nan. The concatenated column names list becomes [100.0, np.nan] and it does not
+            # contain the None column. The None column is not added to the final result.
+            expected_data = {
+                col_name: list(df1[col_name]) if col_name in df2.columns else list(df1[col_name]) + [np.nan] * 3
+                for col_name in df1.columns
+            }
+            for col_name in df2:
+                if col_name in expected_data:
+                    expected_data[col_name] = expected_data[col_name] + list(df2[col_name])
+                else:
+                    expected_data[col_name] = ([np.nan] * 3) + list(df2[col_name])
+            expected = pd.DataFrame(expected_data, index=df1.index.union(df2.index))
+            expected.columns = pd.Index(expected_data.keys(), dtype=object)
+        else:
+            expected = pd.concat([df1, df2])
+            expected_names = pd.Index(df1.keys().append(df2.keys()).unique())
+            expected.columns = expected_names if len(expected_names) else pd.RangeIndex(start=0, stop=0, step=1)
+        return expected
+
+    def test_append_with_different_col_name_normalization(self, lmdb_version_store_dynamic_schema_v1, to_write, to_add):
+        lib = lmdb_version_store_dynamic_schema_v1
+        lib.write("sym", to_write)
+        lib.append("sym", to_add)
+        result = lib.read("sym").data
+        expected = self.concat(to_write, to_add)
+        assert_frame_equal(result, expected)
+
+    def test_update_with_different_col_name_normalization(self, lmdb_version_store_dynamic_schema_v1, to_write, to_add):
+        lib = lmdb_version_store_dynamic_schema_v1
+        lib.write("sym", to_write)
+        lib.update("sym", to_add)
+        result = lib.read("sym").data
+        expected = self.concat(to_write, to_add)
+        assert_frame_equal(result, expected)
+
+    def test_concat_with_different_col_name_normalization(self, lmdb_library_dynamic_schema, to_write, to_add):
+        lib = lmdb_library_dynamic_schema
+        lib.write("sym0", to_write)
+        lib.write("sym1", to_add)
+        result = concat(lib.read_batch(["sym0", "sym1"], lazy=True), "outer").collect().data
+        expected = self.concat(to_write, to_add)
+        assert_frame_equal(result, expected)

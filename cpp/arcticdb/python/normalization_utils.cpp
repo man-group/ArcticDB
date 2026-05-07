@@ -6,7 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/python/normalization_checks.hpp>
+#include <arcticdb/python/normalization_utils.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -15,6 +15,7 @@
 #undef GetMessage // defined as GetMessageA on Windows
 
 namespace arcticdb {
+using namespace proto::descriptors;
 
 template<typename InnerFunction, typename FieldType = google::protobuf::FieldDescriptor*>
 auto get_pandas_common_via_reflection(
@@ -227,4 +228,160 @@ void fix_normalization_or_throw(
     }
 }
 
+NormalizationMetadata accumulate_norm_metadata(
+        const NormalizationMetadata& accumulated, const NormalizationMetadata& other,
+        std::unordered_set<size_t>& fake_field_pos_acc
+) {
+    // Arrow + Arrow
+    // Arrow schemas are compatible as long as both have the same `has_index`.
+    // We return the `accumulated` metadata if compatible.
+    if (accumulated.has_experimental_arrow() && other.has_experimental_arrow()) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                accumulated.experimental_arrow().has_index() == other.experimental_arrow().has_index(),
+                "Cannot join indexed arrow data with unindexed arrow data"
+        );
+        return accumulated;
+    }
+
+    // One arrow, one pandas
+    // Pandas norm metadata is preferred over arrow when mixing, because it carries more detail
+    // (index name, timezone, range index params, etc.). Arrow and pandas are compatible when:
+    //   arrow.has_index() == pandas.index().is_physically_stored()
+    if (accumulated.has_experimental_arrow() || other.has_experimental_arrow()) {
+        const auto& arrow_meta = accumulated.has_experimental_arrow() ? accumulated : other;
+        const auto& pandas_meta = accumulated.has_experimental_arrow() ? other : accumulated;
+        const auto& common = pandas_meta.has_series() ? pandas_meta.series().common() : pandas_meta.df().common();
+        // TODO: When arrow normalization metadata is finalized we can consider allowing
+        // concat(arrow,pandas_with_multiindex)
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                common.has_index(), "Cannot join arrow-written data with multi-indexed pandas data"
+        );
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                arrow_meta.experimental_arrow().has_index() == common.index().is_physically_stored(),
+                "Cannot join unindexed with indexed data"
+        );
+        return pandas_meta;
+    }
+
+    // Pandas + Pandas
+    // Ensure:
+    // Both are Series or both are DataFrames
+    // Both have PandasIndex or both have PandasMultiIndex
+    // If PandasIndex:
+    //  - name/is_int/fake_name - if all the same maintain, otherwise "index"/false/true
+    //  - tz - if all the same maintain, otherwise empty string
+    //  - is_physically stored must all be the same
+    //  - RangeIndex
+    //    - start==0/step==1 - maintain
+    //    - All steps the same, use start from first schema and maintain step
+    //    - Otherwise, log warning, set start==0/step==1
+    // If PandasMultiIndex:
+    //  - name/is_int - if all the same maintain, otherwise "index"/false
+    //  - field_count must all be same
+    //  - tz - if all the same maintain, otherwise empty string
+    //  - fake_field_pos - added to fake_field_pos_acc
+    //      fake_field_pos.contains(0) serves same purpose as fake_name flag on PandasIndex
+    //  - timezone - Like tz, for a given key all values must be same, otherwise set value to empty string
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            accumulated.has_series() == other.has_series(), "Multi-symbol joins cannot join a Series to a DataFrame"
+    );
+
+    auto res = accumulated;
+    auto* res_common = res.has_series() ? res.mutable_series()->mutable_common() : res.mutable_df()->mutable_common();
+    const auto& other_common = other.has_series() ? other.series().common() : other.df().common();
+
+    if (res.has_series()) {
+        if (res_common->name() != other_common.name() || !other_common.has_name() || !res_common->has_name()) {
+            res_common->set_name("");
+            res_common->set_has_name(false);
+        }
+    }
+
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            other_common.has_multi_index() == res_common->has_multi_index(), "Mismatching norm metadata in schema join"
+    );
+
+    if (res_common->has_multi_index()) {
+        auto* res_index = res_common->mutable_multi_index();
+        const auto& other_index = other_common.multi_index();
+        if (other_index.name() != res_index->name() || other_index.is_int() != res_index->is_int()) {
+            res_index->clear_name();
+            res_index->set_is_int(false);
+        }
+        if (other_index.tz() != res_index->tz()) {
+            res_index->clear_tz();
+        }
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                other_index.field_count() == res_index->field_count(), "Mismatching norm metadata in schema join"
+        );
+        for (const auto& [idx, idx_timezone] : other_index.timezone()) {
+            if ((*res_index->mutable_timezone())[idx] != idx_timezone) {
+                (*res_index->mutable_timezone())[idx] = "";
+            }
+        }
+        for (auto pos : other_index.fake_field_pos()) {
+            fake_field_pos_acc.insert(pos);
+        }
+    } else {
+        auto* res_index = res_common->mutable_index();
+        const auto& other_index = other_common.index();
+        if (other_index.name() != res_index->name() || other_index.is_int() != res_index->is_int() ||
+            other_index.fake_name() || res_index->fake_name()) {
+            res_index->set_name("index");
+            res_index->set_is_int(false);
+            res_index->set_fake_name(true);
+        }
+        if (other_index.tz() != res_index->tz()) {
+            res_index->clear_tz();
+        }
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                other_index.is_physically_stored() == res_index->is_physically_stored(),
+                "Mismatching norm metadata in schema join"
+        );
+        if (other_index.step() != res_index->step()) {
+            log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
+            res_index->set_start(0);
+            res_index->set_step(1);
+        }
+    }
+    return res;
+}
+
+NormalizationMetadata generate_norm_meta(
+        const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
+) {
+    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
+    for (const auto& schema : input_schemas) {
+        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+                schema.norm_metadata_.has_experimental_arrow() || schema.norm_metadata_.has_series() ||
+                        schema.norm_metadata_.has_df(),
+                "Multi-symbol joins only supported with Arrow, Series, and DataFrames"
+        );
+    }
+    auto res = input_schemas.front().norm_metadata_;
+    for (auto it = std::next(input_schemas.cbegin()); it != input_schemas.cend(); ++it) {
+        res = accumulate_norm_metadata(res, it->norm_metadata_, non_matching_name_indices);
+    }
+    // Apply accumulated non_matching_name_indices to the result multi-index.
+    // non_matching_name_indices contains values from add_index_fields (index fields with mismatched names)
+    // plus fake_field_pos accumulated from all schemas during pairwise merges above.
+    auto* res_common = res.has_series() ? res.mutable_series()->mutable_common()
+                       : res.has_df()   ? res.mutable_df()->mutable_common()
+                                        : nullptr;
+    if (res_common && res_common->has_multi_index()) {
+        auto* index = res_common->mutable_multi_index();
+        // Make sure the result fake_field_pos are also included. E.g. if input_schemas.size() == 1
+        for (auto pos : index->fake_field_pos()) {
+            non_matching_name_indices.insert(pos);
+        }
+        index->clear_fake_field_pos();
+        for (auto idx : non_matching_name_indices) {
+            index->add_fake_field_pos(idx);
+        }
+        if (non_matching_name_indices.contains(0)) {
+            index->set_name("index");
+        }
+    }
+    return res;
+}
 } // namespace arcticdb

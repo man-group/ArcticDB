@@ -7,6 +7,9 @@
  */
 
 #include <arcticdb/pipeline/index_utils.hpp>
+
+#include "python/normalization_utils.hpp"
+
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
@@ -73,7 +76,7 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
 
 TimeseriesDescriptor get_merged_tsd(
         size_t row_count, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const std::shared_ptr<pipelines::InputFrame>& new_frame
+        const std::shared_ptr<InputFrame>& new_frame
 ) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
