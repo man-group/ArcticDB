@@ -301,6 +301,11 @@ jobs:
       - name: Install pytest-repeat
         run: python -m pip --retries 3 --timeout 180 install pytest-repeat
 
+      - name: Get Python impl name
+        id: pyver
+        run: |
+          echo "impl=cp$(python -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')" >> $GITHUB_OUTPUT
+
       - name: Test with pytest
         run: |
           openssl version -d || true
@@ -321,6 +326,7 @@ jobs:
             fi
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
               $BASETEMP_ARG \
+              --junitxml=$RUNNER_TEMP/pytest.xml \
               tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
             fi
         env:
@@ -333,3 +339,11 @@ jobs:
           NODE_OPTIONS: --openssl-legacy-provider
           ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
           ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
+
+      - name: Upload pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda_pytest-${{inputs.platform}}-${{steps.pyver.outputs.impl}}-${{matrix.type}}
+          path: ${{ runner.temp }}/pytest.xml
+        continue-on-error: true

@@ -88,6 +88,15 @@ jobs:
       run_commandline:           ${{format('{0}', inputs.run_commandline)}}
       run_custom_pytest_command: ${{format('{0}', inputs.run_custom_pytest_command)}}
 
+  publish_pytest_data:
+    needs: [linux_64, linux_aarch64, osx_arm64, win_64]
+    if: |
+      always() &&
+      !cancelled()
+    uses: ./.github/workflows/publish_pytest_data.yml
+    secrets: inherit
+    permissions: {contents: write}
+
   can_merge_conda:
     name: All conda jobs completed
     needs: [linux_64, linux_aarch64, osx_arm64, win_64]
