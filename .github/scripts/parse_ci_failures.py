@@ -113,15 +113,17 @@ def parse_pytest_failures(log_text: str) -> set[str]:
 
 
 def filter_infra_steps(all_steps: list[str]) -> list[str]:
-    """Filter out test-runner steps, keeping only infrastructure steps.
+    """Filter out test-runner and benchmark steps, keeping only infrastructure steps.
 
-    Test-runner steps (e.g. "Run test", "Run pytest") are always removed:
-    - When test names were parsed, these are redundant.
+    Test-runner steps (e.g. "Run test", "Run pytest") and benchmark steps
+    (e.g. "Benchmark against master") are always removed:
+    - When test names were parsed, test steps are redundant.
+    - Benchmark failures are expected outcomes (regressions), not infra issues.
     - When no test names were parsed (e.g. timeout), removing them lets the
       pipeline fall through to the unparseable/timeout fallback rather than
       creating a useless "Flaky step: Run test" issue.
     """
-    test_keywords = re.compile(r"(test|pytest|ctest)", re.IGNORECASE)
+    test_keywords = re.compile(r"(test|pytest|ctest|benchmark)", re.IGNORECASE)
     return [s for s in all_steps if not test_keywords.search(s)]
 
 

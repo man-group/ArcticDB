@@ -171,6 +171,17 @@ class TestFilterInfraSteps:
         steps = ["Run Tests", "Install"]
         assert filter_infra_steps(steps) == ["Install"]
 
+    def test_filters_benchmark_steps(self):
+        steps = [
+            "Install deps",
+            "Benchmark against master",
+            "Upload artifacts",
+        ]
+        assert filter_infra_steps(steps) == [
+            "Install deps",
+            "Upload artifacts",
+        ]
+
 
 # ---------------------------------------------------------------------------
 # strip_parametrize
