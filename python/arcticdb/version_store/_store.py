@@ -1144,6 +1144,11 @@ class NativeVersionStore:
             },
             kwargs,
         )
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "update() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause data corruption or read exceptions. This parameter override is planned to be removed."
+            )
 
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
@@ -1432,6 +1437,11 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items
         """
         self._validate_kwargs("batch_read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "batch_read() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause read exceptions. This parameter override is planned to be removed."
+            )
 
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
         throw_on_error = True
@@ -1600,6 +1610,11 @@ class NativeVersionStore:
                 * Incompatible column types e.g. joining a string column to an integer column
         """
         self._validate_kwargs("batch_read_and_join", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "batch_read_and_join() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause read exceptions. This parameter override is planned to be removed."
+            )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         if columns:
@@ -1656,6 +1671,11 @@ class NativeVersionStore:
             Dictionary of symbol mapping with the versioned items. The data attribute will be None.
         """
         self._validate_kwargs("batch_read_metadata", self._valid_read_kwargs, kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "batch_read_metadata() received 'dynamic_schema' parameter which has no effect and is "
+                "planned to be removed."
+            )
 
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         include_errors_and_none_meta = False
@@ -1726,6 +1746,11 @@ class NativeVersionStore:
             each VersionedItem for each symbol. The data attribute will be None.
         """
         self._validate_kwargs("batch_read_metadata_multi", self._valid_read_kwargs, kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "batch_read_metadata_multi() received 'dynamic_schema' parameter which has no effect and is "
+                "planned to be removed."
+            )
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
@@ -2128,6 +2153,11 @@ class NativeVersionStore:
             i-th entry corresponds to i-th element of `symbols`.
         """
         self._validate_kwargs("batch_restore_version", self._valid_read_kwargs, kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "batch_restore_version() received 'dynamic_schema' parameter which has no effect and is "
+                "planned to be removed."
+            )
 
         _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
@@ -2472,6 +2502,11 @@ class NativeVersionStore:
         self._validate_kwargs(
             "read", self._valid_read_kwargs.union({"implement_read_index", "allow_secondary"}), kwargs
         )
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "read() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause read exceptions. This parameter override is planned to be removed."
+            )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -2517,6 +2552,11 @@ class NativeVersionStore:
         VersionedItem
         """
         self._validate_kwargs("head", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "head() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause read exceptions. This parameter override is planned to be removed."
+            )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -2553,6 +2593,11 @@ class NativeVersionStore:
         VersionedItem
         """
         self._validate_kwargs("tail", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "tail() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause read exceptions. This parameter override is planned to be removed."
+            )
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -2731,6 +2776,11 @@ class NativeVersionStore:
             Includes the version number that was just written.
         """
         self._validate_kwargs("restore_version", self._valid_read_kwargs, kwargs)
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "restore_version() received 'dynamic_schema' parameter which has no effect and is "
+                "planned to be removed."
+            )
 
         version_query = self._get_version_query(as_of, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
@@ -3230,6 +3280,11 @@ class NativeVersionStore:
             {"dynamic_schema", "prune_previous_versions", "prune_previous_version"},
             kwargs,
         )
+        if "dynamic_schema" in kwargs:
+            log.warning(
+                "delete() received 'dynamic_schema' parameter which overrides the library setting "
+                "and may cause data corruption or read exceptions. This parameter override is planned to be removed."
+            )
 
         if date_range is not None:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
