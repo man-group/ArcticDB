@@ -60,8 +60,8 @@ def test_write_zero_row_table(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
-def test_write_zero_row_table_view(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_zero_row_table_view(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_zero_row_table_view"
     arr0 = pa.array([0, 1], pa.int64())
     arr1 = pa.array([2, 3, 4], pa.int64())
@@ -78,8 +78,8 @@ def test_write_zero_row_table_view(lmdb_version_store_arrow):
 
 # Arrow stores bools as packed bitsets so worth testing separately even in scenarios as basic as this
 @pytest.mark.parametrize("type", [pa.int64(), pa.bool_()])
-def test_basic_write(lmdb_version_store_arrow, type, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_basic_write(in_memory_version_store_arrow, type, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_basic_write"
     table = pa.table({"col": pa.array([0, 1] if type == pa.int64() else [True, False], type)})
     metadata = {"hello", "there"}
@@ -90,8 +90,8 @@ def test_basic_write(lmdb_version_store_arrow, type, arrow_output_format):
 
 
 @pytest.mark.parametrize("type", [pa.string(), pa.large_string()])
-def test_basic_write_strings(lmdb_version_store_arrow, type):
-    lib = lmdb_version_store_arrow
+def test_basic_write_strings(in_memory_version_store_arrow, type):
+    lib = in_memory_version_store_arrow
     sym = "test_basic_write_strings"
     table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], type)})
     lib.write(sym, table)
@@ -102,8 +102,8 @@ def test_basic_write_strings(lmdb_version_store_arrow, type):
 @pytest.mark.skip(reason="Not implemented yet 9951777416")
 @pytest.mark.parametrize("type", [pa.timestamp("us"), pa.timestamp("ms"), pa.timestamp("s")])
 @pytest.mark.parametrize("index_column", [False, True])
-def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, type, index_column):
-    lib = lmdb_version_store_arrow
+def test_write_with_non_nanosecond_time_types(in_memory_version_store_arrow, type, index_column):
+    lib = in_memory_version_store_arrow
     sym = "test_write_with_non_nanosecond_time_types"
     table = pa.table(
         {
@@ -117,8 +117,8 @@ def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, type, in
 
 
 @pytest.mark.parametrize("type", [pa.int64(), pa.bool_(), pa.string(), pa.large_string()])
-def test_write_multiple_record_batches(lmdb_version_store_arrow, type):
-    lib = lmdb_version_store_arrow
+def test_write_multiple_record_batches(in_memory_version_store_arrow, type):
+    lib = in_memory_version_store_arrow
     sym = "test_write_multiple_record_batches"
     if type == pa.int64():
         arr0 = pa.array([0, 1], type)
@@ -143,8 +143,8 @@ def test_write_multiple_record_batches(lmdb_version_store_arrow, type):
     assert table.equals(received)
 
 
-def test_write_with_index(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_write_with_index(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_write_with_index"
     table = pa.table(
         {
@@ -162,8 +162,8 @@ def test_write_with_index(lmdb_version_store_arrow, arrow_output_format):
     assert_arrow_equal(table, received)
 
 
-def test_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_multiple_record_batches_indexed(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_multiple_record_batches_indexed"
     rb0 = pa.RecordBatch.from_arrays(
         [
@@ -197,10 +197,8 @@ def test_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
 
 @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
-def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols, arrow_output_format):
-    lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
+def test_write_sliced(in_memory_version_store_tiny_segment_arrow, num_rows, num_cols, arrow_output_format):
+    lib = in_memory_version_store_tiny_segment_arrow
     sym = "test_write_sliced"
     table = pa.table(
         {
@@ -233,10 +231,8 @@ def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols, arrow
         [False, True, True, False, True],
     ],
 )
-def test_write_bools_sliced(lmdb_version_store_tiny_segment, data):
-    lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
+def test_write_bools_sliced(in_memory_version_store_tiny_segment_arrow, data):
+    lib = in_memory_version_store_tiny_segment_arrow
     sym = "test_write_bools_sliced"
     table = pa.table({"col": pa.array(data)})
     lib.write(sym, table)
@@ -246,10 +242,8 @@ def test_write_bools_sliced(lmdb_version_store_tiny_segment, data):
 
 @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
-def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_cols):
-    lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
+def test_write_sliced_with_index(in_memory_version_store_tiny_segment_arrow, num_rows, num_cols):
+    lib = in_memory_version_store_tiny_segment_arrow
     lib_tool = lib.library_tool()
     sym = "test_write_sliced_with_index"
     df = pd.DataFrame(
@@ -285,9 +279,9 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
 
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 10, 100_000])
-def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
+def test_many_record_batches_many_slices(in_memory_store_factory, rows_per_slice):
     rng = np.random.default_rng()
-    lib = version_store_factory(segment_row_size=rows_per_slice)
+    lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_many_record_batches_many_slices"
@@ -312,9 +306,9 @@ def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
 @pytest.mark.parametrize("rows_per_record_batch", [1, 2, 3, 5, 7])
-def test_many_record_batches_edge_cases(version_store_factory, rows_per_slice, rows_per_record_batch):
+def test_many_record_batches_edge_cases(in_memory_store_factory, rows_per_slice, rows_per_record_batch):
     rng = np.random.default_rng()
-    lib = version_store_factory(segment_row_size=rows_per_slice)
+    lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_many_record_batches_same_size"
@@ -337,8 +331,8 @@ def test_many_record_batches_edge_cases(version_store_factory, rows_per_slice, r
     assert table.equals(received)
 
 
-def test_write_view(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_view(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_view"
     table = pa.table(
         {
@@ -361,8 +355,8 @@ def test_write_view(lmdb_version_store_arrow):
 
 
 @pytest.mark.parametrize("type", [pa.string(), pa.large_string()])
-def test_write_view_strings(lmdb_version_store_arrow, type):
-    lib = lmdb_version_store_arrow
+def test_write_view_strings(in_memory_version_store_arrow, type):
+    lib = in_memory_version_store_arrow
     sym = "test_write_view_strings"
     table_0 = pa.table({"col": pa.array(["hello", "bonjour", "gutentag"], type)})
     table_1 = pa.table({"col": pa.array(["dog", "bats", "on"], type)})
@@ -373,11 +367,9 @@ def test_write_view_strings(lmdb_version_store_arrow, type):
     assert view.equals(received)
 
 
-def test_write_owned_and_non_owned_buffers(lmdb_version_store_tiny_segment):
+def test_write_owned_and_non_owned_buffers(in_memory_version_store_tiny_segment_arrow):
     # This test is about our ChunkedBuffer holding mixes of owned and non-owned blocks, not Arrow views
-    lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("pyarrow")
-    lib._set_allow_arrow_input()
+    lib = in_memory_version_store_tiny_segment_arrow
     sym = "test_write_owned_and_non_owned_buffers"
     rb0 = pa.RecordBatch.from_arrays([pa.array([0, 1, 2], pa.int32())], names=["col"])
     rb1 = pa.RecordBatch.from_arrays([pa.array([3, 4, 5], pa.int32())], names=["col"])
@@ -388,8 +380,8 @@ def test_write_owned_and_non_owned_buffers(lmdb_version_store_tiny_segment):
 
 
 @pytest.mark.xfail(reason="Not implemented yet, issue number 9929831600")
-def test_write_with_timezone(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_with_timezone(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_with_timezone"
     table = pa.table(
         {
@@ -408,8 +400,8 @@ def test_write_with_timezone(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
-def test_write_with_index_and_read_with_column_slicing(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_with_index_and_read_with_column_slicing(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_with_index_and_read_with_column_slicing"
     table = pa.table(
         {
@@ -424,16 +416,16 @@ def test_write_with_index_and_read_with_column_slicing(lmdb_version_store_arrow)
     assert expected.equals(received)
 
 
-def test_write_index_column_on_empty_table(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_write_index_column_on_empty_table(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_write_index_column_on_empty_table"
     table = pa.table({})
     with pytest.raises(SchemaException, match="Cannot use index_column=True on a table with no columns"):
         lib.write(sym, to_format(table, arrow_output_format), index_column=True)
 
 
-def test_write_non_timestamp_index_column(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_write_non_timestamp_index_column(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_write_non_timestamp_index_column"
     table = pa.table({"non-ts": pa.array([0, 1], pa.int64()), "col": pa.array([2, 3], pa.int64())})
     with pytest.raises(UserInputException) as e:
@@ -441,8 +433,8 @@ def test_write_non_timestamp_index_column(lmdb_version_store_arrow, arrow_output
     assert "int64" in str(e.value).lower()
 
 
-def test_write_unsupported_types(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_unsupported_types(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_unsupported_types"
     table = pa.table({"col": pa.array(np.arange(2, dtype=np.float16), pa.float16())})
     with pytest.raises(SchemaException) as e:
@@ -457,8 +449,8 @@ def test_write_unsupported_types(lmdb_version_store_arrow):
 
 
 # Reinstate if bounds check is re-added in WriteToSegmentTask::slice_column when 9951777416 is implemented
-# def test_write_with_out_of_range_timestamps(lmdb_version_store_arrow):
-#     lib = lmdb_version_store_arrow
+# def test_write_with_out_of_range_timestamps(in_memory_version_store_arrow):
+#     lib = in_memory_version_store_arrow
 #     sym = "test_write_with_out_of_range_timestamps"
 #     table = pa.table(
 #         {
@@ -474,8 +466,8 @@ def test_write_unsupported_types(lmdb_version_store_arrow):
 
 
 @pytest.mark.parametrize("existing_data", [True, False])
-def test_append(lmdb_version_store_arrow, existing_data, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_append(in_memory_version_store_arrow, existing_data, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_append"
     if existing_data:
         write_table = pa.table({"col0": pa.array([0, 1], pa.int64()), "col1": pa.array(["a", "bb"], pa.string())})
@@ -493,8 +485,8 @@ def test_append(lmdb_version_store_arrow, existing_data, arrow_output_format):
 
 
 @pytest.mark.parametrize("first_type", [pa.string(), pa.large_string()])
-def test_append_mix_strings_and_large_strings(lmdb_version_store_arrow, first_type):
-    lib = lmdb_version_store_arrow
+def test_append_mix_strings_and_large_strings(in_memory_version_store_arrow, first_type):
+    lib = in_memory_version_store_arrow
     sym = "test_append_mix_strings_and_large_strings"
     write_table = pa.table({"col": pa.array(["a", "bb"], first_type)})
     lib.write(sym, write_table)
@@ -508,8 +500,8 @@ def test_append_mix_strings_and_large_strings(lmdb_version_store_arrow, first_ty
 
 
 @pytest.mark.parametrize("existing_data", [True, False])
-def test_append_with_index(lmdb_version_store_arrow, existing_data):
-    lib = lmdb_version_store_arrow
+def test_append_with_index(in_memory_version_store_arrow, existing_data):
+    lib = in_memory_version_store_arrow
     sym = "test_append_with_index"
     if existing_data:
         write_table = pa.table(
@@ -533,8 +525,8 @@ def test_append_with_index(lmdb_version_store_arrow, existing_data):
 
 
 @pytest.mark.parametrize("method", ["append", "update"])
-def test_wrong_index_name(lmdb_version_store_arrow, method, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_wrong_index_name(in_memory_version_store_arrow, method, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_wrong_index_name"
     table_0 = pa.table(
         {
@@ -554,8 +546,8 @@ def test_wrong_index_name(lmdb_version_store_arrow, method, arrow_output_format)
 
 
 @pytest.mark.parametrize("existing_data", [True, False])
-def test_update(lmdb_version_store_arrow, existing_data, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_update(in_memory_version_store_arrow, existing_data, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_update"
     if existing_data:
         write_table = pa.table(
@@ -594,8 +586,8 @@ def test_update(lmdb_version_store_arrow, existing_data, arrow_output_format):
 
 
 @pytest.mark.parametrize("first_type", [pa.string(), pa.large_string()])
-def test_update_mix_strings_and_large_strings(lmdb_version_store_arrow, first_type):
-    lib = lmdb_version_store_arrow
+def test_update_mix_strings_and_large_strings(in_memory_version_store_arrow, first_type):
+    lib = in_memory_version_store_arrow
     sym = "test_update_mix_strings_and_large_strings"
     write_table = pa.table(
         {
@@ -630,8 +622,8 @@ def test_update_mix_strings_and_large_strings(lmdb_version_store_arrow, first_ty
         (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")),
     ],
 )
-def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_range, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_update_with_date_range_wider_than_data(in_memory_version_store_arrow, date_range, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_update_with_date_range_wider_than_data"
     reference_sym = "test_update_with_date_range_wider_than_data_reference"
     write_table = pa.table(
@@ -692,8 +684,10 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
         ),
     ],
 )
-def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, date_range, index_tz, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_update_with_date_range_narrower_than_data(
+    in_memory_version_store_arrow, date_range, index_tz, arrow_output_format
+):
+    lib = in_memory_version_store_arrow
     sym = "test_update_with_date_range_narrower_than_data"
     reference_sym = "test_update_with_date_range_narrower_than_data_reference"
     ts_type = pa.timestamp("ns", tz=index_tz)
@@ -723,8 +717,8 @@ def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, dat
 
 
 @pytest.mark.parametrize("method", ["write_parallel", "write_incomplete", "append", "stage"])
-def test_staging_without_sorting(version_store_factory, method):
-    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
+def test_staging_without_sorting(in_memory_store_factory, method):
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
@@ -767,8 +761,8 @@ def test_staging_without_sorting(version_store_factory, method):
     assert expected.equals(received)
 
 
-def test_staging_with_sorting(version_store_factory, arrow_output_format):
-    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
+def test_staging_with_sorting(in_memory_store_factory, arrow_output_format):
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
@@ -801,8 +795,8 @@ def test_staging_with_sorting(version_store_factory, arrow_output_format):
 
 # Merge with test_staging_with_sorting when 18190648152 is done
 @pytest.mark.xfail(reason="Not implemented yet, see issue 18190648152")
-def test_staging_with_sorting_strings(version_store_factory):
-    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
+def test_staging_with_sorting_strings(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
@@ -829,8 +823,8 @@ def test_staging_with_sorting_strings(version_store_factory):
     assert expected.equals(received)
 
 
-def test_recursive_normalizers(lmdb_version_store_arrow, all_recursive_metastructure_versions):
-    lib = lmdb_version_store_arrow
+def test_recursive_normalizers(in_memory_version_store_arrow, all_recursive_metastructure_versions):
+    lib = in_memory_version_store_arrow
     sym = "test_recursive_normalizers"
     table_0 = pa.table({"col0": pa.array(["hello", "there"], pa.string())})
     df_1 = pd.DataFrame({"col1": [2, 3, 4]})
@@ -870,8 +864,10 @@ def test_recursive_normalizers(lmdb_version_store_arrow, all_recursive_metastruc
     assert table_2.equals(cast_string_columns(received["b"]["d"], pa.large_string()))
 
 
-def test_recursive_normalizers_mixed_polars_pyarrow(lmdb_version_store_arrow, all_recursive_metastructure_versions):
-    lib = lmdb_version_store_arrow
+def test_recursive_normalizers_mixed_polars_pyarrow(
+    in_memory_version_store_arrow, all_recursive_metastructure_versions
+):
+    lib = in_memory_version_store_arrow
     sym = "test_recursive_normalizers_mixed"
     pa_table = pa.table({"col0": pa.array(["hello", "there"], pa.large_string())})
     pl_frame = pl.DataFrame({"col1": [2, 3, 4]})
@@ -896,8 +892,8 @@ def test_recursive_normalizers_mixed_polars_pyarrow(lmdb_version_store_arrow, al
     assert_frame_equal_with_arrow(df, received["b"]["d"])
 
 
-def test_batch_write(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_batch_write(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     table_0 = pa.table({"col0": pa.array([0, 1], pa.int16())})
     df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
     table_2 = pa.table(
@@ -919,8 +915,8 @@ def test_batch_write(lmdb_version_store_arrow, arrow_output_format):
     assert_arrow_equal(table_2, received_2)
 
 
-def test_batch_append(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_batch_append(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     table_0 = pa.table({"col0": pa.array([0, 1], pa.int16())})
     df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
     table_2 = pa.table(
@@ -983,7 +979,7 @@ num_supported_types = len(supported_types)
     null_percentage=st.integers(0, 100),
 )
 def test_arrow_writes_hypothesis(
-    lmdb_version_store_big_map,
+    in_memory_store_factory,
     df_length,
     max_record_batches,
     max_row_slices,
@@ -991,9 +987,9 @@ def test_arrow_writes_hypothesis(
     null_percentage,
 ):
     rng = np.random.default_rng()
-    lib = lmdb_version_store_big_map
+    lib = in_memory_store_factory(name="_unique_")
     sym = "test_arrow_writes_hypothesis"
-    # version_store_factory doesn't play nicely with hypothesis, so set these values manually
+    # in_memory_store_factory doesn't play nicely with hypothesis, so set these values manually
     rows_per_slice = max(df_length // max_row_slices, 1)
     cols_per_slice = num_supported_types // max_col_slices
     lib.lib_cfg().lib_desc.version.write_options.segment_row_size = rows_per_slice
@@ -1038,8 +1034,8 @@ def test_arrow_writes_hypothesis(
 
 
 @pytest.mark.xfail(reason="Monday ref: 11325694339")
-def test_write_arrow_read_arrow_convert_to_pandas(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_write_arrow_read_arrow_convert_to_pandas(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_write_arrow_read_arrow_convert_to_pandas"
     table = pa.table(
         {
@@ -1053,8 +1049,8 @@ def test_write_arrow_read_arrow_convert_to_pandas(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow(arrow_received, pandas_received)
 
 
-def test_basic_sparse_write(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_basic_sparse_write(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_basic_sparse_write"
     table = pa.table({"col": pa.array([1, None, 3, None, 5], pa.int64())})
     lib.write(sym, to_format(table, arrow_output_format))
@@ -1064,8 +1060,8 @@ def test_basic_sparse_write(lmdb_version_store_arrow, arrow_output_format):
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
-def test_sparse_write_all_nulls_column(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_sparse_write_all_nulls_column(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_write_all_nulls"
     table = pa.table(
         {
@@ -1091,8 +1087,8 @@ def test_sparse_write_all_nulls_column(lmdb_version_store_arrow):
         pytest.param(["hello", None, "world", None, "!"], pa.large_string(), id="large_string"),
     ],
 )
-def test_sparse_write_different_types(lmdb_version_store_arrow, data, arrow_type):
-    lib = lmdb_version_store_arrow
+def test_sparse_write_different_types(in_memory_version_store_arrow, data, arrow_type):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_write_different_types"
     table = pa.table({"col": pa.array(data, arrow_type)})
     lib.write(sym, table)
@@ -1105,8 +1101,8 @@ def test_sparse_write_different_types(lmdb_version_store_arrow, data, arrow_type
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5])
 @pytest.mark.parametrize("cols_per_slice", [1, 2, 3, 5])
-def test_sparse_write_multiple_columns_different_types(version_store_factory, rows_per_slice, cols_per_slice):
-    lib = version_store_factory(segment_row_size=rows_per_slice, column_group_size=cols_per_slice)
+def test_sparse_write_multiple_columns_different_types(in_memory_store_factory, rows_per_slice, cols_per_slice):
+    lib = in_memory_store_factory(segment_row_size=rows_per_slice, column_group_size=cols_per_slice)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_write_multiple_columns"
@@ -1141,8 +1137,8 @@ def test_sparse_write_multiple_columns_different_types(version_store_factory, ro
         pytest.param("hello", pa.large_string(), id="large_string"),
     ],
 )
-def test_sparse_many_different_size_batches(version_store_factory, rows_per_slice, value, arrow_type):
-    lib = version_store_factory(segment_row_size=rows_per_slice)
+def test_sparse_many_different_size_batches(in_memory_store_factory, rows_per_slice, value, arrow_type):
+    lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_many_different_size_batches"
@@ -1166,9 +1162,9 @@ def test_sparse_many_different_size_batches(version_store_factory, rows_per_slic
 
 @pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
 @pytest.mark.parametrize("rows_per_record_batch", [1, 2, 3, 5, 7])
-def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_slice, rows_per_record_batch):
+def test_sparse_write_many_batches_many_slices(in_memory_store_factory, rows_per_slice, rows_per_record_batch):
     rng = np.random.default_rng(42)
-    lib = version_store_factory(segment_row_size=rows_per_slice)
+    lib = in_memory_store_factory(segment_row_size=rows_per_slice)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_write_many_batches_many_slices"
@@ -1237,8 +1233,8 @@ def test_sparse_write_many_batches_many_slices(version_store_factory, rows_per_s
         pytest.param(3, 0, id="empty_slice"),
     ],
 )
-def test_sparse_write_view(lmdb_version_store_arrow, offset, length):
-    lib = lmdb_version_store_arrow
+def test_sparse_write_view(in_memory_version_store_arrow, offset, length):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_write_view"
     table = pa.table(
         {
@@ -1254,8 +1250,8 @@ def test_sparse_write_view(lmdb_version_store_arrow, offset, length):
     assert view.equals(received)
 
 
-def test_sparse_index_column_raises(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_sparse_index_column_raises(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_index_column_raises"
     # Create a table with a timestamp index column that has null values
     table = pa.table(
@@ -1275,8 +1271,8 @@ def test_sparse_index_column_raises(lmdb_version_store_arrow):
         lib.write(sym, table, index_column=True)
 
 
-def test_sparse_write_with_index(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_sparse_write_with_index(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_write_with_index"
     table = pa.table(
         {
@@ -1296,8 +1292,8 @@ def test_sparse_write_with_index(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow_for_sparse(table, pandas_received)
 
 
-def test_sparse_append(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_sparse_append(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_append"
     write_table = pa.table({"col": pa.array([1, None, 3], pa.int64())})
     lib.write(sym, to_format(write_table, arrow_output_format))
@@ -1311,8 +1307,8 @@ def test_sparse_append(lmdb_version_store_arrow, arrow_output_format):
     assert_frame_equal_with_arrow_for_sparse(expected, pandas_received)
 
 
-def test_sparse_update(lmdb_version_store_arrow, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_sparse_update(in_memory_version_store_arrow, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_update"
     write_table = pa.table(
         {
@@ -1341,11 +1337,8 @@ def test_sparse_update(lmdb_version_store_arrow, arrow_output_format):
     assert_frame_equal_with_arrow_for_sparse(expected, pandas_received)
 
 
-@pytest.mark.xfail(
-    reason="Column selection for Arrow-written data always includes the first column even when not requested (monday: 11432991054)"
-)
-def test_arrow_column_selection_excludes_first_column(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_arrow_column_selection_excludes_first_column(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     table = pa.table(
         {
             "a": pa.array([1, 2, 3], pa.int64()),
@@ -1358,8 +1351,8 @@ def test_arrow_column_selection_excludes_first_column(lmdb_version_store_arrow):
     assert expected.equals(received)
 
 
-def test_arrow_buffer_released_after_write(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_arrow_buffer_released_after_write(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "lifetime_test"
     released = []
 
