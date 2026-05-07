@@ -37,8 +37,10 @@ if _sys.platform == "win32":
     _original_exit = _os._exit
 
     def _safe_exit(code):
-        _ext.shutdown()
-        _original_exit(code)
+        try:
+            _ext.shutdown()
+        finally:
+            _original_exit(code)
 
     _os._exit = _safe_exit
 

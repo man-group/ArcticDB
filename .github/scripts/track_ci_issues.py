@@ -41,7 +41,7 @@ def _sanitise_search_query(title: str) -> str:
     backslash paths) to return zero results. We strip these from the search
     query and rely on the exact title match below to filter accurately.
     """
-    return re.sub(r'[\[\]:/.\\\\""]', " ", title)
+    return re.sub(r'[\[\]:/.\\"]', " ", title)
 
 
 def find_existing_issue(repo: str, label: str, title: str) -> int | None:
