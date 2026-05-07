@@ -30,18 +30,4 @@ from arcticdb.version_store.admin_tools import KeyType, Size
 
 set_config_from_env_vars(_os.environ)
 
-if _sys.platform == "win32":
-    # On Windows, os._exit → ExitProcess can deadlock when thread pool threads
-    # hold CRT locks during DLL_PROCESS_DETACH (the "loader lock" deadlock).
-    # Wrapping os._exit to stop thread pools first prevents the deadlock.
-    _original_exit = _os._exit
-
-    def _safe_exit(code):
-        try:
-            _ext.shutdown()
-        finally:
-            _original_exit(code)
-
-    _os._exit = _safe_exit
-
 __version__ = "dev"

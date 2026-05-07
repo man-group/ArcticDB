@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from arcticdb.util.test import assert_frame_equal
+from tests.util.mark import SKIP_CONDA_MARK
 
 
 @pytest.mark.storage
@@ -39,6 +40,11 @@ def killed_worker(lib, io_threads, cpu_threads):
     os._exit(0)
 
 
+# On Windows conda, os._exit → ExitProcess is suspected to deadlock when CPU
+# thread pool threads hold CRT locks during DLL_PROCESS_DETACH (the "loader lock"
+# deadlock). Only the [False-True] parametrization (CPU threads only) is affected.
+# Not yet confirmed — see PR #3076 for analysis.
+@SKIP_CONDA_MARK
 @pytest.mark.parametrize("io_threads_spawned_in_child", [True, False])
 @pytest.mark.parametrize("cpu_threads_spawned_in_child", [True, False])
 def test_os_exit_exits_within_timeout(
