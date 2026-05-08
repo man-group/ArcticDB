@@ -688,11 +688,7 @@ class NativeVersionStore:
 
     @staticmethod
     def _validate_kwargs(method, valid_kwargs, kwargs):
-        if (
-            "dynamic_schema" in kwargs
-            and "dynamic_schema" in valid_kwargs
-            and os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", None) != "1"
-        ):
+        if "dynamic_schema" in kwargs and "dynamic_schema" in valid_kwargs:
             log.warning(
                 f"{method}() received 'dynamic_schema' parameter which overrides the library setting. "
                 "Per-call dynamic_schema override is planned to be removed."
