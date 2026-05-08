@@ -2078,7 +2078,7 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
                 *stream_id
         );
 
-        sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
+        sym_versions[*stream_id].emplace_back(version_id);
     }
     return sym_versions;
 }
