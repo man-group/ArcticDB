@@ -121,10 +121,7 @@ Column make_regular_blocks(const std::vector<timestamp>& data) {
 // DETACHABLE allocation routes lookups through ChunkedBuffer::block_offsets_ even with uniform
 // block sizes, so these stress the irregular path while keeping block sizes consistent.
 Column make_irregular_blocks(const std::vector<timestamp>& data, size_t block_size) {
-    Column col(
-            make_scalar_type(DataType::NANOSECONDS_UTC64), 0, AllocationType::DETACHABLE,
-            Sparsity::NOT_PERMITTED
-    );
+    Column col(make_scalar_type(DataType::NANOSECONDS_UTC64), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
     size_t remaining = data.size();
     while (remaining > 0) {
         const size_t alloc = std::min(remaining, block_size);
@@ -136,12 +133,8 @@ Column make_irregular_blocks(const std::vector<timestamp>& data, size_t block_si
     return col;
 }
 
-auto make_irregular_blocks_1000 = [](const std::vector<timestamp>& data) {
-    return make_irregular_blocks(data, 1000);
-};
-auto make_irregular_blocks_1 = [](const std::vector<timestamp>& data) {
-    return make_irregular_blocks(data, 1);
-};
+auto make_irregular_blocks_1000 = [](const std::vector<timestamp>& data) { return make_irregular_blocks(data, 1000); };
+auto make_irregular_blocks_1 = [](const std::vector<timestamp>& data) { return make_irregular_blocks(data, 1); };
 
 } // namespace
 
@@ -201,9 +194,10 @@ static void BM_exponential_lower_bound_shape(benchmark::State& state, MakeColumn
         state.PauseTiming();
         size_t target_idx = idx_dis(rng);
         auto value = data[target_idx];
-        auto begin = begin_dist >= 0
-                ? column_data.template citerator_at<BenchTDT, IteratorType::ENUMERATED>(target_idx - begin_dist)
-                : cbegin_it;
+        auto begin =
+                begin_dist >= 0
+                        ? column_data.template citerator_at<BenchTDT, IteratorType::ENUMERATED>(target_idx - begin_dist)
+                        : cbegin_it;
         state.ResumeTiming();
         benchmark::DoNotOptimize(
                 exponential_lower_bound<BenchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, value)
@@ -211,9 +205,7 @@ static void BM_exponential_lower_bound_shape(benchmark::State& state, MakeColumn
     }
 }
 
-static void BM_search_sorted_single_block(benchmark::State& state) {
-    BM_search_sorted_shape(state, make_single_block);
-}
+static void BM_search_sorted_single_block(benchmark::State& state) { BM_search_sorted_shape(state, make_single_block); }
 static void BM_search_sorted_regular_blocks(benchmark::State& state) {
     BM_search_sorted_shape(state, make_regular_blocks);
 }
@@ -224,12 +216,8 @@ static void BM_search_sorted_irregular_blocks_1(benchmark::State& state) {
     BM_search_sorted_shape(state, make_irregular_blocks_1);
 }
 
-static void BM_lower_bound_single_block(benchmark::State& state) {
-    BM_lower_bound_shape(state, make_single_block);
-}
-static void BM_lower_bound_regular_blocks(benchmark::State& state) {
-    BM_lower_bound_shape(state, make_regular_blocks);
-}
+static void BM_lower_bound_single_block(benchmark::State& state) { BM_lower_bound_shape(state, make_single_block); }
+static void BM_lower_bound_regular_blocks(benchmark::State& state) { BM_lower_bound_shape(state, make_regular_blocks); }
 static void BM_lower_bound_irregular_blocks_1000(benchmark::State& state) {
     BM_lower_bound_shape(state, make_irregular_blocks_1000);
 }

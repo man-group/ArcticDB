@@ -421,8 +421,7 @@ void populate(Column& col, const std::vector<int64_t>& values) {
 // Three column shapes exercise the three random_accessor paths: SINGLE / REGULAR / IRREGULAR.
 Column make_single_block(const std::vector<int64_t>& values) {
     Column col(
-            static_cast<TypeDescriptor>(SearchTDT{}), values.size(), AllocationType::PRESIZED,
-            Sparsity::NOT_PERMITTED
+            static_cast<TypeDescriptor>(SearchTDT{}), values.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
     );
     populate(col, values);
     return col;
@@ -430,7 +429,8 @@ Column make_single_block(const std::vector<int64_t>& values) {
 
 Column make_regular_blocks(const std::vector<int64_t>& values) {
     Column col(
-            static_cast<TypeDescriptor>(SearchTDT{}), Sparsity::NOT_PERMITTED,
+            static_cast<TypeDescriptor>(SearchTDT{}),
+            Sparsity::NOT_PERMITTED,
             ChunkedBuffer::presized_in_blocks(values.size() * sizeof(int64_t))
     );
     populate(col, values);
@@ -438,9 +438,7 @@ Column make_regular_blocks(const std::vector<int64_t>& values) {
 }
 
 Column make_irregular_blocks(const std::vector<int64_t>& values, const std::vector<size_t>& block_sizes) {
-    Column col(
-            static_cast<TypeDescriptor>(SearchTDT{}), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED
-    );
+    Column col(static_cast<TypeDescriptor>(SearchTDT{}), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
     for (size_t block_size : block_sizes) {
         col.allocate_data(block_size * sizeof(int64_t));
         col.advance_data(block_size * sizeof(int64_t));
@@ -470,17 +468,14 @@ Column make_irregular_blocks(const std::vector<int64_t>& values) {
 // from/to (when set) restrict the column-side search via citerator_at; otherwise cbegin/cend are used.
 void check_search_on_column(
         const std::vector<int64_t>& values, const Column& col, const std::vector<int64_t>& probes,
-        std::string_view label, std::optional<size_t> from = std::nullopt,
-        std::optional<size_t> to = std::nullopt
+        std::string_view label, std::optional<size_t> from = std::nullopt, std::optional<size_t> to = std::nullopt
 ) {
     auto column_data = col.data();
     const ssize_t total = static_cast<ssize_t>(values.size());
-    auto begin = from.has_value()
-            ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*from)
-            : column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
-    auto end = to.has_value()
-            ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*to)
-            : column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto begin = from.has_value() ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*from)
+                                  : column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = to.has_value() ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*to)
+                              : column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
     auto res_idx = [&](auto& it) { return it.current_block().has_value() ? it->idx() : total; };
     const auto std_begin = values.begin() + from.value_or(0);
     const auto std_end = values.begin() + to.value_or(values.size());
@@ -508,8 +503,12 @@ void check_search(
     check_search_on_column(values, make_regular_blocks(values), probes, "regular", from, to);
     check_search_on_column(values, make_irregular_blocks(values), probes, "irregular", from, to);
     check_search_on_column(
-            values, make_irregular_blocks(values, std::vector<size_t>(values.size(), 1)), probes,
-            "all-1-blocks", from, to
+            values,
+            make_irregular_blocks(values, std::vector<size_t>(values.size(), 1)),
+            probes,
+            "all-1-blocks",
+            from,
+            to
     );
 }
 
@@ -578,6 +577,14 @@ TEST(ColumnSearch, SubRangeAtRunOfEquals) {
     std::vector<int64_t> probes{0, 1, 2, 3, 4};
     check_search(values, probes, 2, 8);
     check_search(values, probes, 3, 7);
+}
+
+// Covers boundary condition where galloping to the position 0 + 2**2 = 4 is the precisely the last element in the block
+TEST(ColumnSearch, GallopProbeAtFirstBlockEnd) {
+    std::vector<int64_t> values{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    std::vector<int64_t> probes{0, 4, 5, 6, 10, 16};
+    check_search_on_column(values, make_irregular_blocks(values, std::vector<size_t>{5, 5, 5}), probes, "fixed-5");
+    check_search_on_column(values, make_irregular_blocks(values, std::vector<size_t>{5, 5, 5}), probes, "fixed-5", 2);
 }
 
 TEST(ColumnStats, MultipleBlocks) {

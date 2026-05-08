@@ -346,50 +346,56 @@ namespace search_detail {
 // `within_block_bisect` is std::lower_bound or std::upper_bound run on the contiguous block memory.
 template<typename TDT, IteratorType IT, IteratorDensity ID, typename IsBeforeAnswer, typename WithinBlockBisect>
 ColumnData::ColumnDataIterator<TDT, IT, ID, true> bound_search(
-        ColumnData::ColumnDataIterator<TDT, IT, ID, true> begin, ColumnData::ColumnDataIterator<TDT, IT, ID, true> end,
-        typename TDT::DataTypeTag::raw_type value, IsBeforeAnswer is_before, WithinBlockBisect bisect
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& begin,
+        const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value,
+        IsBeforeAnswer is_before, WithinBlockBisect bisect
 ) {
     using RawType = typename TDT::DataTypeTag::raw_type;
     static_assert(ID == IteratorDensity::DENSE, "Sorted search currently supports DENSE only");
     static_assert(TDT::dimension() == Dimension::Dim0, "Sorted search supports Dim0 only");
     util::check(begin.parent() == end.parent(), "bound_search: begin and end have different parents");
 
-    const ColumnData* data = begin.parent();
-
-    // Narrow the block range until all possible values sit in the same block.
-    // Use inclusive first_block and inclusive last_block for easier to read binary search condition.
-    auto first_block = begin.current_block_index();
-    auto last_block = end.current_block_index() - (end.current_in_block_offset() == 0);
-    while (first_block < last_block) {
-        const size_t mid_block_idx = (first_block + last_block) / 2;
-        auto mid_block = data->template typed_block_at_position<TDT>(mid_block_idx);
-        ColumnData::ColumnDataIterator<TDT, IT, ID, true> last_in_mid(data, mid_block_idx, mid_block->row_count() - 1);
-        auto first_in_next = last_in_mid;
-        ++first_in_next;
-        if (is_before(*last_in_mid.current_ptr(), value)) {
-            begin = first_in_next;
-            first_block = mid_block_idx + 1;
-        } else {
-            end = first_in_next;
-            last_block = mid_block_idx;
-        }
-    }
-
     if (begin == end) {
+        // This to covers the case of empty column or empty range
         return begin;
     }
 
-    const size_t block_pos = begin.current_block_index();
-    auto block = data->template typed_block_at_position<TDT>(block_pos);
-    const size_t first = begin.current_in_block_offset();
-    const size_t last = (end.current_block_index() == block_pos) ? end.current_in_block_offset() : block->row_count();
-    const RawType* found = bisect(block->data() + first, block->data() + last, value);
-    if (found == block->data() + last) {
+    const ColumnData* data = begin.parent();
+    const auto& blocks = data->buffer().blocks();
+    auto block_data_at = [&blocks](size_t idx) { return reinterpret_cast<const RawType*>(blocks[idx]->data()); };
+    auto block_row_count_at = [&blocks](size_t idx) { return blocks[idx]->logical_size() / sizeof(RawType); };
+
+    const size_t begin_block = begin.current_block_index();
+    const size_t begin_in_block_offset = begin.current_in_block_offset();
+    const size_t end_block = end.current_block_index();
+    const size_t end_in_block_offset = end.current_in_block_offset();
+
+    // Inclusive [first_block, last_block]. last_block excludes end's block when end sits at offset 0.
+    size_t first_block = begin_block;
+    size_t last_block = end_block - (end_in_block_offset == 0);
+
+    // Block-level binary search. Probe the last element of each candidate block via raw block memory.
+    while (first_block < last_block) {
+        const size_t mid_block_idx = (first_block + last_block) / 2;
+        const RawType last_in_mid = block_data_at(mid_block_idx)[block_row_count_at(mid_block_idx) - 1];
+        if (is_before(last_in_mid, value)) {
+            first_block = mid_block_idx + 1;
+        } else {
+            last_block = mid_block_idx;
+        }
+    }
+    // first_block == last_block now. The answer (if any) lies in this block.
+
+    const size_t block_pos = first_block;
+    const RawType* block_ptr = block_data_at(block_pos);
+    const size_t first = (block_pos == begin_block) ? begin_in_block_offset : 0;
+    const size_t last = (block_pos == end_block) ? end_in_block_offset : block_row_count_at(block_pos);
+    const RawType* found = bisect(block_ptr + first, block_ptr + last, value);
+    if (found == block_ptr + last) {
+        // If bisect doesn't find the result in the block, there is no result in the given [begin, end)
         return end;
     }
-    return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(
-            data, block_pos, static_cast<size_t>(found - block->data())
-    );
+    return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(data, block_pos, static_cast<size_t>(found - block_ptr));
 }
 
 // Gallop forward from `begin` in steps of 2**n until an element after value is reached.
@@ -401,61 +407,80 @@ gallop_bracket(
         const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value,
         IsBeforeAnswer is_before
 ) {
-    const ColumnData* data = begin.parent();
-
+    using RawType = typename TDT::DataTypeTag::raw_type;
     if (begin == end) {
         return {begin, end};
     }
+    const ColumnData* data = begin.parent();
+    const auto& blocks = data->buffer().blocks();
+    auto block_data_at = [&blocks](size_t idx) { return reinterpret_cast<const RawType*>(blocks[idx]->data()); };
+    auto block_row_count_at = [&blocks](size_t idx) { return blocks[idx]->logical_size() / sizeof(RawType); };
 
-    const auto first_block = *begin.current_block();
     const size_t first_block_idx = begin.current_block_index();
+    const size_t first_offset = begin.current_in_block_offset();
     const size_t end_block_idx = end.current_block_index();
+    const size_t end_in_block_offset = end.current_in_block_offset();
+    const size_t first_block_row_count = block_row_count_at(first_block_idx);
+    const RawType* first_block_data = block_data_at(first_block_idx);
 
-    auto prev = begin;
-    auto current = begin;
+    // For each probe track the current possible range for the answer - [prev, cur).
+    // We store prev and cur as pairs (block_idx, in_block_offset) because it's cheaper than constructing iterators.
+    size_t prev_block = first_block_idx;
+    size_t prev_offset = first_offset;
+    size_t cur_block = first_block_idx;
+    size_t cur_offset = first_offset;
 
-    // Probes at (block_idx, in_block_offset) and returns whether it's before value.
-    // If yes, the element we search for is in range [current, end) and we need to continue galloping.
-    // If not, the element we search for is in range [prev, current) and we can stop galloping.
-    auto probe_and_update_range = [&](size_t block_idx, size_t in_block_offset) {
-        prev = current;
-        current = ColumnData::ColumnDataIterator<TDT, IT, ID, true>(data, block_idx, in_block_offset);
-        auto value_at_current = *current.current_ptr();
-        ++current;
-        return is_before(value_at_current, value);
+    // Record a probe. (next_block, next_offset) should correspond to the position directly after probe_value
+    // Returns whether the probe_value is before the searched value.
+    // If yes, answer is in [cur, end).
+    // If not, answer is in [prev, cur).
+    auto record_probe = [&](size_t next_block, size_t next_offset, RawType probe_value) {
+        prev_block = cur_block;
+        prev_offset = cur_offset;
+        cur_block = next_block;
+        cur_offset = next_offset;
+        return is_before(probe_value, value);
     };
 
-    // Probe within first block at first_offset + 2**n
-    const size_t first_offset = begin.current_in_block_offset();
-    const size_t up_to =
-            end_block_idx > first_block_idx ? first_block.row_count() : end.current_in_block_offset();
+    auto make_iter = [&](size_t block, size_t offset) -> ColumnData::ColumnDataIterator<TDT, IT, ID, true> {
+        if (block > end_block_idx || (block == end_block_idx && offset >= end_in_block_offset)) {
+            return end;
+        }
+        return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(data, block, offset);
+    };
+
+    // Probe within the first block at first_offset + 2**n
+    // We iterate until `first_offset+step < up_to - 1` because we'll later explicitly probe at
+    // the last element of the first block
+    const size_t up_to = end_block_idx > first_block_idx ? first_block_row_count : end_in_block_offset;
     size_t step = 1;
-    for (; first_offset + step < up_to; step *= 2) {
-        if (!probe_and_update_range(first_block_idx, first_offset + step)) {
-            return {prev, current};
+    for (; first_offset + step + 1 < up_to; step *= 2) {
+        const size_t probe_offset = first_offset + step;
+        if (!record_probe(first_block_idx, probe_offset + 1, first_block_data[probe_offset])) {
+            return {make_iter(prev_block, prev_offset), make_iter(cur_block, cur_offset)};
         }
     }
 
     if (end_block_idx == first_block_idx) {
-        // If end is in the first block, the resulting range is [current, end)
-        return {current, end};
+        // End lies in the first block; resulting range is [cur, end).
+        return {make_iter(cur_block, cur_offset), end};
     }
 
-    // Probe at the last element of first block
-    if (!probe_and_update_range(first_block_idx, first_block.row_count() - 1)) {
-        return {prev, current};
+    // Probe the last element of the first block. Post-probe position is (first_block_idx + 1, 0).
+    if (!record_probe(first_block_idx + 1, 0, first_block_data[first_block_row_count - 1])) {
+        return {make_iter(prev_block, prev_offset), make_iter(cur_block, cur_offset)};
     }
 
-    // Answer is beyond the starting block — probe the last elements of blocks at first_idx + 2**n
+    // Answer is after the first block — probe the last elements of blocks at first_idx + 2**n
     step = 1;
     for (; first_block_idx + step < end_block_idx; step *= 2) {
         const size_t block_idx = first_block_idx + step;
-        auto block = data->template typed_block_at_position<TDT>(block_idx);
-        if (!probe_and_update_range(block_idx, block->row_count() - 1)) {
-            return {prev, current};
+        const RawType last_in_block = block_data_at(block_idx)[block_row_count_at(block_idx) - 1];
+        if (!record_probe(block_idx + 1, 0, last_in_block)) {
+            return {make_iter(prev_block, prev_offset), make_iter(cur_block, cur_offset)};
         }
     }
-    return {current, end};
+    return {make_iter(cur_block, cur_offset), end};
 }
 
 } // namespace search_detail
