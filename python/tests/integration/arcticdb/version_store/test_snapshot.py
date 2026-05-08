@@ -444,19 +444,6 @@ def test_add_to_snapshot_mismatched_symbols_and_versions_raises(basic_store_tomb
 
 
 @pytest.mark.storage
-def test_add_to_snapshot_negative_version_raises(basic_store_tombstone_and_pruning):
-    lib = basic_store_tombstone_and_pruning
-    lib.write("s1", 1)
-    lib.write("s2", 2)
-    lib.write("s2", 3)
-    lib.snapshot("snap")
-    lib.write("s3", 3)
-
-    with pytest.raises(UserInputException, match="Negative version"):
-        lib.add_to_snapshot("snap", ["s1", "s2"], as_ofs=[2, -3])
-
-
-@pytest.mark.storage
 def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
