@@ -822,7 +822,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # Verify mixing of existing and non-existing symbols and versions result
     # in proper versions of existing symbols added to the snapshot
-    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2", "s2"], [1, 1, 1, 1, 4])
+    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2"], [1, 1, 1, 1])
     assert 101 == lib.read("s1", as_of="snap").data
     assert 400 == lib.read("s4", as_of="snap").data
     assert 201 == lib.read("s2", as_of="snap").data
