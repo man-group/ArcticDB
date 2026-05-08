@@ -7,7 +7,10 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from track_ci_issues import IssueTracker, SummaryEntry, GROUPING_THRESHOLD, main, read_lines
+from track_ci_issues import (
+    IssueTracker, SummaryEntry, GROUPING_THRESHOLD, main, read_lines,
+    _sanitise_search_query,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -289,3 +292,27 @@ class TestHandleTimeout:
         assert "Another timeout" in comment_body
         assert ":hourglass:" in tracker.format_summary("slack")
         assert "#20" in tracker.format_summary("slack")
+
+
+# ---------------------------------------------------------------------------
+# _sanitise_search_query
+# ---------------------------------------------------------------------------
+class TestSanitiseSearchQuery:
+    def test_strips_brackets_and_slashes(self):
+        result = _sanitise_search_query("Flaky test: tests/test_foo.py::test_bar[param1]")
+        assert "[" not in result
+        assert "]" not in result
+        assert "/" not in result
+
+    def test_strips_backslashes(self):
+        title = r"Flaky test: tests\stress\arcticdb\version_store\test_deallocation.py::test_os_exit"
+        result = _sanitise_search_query(title)
+        assert "\\" not in result
+        assert "tests" in result
+        assert "test_os_exit" in result
+
+    def test_backslash_path_produces_searchable_words(self):
+        title = r"Flaky test: tests\stress\arcticdb\test_foo.py::test_bar"
+        result = _sanitise_search_query(title)
+        for word in ["tests", "stress", "arcticdb", "test_foo", "test_bar"]:
+            assert word in result

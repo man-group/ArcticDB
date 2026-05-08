@@ -12,6 +12,7 @@ from parse_ci_failures import (
     parse_gtest_failures,
     parse_pytest_failures,
     strip_parametrize,
+    normalise_path_separators,
     filter_infra_steps,
 )
 
@@ -170,6 +171,17 @@ class TestFilterInfraSteps:
         steps = ["Run Tests", "Install"]
         assert filter_infra_steps(steps) == ["Install"]
 
+    def test_filters_benchmark_steps(self):
+        steps = [
+            "Install deps",
+            "Benchmark against master",
+            "Upload artifacts",
+        ]
+        assert filter_infra_steps(steps) == [
+            "Install deps",
+            "Upload artifacts",
+        ]
+
 
 # ---------------------------------------------------------------------------
 # strip_parametrize
@@ -195,3 +207,35 @@ class TestStripParametrize:
     def test_empty_params(self):
         assert strip_parametrize("tests/test_foo.py::test_bar[]") == \
             "tests/test_foo.py::test_bar"
+
+
+# ---------------------------------------------------------------------------
+# normalise_path_separators
+# ---------------------------------------------------------------------------
+class TestNormalisePathSeparators:
+    def test_windows_backslashes_converted(self):
+        assert normalise_path_separators(
+            r"tests\stress\arcticdb\version_store\test_deallocation.py::test_foo"
+        ) == "tests/stress/arcticdb/version_store/test_deallocation.py::test_foo"
+
+    def test_forward_slashes_unchanged(self):
+        assert normalise_path_separators(
+            "tests/stress/arcticdb/test_foo.py::test_bar"
+        ) == "tests/stress/arcticdb/test_foo.py::test_bar"
+
+    def test_mixed_slashes(self):
+        assert normalise_path_separators(
+            r"tests\stress/arcticdb\test_foo.py::test_bar"
+        ) == "tests/stress/arcticdb/test_foo.py::test_bar"
+
+    def test_windows_and_linux_same_test_deduplicated(self):
+        """Same test from Windows and Linux runners should produce one entry."""
+        log = (
+            r"FAILED tests\stress\arcticdb\version_store\test_deallocation.py::test_os_exit[False-True]"
+            "\n"
+            "FAILED tests/stress/arcticdb/version_store/test_deallocation.py::test_os_exit[True-False]"
+            "\n"
+        )
+        assert parse_pytest_failures(log) == {
+            "tests/stress/arcticdb/version_store/test_deallocation.py::test_os_exit"
+        }
