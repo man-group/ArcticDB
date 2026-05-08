@@ -10,10 +10,13 @@ from hypothesis import given, settings, assume
 import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
+from polars.testing import assert_frame_equal as assert_frame_equal_pl
+import pyarrow as pa
 import pytest
 
 from arcticdb_ext.exceptions import DuplicateKeyException, SchemaException, StorageException
 from arcticdb_ext.storage import KeyType
+from arcticdb_ext.version_store import CompactDataInfo
 from arcticdb.exceptions import ArcticNativeException, UserInputException
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.hypothesis import (
@@ -24,12 +27,45 @@ from tests.util.mark import MACOS, WINDOWS
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
+def check_compact_data_info(
+    compact_data_info, pre_compaction_version, post_compaction_version, pre_compaction_index, post_compaction_index
+):
+    assert compact_data_info.version_id_before == pre_compaction_version
+    assert compact_data_info.version_id_after == post_compaction_version
+    assert compact_data_info.will_do_work == (pre_compaction_version != post_compaction_version)
+    row_slices_before = compact_data_info.row_slices_before
+    assert compact_data_info.num_row_slices_before == max(len(row_slices_before) - 1, 0)
+    for idx, data_key in enumerate(pre_compaction_index.itertuples()):
+        # This relies on the data keys in our index keys being ordered by column slice, and so will need changing if
+        # we switch to the (more sensible) ordering by row slice
+        idx = idx % compact_data_info.num_row_slices_before
+        assert data_key.start_row == row_slices_before[idx]
+        assert data_key.end_row == row_slices_before[idx + 1]
+
+    row_slices_after = compact_data_info.row_slices_after
+    assert compact_data_info.num_row_slices_after == max(len(row_slices_after) - 1, 0)
+    for idx, data_key in enumerate(post_compaction_index.itertuples()):
+        idx = idx % compact_data_info.num_row_slices_after
+        assert data_key.start_row == row_slices_after[idx]
+        assert data_key.end_row == row_slices_after[idx + 1]
+
+
 def generic_compact_data_test(lib, sym, method_arg=None):
     qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
-    vit_before_compaction = lib.read(sym)
+    # Use Polars so that sparse data checking is proper
+    vit_before_compaction = lib.read(sym, output_format="POLARS")
     expected = vit_before_compaction.data
-    pre_compaction_data_keys = len(lib.read_index(sym))
+    pre_compaction_index = lib.read_index(sym)
+    pre_compaction_data_keys = len(pre_compaction_index)
+    with qs.query_stats():
+        compact_data_info = lib.compact_data_explain_plan_experimental(sym, rows_per_segment=method_arg)
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    # No data keys read and no keys of any type written
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+    assert "Memory_PutObject" not in stats["storage_operations"]
+
     with qs.query_stats():
         lib.compact_data_experimental(sym, rows_per_segment=method_arg)
         stats = qs.get_query_stats()
@@ -39,13 +75,14 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     )
     if rows_per_segment == 0:
         rows_per_segment = 100_000
-    received = lib.read(sym).data
+    vit_after_compaction = lib.read(sym, output_format="POLARS")
+    received = vit_after_compaction.data
     if pickled:
         assert received == expected
     else:
-        assert_frame_equal(expected, received)
-    index = lib.read_index(sym)
-    row_counts = index["end_row"] - index["start_row"]
+        assert_frame_equal_pl(expected, received)
+    post_compaction_index = lib.read_index(sym)
+    row_counts = post_compaction_index["end_row"] - post_compaction_index["start_row"]
     # Definitions taken from CompactDataClause constructor
     min_rows_per_segment = max((2 * rows_per_segment) // 3, 1)
     max_rows_per_segment = max((4 * rows_per_segment) // 3, rows_per_segment + 1)
@@ -55,11 +92,20 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     assert row_counts.min() >= min_rows_per_segment
     assert row_counts.max() <= max_rows_per_segment
 
-    post_compaction_data_keys = len(index)
-    new_data_keys = len(index[index["version_id"] > vit_before_compaction.version])
+    post_compaction_data_keys = len(post_compaction_index)
+    new_data_keys = len(post_compaction_index[post_compaction_index["version_id"] > vit_before_compaction.version])
     compacted_data_keys = pre_compaction_data_keys - (post_compaction_data_keys - new_data_keys)
     assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == compacted_data_keys
     assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == new_data_keys
+
+    check_compact_data_info(
+        compact_data_info,
+        vit_before_compaction.version,
+        vit_after_compaction.version,
+        pre_compaction_index,
+        post_compaction_index,
+    )
+
     # Second compaction should always be a no-op
     generic_compact_data_test_noop(lib, sym, rows_per_segment)
 
@@ -67,20 +113,31 @@ def generic_compact_data_test(lib, sym, method_arg=None):
 def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     qs.reset_stats()  # Clear any leftover stats from a previous failed run
     pickled = lib.is_symbol_pickled(sym)
-    vit_before_compaction = lib.read(sym)
+    vit_before_compaction = lib.read(sym, output_format="POLARS")
     expected = vit_before_compaction.data
     pre_compaction_index = lib.read_index(sym)
-    pre_compaction_data_keys = len(lib.read_index(sym))
+    with qs.query_stats():
+        compact_data_info = lib.compact_data_explain_plan_experimental(sym, rows_per_segment=rows_per_segment)
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    assert compact_data_info.num_row_slices_before == compact_data_info.num_row_slices_after
+    assert compact_data_info.row_slices_before == compact_data_info.row_slices_after
+    assert compact_data_info.version_id_before == compact_data_info.version_id_after
+    assert not compact_data_info.will_do_work
+    # No data keys read and no keys of any type written
+    assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 0
+    assert "Memory_PutObject" not in stats["storage_operations"]
+
     with qs.query_stats():
         compacted_version = lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment).version
         stats = qs.get_query_stats()
     qs.reset_stats()
     assert vit_before_compaction.version == compacted_version
-    received = lib.read(sym).data
+    received = lib.read(sym, output_format="POLARS").data
     if pickled:
         assert received == expected
     else:
-        assert_frame_equal(expected, received)
+        assert_frame_equal_pl(expected, received)
     post_compaction_index = lib.read_index(sym)
     assert_frame_equal(post_compaction_index, pre_compaction_index)
     new_data_keys = len(post_compaction_index[post_compaction_index["version_id"] > vit_before_compaction.version])
@@ -89,8 +146,59 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     # No objects should be written at all in this case
     assert "Memory_PutObject" not in stats["storage_operations"]
 
+    check_compact_data_info(
+        compact_data_info, vit_before_compaction.version, compacted_version, pre_compaction_index, post_compaction_index
+    )
 
-def test_docstring_example_v1(lmdb_version_store_v1):
+
+def test_compact_data_explain_plan(in_memory_store_factory):
+    lib = in_memory_store_factory(segment_row_size=10)
+    sym = "test_compact_data_explain_plan"
+    lib.write(sym, pd.DataFrame({"col": [0, 1, 2, 3, 4]}))
+    lib.append(sym, pd.DataFrame({"col": [5, 6, 7, 8, 9]}))
+    # Run it twice to prove that it isn't compacting anything
+    compact_data_info = lib.compact_data_explain_plan_experimental(sym)
+    compact_data_info_again = lib.compact_data_explain_plan_experimental(sym)
+    # We don't need an equality operator for this class for any other reason, so just compare the repr for this test
+    assert str(compact_data_info) == str(compact_data_info_again)
+    assert isinstance(compact_data_info, CompactDataInfo)
+    assert compact_data_info.num_row_slices_before == 2
+    assert compact_data_info.num_row_slices_after == 1
+    assert compact_data_info.row_slices_before == [0, 5, 10]
+    assert compact_data_info.row_slices_after == [0, 10]
+    assert compact_data_info.version_id_before == 1
+    assert compact_data_info.version_id_after == 2
+    assert compact_data_info.will_do_work
+
+    # After compaction there will be no work to do
+    lib.compact_data_experimental(sym)
+    compact_data_info = lib.compact_data_explain_plan_experimental(sym)
+    assert isinstance(compact_data_info, CompactDataInfo)
+    assert compact_data_info.num_row_slices_before == 1
+    assert compact_data_info.num_row_slices_after == 1
+    assert compact_data_info.row_slices_before == [0, 10]
+    assert compact_data_info.row_slices_after == [0, 10]
+    assert compact_data_info.version_id_before == 2
+    assert compact_data_info.version_id_after == 2
+    assert not compact_data_info.will_do_work
+
+
+def test_compact_data_explain_plan_docstring_example(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": np.arange(100_000)})
+    for idx in range(100):
+        lib.append("sym", df[idx * 1_000 : (idx + 1) * 1_000])
+    compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+    assert compact_data_info.row_slices_before == list(range(0, 101_000, 1_000))
+    assert compact_data_info.row_slices_after == [0, 100_000]
+    assert compact_data_info.num_row_slices_before == 100
+    assert compact_data_info.num_row_slices_after == 1
+    assert compact_data_info.version_id_before == 99
+    assert compact_data_info.version_id_after == 100
+    assert compact_data_info.will_do_work
+
+
+def test_compact_data_docstring_example_v1(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"col": np.arange(100_000)})
     for idx in range(100):
@@ -100,7 +208,7 @@ def test_docstring_example_v1(lmdb_version_store_v1):
     assert len(lib.read_index("sym")) == 1
 
 
-def test_docstring_example_v2(lmdb_library):
+def test_compact_data_docstring_example_v2(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"col": np.arange(100_000)})
     for idx in range(100):
@@ -147,18 +255,25 @@ def test_compact_data_explicit_rows_per_segment(
 ):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=lib_config_value, dynamic_strings=True)
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_explicit_rows_per_segment"
-    df = pd.DataFrame(
+    table = pa.table(
         {
-            "ints": np.arange(30, dtype=np.int64),
-            "floats": np.arange(30, 60, dtype=np.float32),
-            "bools": rng.random(30) > 0.5,
-            # Include multiple string columns with overlap of the values to test string pool construction
-            "strings_1": 6 * ["hello", None, "gutentag", np.nan, "konichiwa"],
-            "strings_2": 6 * ["hello", "bonjour", "gutentag", "nihao", "konichiwa"],
+            "ints dense": np.arange(30, dtype=np.int64),
+            "floats dense": np.arange(30, 60, dtype=np.float32),
+            "bools dense": rng.random(30) > 0.5,
+            "strings dense": 6 * ["hello", "bonjour", "gutentag", "nihao", "konichiwa"],
+            "ints sparse": pa.array(6 * [0, 1, 2, None, None], pa.int8()),
+            "floats sparse": pa.array(6 * [None, 0.1, 0.2, None, 0.3], pa.float32()),
+            "bools sparse": pa.array(6 * [True, None, None, None, False], pa.bool_()),
+            "strings sparse": 6 * ["hello", None, "gutentag", None, "konichiwa"],
+            "ints empty": pa.array(30 * [None], pa.uint16()),
+            "floats empty": pa.array(30 * [None], pa.float64()),
+            "bools empty": pa.array(30 * [None], pa.bool_()),
+            "strings empty": pa.array(30 * [None], pa.string()),
         }
     )
-    lib.write(sym, df)
+    lib.write(sym, table)
     generic_compact_data_test(lib, sym, method_arg)
 
 
@@ -191,18 +306,27 @@ def test_compact_data_widely_varying_row_counts(in_memory_store_factory, clear_q
 def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, append_rows):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_append"
     string_values = random_strings_of_length(5, 5, True)
-    df = pd.DataFrame(
+    table = pa.table(
         {
-            "ints": np.arange(initial_rows + append_rows, dtype=np.int64),
-            "floats": np.arange(initial_rows + append_rows, 2 * (initial_rows + append_rows), dtype=np.int64),
-            "bools": rng.random(initial_rows + append_rows) > 0.5,
-            "strings": rng.choice(string_values, initial_rows + append_rows),
+            "ints dense": np.arange(initial_rows + append_rows, dtype=np.int64),
+            "floats dense": np.arange(initial_rows + append_rows, 2 * (initial_rows + append_rows), dtype=np.float32),
+            "bools dense": rng.random(initial_rows + append_rows) > 0.5,
+            "strings dense": rng.choice(string_values, initial_rows + append_rows),
+            "ints sparse": pa.array((8 * [0, 1, 2, None, None])[: initial_rows + append_rows], pa.int8()),
+            "floats sparse": pa.array((8 * [None, 0.1, 0.2, None, 0.3])[: initial_rows + append_rows], pa.float32()),
+            "bools sparse": pa.array((8 * [True, None, None, None, False])[: initial_rows + append_rows], pa.bool_()),
+            "strings sparse": (8 * ["hello", None, "gutentag", None, "konichiwa"])[: initial_rows + append_rows],
+            "ints empty": pa.array((initial_rows + append_rows) * [None], pa.uint16()),
+            "floats empty": pa.array((initial_rows + append_rows) * [None], pa.float64()),
+            "bools empty": pa.array((initial_rows + append_rows) * [None], pa.bool_()),
+            "strings empty": pa.array((initial_rows + append_rows) * [None], pa.string()),
         }
     )
-    lib.write(sym, df[:initial_rows])
-    lib.append(sym, df[initial_rows:])
+    lib.write(sym, table.slice(length=initial_rows))
+    lib.append(sym, table.slice(offset=initial_rows))
     generic_compact_data_test(lib, sym)
 
 
@@ -212,28 +336,45 @@ def test_compact_data_append(in_memory_store_factory, clear_query_stats, rows_pe
 def test_compact_data_update(in_memory_store_factory, clear_query_stats, rows_per_segment, initial_rows, update_rows):
     rng = np.random.default_rng()
     lib = in_memory_store_factory(segment_row_size=rows_per_segment, dynamic_strings=True)
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_update"
     string_values = random_strings_of_length(5, 5, True)
-    write_df = pd.DataFrame(
+    write_table = pa.table(
         {
-            "ints": np.arange(initial_rows, dtype=np.int64),
-            "floats": np.arange(initial_rows, 2 * initial_rows, dtype=np.float32),
-            "bools": rng.random(initial_rows) > 0.5,
-            "strings": rng.choice(string_values, initial_rows),
-        },
-        index=pd.date_range("2026-01-01", periods=initial_rows),
+            "ts": pa.Array.from_pandas(pd.date_range("2026-01-01", periods=initial_rows), type=pa.timestamp("ns")),
+            "ints dense": np.arange(initial_rows, dtype=np.int64),
+            "floats dense": np.arange(initial_rows, 2 * initial_rows, dtype=np.float32),
+            "bools dense": rng.random(initial_rows) > 0.5,
+            "strings dense": rng.choice(string_values, initial_rows),
+            "ints sparse": pa.array((6 * [0, 1, 2, None, None])[:initial_rows], pa.int8()),
+            "floats sparse": pa.array((6 * [None, 0.1, 0.2, None, 0.3])[:initial_rows], pa.float32()),
+            "bools sparse": pa.array((6 * [True, None, None, None, False])[:initial_rows], pa.bool_()),
+            "strings sparse": (6 * ["hello", None, "gutentag", None, "konichiwa"])[:initial_rows],
+            "ints empty": pa.array(initial_rows * [None], pa.uint16()),
+            "floats empty": pa.array(initial_rows * [None], pa.float64()),
+            "bools empty": pa.array(initial_rows * [None], pa.bool_()),
+            "strings empty": pa.array(initial_rows * [None], pa.string()),
+        }
     )
-    lib.write(sym, write_df)
-    update_df = pd.DataFrame(
+    lib.write(sym, write_table, index_column=True)
+    update_table = pa.table(
         {
-            "ints": np.arange(initial_rows, initial_rows + update_rows, dtype=np.int64),
-            "floats": np.arange(initial_rows, initial_rows + update_rows, dtype=np.float32),
-            "bools": rng.random(update_rows) > 0.5,
-            "strings": rng.choice(string_values, update_rows),
-        },
-        index=pd.date_range("2026-01-15", periods=update_rows),
+            "ts": pa.Array.from_pandas(pd.date_range("2026-01-15", periods=update_rows), type=pa.timestamp("ns")),
+            "ints dense": np.arange(update_rows, dtype=np.int64),
+            "floats dense": np.arange(update_rows, 2 * update_rows, dtype=np.float32),
+            "bools dense": rng.random(update_rows) > 0.5,
+            "strings dense": rng.choice(string_values, update_rows),
+            "ints sparse": pa.array((2 * [0, 1, 2, None, None])[:update_rows], pa.int8()),
+            "floats sparse": pa.array((2 * [None, 0.1, 0.2, None, 0.3])[:update_rows], pa.float32()),
+            "bools sparse": pa.array((2 * [True, None, None, None, False])[:update_rows], pa.bool_()),
+            "strings sparse": (2 * ["hello", None, "gutentag", None, "konichiwa"])[:update_rows],
+            "ints empty": pa.array(update_rows * [None], pa.uint16()),
+            "floats empty": pa.array(update_rows * [None], pa.float64()),
+            "bools empty": pa.array(update_rows * [None], pa.bool_()),
+            "strings empty": pa.array(update_rows * [None], pa.string()),
+        }
     )
-    lib.update(sym, update_df)
+    lib.update(sym, update_table, index_column=True)
     generic_compact_data_test(lib, sym)
 
 
@@ -448,18 +589,6 @@ def test_compact_recursively_normalized_data(lmdb_version_store_v1):
     assert "recursive" in str(e.value) and sym in str(e.value)
 
 
-def test_compact_sparse_data(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_compact_sparse_data"
-    write_df = pd.DataFrame({"col": [0.5, np.nan]})
-    append_df = pd.DataFrame({"col": [1.5]})
-    lib.write(sym, write_df, sparsify_floats=True)
-    lib.append(sym, append_df)
-    with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
-    assert "sparse" in str(e.value)
-
-
 @pytest.mark.parametrize(
     "first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
 )
@@ -557,8 +686,8 @@ def test_compact_data_dynamic_schema_missing_columns(in_memory_store_factory, in
 
 
 def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_store_factory):
-    # Prune previous as we're going to look at the data segment descriptors post-compaction
-    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10, prune_previous_version=True)
+    lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_output_column_missing_from_slice_constant_types"
     # This configuration tests the right thing because:
     # - we start with row-slices of 5, 10, and 5 rows respectively
@@ -567,40 +696,74 @@ def test_compact_data_output_column_missing_from_slice_constant_types(in_memory_
     # - the column reslicer will then split these 20 rows into 2 segments of 10
     # - Therefore, present_in_first will be missing from the second slice, and present_in_last will be missing from the
     #   first slice in the resulting segments written to disk
-    lib.write(sym, pd.DataFrame({"present_in_all": np.arange(5), "present_in_first": np.arange(5)}))
-    lib.append(sym, pd.DataFrame({"present_in_all": np.arange(5, 15)}))
-    lib.append(sym, pd.DataFrame({"present_in_all": np.arange(15, 20), "present_in_last": np.arange(15, 20)}))
+    table_0 = pa.table(
+        {
+            "present_in_all": np.arange(5, dtype=np.int64),
+            "present_in_first_dense": np.arange(5, dtype=np.int64),
+            "present_in_first_sparse": pa.array(([0, 1, 2, None, None]), pa.int8()),
+            "present_in_first_empty": pa.array((5 * [None]), pa.int8()),
+        }
+    )
+    table_1 = pa.table({"present_in_all": np.arange(5, 15, dtype=np.int64)})
+    table_2 = pa.table(
+        {
+            "present_in_all": np.arange(15, 20, dtype=np.int64),
+            "present_in_last_dense": np.arange(15, 20, dtype=np.int64),
+            "present_in_last_sparse": pa.array(([None, 16, None, 17, None]), pa.int8()),
+            "present_in_last_empty": pa.array((5 * [None]), pa.int8()),
+        }
+    )
+    lib.write(sym, table_0)
+    lib.append(sym, table_1)
+    lib.append(sym, table_2)
     generic_compact_data_test(lib, sym)
-    lib_tool = lib.library_tool()
-    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
-    assert len(data_keys) == 2
-    # These aren't in any particular order
-    data_key_0 = [key for key in data_keys if key.start_index == 0][0]
-    data_key_1 = [key for key in data_keys if key.start_index == 10][0]
-    fields_0 = [field.name for field in lib_tool.read_descriptor(data_key_0).fields()]
-    fields_1 = [field.name for field in lib_tool.read_descriptor(data_key_1).fields()]
-    assert len(fields_0) == 2
-    assert len(fields_1) == 2
-    assert fields_0 == ["present_in_all", "present_in_first"]
-    assert fields_1 == ["present_in_all", "present_in_last"]
 
 
 # Like the test above, but with type promotion as well to force use of the iteration code-path, rather than the memcpy
 # implementation
 def test_compact_data_output_column_missing_from_slice_changing_types(in_memory_store_factory):
     lib = in_memory_store_factory(dynamic_schema=True, segment_row_size=10)
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_output_column_missing_from_slice_changing_types"
-    lib.write(sym, pd.DataFrame({"present_in_all": np.arange(2), "present_in_first": np.arange(2, dtype=np.int8)}))
-    lib.append(
-        sym, pd.DataFrame({"present_in_all": np.arange(2, 5), "present_in_first": np.arange(2, 5, dtype=np.int16)})
+    table_0 = pa.table(
+        {
+            "present_in_all": np.arange(2, dtype=np.int64),
+            "present_in_first_dense": np.arange(2, dtype=np.int8),
+            "present_in_first_sparse": pa.array(([None, 1]), pa.int32()),
+            "present_in_first_empty": pa.array((2 * [None]), pa.uint8()),
+        }
     )
-    lib.append(sym, pd.DataFrame({"present_in_all": np.arange(5, 15)}))
-    lib.append(
-        sym, pd.DataFrame({"present_in_all": np.arange(15, 18), "present_in_last": np.arange(15, 18, dtype=np.float32)})
+    table_1 = pa.table(
+        {
+            "present_in_all": np.arange(2, 5, dtype=np.int64),
+            "present_in_first_dense": np.arange(2, 5, dtype=np.int16),
+            "present_in_first_sparse": pa.array(([None, 3, None]), pa.int8()),
+            "present_in_first_empty": pa.array((3 * [None]), pa.uint32()),
+        }
     )
-    lib.append(
-        sym, pd.DataFrame({"present_in_all": np.arange(18, 20), "present_in_last": np.arange(18, 20, dtype=np.float64)})
+    table_2 = pa.table({"present_in_all": np.arange(5, 15, dtype=np.int64)})
+    table_3 = pa.table(
+        {
+            "present_in_all": np.arange(15, 18, dtype=np.int64),
+            "present_in_last_dense": np.arange(15, 18, dtype=np.int64),
+            "present_in_last_sparse": pa.array(([None, None, 17]), pa.int8()),
+            "present_in_last_empty": pa.array((3 * [None]), pa.int8()),
+        }
     )
+    table_4 = pa.table(
+        {
+            "present_in_all": np.arange(18, 20, dtype=np.int64),
+            "present_in_last_dense": np.arange(18, 20, dtype=np.uint32),
+            "present_in_last_sparse": pa.array(([18, None]), pa.uint8()),
+            "present_in_last_empty": pa.array((2 * [None]), pa.uint32()),
+        }
+    )
+
+    lib.write(sym, table_0)
+    lib.append(sym, table_1)
+    lib.append(sym, table_2)
+    lib.append(sym, table_3)
+    lib.append(sym, table_4)
     generic_compact_data_test(lib, sym)
 
 
@@ -657,6 +820,8 @@ def test_compact_data_hypothesis_small_and_large_segments(
     # The more interesting cases are when num_rows > rows_per_segment
     rows_per_segment=st.integers(1, 100),
     cols_per_segment=st.integers(1, 20),
+    # Shrinks towards False, which is the simpler case
+    sparse=st.booleans(),
 )
 @pytest.mark.skipif(
     WINDOWS or MACOS,
@@ -667,13 +832,15 @@ def test_compact_data_hypothesis_small_and_large_segments(
 """,
 )
 def test_compact_data_hypothesis_static_schema(
-    in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment
+    in_memory_store_factory, clear_query_stats, num_rows, num_cols, rows_per_segment, cols_per_segment, sparse
 ):
     rng = np.random.default_rng(42)
     lib_sliced = in_memory_store_factory(
         column_group_size=cols_per_segment, segment_row_size=rows_per_segment, dynamic_strings=True, name="_unique_"
     )
     lib_unsliced = in_memory_store_factory(column_group_size=cols_per_segment, dynamic_strings=True, name="_unique_")
+    lib_sliced._set_allow_arrow_input()
+    lib_unsliced._set_allow_arrow_input()
     sym = "test_compact_data_hypothesis_static_schema"
     supported_types = [
         np.uint8,
@@ -708,18 +875,23 @@ def test_compact_data_hypothesis_static_schema(
             # datetime
             arr = pd.date_range("2026-01-01", freq="s", periods=num_rows).values
             rng.shuffle(arr)
+        if sparse:
+            null_mask = rng.random(num_rows) < 0.5
+            arr = pa.array(arr, mask=null_mask)
+        else:
+            arr = pa.array(arr)
         data[col_name] = arr
-    df = pd.DataFrame(data)
+    table = pa.table(data)
     # Do one version where we write with the slicing policy and then compact
-    lib_sliced.write(sym, df)
+    lib_sliced.write(sym, table)
     generic_compact_data_test(lib_sliced, sym)
     # Do another version where we append random numbers of rows between 1 and 2 * rows_per_segment and then compact with
     # an explicit argument
     remaining_rows = num_rows
     while remaining_rows > 0:
         rows_to_take = rng.integers(1, 2 * rows_per_segment)
-        lib_unsliced.append(sym, df[:rows_to_take])
-        df = df[rows_to_take:]
+        lib_unsliced.append(sym, table.slice(length=rows_to_take))
+        table = table.slice(offset=rows_to_take)
         remaining_rows -= rows_to_take
     generic_compact_data_test(lib_unsliced, sym, rows_per_segment)
 
@@ -734,6 +906,8 @@ def test_compact_data_hypothesis_static_schema(
     num_rows=st.integers(1, 2_000),
     # The more interesting cases are when num_rows > rows_per_segment
     rows_per_segment=st.integers(1, 100),
+    # Shrinks towards False, which is the simpler case
+    sparse=st.booleans(),
 )
 @pytest.mark.skipif(
     WINDOWS or MACOS,
@@ -743,9 +917,12 @@ def test_compact_data_hypothesis_static_schema(
         TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
 """,
 )
-def test_compact_data_hypothesis_dynamic_schema(in_memory_store_factory, clear_query_stats, num_rows, rows_per_segment):
+def test_compact_data_hypothesis_dynamic_schema(
+    in_memory_store_factory, clear_query_stats, num_rows, rows_per_segment, sparse
+):
     rng = np.random.default_rng(42)
     lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True, name="_unique_")
+    lib._set_allow_arrow_input()
     sym = "test_compact_data_hypothesis_dynamic_schema"
     unsigned_int_types = [np.uint8, np.uint16, np.uint32, np.uint64]
     signed_int_types = [np.int8, np.int16, np.int32, np.int64]
@@ -786,8 +963,13 @@ def test_compact_data_hypothesis_dynamic_schema(in_memory_store_factory, clear_q
                 # datetime
                 arr = pd.date_range("2026-01-01", freq="s", periods=rows_to_take).values
                 rng.shuffle(arr)
+            if sparse:
+                null_mask = rng.random(rows_to_take) < 0.5
+                arr = pa.array(arr, mask=null_mask)
+            else:
+                arr = pa.array(arr)
             data[col_name] = arr
-        df = pd.DataFrame(data)
-        lib.append(sym, df)
+        table = pa.table(data)
+        lib.append(sym, table)
         remaining_rows -= rows_to_take
     generic_compact_data_test(lib, sym, rows_per_segment)

@@ -57,7 +57,6 @@ dependencies:
   # Matches the version of lmdb as vendored in its submodule.
   - lmdb==0.9.22
   - lmdbxx
-  - libiconv
   - aws-c-s3
   # Build dependencies for tests
   - libarrow

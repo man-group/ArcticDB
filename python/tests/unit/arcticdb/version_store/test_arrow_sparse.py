@@ -39,9 +39,9 @@ STRING_FORMAT_PER_COLUMN = {
 @pytest.mark.parametrize("row_range_start", list(range(15)))
 @pytest.mark.parametrize("row_range_width", [0, 1, 2, 5, 7, 10, 14, 15])
 def test_sparse_arrow_row_range(
-    version_store_factory, dynamic_schema, use_query_builder, row_range_start, row_range_width
+    in_memory_store_factory, dynamic_schema, use_query_builder, row_range_start, row_range_width
 ):
-    lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
+    lib = in_memory_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_arrow_row_range"
@@ -82,9 +82,9 @@ def test_sparse_arrow_row_range(
 @pytest.mark.parametrize("date_range_start", list(pd.date_range("2025-01-01", periods=15)))
 @pytest.mark.parametrize("date_range_width", [0, 1, 2, 5, 7, 10, 14, 15])
 def test_sparse_arrow_date_range(
-    version_store_factory, dynamic_schema, use_query_builder, date_range_start, date_range_width
+    in_memory_store_factory, dynamic_schema, use_query_builder, date_range_start, date_range_width
 ):
-    lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
+    lib = in_memory_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_arrow_date_range"
@@ -132,10 +132,10 @@ def test_sparse_arrow_date_range(
     rows_per_slice=st.integers(2, 10),
     use_row_range=st.booleans(),
 )
-def test_sparse_arrow_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, use_row_range):
+def test_sparse_arrow_hypothesis(in_memory_version_store_arrow, df, rows_per_slice, use_row_range):
     row_count = len(df)
     assume(row_count > 0)
-    lib = lmdb_version_store_arrow
+    lib = in_memory_version_store_arrow
     lib._cfg.write_options.segment_row_size = rows_per_slice
     sym = "test_sparse_arrow_hypothesis"
     float_array = pa.Array.from_pandas(df["float_col"])
@@ -181,8 +181,8 @@ def test_sparse_arrow_hypothesis(lmdb_version_store_arrow, df, rows_per_slice, u
         ["b"],
     ],
 )
-def test_sparse_column_selection(version_store_factory, column_group_size, use_row_range, index_column, columns):
-    lib = version_store_factory(column_group_size=column_group_size)
+def test_sparse_column_selection(in_memory_store_factory, column_group_size, use_row_range, index_column, columns):
+    lib = in_memory_store_factory(column_group_size=column_group_size)
     lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_sparse_col_selection"
@@ -222,8 +222,8 @@ class TestSparseArrowQueryBuilder:
     sym = "TestSparseArrowQueryBuilder"
 
     @pytest.fixture(autouse=True)
-    def setup(self, lmdb_version_store_arrow):
-        lib = lmdb_version_store_arrow
+    def setup(self, in_memory_version_store_arrow):
+        lib = in_memory_version_store_arrow
         self.table = pa.table(
             {
                 "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=8), type=pa.timestamp("ns")),
@@ -233,50 +233,50 @@ class TestSparseArrowQueryBuilder:
         )
         lib.write(self.sym, self.table, index_column=True)
 
-    def test_filter_isnull(self, lmdb_version_store_arrow):
+    def test_filter_isnull(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"].isnull()]
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         mask = pc.is_null(self.table.column("int_col"))
         expected = self.table.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_filter_notnull(self, lmdb_version_store_arrow):
+    def test_filter_notnull(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"].notnull()]
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         mask = pc.is_valid(self.table.column("int_col"))
         expected = self.table.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_filter_equals(self, lmdb_version_store_arrow):
+    def test_filter_equals(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"] == 3]
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         mask = pc.equal(self.table.column("int_col"), 3)
         expected = self.table.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_filter_greater_than(self, lmdb_version_store_arrow):
+    def test_filter_greater_than(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"] > 3]
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         mask = pc.greater(self.table.column("int_col"), 3)
         expected = self.table.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
@@ -295,60 +295,60 @@ class TestSparseArrowQueryBuilder:
             ),
         ],
     )
-    def test_filter_isin(self, lmdb_version_store_arrow, values):
+    def test_filter_isin(self, in_memory_version_store_arrow, values):
         q = QueryBuilder()
         q = q[q["int_col"].isin(values)]
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         mask = pc.is_in(self.table.column("int_col"), pa.array(values, pa.int64()))
         expected = self.table.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_filter_combined_columns(self, lmdb_version_store_arrow):
+    def test_filter_combined_columns(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[(q["int_col"].notnull()) & (q["float_col"].notnull())]
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         assert len(received) == 0
-        received_pandas = lmdb_version_store_arrow.read(self.sym, query_builder=q, output_format="PANDAS").data
+        received_pandas = in_memory_version_store_arrow.read(self.sym, query_builder=q, output_format="PANDAS").data
         assert len(received_pandas) == 0
 
-    def test_project_multiple_cols(self, lmdb_version_store_arrow):
+    def test_project_multiple_cols(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q.apply("sum", q["int_col"] + 10)
         q = q.apply("product", q["int_col"] * q["float_col"])
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         sum = pc.add(self.table.column("int_col"), 10)
         product = pc.multiply(self.table.column("int_col"), self.table.column("float_col"))
         expected = self.table.append_column("sum", sum)
         expected = expected.append_column("product", product)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_filter_then_project(self, lmdb_version_store_arrow):
+    def test_filter_then_project(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["float_col"].notnull()]
         q = q.apply("doubled", q["float_col"] * 2)
-        received = lmdb_version_store_arrow.read(self.sym, query_builder=q).data
+        received = in_memory_version_store_arrow.read(self.sym, query_builder=q).data
         mask = pc.is_valid(self.table.column("float_col"))
         filtered = self.table.filter(mask)
         doubled = pc.multiply(filtered.column("float_col"), 2)
         expected = filtered.append_column("doubled", doubled)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym, query_builder=q, output_format="PANDAS"
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_date_range_with_filter(self, lmdb_version_store_arrow):
+    def test_date_range_with_filter(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["int_col"].notnull()]
-        received = lmdb_version_store_arrow.read(
+        received = in_memory_version_store_arrow.read(
             self.sym,
             date_range=(pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-06")),
             query_builder=q,
@@ -357,7 +357,7 @@ class TestSparseArrowQueryBuilder:
         mask = pc.is_valid(sliced.column("int_col"))
         expected = sliced.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym,
             date_range=(pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-06")),
             query_builder=q,
@@ -365,10 +365,10 @@ class TestSparseArrowQueryBuilder:
         ).data.reset_index()
         assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
-    def test_row_range_with_filter(self, lmdb_version_store_arrow):
+    def test_row_range_with_filter(self, in_memory_version_store_arrow):
         q = QueryBuilder()
         q = q[q["float_col"].notnull()]
-        received = lmdb_version_store_arrow.read(
+        received = in_memory_version_store_arrow.read(
             self.sym,
             row_range=(2, 6),
             query_builder=q,
@@ -377,7 +377,7 @@ class TestSparseArrowQueryBuilder:
         mask = pc.is_valid(sliced.column("float_col"))
         expected = sliced.filter(mask)
         assert expected.equals(received)
-        received_pandas = lmdb_version_store_arrow.read(
+        received_pandas = in_memory_version_store_arrow.read(
             self.sym,
             row_range=(2, 6),
             query_builder=q,
@@ -388,8 +388,8 @@ class TestSparseArrowQueryBuilder:
 
 @pytest.mark.parametrize("write_sparse", [True, False])
 @pytest.mark.parametrize("append_sparse", [True, False])
-def test_sparse_append_roundtrip(lmdb_version_store_arrow, write_sparse, append_sparse, arrow_output_format):
-    lib = lmdb_version_store_arrow
+def test_sparse_append_roundtrip(in_memory_version_store_arrow, write_sparse, append_sparse, arrow_output_format):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_append_roundtrip"
     if write_sparse:
         str_data_1 = [None, "b", None]
@@ -480,9 +480,9 @@ def test_sparse_append_all_nulls(lmdb_version_store_arrow):
     ],
 )
 def test_sparse_update_roundtrip(
-    lmdb_version_store_arrow, write_sparse, update_sparse, date_range, arrow_output_format
+    in_memory_version_store_arrow, write_sparse, update_sparse, date_range, arrow_output_format
 ):
-    lib = lmdb_version_store_arrow
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_update_roundtrip"
     dates = pd.date_range("2025-01-01", periods=6)
     update_dates = pd.date_range("2025-01-03", periods=2)  # replaces rows 2 and 3
@@ -561,8 +561,8 @@ def test_sparse_update_roundtrip(
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
-def test_sparse_update_all_nulls(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_sparse_update_all_nulls(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_sparse_update_all_nulls"
     dates = pd.date_range("2025-01-01", periods=4)
     write_table = pa.table(
@@ -592,8 +592,8 @@ def test_sparse_update_all_nulls(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
-def test_sparse_dynamic_schema_combined(version_store_factory):
-    lib = version_store_factory(dynamic_schema=True, dynamic_strings=True)
+def test_sparse_dynamic_schema_combined(in_memory_store_factory):
+    lib = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib._set_allow_arrow_input()
     sym = "test_sparse_dynschema_combined"
@@ -658,9 +658,9 @@ def test_sparse_dynamic_schema_combined(version_store_factory):
 )
 @pytest.mark.parametrize("row_range", [None, (2, 6)])
 def test_sparse_dynamic_schema_type_upgrade(
-    version_store_factory, write_type, append_type, result_type, row_range, arrow_output_format
+    in_memory_store_factory, write_type, append_type, result_type, row_range, arrow_output_format
 ):
-    lib = version_store_factory(dynamic_schema=True)
+    lib = in_memory_store_factory(dynamic_schema=True)
     lib.set_output_format(OutputFormat.PYARROW)
     lib._set_allow_arrow_input()
     sym = "test_sparse_type_upgrade"
@@ -727,8 +727,8 @@ class TestSparseArrowGroupBy:
     sym = "test_sparse_groupby"
 
     @pytest.fixture(autouse=True)
-    def setup(self, version_store_factory):
-        self.lib = version_store_factory(segment_row_size=3)
+    def setup(self, in_memory_store_factory):
+        self.lib = in_memory_store_factory(segment_row_size=3)
         self.lib.set_output_format(OutputFormat.POLARS)
         self.lib._set_allow_arrow_input()
         self.pldf = pl.DataFrame(
@@ -778,8 +778,8 @@ class TestSparseArrowResample:
     # - Other resampling kwargs like offset, origin
 
     @pytest.fixture(autouse=True)
-    def setup(self, version_store_factory):
-        self.lib = version_store_factory(segment_row_size=4)
+    def setup(self, in_memory_store_factory):
+        self.lib = in_memory_store_factory(segment_row_size=4)
         self.lib.set_output_format(OutputFormat.POLARS)
         self.lib._set_allow_arrow_input()
         # Bucket 2 (hours 6-8) is fully null for both columns when resampled at 3h
@@ -831,8 +831,8 @@ class TestSparseArrowResample:
 
 class TestSparseArrowConcat:
     @pytest.fixture(autouse=True)
-    def setup(self, lmdb_library_factory):
-        self.lib = lmdb_library_factory(LibraryOptions())
+    def setup(self, mem_library_factory):
+        self.lib = mem_library_factory(LibraryOptions())
         self.lib._nvs.set_output_format(OutputFormat.POLARS)
         self.lib._nvs._set_allow_arrow_input()
 

@@ -111,17 +111,9 @@ def merge_arguments(
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_arguments(COL_NAMES, DTYPES))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-@pytest.mark.skipif(
-    WINDOWS or MACOS,
-    reason="""
-        On macOS/Windows the low timestamp resolution can cause duplicate keys when
-        successive operations land within the same clock tick.
-        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-""",
-)
-def test_timeseries_merge_update(lmdb_version_store_v1, merge_args):
+def test_timeseries_merge_update(s3_version_store_v1, merge_args):
     target_list, source, on = merge_args
-    lib = lmdb_version_store_v1
+    lib = s3_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
@@ -146,12 +138,12 @@ def test_timeseries_merge_update(lmdb_version_store_v1, merge_args):
     cols_to_promote=st.lists(st.sampled_from(COL_NAMES), unique=True, min_size=1),
 )
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_multiindex_merge_update(lmdb_version_store_v1, merge_args, cols_to_promote):
+def test_multiindex_merge_update(s3_version_store_v1, merge_args, cols_to_promote):
     target_list, source, on = merge_args
     target_list = [df.set_index(cols_to_promote, append=True) for df in target_list]
     source = source.set_index(cols_to_promote, append=True)
 
-    lib = lmdb_version_store_v1
+    lib = s3_version_store_v1
     symbol = "test_multiindex_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     for df in target_list:
@@ -173,18 +165,10 @@ def test_multiindex_merge_update(lmdb_version_store_v1, merge_args, cols_to_prom
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(merge_args=merge_arguments(COL_NAMES, DTYPES, index_type=DataframeStrategyIndexType.ROWRANGE))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-@pytest.mark.skipif(
-    WINDOWS or MACOS,
-    reason="""
-        On macOS/Windows the low timestamp resolution can cause duplicate keys when
-        successive operations land within the same clock tick.
-        TODO: Fix the underlying issue and remove this workaround (monday ticket ref 11777175142)
-""",
-)
-def test_rowrange_merge_update(lmdb_version_store_v1, merge_args):
+def test_rowrange_merge_update(s3_version_store_v1, merge_args):
     target, source, on = merge_args
     assert len(target) == 1
-    lib = lmdb_version_store_v1
+    lib = s3_version_store_v1
     symbol = "test_merge_update"
     lib.version_store.force_delete_symbol(symbol)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")

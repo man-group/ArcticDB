@@ -337,6 +337,37 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("index_segment", &DescriptorItem::index_segment)
             .def_property_readonly("column_stats_segment", &DescriptorItem::column_stats_segment);
 
+    py::class_<CompactDataInfo, std::shared_ptr<CompactDataInfo>>(version, "CompactDataInfo", R"pbdoc(
+        Result returned by the compact_data_explain_plan method. Contains information about what the effect of calling
+        compact_data would be on the specified symbol.
+
+        Attributes
+        ----------
+        row_slices_before : List[int]
+            The row numbers of boundaries between row-slices in the current latest version
+        row_slices_after : List[int]
+            What the row numbers of boundaries between row-slices would be after calling compact_data
+        num_row_slices_before : int
+            The number of row-slices in the current latest version
+        num_row_slices_after : int
+            What the number of row-slices would be after calling compact_data
+        version_id_before : int
+            The version id of the current latest version
+        version_id_after : int
+            What the version id would be after calling compact_data
+        will_do_work : bool
+            Whether calling compact_data would do any compaction. If False, the current data is already suitably
+            compacted.
+)pbdoc")
+            .def_property_readonly("row_slices_before", &CompactDataInfo::row_slices_before)
+            .def_property_readonly("row_slices_after", &CompactDataInfo::row_slices_after)
+            .def_property_readonly("num_row_slices_before", &CompactDataInfo::num_row_slices_before)
+            .def_property_readonly("num_row_slices_after", &CompactDataInfo::num_row_slices_after)
+            .def_property_readonly("version_id_before", &CompactDataInfo::version_id_before)
+            .def_property_readonly("version_id_after", &CompactDataInfo::version_id_after)
+            .def_property_readonly("will_do_work", &CompactDataInfo::will_do_work)
+            .def("__repr__", &CompactDataInfo::to_string);
+
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
         
@@ -697,6 +728,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_library,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact the whole library wherever necessary")
+            .def("_compact_data_explain_plan",
+                 &PythonVersionStore::compact_data_explain_plan,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Calculates what the new row-slice distribution would be after calling compact_data")
             .def("_compact_data",
                  &PythonVersionStore::compact_data,
                  py::call_guard<SingleThreadMutexHolder>(),

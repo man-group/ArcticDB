@@ -37,22 +37,22 @@ def test_range_index(lmdb_version_store_arrow, index, index_name, col_name):
 
 @pytest.mark.parametrize("col_name", ["col", None, 5, ""])
 @pytest.mark.parametrize("duplicate", [True, False])
-def test_duplicate_and_special_col_names(lmdb_version_store_arrow, col_name, duplicate):
+def test_duplicate_and_special_col_names(in_memory_version_store_arrow, col_name, duplicate):
     columns = [col_name, "y"]
     expected_columns = [f"{col_name}", "y"]
     if duplicate:
         columns.append(col_name)
         expected_columns.append(f"_{col_name}_")
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns)
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_duplicate_and_special_col_names", df, expected_columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_duplicate_and_special_col_names", df, expected_columns)
 
 
 @pytest.mark.parametrize("col_name", [None, 5])
-def test_special_col_names_clash_with_string_col_name(lmdb_version_store_arrow, col_name):
+def test_special_col_names_clash_with_string_col_name(in_memory_version_store_arrow, col_name):
     columns = [col_name, str(col_name), col_name]
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns)
     generic_arrow_norm_test(
-        lmdb_version_store_arrow,
+        in_memory_version_store_arrow,
         "test_special_col_names_clash_with_string_col_name",
         df,
         [f"{col_name}", f"_{col_name}_", f"__{col_name}__"],
@@ -60,7 +60,7 @@ def test_special_col_names_clash_with_string_col_name(lmdb_version_store_arrow, 
 
 
 @pytest.mark.parametrize("columns", [["col"], ["index"], ["index", "index"], ["__index__"], ["__index__", "__index__"]])
-def test_unnamed_timeseries_index(lmdb_version_store_arrow, columns):
+def test_unnamed_timeseries_index(in_memory_version_store_arrow, columns):
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
     index_column_name = "__index__" if "__index__" not in columns else "___index___"
     expected_columns = [index_column_name]
@@ -70,36 +70,36 @@ def test_unnamed_timeseries_index(lmdb_version_store_arrow, columns):
             column = f"_{column}_"
         taken_column_names.add(column)
         expected_columns.append(column)
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_unnamed_timeseries_index", df, expected_columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_unnamed_timeseries_index", df, expected_columns)
 
 
 @pytest.mark.parametrize("index_name", ["index", "__index__", "ts"])
-def test_named_timeseries_index_no_clash(lmdb_version_store_arrow, index_name):
+def test_named_timeseries_index_no_clash(in_memory_version_store_arrow, index_name):
     columns = ["col"]
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
     df.index.name = index_name
     expected_columns = [index_name] + columns
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_named_timeseries_index_no_clash", df, expected_columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_named_timeseries_index_no_clash", df, expected_columns)
 
 
 @pytest.mark.parametrize("index_name", ["index", "__index__", "ts"])
-def test_named_timeseries_index_clash(lmdb_version_store_arrow, index_name):
+def test_named_timeseries_index_clash(in_memory_version_store_arrow, index_name):
     columns = [index_name, index_name, f"_{index_name}_"]
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
     df.index.name = index_name
     expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__", f"__{columns[2]}__"]
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_named_timeseries_index_clash", df, expected_columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_named_timeseries_index_clash", df, expected_columns)
 
 
 @pytest.mark.parametrize("col_name", ["", None, 5])
-def test_named_timeseries_index_clash_special_col_names(lmdb_version_store_arrow, col_name):
+def test_named_timeseries_index_clash_special_col_names(in_memory_version_store_arrow, col_name):
     index_name = str(col_name)
     columns = [col_name, col_name]
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
     df.index.name = index_name
     expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__"]
     generic_arrow_norm_test(
-        lmdb_version_store_arrow, "test_named_timeseries_index_clash_special_col_names", df, expected_columns
+        in_memory_version_store_arrow, "test_named_timeseries_index_clash_special_col_names", df, expected_columns
     )
 
 
@@ -113,7 +113,7 @@ def test_named_timeseries_index_clash_special_col_names(lmdb_version_store_arrow
         ["__index_level_0__", "__index_level_1__"],
     ],
 )
-def test_unnamed_multiindex(lmdb_version_store_arrow, columns):
+def test_unnamed_multiindex(in_memory_version_store_arrow, columns):
     df = pd.DataFrame(
         np.zeros((1, len(columns))), columns=columns, index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]])
     )
@@ -125,7 +125,7 @@ def test_unnamed_multiindex(lmdb_version_store_arrow, columns):
     if columns == ["__index_level_0__", "__index_level_0__"]:
         columns[-1] = f"__{columns[-1]}__"
     expected_columns = index_column_names + columns
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_unnamed_multiindex", df, expected_columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_unnamed_multiindex", df, expected_columns)
 
 
 @pytest.mark.parametrize(
@@ -145,7 +145,7 @@ def test_unnamed_multiindex(lmdb_version_store_arrow, columns):
         ["__index_level_0__", "__index_level_1__"],
     ],
 )
-def test_partially_named_multiindex(lmdb_version_store_arrow, index_column_names, columns):
+def test_partially_named_multiindex(in_memory_version_store_arrow, index_column_names, columns):
     df = pd.DataFrame(
         np.zeros((1, len(columns))),
         columns=columns,
@@ -163,21 +163,21 @@ def test_partially_named_multiindex(lmdb_version_store_arrow, index_column_names
         expected_columns[-1] = f"_{expected_columns[-1]}_"
     if expected_columns[0] == "___index_level_0___" and columns == ["__index_level_0__", "__index_level_0__"]:
         expected_columns[-1] = f"_{expected_columns[-1]}_"
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_partially_named_multiindex", df, expected_columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_partially_named_multiindex", df, expected_columns)
 
 
 @pytest.mark.parametrize("index_names", [["level 1", "level 2"], ["index", "__index__"], ["__index__", "index"]])
-def test_named_multiindex_no_clash(lmdb_version_store_arrow, index_names):
+def test_named_multiindex_no_clash(in_memory_version_store_arrow, index_names):
     columns = ["col"]
     df = pd.DataFrame(
         np.zeros((1, len(columns))),
         columns=columns,
         index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=index_names),
     )
-    generic_arrow_norm_test(lmdb_version_store_arrow, "test_named_multiindex_no_clash", df, index_names + columns)
+    generic_arrow_norm_test(in_memory_version_store_arrow, "test_named_multiindex_no_clash", df, index_names + columns)
 
 
-def test_named_multiindex_duplicates_in_level_names(lmdb_version_store_arrow):
+def test_named_multiindex_duplicates_in_level_names(in_memory_version_store_arrow):
     index_names = ["level", "level"]
     columns = ["col"]
     df = pd.DataFrame(
@@ -186,12 +186,15 @@ def test_named_multiindex_duplicates_in_level_names(lmdb_version_store_arrow):
         index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]], names=index_names),
     )
     generic_arrow_norm_test(
-        lmdb_version_store_arrow, "test_named_multiindex_duplicates_in_level_names", df, ["level", "_level_", "col"]
+        in_memory_version_store_arrow,
+        "test_named_multiindex_duplicates_in_level_names",
+        df,
+        ["level", "_level_", "col"],
     )
 
 
 @pytest.mark.parametrize("columns", [["level 1"], ["level 2"], ["level 1", "level 2"], ["level 1", "level 1"]])
-def test_named_multiindex_duplicates_in_columns(lmdb_version_store_arrow, columns):
+def test_named_multiindex_duplicates_in_columns(in_memory_version_store_arrow, columns):
     index_names = ["level 1", "level 2"]
     df = pd.DataFrame(
         np.zeros((1, len(columns))),
@@ -206,13 +209,13 @@ def test_named_multiindex_duplicates_in_columns(lmdb_version_store_arrow, column
         expected_columns.append(col)
         taken_column_names.add(col)
     generic_arrow_norm_test(
-        lmdb_version_store_arrow, "test_named_multiindex_duplicates_in_columns", df, expected_columns
+        in_memory_version_store_arrow, "test_named_multiindex_duplicates_in_columns", df, expected_columns
     )
 
 
 @pytest.mark.parametrize("clash_level", [0, 1])
 @pytest.mark.parametrize("col_name", ["", None, 5])
-def test_named_multiindex_clash_special_col_names(lmdb_version_store_arrow, clash_level, col_name):
+def test_named_multiindex_clash_special_col_names(in_memory_version_store_arrow, clash_level, col_name):
     index_names = ["level 1", "level 2"]
     index_names[clash_level] = str(col_name)
     df = pd.DataFrame(
@@ -222,17 +225,17 @@ def test_named_multiindex_clash_special_col_names(lmdb_version_store_arrow, clas
     )
     expected_columns = index_names + [f"_{col_name}_"]
     generic_arrow_norm_test(
-        lmdb_version_store_arrow, "test_named_multiindex_clash_special_col_names", df, expected_columns
+        in_memory_version_store_arrow, "test_named_multiindex_clash_special_col_names", df, expected_columns
     )
 
 
-def test_index_with_timezone(lmdb_version_store_arrow):
+def test_index_with_timezone(in_memory_version_store_arrow):
     df = pd.DataFrame(
         {"col": np.arange(10, dtype=np.int64)},
         index=pd.date_range(pd.Timestamp(year=2025, month=1, day=1, tz="America/New_York"), periods=10),
     )
     generic_arrow_norm_test(
-        lmdb_version_store_arrow,
+        in_memory_version_store_arrow,
         "test_index_with_timezone",
         df,
         ["__index__", "col"],
@@ -240,7 +243,7 @@ def test_index_with_timezone(lmdb_version_store_arrow):
     )
 
 
-def test_multi_index_with_tz(lmdb_version_store_arrow):
+def test_multi_index_with_tz(in_memory_version_store_arrow):
     df = pd.DataFrame(
         {"col": np.arange(10, dtype=np.int64())},
         index=[
@@ -250,7 +253,7 @@ def test_multi_index_with_tz(lmdb_version_store_arrow):
     )
     df.index.names = ["index1", "index2"]
     generic_arrow_norm_test(
-        lmdb_version_store_arrow,
+        in_memory_version_store_arrow,
         "test_multi_index_with_tz",
         df,
         ["index1", "index2", "col"],
@@ -258,7 +261,7 @@ def test_multi_index_with_tz(lmdb_version_store_arrow):
     )
 
 
-def test_multi_index_no_name_multiple_tz(lmdb_version_store_arrow):
+def test_multi_index_no_name_multiple_tz(in_memory_version_store_arrow):
     df = pd.DataFrame(
         {"col": np.arange(10, dtype=np.int64)},
         index=[
@@ -267,7 +270,7 @@ def test_multi_index_no_name_multiple_tz(lmdb_version_store_arrow):
         ],
     )
     generic_arrow_norm_test(
-        lmdb_version_store_arrow,
+        in_memory_version_store_arrow,
         "test_multi_index_no_name_multiple_tz",
         df,
         ["__index_level_0__", "__index_level_1__", "col"],
@@ -282,14 +285,14 @@ def test_series_basic(lmdb_version_store_arrow):
     generic_arrow_norm_test(lmdb_version_store_arrow, "test_series_basic", series, ["my series"])
 
 
-def test_series_with_index(lmdb_version_store_arrow):
+def test_series_with_index(in_memory_version_store_arrow):
     series = pd.Series(
         np.arange(10, dtype=np.int64),
         name="my series",
         index=pd.date_range(pd.Timestamp(year=2025, month=1, day=1, tz="Europe/London"), periods=10),
     )
     generic_arrow_norm_test(
-        lmdb_version_store_arrow,
+        in_memory_version_store_arrow,
         "test_series_with_index",
         series,
         ["__index__", "my series"],
@@ -297,8 +300,8 @@ def test_series_with_index(lmdb_version_store_arrow):
     )
 
 
-def test_read_pickled(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_read_pickled(in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_read_pickled"
     obj = {"a": ["b", "c"], "x": 122.3}
     lib.write(sym, obj)
@@ -306,8 +309,8 @@ def test_read_pickled(lmdb_version_store_arrow):
     assert obj == result
 
 
-def test_custom_normalizer(custom_thing_with_registered_normalizer, lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
+def test_custom_normalizer(custom_thing_with_registered_normalizer, in_memory_version_store_arrow):
+    lib = in_memory_version_store_arrow
     sym = "test_custom_normalizer"
     obj = custom_thing_with_registered_normalizer
     lib.write(sym, obj)

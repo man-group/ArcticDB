@@ -34,7 +34,7 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -2902,7 +2902,10 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if (
+                output_format.lower() == OutputFormat.POLARS.lower()
+                and not norm.WhichOneof("input_type") == "msg_pack_frame"
+            ):
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -3966,6 +3969,67 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
+    def compact_data_explain_plan_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+    ) -> CompactDataInfo:
+        """
+        Do a dry run of compact_data_experimental, demonstrating what the impact would be of calling
+        compact_data_experimental without actually modifying any data on disk.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the dry run on.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting.
+
+        Returns
+        -------
+        CompactDataInfo
+            Structure containing information about what the fragmentation of the symbol looks like currently, and what
+            it would look like after a call to compact_data_experimental.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+        >>> compact_data_info.row_slices_before
+        [0, 1000, 2000, ..., 99000, 100000]
+        >>> compact_data_info.row_slices_after
+        [0, 100000]
+        >>> compact_data_info.num_row_slices_before
+        100
+        >>> compact_data_info.num_row_slices_after
+        1
+        >>> compact_data_info.version_id_before
+        99
+        >>> compact_data_info.version_id_after
+        100
+        >>> compact_data_info.will_do_work
+        True
+        """
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        res = self.version_store._compact_data_explain_plan(symbol, rows_per_segment)
+        return res
+
     def compact_data_experimental(
         self,
         symbol: str,
@@ -3987,10 +4051,8 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
-            compactions may fail. Additionally, resampling is not yet supported with sparse data.
-
-            Sparse data is not yet supported.
+            Note that compacting dynamic schema data can produce sparse data, even if the input data was dense, and
+            resampling does not yet support sparse data.
 
         Parameters
         ----------
@@ -4016,7 +4078,7 @@ class NativeVersionStore:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, or the data is sparse
+            If the existing data is recursively normalized
 
         Examples
         --------

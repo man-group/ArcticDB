@@ -65,3 +65,6 @@ __azurite_*
 docs/mkdocs/docs/notebooks/arcticdb_sports/
 docs/mkdocs/docs/notebooks/exports/
 /.pytest_cache/
+
+venv
+arcticdb_ext-stubs

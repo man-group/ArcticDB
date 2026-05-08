@@ -135,6 +135,10 @@ class VersionedEngine {
 
     virtual std::set<StreamId> get_active_incomplete_refs() = 0;
 
+    virtual CompactDataInfo compact_data_explain_plan_internal(
+            const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+    ) = 0;
+
     virtual VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
     ) = 0;

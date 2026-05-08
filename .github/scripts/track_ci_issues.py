@@ -36,12 +36,12 @@ def read_lines(path: str) -> list[str]:
 def _sanitise_search_query(title: str) -> str:
     """Strip characters that GitHub Search treats as special syntax.
 
-    GitHub's issue search interprets [ ] : / . as operators, which causes
-    queries for pytest parametrized names (e.g. test_foo[param1-param2]) to
-    return zero results. We strip these from the search query and rely on
-    the exact title match below to filter accurately.
+    GitHub's issue search interprets [ ] : / . \\ as operators or escape
+    characters, which causes queries for test paths (especially Windows
+    backslash paths) to return zero results. We strip these from the search
+    query and rely on the exact title match below to filter accurately.
     """
-    return re.sub(r'[\[\]:/."]', " ", title)
+    return re.sub(r'[\[\]:/.\\"]', " ", title)
 
 
 def find_existing_issue(repo: str, label: str, title: str) -> int | None:

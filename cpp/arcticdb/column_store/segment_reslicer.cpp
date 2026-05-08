@@ -66,9 +66,8 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     std::vector<StringPool> string_pools(reslicing_info.num_segments);
     // We can use string_view keys here as they point to the keys in column_map, which are still live while this
     // variable is in use
-    ankerl::unordered_dense::
-            map<std::string_view, std::vector<std::optional<Column>>, util::TransparentStringHash, std::equal_to<>>
-                    resliced_column_map;
+    ankerl::unordered_dense::map<std::string_view, std::vector<Column>, util::TransparentStringHash, std::equal_to<>>
+            resliced_column_map;
     for (auto&& [col_name, column_reslicer] : column_map) {
         resliced_column_map.emplace(col_name, column_reslicer.reslice_columns(string_pools));
     }
@@ -81,9 +80,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
                 reslicing_info.num_segments
         );
         for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
-            if (sliced_cols.at(idx).has_value()) {
-                res.at(idx).add_column(col_name, std::make_shared<Column>(std::move(*sliced_cols.at(idx))));
-            }
+            res.at(idx).add_column(col_name, std::make_shared<Column>(std::move(sliced_cols.at(idx))));
         }
     }
     for (size_t idx = 0; idx < reslicing_info.num_segments; ++idx) {

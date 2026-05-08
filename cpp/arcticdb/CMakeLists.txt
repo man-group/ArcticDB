@@ -103,11 +103,7 @@ add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
-# Libraries baked into the internal and external Linux images are found by searching various paths
-# On Windows, vcpkg will provide a "Config" which takes precedence
-if (WIN32)
-    find_package(Iconv)
-else ()
+if (NOT WIN32)
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
@@ -227,6 +223,7 @@ set(arcticdb_srcs
         column_store/segment_utils.hpp
         column_store/memory_segment_pretty_print.hpp
         entity/atom_key.hpp
+        entity/compact_data_info.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
@@ -470,6 +467,7 @@ set(arcticdb_srcs
         column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
+        entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
         entity/field_collection_proto.cpp
@@ -809,11 +807,7 @@ else()
     endif()
 endif()
 
-if (WIN32)
-    list (APPEND arcticdb_core_libraries
-            Iconv::Iconv
-            )
-else ()
+if (NOT WIN32)
 
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list (APPEND arcticdb_core_libraries stdc++fs)
