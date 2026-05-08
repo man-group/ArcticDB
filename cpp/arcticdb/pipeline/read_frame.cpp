@@ -329,13 +329,22 @@ void handle_type_promotion(const ColumnMapping& m, Column& column) {
 }
 
 void decode_or_expand(
-        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
-        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const ColumnMapping& mapping, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info, // type of the column.
+        // encoded_field_info is the type of the data key. and dest_column may need to be promoted if types are
+        // differrent between data keys
+        // timeseries descriptor contains the promoted types of the column in destination
+        const DecodePathData& shared_data,
+        std::any& handler_data
+        /*if we need to allocate python string, python ref counts, we pass it to type handler eg nan,this is for
+           PANDAS*/
+        ,
+        EncodingVersion encoding_version,
+        const ColumnMapping& mapping /*where we should write in dest_column and truncate range info*/,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
+    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc)) {
         handler->handle_type(
                 data,
                 dest_column,
@@ -635,7 +644,7 @@ void check_data_left_for_subsequent_fields(
     );
 }
 
-void decode_into_frame_static(
+void decode_into_frame_static( // with or without filters, row range or date range
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
         const ReadOptions& read_options
@@ -665,11 +674,19 @@ void decode_into_frame_static(
         auto& index_field = fields.at(0u);
         const auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
-        auto truncate_range = get_truncate_range(
-                frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
+        auto truncate_range = get_truncate_range( // arrow specific, if we have filters finds the index start and end
+                frame,
+                context,
+                read_options,
+                read_query,
+                encoding_version,
+                index_field,
+                index_field_offset
         );
         if (context.fetch_index() && get_index_field_count(frame)) {
-            handle_truncation(frame.column(0), truncate_range);
+            handle_truncation(
+                    frame.column(0), truncate_range
+            ); // truncates the index column if we have an index and we need to truncate based on the filte
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -677,7 +694,7 @@ void decode_into_frame_static(
             return;
 
         while (it.has_next()) {
-            advance_skipped_cols(data, it, fields, hdr);
+            advance_skipped_cols(data, it, fields, hdr); // if we have colum filter
             if (has_magic_nums)
                 util::check_magic_in_place<ColumnMagic>(data);
 
@@ -690,7 +707,9 @@ void decode_into_frame_static(
             );
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
             auto& column = frame.column(static_cast<ssize_t>(it.dest_col()));
-            ColumnMapping mapping{frame, it.dest_col(), it.source_field_pos(), context};
+            ColumnMapping mapping{
+                    frame, it.dest_col(), it.source_field_pos(), context
+            }; // where to write in the output frame
             mapping.set_truncate(truncate_range);
 
             check_type_compatibility(mapping, field_name, it.source_col(), it.dest_col());

@@ -192,11 +192,10 @@ def test_column_stats_nat_values(lmdb_version_store, any_output_format):
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
-    nat = np.iinfo(np.int64).min
     expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
-            [pd.Timestamp("2020-01-01").value, nat, nat, nat],
+            [pd.Timestamp("2020-01-01").value, None, None, None],
             dtype=pl.Int64,
         ).cast(pl.Datetime("ns")),
         pl.Series(
