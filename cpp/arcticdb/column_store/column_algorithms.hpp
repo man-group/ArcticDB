@@ -555,4 +555,69 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_upper_bound(
     return upper_bound<TDT, IT, ID>(bracket_start, bracket_end, value);
 }
 
+namespace search_detail {
+// Allow the int64-aliased NANOSECONDS_UTC64 to be searched as int64_t.
+template<typename T>
+constexpr bool data_type_compatible_with(DataType dt) {
+    constexpr DataType T_dt = data_type_from_raw_type<T>();
+    return dt == T_dt || (T_dt == DataType::INT64 && dt == DataType::NANOSECONDS_UTC64);
+}
+} // namespace search_detail
+
+template<typename T>
+requires std::is_arithmetic_v<T>
+size_t lower_bound_idx(
+        const Column& column, T value, std::optional<size_t> from = std::nullopt,
+        std::optional<size_t> to = std::nullopt
+) {
+    using TDT = ScalarTagType<DataTypeTag<data_type_from_raw_type<T>()>>;
+    util::check(!column.is_sparse(), "lower_bound_idx not supported on sparse columns");
+    util::check(
+            search_detail::data_type_compatible_with<T>(column.type().data_type()),
+            "lower_bound_idx column type {} does not match search value type",
+            datatype_to_str(column.type().data_type())
+    );
+    auto column_data = column.data();
+    auto begin = from.has_value()
+                         ? column_data.template citerator_at<TDT, IteratorType::ENUMERATED>(*from)
+                         : column_data.template cbegin<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = to.has_value() && static_cast<position_t>(*to) < column.row_count()
+                       ? column_data.template citerator_at<TDT, IteratorType::ENUMERATED>(*to)
+                       : column_data.template cend<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto result = lower_bound<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, value);
+    if (!result.current_block().has_value()) {
+        // Iterator to end doesn't have `->idx()`
+        return column.row_count();
+    }
+    return result->idx();
+}
+
+template<typename T>
+requires std::is_arithmetic_v<T>
+size_t upper_bound_idx(
+        const Column& column, T value, std::optional<size_t> from = std::nullopt,
+        std::optional<size_t> to = std::nullopt
+) {
+    using TDT = ScalarTagType<DataTypeTag<data_type_from_raw_type<T>()>>;
+    util::check(!column.is_sparse(), "upper_bound_idx not supported on sparse columns");
+    util::check(
+            search_detail::data_type_compatible_with<T>(column.type().data_type()),
+            "upper_bound_idx column type {} does not match search value type",
+            datatype_to_str(column.type().data_type())
+    );
+    auto column_data = column.data();
+    auto begin = from.has_value()
+                         ? column_data.template citerator_at<TDT, IteratorType::ENUMERATED>(*from)
+                         : column_data.template cbegin<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = to.has_value() && static_cast<position_t>(*to) < column.row_count()
+                       ? column_data.template citerator_at<TDT, IteratorType::ENUMERATED>(*to)
+                       : column_data.template cend<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto result = upper_bound<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, value);
+    if (!result.current_block().has_value()) {
+        // Iterator to end doesn't have `->idx()`
+        return column.row_count();
+    }
+    return result->idx();
+}
+
 } // namespace arcticdb

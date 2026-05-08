@@ -23,59 +23,10 @@ using BenchTDT = TypeDescriptorTag<DataTypeTag<DataType::NANOSECONDS_UTC64>, Dim
 static std::random_device rd;
 static std::mt19937 gen(rd());
 
-static void BM_search_sorted_random(benchmark::State& state) {
-    auto num_rows = state.range(0);
-    std::vector<timestamp> data;
-    data.reserve(num_rows);
-    std::uniform_int_distribution<timestamp> dis(
-            std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::max()
-    );
-    for (auto idx = 0; idx < num_rows; ++idx) {
-        data.emplace_back(dis(gen));
-    }
-    std::ranges::sort(data);
-    Column col(
-            make_scalar_type(DataType::NANOSECONDS_UTC64), num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-    );
-    memcpy(col.ptr(), data.data(), num_rows * sizeof(timestamp));
-    col.set_row_data(num_rows - 1);
-    for (auto _ : state) {
-        state.PauseTiming();
-        auto value = dis(gen);
-        state.ResumeTiming();
-        col.search_sorted(value);
-    }
-}
-
-static void BM_search_sorted_single_value(benchmark::State& state) {
-    auto num_rows = state.range(0);
-    auto from_right = state.range(1);
-    std::uniform_int_distribution<timestamp> dis(
-            std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::max()
-    );
-    auto value = dis(gen);
-    std::vector<timestamp> data(num_rows, value);
-    Column col(
-            make_scalar_type(DataType::NANOSECONDS_UTC64), num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-    );
-    memcpy(col.ptr(), data.data(), num_rows * sizeof(timestamp));
-    col.set_row_data(num_rows - 1);
-    for (auto _ : state) {
-        col.search_sorted(value, from_right);
-    }
-}
-
-BENCHMARK(BM_search_sorted_random)->Args({100'000});
-BENCHMARK(BM_search_sorted_single_value)->Args({100'000, true})->Args({100'000, false});
-
 // ─── Sorted-search benchmarks across block layouts ────────────────────────────────────────────────
 //
 // Four column shapes — single-block (PRESIZED memcpy), regular blocks (presized_in_blocks),
-// irregular blocks of size 1000 (DETACHABLE), irregular blocks of size 1 (DETACHABLE). The
-// DETACHABLE allocation routes block lookups through ChunkedBuffer::block_offsets_ even with
-// uniform block sizes, isolating "irregular path" overhead from "varying block size" overhead.
-// For each shape compare Column::search_sorted (random_accessor path) against the new lower_bound
-// free function (two-level block + within-block bsearch). Run with a release build.
+// irregular blocks of size 1000 (DETACHABLE), irregular blocks of size 1 (DETACHABLE).
 
 namespace {
 
@@ -138,22 +89,7 @@ auto make_irregular_blocks_1 = [](const std::vector<timestamp>& data) { return m
 
 } // namespace
 
-template<typename MakeColumn>
-static void BM_search_sorted_shape(benchmark::State& state, MakeColumn make_column) {
-    auto num_rows = state.range(0);
-    std::mt19937 rng(0xC0FFEE);
-    auto data = make_sorted_data(num_rows, rng);
-    auto col = make_column(data);
-    std::uniform_int_distribution<size_t> idx_dis(0, num_rows - 1);
-    for (auto _ : state) {
-        state.PauseTiming();
-        auto value = data[idx_dis(rng)];
-        state.ResumeTiming();
-        benchmark::DoNotOptimize(col.search_sorted(value));
-    }
-}
-
-// Full-column lower_bound — random target, cbegin to cend. Comparable to BM_search_sorted_shape.
+// Full-column lower_bound — random target, cbegin to cend.
 template<typename MakeColumn>
 static void BM_lower_bound_shape(benchmark::State& state, MakeColumn make_column) {
     auto num_rows = state.range(0);
@@ -175,7 +111,7 @@ static void BM_lower_bound_shape(benchmark::State& state, MakeColumn make_column
 }
 
 // begin_dist controls where the exponential search starts:
-//   begin_dist == -1 → begin = cbegin (full-column gallop, comparable to BM_lower_bound_shape).
+//   begin_dist == -1 → begin = cbegin (full-column gallop).
 //   begin_dist >=  0 → begin = citerator_at(target_idx - begin_dist) (answer is begin_dist past begin).
 // The begin construction sits inside PauseTiming/ResumeTiming so only the search call is measured.
 template<typename MakeColumn>
@@ -205,17 +141,6 @@ static void BM_exponential_lower_bound_shape(benchmark::State& state, MakeColumn
     }
 }
 
-static void BM_search_sorted_single_block(benchmark::State& state) { BM_search_sorted_shape(state, make_single_block); }
-static void BM_search_sorted_regular_blocks(benchmark::State& state) {
-    BM_search_sorted_shape(state, make_regular_blocks);
-}
-static void BM_search_sorted_irregular_blocks_1000(benchmark::State& state) {
-    BM_search_sorted_shape(state, make_irregular_blocks_1000);
-}
-static void BM_search_sorted_irregular_blocks_1(benchmark::State& state) {
-    BM_search_sorted_shape(state, make_irregular_blocks_1);
-}
-
 static void BM_lower_bound_single_block(benchmark::State& state) { BM_lower_bound_shape(state, make_single_block); }
 static void BM_lower_bound_regular_blocks(benchmark::State& state) { BM_lower_bound_shape(state, make_regular_blocks); }
 static void BM_lower_bound_irregular_blocks_1000(benchmark::State& state) {
@@ -237,11 +162,6 @@ static void BM_exponential_lower_bound_irregular_blocks_1000(benchmark::State& s
 static void BM_exponential_lower_bound_irregular_blocks_1(benchmark::State& state) {
     BM_exponential_lower_bound_shape(state, make_irregular_blocks_1);
 }
-
-BENCHMARK(BM_search_sorted_single_block)->Args({100'000});
-BENCHMARK(BM_search_sorted_regular_blocks)->Args({100'000});
-BENCHMARK(BM_search_sorted_irregular_blocks_1000)->Args({100'000});
-BENCHMARK(BM_search_sorted_irregular_blocks_1)->Args({100'000});
 
 BENCHMARK(BM_lower_bound_single_block)->Args({100'000});
 BENCHMARK(BM_lower_bound_regular_blocks)->Args({100'000});
