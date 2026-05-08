@@ -789,9 +789,10 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
             );
         }
 
+        // Switch to the CPU executor for reasons detailed in the PR description:
+        // https://github.com/man-group/ArcticDB/pull/3086
         futures->emplace_back(folly::collect(local_futs)
-                                      .via(&async::io_executor()
-                                      ) // Stay on the same executor as the read so that we can inline if possible
+                                      .via(&async::cpu_executor())
                                       .thenValueInline([component_manager,
                                                         segment_fetch_counts,
                                                         id_to_pos,
