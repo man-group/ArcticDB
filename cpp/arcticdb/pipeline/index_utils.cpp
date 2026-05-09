@@ -74,6 +74,34 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
     return {std::move(index_segment_reader), std::move(slice_and_keys)};
 }
 
+proto::descriptors::NormalizationMetadata merge_normalization_metadata(
+        const TimeseriesDescriptor& existing_tsd, const InputFrame& new_frame
+) {
+    if (existing_tsd.index().type() == IndexDescriptor::Type::EMPTY) {
+        return new_frame.norm_meta;
+    }
+
+    proto::descriptors::NormalizationMetadata result = existing_tsd.normalization();
+    accumulate_norm_metadata_column_names(result, new_frame.norm_meta);
+    if (result.has_np()) {
+        // Only append is allowed for numpy arrays, and it's checked up the callstack.
+        (*result.mutable_np()->mutable_shape())[0] += new_frame.norm_meta.np().shape()[0];
+    }
+
+    if (existing_tsd.index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        // The current behavior is the last modification operation is setting the index name. See Monday 9797097831, it
+        // would be best to require that index names are always matching. This is the case for datetime index because
+        // it's a physical column. It's a potentially breaking change. Covered in:
+        // test_append.py::test_append_series_with_different_row_range_index_name
+        if (result.has_series()) {
+            *result.mutable_series()->mutable_common()->mutable_index() = new_frame.norm_meta.series().common().index();
+        } else if (result.has_df()) {
+            *result.mutable_df()->mutable_common()->mutable_index() = new_frame.norm_meta.df().common().index();
+        }
+    }
+    return result;
+}
+
 TimeseriesDescriptor get_merged_tsd(
         size_t row_count, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
         const std::shared_ptr<InputFrame>& new_frame
@@ -109,7 +137,7 @@ TimeseriesDescriptor get_merged_tsd(
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),
-            std::move(new_frame->norm_meta),
+            merge_normalization_metadata(existing_tsd, *new_frame),
             std::move(new_frame->user_meta),
             std::nullopt,
             std::nullopt,

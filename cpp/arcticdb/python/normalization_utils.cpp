@@ -181,17 +181,15 @@ bool check_ndarray_append(const NormalizationMetadata& old_norm, NormalizationMe
         normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
                 old_norm.has_np() && new_norm.has_np(), "Currently, can only append numpy.ndarray to each other."
         );
-
         const auto& old_shape = old_norm.np().shape();
-        auto* new_shape = new_norm.mutable_np()->mutable_shape();
+        const auto& new_shape = new_norm.mutable_np()->shape();
         normalization::check<ErrorCode::E_WRONG_SHAPE>(
-                !new_shape->empty(), "Append input has invalid normalization metadata (empty shape)"
+                !new_shape.empty(), "Append input has invalid normalization metadata (empty shape)"
         );
         normalization::check<ErrorCode::E_WRONG_SHAPE>(
-                std::equal(old_shape.begin() + 1, old_shape.end(), new_shape->begin() + 1, new_shape->end()),
+                std::equal(old_shape.begin() + 1, old_shape.end(), new_shape.begin() + 1, new_shape.end()),
                 "The appending NDArray must have the same shape as the existing (excl. the first dimension)"
         );
-        (*new_shape)[0] += old_shape[0];
         return true;
     }
     return false;
@@ -225,6 +223,40 @@ void fix_normalization_or_throw(
         normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(
                 !old_norm.has_np() && !new_norm.has_np(), "current normalization scheme doesn't allow update of ndarray"
         );
+    }
+}
+
+bool operator==(
+        const NormalizationMetadata_Pandas_ColumnName& lhs, const NormalizationMetadata_Pandas_ColumnName& rhs
+) {
+    return lhs.is_empty() == rhs.is_empty() && lhs.is_int() == rhs.is_int() && lhs.is_none() == rhs.is_none() &&
+           lhs.original_name() == rhs.original_name();
+}
+
+template<typename ColumnNameMapParent>
+requires util::any_of<
+        ColumnNameMapParent, NormalizationMetadata_NormalisedTimeSeries, NormalizationMetadata_PandasDataFrame>
+void accumulate_norm_metadata_column_names(ColumnNameMapParent& accumulated, const ColumnNameMapParent& new_entry) {
+    accumulated.set_has_synthetic_columns(accumulated.has_synthetic_columns() && new_entry.has_synthetic_columns());
+    auto* accumulated_col_names = accumulated.mutable_common()->mutable_col_names();
+    for (auto& [col_name, col_name_info] : new_entry.common().col_names()) {
+        if (const auto it = accumulated_col_names->find(col_name); it != accumulated_col_names->end()) {
+            normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
+                    it->second == col_name_info,
+                    "Merging column name normalization for column: \"{}\" does not allow different ColumnName "
+                    "settings for columns named the same way.",
+                    col_name
+            );
+        }
+    }
+    accumulated_col_names->insert(new_entry.common().col_names().begin(), new_entry.common().col_names().end());
+}
+
+void accumulate_norm_metadata_column_names(NormalizationMetadata& accumulated, const NormalizationMetadata& new_entry) {
+    if (accumulated.has_df()) {
+        accumulate_norm_metadata_column_names(*accumulated.mutable_df(), new_entry.df());
+    } else if (accumulated.has_series()) {
+        accumulate_norm_metadata_column_names(*accumulated.mutable_series(), new_entry.series());
     }
 }
 
@@ -319,9 +351,7 @@ NormalizationMetadata accumulate_norm_metadata(
                 (*res_index->mutable_timezone())[idx] = "";
             }
         }
-        for (auto pos : other_index.fake_field_pos()) {
-            fake_field_pos_acc.insert(pos);
-        }
+        fake_field_pos_acc.insert(other_index.fake_field_pos().begin(), other_index.fake_field_pos().end());
     } else {
         auto* res_index = res_common->mutable_index();
         const auto& other_index = other_common.index();
@@ -344,6 +374,7 @@ NormalizationMetadata accumulate_norm_metadata(
             res_index->set_step(1);
         }
     }
+    accumulate_norm_metadata_column_names(res, other);
     return res;
 }
 

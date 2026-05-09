@@ -10,12 +10,9 @@
 
 #include <vector>
 #include <unordered_set>
+#include <arcticdb/entity/descriptors.hpp>
 
 namespace arcticdb {
-
-namespace proto {
-namespace descriptors = arcticc::pb2::descriptors_pb2;
-} // namespace proto
 
 namespace entity {
 struct OutputSchema;
@@ -37,5 +34,10 @@ void fix_normalization_or_throw(
 
 proto::descriptors::NormalizationMetadata generate_norm_meta(
         const std::vector<entity::OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
+);
+
+void accumulate_norm_metadata_column_names(
+        proto::descriptors::NormalizationMetadata& accumulated,
+        const proto::descriptors::NormalizationMetadata& new_entry
 );
 } // namespace arcticdb
