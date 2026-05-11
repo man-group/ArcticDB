@@ -16,5 +16,5 @@ namespace py = pybind11;
 namespace arcticdb::version_store {
 
 void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& base_exception);
-
+void register_python_version_store(py::module& version);
 } // namespace arcticdb::version_store

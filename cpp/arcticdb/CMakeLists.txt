@@ -598,6 +598,7 @@ set(arcticdb_srcs
         version/version_tasks.cpp
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
+        version/python_version_store_bindings.cpp
 )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
@@ -912,6 +913,7 @@ set(arcticdb_python_srcs
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
+        version/python_version_store_bindings.cpp
         util/python_bindings.cpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp)

@@ -346,6 +346,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
     auto version_submodule = m.def_submodule("version_store", "Versioned storage implementation apis");
     version_store::register_bindings(version_submodule, base_exception);
+    version_store::register_python_version_store(version_submodule);
     py::register_local_exception<NoSuchVersionException>(
             version_submodule, "NoSuchVersionException", no_data_found_exception.ptr()
     );
