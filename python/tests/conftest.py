@@ -146,12 +146,14 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
 
-    # Arm a session-level faulthandler watchdog that fires if the process hangs
-    # during test collection or session fixture setup — before any test enters
-    # pytest_runtest_protocol where the per-test timer is armed.
-    # The first call to pytest_runtest_protocol will replace this with the
-    # per-test timer (dump_traceback_later re-arms, cancelling the previous one).
-    if _FAULTHANDLER_TIMEOUT > 0:
+    # Arm a session-level faulthandler watchdog on xdist workers only.
+    # Workers collect tests and run session fixtures before pytest_runtest_protocol
+    # arms the per-test timer — this covers that gap.
+    # Skip the xdist controller (no PYTEST_XDIST_WORKER env var): it never runs
+    # tests, so the per-test timer never replaces this one, and it would false-fire
+    # while legitimately waiting for workers.
+    is_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") is not None
+    if _FAULTHANDLER_TIMEOUT > 0 and is_xdist_worker:
         os.makedirs(_FAULTHANDLER_DIR, exist_ok=True)
         crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
         global _faulthandler_file
@@ -166,26 +168,6 @@ def pytest_configure(config):
             exit=True,
             file=_faulthandler_file,
         )
-
-
-def pytest_collection_finish(session):
-    """Cancel the session-level faulthandler once collection completes.
-
-    On xdist controllers, pytest_runtest_protocol is never called (only workers
-    run tests), so the session timer would otherwise fire while workers are
-    legitimately running long tests.  Cancelling here means the session watchdog
-    only covers collection and session fixture setup.
-    """
-    global _faulthandler_file
-    faulthandler.cancel_dump_traceback_later()
-    if _faulthandler_file is not None:
-        _faulthandler_file.close()
-        _faulthandler_file = None
-        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
-        try:
-            os.remove(crash_path)
-        except OSError:
-            pass
 
 
 @pytest.hookimpl(tryfirst=True)
