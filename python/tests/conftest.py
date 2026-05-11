@@ -112,6 +112,9 @@ MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 # (90min = 5400s) so it fires first and gives us a traceback.
 # Disabled by default (0) — enabled in CI via parallel_test.sh.
 _FAULTHANDLER_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_TIMEOUT", "0"))
+# Session-level timeout for hangs during collection or session fixture setup,
+# before any test enters pytest_runtest_protocol.  Defaults to 10 minutes.
+_FAULTHANDLER_SESSION_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_SESSION_TIMEOUT", "600"))
 # Directory for faulthandler crash files.  xdist workers have stderr piped
 # through execnet, so writing to sys.stderr won't reach the CI log.  We write
 # to a file instead, and parallel_test.sh prints any crash files after pytest.
@@ -134,14 +137,35 @@ def _set_multiprocessing_start_method_for_macos():
             pass
 
 
+_faulthandler_file = None  # kept open so faulthandler can write to the fd
+
+
 # silence warnings about custom markers
 def pytest_configure(config):
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
 
-
-_faulthandler_file = None  # kept open so faulthandler can write to the fd
+    # Arm a session-level faulthandler watchdog that fires if the process hangs
+    # during test collection or session fixture setup — before any test enters
+    # pytest_runtest_protocol where the per-test timer is armed.
+    # The first call to pytest_runtest_protocol will replace this with the
+    # per-test timer (dump_traceback_later re-arms, cancelling the previous one).
+    if _FAULTHANDLER_TIMEOUT > 0:
+        os.makedirs(_FAULTHANDLER_DIR, exist_ok=True)
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        global _faulthandler_file
+        _faulthandler_file = open(crash_path, "w")
+        _faulthandler_file.write(
+            f"Faulthandler session timeout ({_FAULTHANDLER_SESSION_TIMEOUT}s): "
+            f"hang during collection/setup (pid {os.getpid()})\n"
+        )
+        _faulthandler_file.flush()
+        faulthandler.dump_traceback_later(
+            _FAULTHANDLER_SESSION_TIMEOUT,
+            exit=True,
+            file=_faulthandler_file,
+        )
 
 
 @pytest.hookimpl(tryfirst=True)
