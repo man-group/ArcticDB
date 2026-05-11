@@ -515,8 +515,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    with:
-      environment: ${{needs.common_config.outputs.publish_env}}
 
   can_merge:
     needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
