@@ -26,6 +26,8 @@ from arcticdb.util.test import assert_frame_equal, config_context, query_stats_o
 from tests.util.mark import MACOS, WINDOWS
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
+pytestmark = pytest.mark.pipeline
+
 
 def check_compact_data_info(
     compact_data_info, pre_compaction_version, post_compaction_version, pre_compaction_index, post_compaction_index

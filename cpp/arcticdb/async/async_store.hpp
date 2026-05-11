@@ -59,7 +59,8 @@ class AsyncStore : public Store {
     ) :
         library_(std::move(library)),
         codec_(std::make_shared<proto::encoding::VariantCodec>(codec)),
-        encoding_version_(encoding_version) {}
+        encoding_version_(encoding_version),
+        window_processing_pipeline_reads_(ConfigsMap::instance()->get_int("Storage.WindowProcessingReads", 1) == 1) {}
 
     folly::Future<entity::VariantKey> write(
             stream::KeyType key_type, VersionId version_id, const StreamId& stream_id, IndexValue start_index,
@@ -427,14 +428,36 @@ class AsyncStore : public Store {
             std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
     ) override {
         ARCTICDB_RUNTIME_DEBUG(log::version(), "Reading {} keys", ranges_and_keys.size());
-        std::vector<folly::Future<pipelines::SegmentAndSlice>> output;
-        for (auto&& ranges_and_key : ranges_and_keys) {
-            const auto key = ranges_and_key.key_;
-            output.emplace_back(read_and_continue(
-                    key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
-            ));
+        // Window the reads by default (but with a kill switch) for reasons detailed in the PR description:
+        // https://github.com/man-group/ArcticDB/pull/3086
+        // TODO 11961775873: remove this kill switch
+        if (window_processing_pipeline_reads_) {
+            return folly::window(
+                    std::move(ranges_and_keys),
+                    [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {
+                        const auto key = ranges_and_key.key_;
+                        return read_and_continue(
+                                key,
+                                library_,
+                                storage::ReadKeyOpts{},
+                                DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
+                        );
+                    },
+                    2 * async::TaskScheduler::instance()->io_thread_count()
+            );
+        } else {
+            std::vector<folly::Future<pipelines::SegmentAndSlice>> output;
+            for (auto&& ranges_and_key : ranges_and_keys) {
+                const auto key = ranges_and_key.key_;
+                output.emplace_back(read_and_continue(
+                        key,
+                        library_,
+                        storage::ReadKeyOpts{},
+                        DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
+                ));
+            }
+            return output;
         }
-        return output;
     }
 
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
@@ -508,6 +531,7 @@ class AsyncStore : public Store {
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;
+    const bool window_processing_pipeline_reads_;
 };
 
 } // namespace arcticdb::async
