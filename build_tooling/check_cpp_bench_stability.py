@@ -140,8 +140,24 @@ def print_table(rows: list[tuple[str, dict]]) -> None:
             f"  {name}"
         )
 
+def validate_args(args):
+    if not args.binary.exists():
+        raise ValueError(
+            f"Benchmark binary not found at {args.binary}.\n"
+            f"Build it with:\n"
+            f"  cmake --preset linux-release -DTEST=ON cpp\n"
+            f"  cmake --build cpp/out/linux-release-build --target benchmarks"
+        )
 
-def main() -> int:
+    if args.runs < 2:
+        raise ValueError("--runs must be >= 2 to compute variance")
+
+    names = list_benchmark_names(args.binary, args.filter)
+    if not names:
+        raise ValueError("No benchmarks discovered (check --filter).")
+
+
+def parse_args():
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -170,27 +186,14 @@ def main() -> int:
         "--fail-on-flagged", action="store_true",
         help="Exit non-zero if any benchmark exceeds the threshold (useful in CI).",
     )
-    args = parser.parse_args()
 
-    if not args.binary.exists():
-        print(
-            f"Benchmark binary not found at {args.binary}.\n"
-            f"Build it with:\n"
-            f"  cmake --preset linux-release -DTEST=ON cpp\n"
-            f"  cmake --build cpp/out/linux-release-build --target benchmarks",
-            file=sys.stderr,
-        )
-        return 2
+    return parser.parse_args()
 
-    if args.runs < 2:
-        print("--runs must be >= 2 to compute variance", file=sys.stderr)
-        return 2
 
+def main() -> int:
+    args = parse_args()
+    validate_args(args)
     names = list_benchmark_names(args.binary, args.filter)
-    if not names:
-        print("No benchmarks discovered (check --filter).", file=sys.stderr)
-        return 2
-
     total_invocations = len(names) * args.runs
     print(
         f"Running {len(names)} benchmark(s) x {args.runs} run(s) = {total_invocations} invocation(s). "
