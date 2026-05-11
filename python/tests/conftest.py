@@ -168,6 +168,26 @@ def pytest_configure(config):
         )
 
 
+def pytest_collection_finish(session):
+    """Cancel the session-level faulthandler once collection completes.
+
+    On xdist controllers, pytest_runtest_protocol is never called (only workers
+    run tests), so the session timer would otherwise fire while workers are
+    legitimately running long tests.  Cancelling here means the session watchdog
+    only covers collection and session fixture setup.
+    """
+    global _faulthandler_file
+    faulthandler.cancel_dump_traceback_later()
+    if _faulthandler_file is not None:
+        _faulthandler_file.close()
+        _faulthandler_file = None
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        try:
+            os.remove(crash_path)
+        except OSError:
+            pass
+
+
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_protocol(item, nextitem):
     """Arm faulthandler's C-level timer before each test.
