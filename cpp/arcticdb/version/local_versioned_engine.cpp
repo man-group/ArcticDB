@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <algorithm>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
@@ -2078,12 +2079,25 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 ) {
     std::map<StreamId, VersionVectorType> sym_versions;
     WarnVersionTypeNotHandled warner;
+
     for (const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index].content_;
-        if (std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
-        else
+
+        if (!std::holds_alternative<SpecificVersionQuery>(query)) {
             warner.warn(*stream_id);
+            continue;
+        }
+
+        const auto version_id = std::get<SpecificVersionQuery>(query).version_id_;
+
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                version_id >= 0,
+                "Negative version numbers are not supported in add_to_snapshot. Got version {} for symbol '{}'",
+                version_id,
+                *stream_id
+        );
+
+        sym_versions[*stream_id].emplace_back(version_id);
     }
     return sym_versions;
 }
@@ -2131,8 +2145,8 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
         auto restore_fut =
                 async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key->id(), *key, maybe_prev});
         if (maybe_prev && maybe_prev->deleted) {
-            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a symbol
-            // list entry for it
+            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a
+            // symbol list entry for it
             auto overall_fut =
                     std::move(restore_fut).via(&async::io_executor()).thenValue([this](auto&& restore_result) {
                         WriteSymbolTask(store(),
@@ -2182,6 +2196,17 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
     std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> specific_versions;
     if (!version_queries.empty()) {
         auto sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
+
+        auto symbol_with_more_than_one_version =
+                std::ranges::find_if(sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
+
+        if (symbol_with_more_than_one_version != sym_versions.end()) {
+            auto stream_id = symbol_with_more_than_one_version->first;
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
+            );
+        }
+
         specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
         std::vector<StreamId> latest_ids;
         std::copy_if(
@@ -2337,8 +2362,8 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
-// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
-// operations
+// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
+// listing operations
 static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
@@ -2460,7 +2485,8 @@ VersionedItem LocalVersionedEngine::merge_internal(
         if (source->empty()) {
             ARCTICDB_RUNTIME_DEBUG(
                     log::version(),
-                    "Merging into existing data with an empty source has no effect. \n No new version is being created "
+                    "Merging into existing data with an empty source has no effect. \n No new version is being "
+                    "created "
                     "for symbol='{}', and the last version is returned",
                     stream_id
             );

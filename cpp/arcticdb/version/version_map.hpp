@@ -862,25 +862,18 @@ class VersionMapImpl {
         if (!opt_latest.has_value()) {
             return false;
         }
-        VersionId resolved_version_id;
-        if (requested_version_id < 0) {
-            auto negative_resolved_version_id =
-                    get_version_id_negative_index(opt_latest->version_id(), requested_version_id);
-            if (negative_resolved_version_id.has_value()) {
-                resolved_version_id = static_cast<VersionId>(*negative_resolved_version_id);
-            } else {
-                return false;
-            }
-        } else {
-            resolved_version_id = static_cast<VersionId>(requested_version_id);
+        auto resolved_version_id = resolve_version_id(requested_version_id, entry);
+
+        if (!resolved_version_id.has_value()) {
+            return false;
         }
 
-        if (resolved_version_id <= opt_latest->version_id() &&
-            (entry.load_progress_.oldest_loaded_index_version_ <= resolved_version_id || has_loaded_earliest)) {
+        if (*resolved_version_id <= opt_latest->version_id() &&
+            (entry.load_progress_.oldest_loaded_index_version_ <= *resolved_version_id || has_loaded_earliest)) {
             ARCTICDB_DEBUG(
                     log::version(),
                     "Loaded as far as required value {}, have {} to {}",
-                    resolved_version_id,
+                    *resolved_version_id,
                     entry.load_progress_.oldest_loaded_index_version_,
                     opt_latest->version_id()
             );

@@ -822,7 +822,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # Verify mixing of existing and non-existing symbols and versions result
     # in proper versions of existing symbols added to the snapshot
-    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2", "s2"], [1, 1, 1, 1, 4])
+    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2"], [1, 1, 1, 1])
     assert 101 == lib.read("s1", as_of="snap").data
     assert 400 == lib.read("s4", as_of="snap").data
     assert 201 == lib.read("s2", as_of="snap").data
@@ -837,20 +837,14 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
             lib.read(symbol, as_of="snap")
 
 
-@pytest.mark.xfail(True, reason="Negative version numbers does not work, issue 10060901137")
 def test_add_to_snapshot_with_negative_numbers(basic_store):
     lib: NativeVersionStore = basic_store
     lib.write("s1", 100)
     lib.snapshot("snap")
     lib.write("s1", 101)
-    lib.write("s1", 102)
-    lib.write("s1", 103)
 
-    # Lets check negative number version handling
-    lib.add_to_snapshot("snap", ["s1"], [-1])
-    assert 102 == lib.read("s1", as_of="snap").data
-    lib.add_to_snapshot("snap", ["s1"], [-2])
-    assert 101 == lib.read("s1", as_of="snap").data
+    with pytest.raises(UserInputException, match="Negative version"):
+        lib.add_to_snapshot("snap", ["s1"], [-1])
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
