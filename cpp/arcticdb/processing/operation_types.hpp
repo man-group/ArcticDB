@@ -595,8 +595,13 @@ struct PowOperator {
             uint64_t base = static_cast<uint64_t>(t);
             uint64_t exponent = static_cast<uint64_t>(u);
 
-            for (uint64_t i = 0; i < exponent; ++i) {
-                result *= base;
+            while (exponent > 0) {
+                if (exponent & 1) {
+                    result *= base;
+                }
+
+                base *= base;
+                exponent >>= 1;
             }
 
             return result;
@@ -605,8 +610,13 @@ struct PowOperator {
             int64_t base = static_cast<int64_t>(t);
             uint64_t exponent = static_cast<uint64_t>(u);
 
-            for (uint64_t i = 0; i < exponent; ++i) {
-                result *= base;
+            while (exponent > 0) {
+                if (exponent & 1) {
+                    result *= base;
+                }
+
+                base *= base;
+                exponent >>= 1;
             }
 
             return result;
