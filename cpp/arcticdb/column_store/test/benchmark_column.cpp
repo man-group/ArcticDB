@@ -141,6 +141,24 @@ static void BM_exponential_lower_bound_shape(benchmark::State& state, MakeColumn
     }
 }
 
+// Full-column iteration — walks cbegin to cend
+template<typename MakeColumn>
+static void BM_iterate_shape(benchmark::State& state, MakeColumn make_column) {
+    auto num_rows = state.range(0);
+    std::mt19937 rng(0xC0FFEE);
+    auto data = make_sorted_data(num_rows, rng);
+    auto col = make_column(data);
+    auto column_data = col.data();
+    for (auto _ : state) {
+        for (auto it = column_data.template cbegin<BenchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
+                  end = column_data.template cend<BenchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+             it != end; ++it) {
+            auto v = it->value();
+            benchmark::DoNotOptimize(v);
+        }
+    }
+}
+
 static void BM_lower_bound_single_block(benchmark::State& state) { BM_lower_bound_shape(state, make_single_block); }
 static void BM_lower_bound_regular_blocks(benchmark::State& state) { BM_lower_bound_shape(state, make_regular_blocks); }
 static void BM_lower_bound_irregular_blocks_1000(benchmark::State& state) {
@@ -163,6 +181,15 @@ static void BM_exponential_lower_bound_irregular_blocks_1(benchmark::State& stat
     BM_exponential_lower_bound_shape(state, make_irregular_blocks_1);
 }
 
+static void BM_iterate_single_block(benchmark::State& state) { BM_iterate_shape(state, make_single_block); }
+static void BM_iterate_regular_blocks(benchmark::State& state) { BM_iterate_shape(state, make_regular_blocks); }
+static void BM_iterate_irregular_blocks_1000(benchmark::State& state) {
+    BM_iterate_shape(state, make_irregular_blocks_1000);
+}
+static void BM_iterate_irregular_blocks_1(benchmark::State& state) {
+    BM_iterate_shape(state, make_irregular_blocks_1);
+}
+
 BENCHMARK(BM_lower_bound_single_block)->Args({100'000});
 BENCHMARK(BM_lower_bound_regular_blocks)->Args({100'000});
 BENCHMARK(BM_lower_bound_irregular_blocks_1000)->Args({100'000});
@@ -175,3 +202,8 @@ BENCHMARK(BM_exponential_lower_bound_single_block)->Args({100'000, -1})->Args({1
 BENCHMARK(BM_exponential_lower_bound_regular_blocks)->Args({100'000, -1})->Args({100'000, 100});
 BENCHMARK(BM_exponential_lower_bound_irregular_blocks_1000)->Args({100'000, -1})->Args({100'000, 100});
 BENCHMARK(BM_exponential_lower_bound_irregular_blocks_1)->Args({100'000, -1})->Args({100'000, 100});
+
+BENCHMARK(BM_iterate_single_block)->Args({100'000});
+BENCHMARK(BM_iterate_regular_blocks)->Args({100'000});
+BENCHMARK(BM_iterate_irregular_blocks_1000)->Args({100'000});
+BENCHMARK(BM_iterate_irregular_blocks_1)->Args({100'000});
