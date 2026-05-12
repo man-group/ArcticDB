@@ -340,6 +340,16 @@ concept SortedSearchInputs = util::instantiation_of<TDT, TypeDescriptorTag> && (
 
 namespace search_detail {
 
+// Read the raw value at the iterator's position. Iterator must not be at end.
+template<typename TDT, IteratorType IT, IteratorDensity ID>
+typename TDT::DataTypeTag::raw_type value_at(const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& it) {
+    if constexpr (IT == IteratorType::ENUMERATED) {
+        return it->value();
+    } else {
+        return *it;
+    }
+}
+
 // Iterator-pair binary search.
 // `is_before_answer(probe, value)` returns true while a probe is strictly before the answer (so we move begin past it).
 // For lower_bound that is `probe < value`; for upper_bound it is `probe <= value`.
@@ -533,6 +543,13 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_lower_bound(
         const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value
 ) {
     using RawType = typename TDT::DataTypeTag::raw_type;
+    if (begin == end) {
+        return begin;
+    }
+    // Short-circuit the case where the answer is at begin, to avoid iterator constructions in gallop_bracket.
+    if (value <= search_detail::value_at(begin)) {
+        return begin;
+    }
     auto [bracket_start, bracket_end] =
             search_detail::gallop_bracket<TDT, IT, ID>(begin, end, value, [](RawType probe, RawType v) {
                 return probe < v;
@@ -548,6 +565,13 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_upper_bound(
         const ColumnData::ColumnDataIterator<TDT, IT, ID, true>& end, typename TDT::DataTypeTag::raw_type value
 ) {
     using RawType = typename TDT::DataTypeTag::raw_type;
+    if (begin == end) {
+        return begin;
+    }
+    // Short-circuit the case where the answer is at begin, to avoid iterator constructions in gallop_bracket.
+    if (value < search_detail::value_at(begin)) {
+        return begin;
+    }
     auto [bracket_start, bracket_end] =
             search_detail::gallop_bracket<TDT, IT, ID>(begin, end, value, [](RawType probe, RawType v) {
                 return !(v < probe);

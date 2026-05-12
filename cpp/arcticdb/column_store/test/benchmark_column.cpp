@@ -152,7 +152,8 @@ static void BM_iterate_shape(benchmark::State& state, MakeColumn make_column) {
     for (auto _ : state) {
         for (auto it = column_data.template cbegin<BenchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(),
                   end = column_data.template cend<BenchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
-             it != end; ++it) {
+             it != end;
+             ++it) {
             auto v = it->value();
             benchmark::DoNotOptimize(v);
         }
@@ -186,9 +187,7 @@ static void BM_iterate_regular_blocks(benchmark::State& state) { BM_iterate_shap
 static void BM_iterate_irregular_blocks_1000(benchmark::State& state) {
     BM_iterate_shape(state, make_irregular_blocks_1000);
 }
-static void BM_iterate_irregular_blocks_1(benchmark::State& state) {
-    BM_iterate_shape(state, make_irregular_blocks_1);
-}
+static void BM_iterate_irregular_blocks_1(benchmark::State& state) { BM_iterate_shape(state, make_irregular_blocks_1); }
 
 BENCHMARK(BM_lower_bound_single_block)->Args({100'000});
 BENCHMARK(BM_lower_bound_regular_blocks)->Args({100'000});
