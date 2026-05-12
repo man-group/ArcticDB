@@ -984,8 +984,10 @@ target_link_libraries(arcticdb_ext
         arcticdb_python)
 
 if (WIN32)
+    # No /DEBUG for Release: /Z7 is restricted to Debug (see cpp/CMakeLists.txt) to avoid LNK1248,
+    # so Release .obj files carry no debug info and a PDB would be empty/misleading.
     target_link_options(arcticdb_ext
-            PRIVATE $<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF>)
+            PRIVATE $<$<CONFIG:Debug>:/DEBUG>)
 endif()
 
 target_include_directories(arcticdb_ext
