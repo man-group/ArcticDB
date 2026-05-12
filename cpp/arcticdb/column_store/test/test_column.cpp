@@ -547,6 +547,14 @@ TEST(ColumnSearch, BasicCoverage) {
     check_search(values, probes);
 }
 
+TEST(ColumnSearch, LargeArray) {
+    // Large array test ensures jumping across regular sized blocks works as well
+    std::vector<int64_t> values(10000);
+    std::iota(values.begin(), values.end(), 0);
+    std::vector<int64_t> probes{-1, 0, 1, 511, 512, 1023, 1024, 2500, 5000, 7500, 8191, 8192, 9999, 10000};
+    check_search(values, probes);
+}
+
 TEST(ColumnSearch, SingleElement) {
     std::vector<int64_t> values{42};
     std::vector<int64_t> probes{41, 42, 43};

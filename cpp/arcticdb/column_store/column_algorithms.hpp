@@ -517,7 +517,7 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> upper_bound(
             begin,
             end,
             value,
-            [](RawType probe, RawType v) { return !(v < probe); },
+            [](RawType probe, RawType v) { return probe <= v; },
             [](const RawType* lo, const RawType* hi, RawType v) { return std::upper_bound(lo, hi, v); }
     );
 }
