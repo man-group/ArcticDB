@@ -13,6 +13,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -42,7 +43,8 @@ struct SpecificVersionQuery {
 // Similar to IndexInformation. See comment on IndexInformation for why both are useful.
 struct PreloadedIndexQuery {
     PreloadedIndexQuery(
-            AtomKey index_key, SegmentInMemory index_seg, std::optional<SegmentInMemory> column_stats_seg = std::nullopt
+            AtomKey index_key, SegmentInMemory index_seg,
+            std::optional<storage::KeySegmentPair> column_stats_seg = std::nullopt
     ) :
         index_key_(std::move(index_key)),
         index_seg_(std::move(index_seg)),
@@ -51,7 +53,7 @@ struct PreloadedIndexQuery {
     // Key is just needed for constructing the VersionedItem to return
     const AtomKey index_key_;
     const SegmentInMemory index_seg_;
-    const std::optional<SegmentInMemory> column_stats_seg_;
+    const std::optional<storage::KeySegmentPair> column_stats_seg_;
 };
 
 using VersionQueryType = std::variant<

@@ -627,3 +627,14 @@ class ColumnStatsManySegmentsZeroMatch:
             date_range=self.date_range_half,
             query_builder=self.query,
         )
+
+    def peakmem_filter_10_columns_zero_match(self, *args):
+        self.lib.read(self.symbol, columns=self.read_columns, query_builder=self.query)
+
+    def peakmem_filter_10_columns_zero_match_with_date_range(self, *args):
+        self.lib.read(
+            self.symbol,
+            columns=self.read_columns,
+            date_range=self.date_range_half,
+            query_builder=self.query,
+        )

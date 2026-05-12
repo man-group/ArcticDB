@@ -22,10 +22,9 @@ namespace arcticdb {
 
 /**
  * Column stats data read from storage, and metadata about the user's query.
- * `data` is either compressed bytes or an already-decoded SegmentInMemory.
  */
 struct ColumnStatsSource {
-    std::variant<storage::KeySegmentPair, SegmentInMemory> data;
+    storage::KeySegmentPair data;
     ColumnStatsQueryMetadata query_metadata;
 };
 

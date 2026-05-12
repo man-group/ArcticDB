@@ -21,7 +21,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include <gtest/gtest_prod.h>
 #include <column_stats.pb.h>
 
 namespace arcticdb {
@@ -60,6 +59,11 @@ struct StatsMetadataForColumn {
     std::vector<StatsIndexAndType> entries;
 };
 
+struct StatsForColumn {
+    std::vector<std::optional<Value>> mins;  // size == num_rows_
+    std::vector<std::optional<Value>> maxes; // size == num_rows_
+};
+
 /**
  * Parsed column statistics from a column stats segment.
  */
@@ -95,17 +99,12 @@ class ColumnStatsData {
     ) const;
 
   private:
-    FRIEND_TEST(ColumnStatsDataTest, FindStatsAllRowsPresent);
-    FRIEND_TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows);
-    FRIEND_TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows);
-    FRIEND_TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly);
+    std::pair<size_t, size_t> calculate_start_and_end_indices(
+            const std::optional<std::pair<timestamp, timestamp>>& date_range, size_t segment_row_count,
+            const Column& start_index_col, const Column& end_index_col
+    );
 
-    ColumnStatsValues stats_for(const std::string& col_name, size_t row) const;
-
-    struct StatsForColumn {
-        std::vector<std::optional<Value>> mins;  // size == num_rows_
-        std::vector<std::optional<Value>> maxes; // size == num_rows_
-    };
+    void drop_duplicate_rows();
 
     size_t num_rows_{0};
     std::vector<timestamp> start_indices_; // size = num_rows_
@@ -122,6 +121,9 @@ struct ColumnStatsQueryMetadata {
     // Columns referenced in the user's query.
     std::unordered_set<std::string> columns_of_interest;
     std::optional<std::pair<timestamp, timestamp>> date_range;
+
+    ColumnStatsQueryMetadata() = default;
+    explicit ColumnStatsQueryMetadata(const std::vector<std::shared_ptr<Clause>>& clauses);
 
     /**
      * True iff column stats are feature-flagged on and the query has at least one filter
@@ -154,25 +156,6 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         storage::KeySegmentPair&& column_stats_compressed, const TimeseriesDescriptor& tsd,
         ColumnStatsQueryMetadata&& query_metadata
 );
-
-/**
- * Create a column stats filter from an already-decoded column stats segment.
- *
- * Used when the column stats segment has been pre-loaded (e.g. via PreloadedIndexQuery) and the
- * compressed bytes are no longer available. Date-range row pruning still applies, but column-set
- * filtering does not — the caller has already paid the full decode cost.
- *
- * Precondition: query_metadata.should_try_column_stats_read() == true.
- */
-FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        SegmentInMemory&& column_stats_segment, const TimeseriesDescriptor& tsd,
-        ColumnStatsQueryMetadata&& query_metadata
-);
-
-/**
- * Metadata about the part of the user's query to which we can apply column stats.
- */
-ColumnStatsQueryMetadata column_stats_query_metadata(const std::vector<std::shared_ptr<Clause>>& clauses);
 
 /**
  * Decode a column stats segment, only considering fields referenced by columns_of_interest.

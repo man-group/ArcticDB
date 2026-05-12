@@ -23,6 +23,11 @@ struct StatsSegmentRow {
 // "price" is at data_col_offset=1 in the TSD (offset 0 is the timestamp index)
 static constexpr uint32_t price_data_col_offset = 1;
 
+ColumnStatsValues stats_for(const ColumnStatsData& data, const std::string& col_name, size_t row) {
+    auto v = data.values_for_column(col_name, {std::optional<size_t>{row}});
+    return v.empty() ? ColumnStatsValues{} : std::move(v.at(0));
+}
+
 TimeseriesDescriptor build_test_tsd() {
     TimeseriesDescriptor tsd;
     tsd.mutable_fields().add_field(scalar_field(DataType::NANOSECONDS_UTC64, "timestamp"));
@@ -99,13 +104,13 @@ TEST(ColumnStatsDataTest, FindStatsAllRowsPresent) {
 
     auto row0 = data.find_row(100, 200);
     ASSERT_TRUE(row0.has_value());
-    auto v0 = data.stats_for("price", *row0);
+    auto v0 = stats_for(data, "price", *row0);
     ASSERT_EQ(v0.min->get<int64_t>(), 10);
     ASSERT_EQ(v0.max->get<int64_t>(), 20);
 
     auto row2 = data.find_row(500, 600);
     ASSERT_TRUE(row2.has_value());
-    auto v2 = data.stats_for("price", *row2);
+    auto v2 = stats_for(data, "price", *row2);
     ASSERT_EQ(v2.min->get<int64_t>(), 50);
     ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
@@ -194,13 +199,13 @@ TEST(ColumnStatsDataTest, DateRangePrunesNonOverlappingRows) {
 
     auto row1 = data.find_row(300, 400);
     ASSERT_TRUE(row1.has_value());
-    auto v1 = data.stats_for("price", *row1);
+    auto v1 = stats_for(data, "price", *row1);
     ASSERT_EQ(v1.min->get<int64_t>(), 30);
     ASSERT_EQ(v1.max->get<int64_t>(), 40);
 
     auto row2 = data.find_row(500, 600);
     ASSERT_TRUE(row2.has_value());
-    auto v2 = data.stats_for("price", *row2);
+    auto v2 = stats_for(data, "price", *row2);
     ASSERT_EQ(v2.min->get<int64_t>(), 50);
     ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
@@ -239,18 +244,62 @@ TEST(ColumnStatsDataTest, DuplicateIndexPairDoesNotAffectOtherRows) {
     // Unique rows are still reachable.
     auto row0 = data.find_row(100, 300);
     ASSERT_TRUE(row0.has_value());
-    auto v0 = data.stats_for("price", *row0);
+    auto v0 = stats_for(data, "price", *row0);
     ASSERT_EQ(v0.min->get<int64_t>(), 10);
     ASSERT_EQ(v0.max->get<int64_t>(), 20);
 
     auto row3 = data.find_row(400, 600);
     ASSERT_TRUE(row3.has_value());
-    auto v3 = data.stats_for("price", *row3);
+    auto v3 = stats_for(data, "price", *row3);
     ASSERT_EQ(v3.min->get<int64_t>(), 70);
     ASSERT_EQ(v3.max->get<int64_t>(), 80);
 
     // Duplicate key is not reachable.
     ASSERT_FALSE(data.find_row(300, 400).has_value());
+}
+
+TEST(ColumnStatsDataTest, NonMonotonicStartIndexThrows) {
+    auto seg = build_stats_segment({
+            {100, 200, 10, 20},
+            {300, 400, 30, 40},
+            {200, 500, 50, 60},
+    });
+
+    auto tsd = build_test_tsd();
+    ASSERT_THROW(ColumnStatsData(std::move(seg), tsd), InternalException);
+}
+
+// Writers only sort on start_index, so when two rows share a start_index their end_indexes
+// can appear in any order. Like normal reads, ColumnStatsData must accept this rather than throwing,
+// even though this suggests an out of order index.
+TEST(ColumnStatsDataTest, NonMonotonicEndIndexesAllowed) {
+    auto seg = build_stats_segment({
+            {100, 300, 10, 20},
+            {100, 200, 30, 40},
+            {200, 400, 50, 60},
+    });
+
+    auto tsd = build_test_tsd();
+    ColumnStatsData data(std::move(seg), tsd);
+    ASSERT_FALSE(data.empty());
+
+    auto row0 = data.find_row(100, 300);
+    ASSERT_TRUE(row0.has_value());
+    auto v0 = stats_for(data, "price", *row0);
+    ASSERT_EQ(v0.min->get<int64_t>(), 10);
+    ASSERT_EQ(v0.max->get<int64_t>(), 20);
+
+    auto row1 = data.find_row(100, 200);
+    ASSERT_TRUE(row1.has_value());
+    auto v1 = stats_for(data, "price", *row1);
+    ASSERT_EQ(v1.min->get<int64_t>(), 30);
+    ASSERT_EQ(v1.max->get<int64_t>(), 40);
+
+    auto row2 = data.find_row(200, 400);
+    ASSERT_TRUE(row2.has_value());
+    auto v2 = stats_for(data, "price", *row2);
+    ASSERT_EQ(v2.min->get<int64_t>(), 50);
+    ASSERT_EQ(v2.max->get<int64_t>(), 60);
 }
 
 // Build a two-column stats segment where "volume" is absent (sparse) for certain rows.
@@ -340,24 +389,24 @@ TEST(ColumnStatsDataTest, SparseColumnAbsentMarkedCorrectly) {
 
     auto row0 = data.find_row(100, 200);
     ASSERT_TRUE(row0.has_value());
-    auto p0 = data.stats_for("price", *row0);
+    auto p0 = stats_for(data, "price", *row0);
     ASSERT_TRUE(p0.min.has_value());
     ASSERT_EQ(p0.min->get<int64_t>(), 10);
     ASSERT_FALSE(p0.column_absent);
 
-    auto v0 = data.stats_for("volume", *row0);
+    auto v0 = stats_for(data, "volume", *row0);
     ASSERT_TRUE(v0.min.has_value());
     ASSERT_EQ(v0.min->get<int64_t>(), 100);
     ASSERT_FALSE(v0.column_absent);
 
     auto row1 = data.find_row(300, 400);
     ASSERT_TRUE(row1.has_value());
-    auto p1 = data.stats_for("price", *row1);
+    auto p1 = stats_for(data, "price", *row1);
     ASSERT_TRUE(p1.min.has_value());
     ASSERT_EQ(p1.min->get<int64_t>(), 30);
     ASSERT_FALSE(p1.column_absent);
 
-    auto v1 = data.stats_for("volume", *row1);
+    auto v1 = stats_for(data, "volume", *row1);
     ASSERT_FALSE(v1.min.has_value());
     ASSERT_FALSE(v1.max.has_value());
     ASSERT_TRUE(v1.column_absent);

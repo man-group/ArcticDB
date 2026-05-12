@@ -27,6 +27,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
 
 namespace arcticdb::version_store {
@@ -187,8 +188,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }))
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
+    py::class_<storage::KeySegmentPair>(version, "KeySegmentPair").def(py::init<>());
+
     py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
-            .def(py::init<AtomKey, SegmentInMemory, std::optional<SegmentInMemory>>(),
+            .def(py::init<AtomKey, SegmentInMemory, std::optional<storage::KeySegmentPair>>(),
                  py::arg("index_key"),
                  py::arg("index_seg"),
                  py::arg("column_stats_seg") = std::nullopt);

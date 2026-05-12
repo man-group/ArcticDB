@@ -125,43 +125,26 @@ StatsVariantData compute_stats(
     return std::vector(row_indices.size(), StatsComparison::UNKNOWN);
 }
 
-ColumnStatsData::ColumnStatsData(
-        SegmentInMemory&& segment, const TimeseriesDescriptor& tsd,
-        std::optional<std::pair<timestamp, timestamp>> date_range
+namespace {
+std::vector<StatsMetadataForColumn> calculate_stats_metadata(
+        const SegmentInMemory& segment, const TimeseriesDescriptor& tsd,
+        arcticc::pb2::column_stats_pb2::ColumnStatsHeader header, const FieldCollection& fields
 ) {
-    using namespace arcticc::pb2::column_stats_pb2;
-    if (segment.row_count() == 0) {
-        return;
-    }
-
-    ColumnStatsHeader header;
-    auto* metadata = segment.metadata();
-    util::check(metadata != nullptr, "Column stats segment has no metadata");
-    bool unpacked = metadata->UnpackTo(&header);
-    util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
-    validate_column_stats_header_version(header);
-
-    segment.init_column_map();
-    const auto& fields = segment.descriptor().fields();
-    const auto segment_row_count = segment.row_count();
-
-    const auto& start_index_col = segment.column(start_index_column_offset);
-    const auto& end_index_col = segment.column(end_index_column_offset);
-    if (start_index_col.is_sparse() || end_index_col.is_sparse() ||
-        static_cast<size_t>(start_index_col.row_count()) != segment_row_count ||
-        static_cast<size_t>(end_index_col.row_count()) != segment_row_count) {
-        log::version().warn("Saw column stats row without start_index or end_index, discarding all column stats");
-        return;
-    }
-
     // Gather metadata about the statistics we're interested in
     std::vector<StatsMetadataForColumn> stats_metadata;
     stats_metadata.reserve(header.stats_by_column().size());
     for (const auto& [data_col_offset, entry_list] : header.stats_by_column()) {
         StatsMetadataForColumn stats_metadata_for_column;
+        util::check(
+                data_col_offset < tsd.fields().size(),
+                "Expected data_col_offset < tsd.fields().size() but saw data_col_offset=[{}] tsd.fields().size()=[{}]",
+                data_col_offset,
+                tsd.fields().size()
+        );
         stats_metadata_for_column.col_name = std::string{tsd.fields().at(data_col_offset).name()};
         for (const auto& entry : entry_list.entries()) {
-            if (entry.type() != MIN_V1 && entry.type() != MAX_V1) {
+            if (entry.type() != arcticc::pb2::column_stats_pb2::MIN_V1 &&
+                entry.type() != arcticc::pb2::column_stats_pb2::MAX_V1) {
                 log::version().warn(
                         "Unknown column stats type {} for column {}, skipping",
                         static_cast<int>(entry.type()),
@@ -191,7 +174,51 @@ ColumnStatsData::ColumnStatsData(
             stats_metadata.emplace_back(std::move(stats_metadata_for_column));
         }
     }
+    return stats_metadata;
+}
 
+std::unordered_map<std::string, StatsForColumn> load_stats_by_column(
+        const SegmentInMemory& segment, std::vector<StatsMetadataForColumn> stats_metadata, size_t first_kept,
+        size_t last_kept_excl, size_t num_rows
+) {
+    std::unordered_map<std::string, StatsForColumn> stats_by_column;
+    for (auto& stats_metadata_for_column : stats_metadata) {
+        StatsForColumn stats_for_column;
+        stats_for_column.mins.resize(num_rows);
+        stats_for_column.maxes.resize(num_rows);
+
+        details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
+            using type_info = ScalarTypeInfo<T>;
+            if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
+                          is_bool_type(type_info::data_type)) {
+                for (const auto& entry : stats_metadata_for_column.entries) {
+                    const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
+                    const bool is_min = entry.stat_type == arcticc::pb2::column_stats_pb2::MIN_V1;
+                    auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
+                    for_each_enumerated<typename type_info::TDT>(
+                            column,
+                            [&](const ColumnData::Enumeration<typename type_info::RawType>& enumerating_it) {
+                                auto idx = static_cast<size_t>(enumerating_it.idx());
+                                if (idx >= first_kept && idx < last_kept_excl) {
+                                    dest.at(idx - first_kept) = Value{enumerating_it.value(), type_info::data_type};
+                                }
+                            }
+                    );
+                }
+            }
+        });
+
+        stats_by_column.emplace(std::move(stats_metadata_for_column.col_name), std::move(stats_for_column));
+    }
+    return stats_by_column;
+}
+
+} // anonymous namespace
+
+std::pair<size_t, size_t> ColumnStatsData::calculate_start_and_end_indices(
+        const std::optional<std::pair<timestamp, timestamp>>& date_range, const size_t segment_row_count,
+        const Column& start_index_col, const Column& end_index_col
+) {
     // Construct start_indices and end_indices with date range pruning.
     // Also construct the interval [first_kept, last_kept_excl) to quickly skip stats for row ranges
     // we are not interested in when we read the statistics themselves.
@@ -200,23 +227,23 @@ ColumnStatsData::ColumnStatsData(
     start_indices_.reserve(segment_row_count);
     end_indices_.reserve(segment_row_count);
     using TsTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    auto start_it = start_index_col.begin<TsTDT>();
-    auto end_it = end_index_col.begin<TsTDT>();
+    auto start_data = start_index_col.data();
+    auto end_data = end_index_col.data();
+    auto start_it = start_data.begin<TsTDT>();
+    auto end_it = end_data.begin<TsTDT>();
     timestamp prev_start = 0;
-    timestamp prev_end = 0;
     for (size_t r = 0; r < segment_row_count; ++r, ++start_it, ++end_it) {
         const timestamp start_index_ts = *start_it;
         const timestamp end_index_ts = *end_it;
         if (r > 0) {
             util::check(
-                    start_index_ts >= prev_start && end_index_ts >= prev_end,
-                    "Column stats segment start_index/end_index must be monotonically increasing "
+                    start_index_ts >= prev_start,
+                    "Column stats segment start_index must be monotonically increasing "
                     "(violated at row {})",
                     r
             );
         }
         prev_start = start_index_ts;
-        prev_end = end_index_ts;
         if (date_range.has_value()) {
             if (start_index_ts > date_range->second) {
                 break;
@@ -232,53 +259,10 @@ ColumnStatsData::ColumnStatsData(
         start_indices_.push_back(start_index_ts);
         end_indices_.push_back(end_index_ts);
     }
-    num_rows_ = start_indices_.size();
-    if (num_rows_ == 0) {
-        return;
-    }
+    return std::make_pair(first_kept, last_kept_excl);
+}
 
-    // Store statistics in the stats_by_column_ map
-    for (auto& stats_metadata_for_column : stats_metadata) {
-        StatsForColumn stats_for_column;
-        stats_for_column.mins.resize(num_rows_);
-        stats_for_column.maxes.resize(num_rows_);
-
-        details::visit_type(stats_metadata_for_column.data_type, [&]<typename T>(T) {
-            using type_info = ScalarTypeInfo<T>;
-            if constexpr (is_numeric_type(type_info::data_type) || is_time_type(type_info::data_type) ||
-                          is_bool_type(type_info::data_type)) {
-                using RawType = type_info::RawType;
-
-                for (const auto& entry : stats_metadata_for_column.entries) {
-                    const auto& column = segment.column(static_cast<position_t>(entry.segment_col_idx));
-                    const bool is_min = entry.stat_type == MIN_V1;
-                    auto& dest = is_min ? stats_for_column.mins : stats_for_column.maxes;
-
-                    if (!column.is_sparse() && static_cast<size_t>(column.row_count()) == segment_row_count) {
-                        // Dense
-                        auto it = column.begin<typename type_info::TDT>();
-                        std::advance(it, static_cast<ssize_t>(first_kept));
-                        for (size_t r = first_kept; r < last_kept_excl; ++r, ++it) {
-                            const size_t kept = r - first_kept;
-                            dest.at(kept) = Value{*it, type_info::data_type};
-                        }
-                    } else {
-                        // Sparse
-                        for (size_t r = first_kept; r < last_kept_excl; ++r) {
-                            if (auto opt_val = column.scalar_at<RawType>(static_cast<position_t>(r));
-                                opt_val.has_value()) {
-                                const size_t kept = r - first_kept;
-                                dest.at(kept) = Value{*opt_val, type_info::data_type};
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        stats_by_column_.emplace(std::move(stats_metadata_for_column.col_name), std::move(stats_for_column));
-    }
-
+void ColumnStatsData::drop_duplicate_rows() {
     index_to_row_.reserve(num_rows_);
     std::unordered_set<std::pair<timestamp, timestamp>, util::PairHasher> duplicate_keys;
     for (size_t r = 0; r < num_rows_; ++r) {
@@ -293,6 +277,48 @@ ColumnStatsData::ColumnStatsData(
         log::version().debug("Duplicate key detected in column stats - dropping {}", key);
         index_to_row_.erase(key);
     }
+}
+
+ColumnStatsData::ColumnStatsData(
+        SegmentInMemory&& segment, const TimeseriesDescriptor& tsd,
+        std::optional<std::pair<timestamp, timestamp>> date_range
+) {
+    using namespace arcticc::pb2::column_stats_pb2;
+    if (segment.row_count() == 0) {
+        return;
+    }
+
+    ColumnStatsHeader header;
+    auto* metadata = segment.metadata();
+    util::check(metadata != nullptr, "Column stats segment has no metadata");
+    bool unpacked = metadata->UnpackTo(&header);
+    util::check(unpacked, "Could not unpack ColumnStatsHeader from column stats segment metadata");
+    validate_column_stats_header_version(header);
+
+    segment.init_column_map();
+    const auto& fields = segment.descriptor().fields();
+    const auto segment_row_count = segment.row_count();
+
+    const auto& start_index_col = segment.column(start_index_column_offset);
+    const auto& end_index_col = segment.column(end_index_column_offset);
+    if (start_index_col.is_sparse() || end_index_col.is_sparse() ||
+        static_cast<size_t>(start_index_col.row_count()) != segment_row_count ||
+        static_cast<size_t>(end_index_col.row_count()) != segment_row_count) {
+        log::version().warn("Saw column stats row without start_index or end_index, discarding all column stats");
+        return;
+    }
+
+    std::vector<StatsMetadataForColumn> stats_metadata = calculate_stats_metadata(segment, tsd, header, fields);
+
+    auto [first_kept, last_kept_excl] =
+            calculate_start_and_end_indices(date_range, segment_row_count, start_index_col, end_index_col);
+    num_rows_ = start_indices_.size();
+    if (num_rows_ == 0) {
+        return;
+    }
+
+    stats_by_column_ = load_stats_by_column(segment, stats_metadata, first_kept, last_kept_excl, num_rows_);
+    drop_duplicate_rows();
 }
 
 std::optional<size_t> ColumnStatsData::find_row(timestamp start_index, timestamp end_index) const {
@@ -332,11 +358,6 @@ std::vector<ColumnStatsValues> ColumnStatsData::values_for_column(
         }
     }
     return result;
-}
-
-ColumnStatsValues ColumnStatsData::stats_for(const std::string& col_name, size_t row) const {
-    auto v = values_for_column(col_name, {std::optional<size_t>{row}});
-    return v.empty() ? ColumnStatsValues{} : std::move(v.at(0));
 }
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
@@ -399,23 +420,22 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
     };
 }
 
-ColumnStatsQueryMetadata column_stats_query_metadata(const std::vector<std::shared_ptr<Clause>>& clauses) {
+ColumnStatsQueryMetadata::ColumnStatsQueryMetadata(const std::vector<std::shared_ptr<Clause>>& clauses) {
     // The clauses eligible for column stats use:
     // - FilterClauses contribute filter expressions and columns of interest
     // - DateRangeClauses contribute their range
     // - RowRangeClauses are skipped
     // - Anything else (Resample / GroupBy / Project) ends the prefix because those clauses
     // transform the data so stats computed on the original segments are no longer valid.
-    ColumnStatsQueryMetadata result;
     for (const auto& clause : clauses) {
         auto& clause_type = folly::poly_type(*clause);
         if (clause_type == typeid(DateRangeClause)) {
             const auto& date_range_clause = folly::poly_cast<DateRangeClause>(*clause);
-            if (!result.date_range.has_value()) {
-                result.date_range = std::make_pair(date_range_clause.start(), date_range_clause.end());
+            if (date_range.has_value()) {
+                date_range->first = std::max(date_range->first, date_range_clause.start());
+                date_range->second = std::min(date_range->second, date_range_clause.end());
             } else {
-                result.date_range->first = std::max(result.date_range->first, date_range_clause.start());
-                result.date_range->second = std::min(result.date_range->second, date_range_clause.end());
+                date_range = std::make_pair(date_range_clause.start(), date_range_clause.end());
             }
             continue;
         }
@@ -426,16 +446,15 @@ ColumnStatsQueryMetadata column_stats_query_metadata(const std::vector<std::shar
             break;
         }
         const auto& filter = folly::poly_cast<FilterClause>(*clause);
-        result.filter_expressions.emplace_back(filter.expression_context_);
+        filter_expressions.emplace_back(filter.expression_context_);
         util::check(
                 filter.clause_info().input_columns_.has_value(),
                 "FilterClause is missing input_columns_ — Python bindings should always populate this"
         );
         for (const auto& col : *filter.clause_info().input_columns_) {
-            result.columns_of_interest.insert(col);
+            columns_of_interest.insert(col);
         }
     }
-    return result;
 }
 
 SegmentInMemory partial_decode_column_stats_segment(
@@ -504,18 +523,14 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
         storage::KeySegmentPair&& column_stats_compressed, const TimeseriesDescriptor& tsd,
         ColumnStatsQueryMetadata&& query_metadata
 ) {
+    util::check(
+            query_metadata.should_try_column_stats_read(),
+            "Should not try to create column stats filter if !should_try_column_stats_read()"
+    );
     SegmentInMemory partial_segment = partial_decode_column_stats_segment(
             *column_stats_compressed.segment_ptr(), tsd, query_metadata.columns_of_interest
     );
     ColumnStatsData column_stats{std::move(partial_segment), tsd, query_metadata.date_range};
-    return build_filter_from_column_stats_data(std::move(column_stats), std::move(query_metadata.filter_expressions));
-}
-
-FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        SegmentInMemory&& column_stats_segment, const TimeseriesDescriptor& tsd,
-        ColumnStatsQueryMetadata&& query_metadata
-) {
-    ColumnStatsData column_stats{std::move(column_stats_segment), tsd, query_metadata.date_range};
     return build_filter_from_column_stats_data(std::move(column_stats), std::move(query_metadata.filter_expressions));
 }
 
