@@ -35,7 +35,12 @@ def find_symbol(lib, branch=None, run_id=None):
 def load_df(lib, symbol):
     """Load run data from ArcticDB as a polars DataFrame."""
     pdf = lib.read(symbol).data
-    return pl.from_pandas(pdf)
+    df = pl.from_pandas(pdf)
+    # python_version can be inferred as f64 (3.10 -> 3.1) or str depending on the
+    # data.  Coerce to str so both sides of the join always match.
+    if "python_version" in df.columns and df["python_version"].dtype.is_numeric():
+        df = df.with_columns(pl.col("python_version").cast(pl.Utf8))
+    return df
 
 
 def compare(current_df, master_df, threshold_pct):
