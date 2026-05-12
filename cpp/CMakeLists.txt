@@ -194,12 +194,13 @@ if(WIN32)
         )
     endif()
 
-    # /Z7 embeds debug info into .obj files; restrict to Debug to avoid bloating the static lib
-    # past the 4 GB MSVC limit (LNK1248) in Release builds. As a consequence, Release builds
-    # ship no debug symbols — crash dumps from Release wheels (Windows) are not symbolizable.
+    # /Z7 embeds debug info into .obj files and causes the static lib to exceed the 4 GB MSVC
+    # limit (LNK1248) in Release builds due to heavy template instantiations (e.g. PowOperator).
+    # /Zi writes debug info to a compiler-managed PDB instead, keeping .obj files small.
+    # Cost: sccache cannot cache TUs compiled with /Zi (shared PDB write conflict).
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
-        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj "$<$<CONFIG:Debug>:/Z7>" /wd4244 /wd4267
+        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj "$<$<CONFIG:Debug>:/Z7>" "$<$<CONFIG:Release>:/Zi>" /wd4244 /wd4267
     )
 
     if(${ARCTICDB_USING_CONDA})
