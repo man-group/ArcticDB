@@ -1002,9 +1002,13 @@ VersionedItem LocalVersionedEngine::write_segment(
     return versioned_item;
 }
 
-// Steps of delete_trees_responsibly:
+/**
+ * For an index key considered for deletion (target_key) we protect the nearest versions to it (above and below)
+ * that are included in snapshots from deletion. This is because the index key may be dedup'd against an earlier
+ * version in a snapshot, or a later version in a snapshot may be dedup'd against this index key.
+ */
 void copy_versions_nearest_to_target(
-        const MasterSnapshotMap::value_type::second_type& keys_map, const IndexTypeKey& target_key,
+        const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map, const IndexTypeKey& target_key,
         util::ContainerFilterWrapper<std::unordered_set<IndexTypeKey>>& not_to_delete
 ) {
     const auto target_version = target_key.version_id();
@@ -1012,7 +1016,7 @@ void copy_versions_nearest_to_target(
     const IndexTypeKey* least_higher_version = nullptr;
     const IndexTypeKey* greatest_lower_version = nullptr;
 
-    for (const auto& pair : keys_map) {
+    for (const auto& pair : index_key_to_snapshot_map) {
         const auto& key = pair.first;
         if (key != target_key) {
             const auto version = key.version_id();
@@ -1062,15 +1066,14 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
     // Each section below performs these checks:
-    // 1) remove any keys_to_delete that is still visible,
-    // 2) find any other index key that could share data with the keys_to_delete
+    // 1) remove any keys_to_delete that are still visible
+    // 2) find any other index key that could share data with the keys_to_delete (due to dedup).
 
-    // Check snapshot:
+    // Remove any keys considered for deletion that are covered by a snapshot.
     if (check.snapshots) {
         keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete](const auto& target_key) {
-            // symbol -> IndexTypeKey -> set<SnapshotId>
-            auto find_symbol = snapshot_map.find(target_key.id());
-            if (find_symbol != snapshot_map.end()) {
+            // snapshot map is {symbol: {index_key: {snapshots...}}}
+            if (auto find_symbol = snapshot_map.find(target_key.id()); find_symbol != snapshot_map.end()) {
                 const auto& keys_map = find_symbol->second;
                 auto snaps_itr = keys_map.find(target_key);
                 if (snaps_itr != keys_map.end()) {
@@ -1093,7 +1096,8 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         });
     }
 
-    // Check versions:
+    // Remove any keys considered for deletion that are still undeleted in the version chain, or which may share
+    // keys with undeleted versions via the dedup mechanism.
     auto load_type = check.calc_load_type();
     if (load_type != LoadType::NOT_LOADED) {
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
