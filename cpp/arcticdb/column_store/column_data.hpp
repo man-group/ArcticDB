@@ -192,11 +192,10 @@ struct ColumnData {
             }
         }
 
-        // Used to construct [c]end iterators
-        explicit ColumnDataIterator(const ColumnData* parent, RawType* end_ptr) :
-            parent_(parent),
-            block_pos_(parent->num_blocks()) {
-            data_.ptr_ = end_ptr;
+        // Build a [c]end iterator. End is represented as
+        // (block_pos_ == num_blocks, in_block_offset_ == 0, block_size_ == 0).
+        [[nodiscard]] static ColumnDataIterator make_end(const ColumnData* parent) {
+            return ColumnDataIterator(parent, EndTag{});
         }
 
         // Construct an iterator pointing at element `in_block_offset` of block `block_pos`.
@@ -206,8 +205,7 @@ struct ColumnData {
             parent_(parent),
             block_pos_(block_pos) {
             load_current_block();
-            remaining_values_in_block_ -= in_block_offset;
-            data_.ptr_ += in_block_offset;
+            in_block_offset_ = in_block_offset;
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
                 if constexpr (iterator_density == IteratorDensity::SPARSE) {
                     util::raise_rte("ColumnDataIterator at-position constructor not supported for SPARSE iteration");
@@ -223,33 +221,26 @@ struct ColumnData {
             parent_(other.parent_),
             block_pos_(other.block_pos_),
             opt_block_(other.opt_block_),
-            remaining_values_in_block_(other.remaining_values_in_block_),
+            in_block_offset_(other.in_block_offset_),
+            block_size_(other.block_size_),
             data_(other.data_) {}
 
         // Minimal accessors used by the search algorithms in column_algorithms.hpp.
         [[nodiscard]] const ColumnData* parent() const { return parent_; }
         [[nodiscard]] const std::optional<TypedBlockData<TDT>>& current_block() const { return opt_block_; }
-        [[nodiscard]] const RawType* current_ptr() const { return data_.ptr_; }
         // Index of the block this iterator currently points into. For end iterators this is num_blocks.
         [[nodiscard]] size_t current_block_index() const { return block_pos_; }
-        // TODO: Might be better to refactor storing the state as block_pos_ + in_block_offset_
-        // Maybe not because current impl has a very efficient == which just compares a single pair of pointers
-        // Although that has downsides as well (how do you iterate a column with external blocks pointing to the same
-        // memory?!?)
-        [[nodiscard]] size_t current_in_block_offset() const {
-            if (remaining_values_in_block_ == 0) {
-                // True only for end_ptrs
-                return 0;
-            }
-            return data_.ptr_ - opt_block_->data();
-        }
+        [[nodiscard]] size_t current_in_block_offset() const { return in_block_offset_; }
 
       private:
         friend class boost::iterator_core_access;
 
+        struct EndTag {};
+        ColumnDataIterator(const ColumnData* parent, EndTag) : parent_(parent), block_pos_(parent->num_blocks()) {}
+
         void increment() {
-            ++data_.ptr_;
-            if (ARCTICDB_UNLIKELY(--remaining_values_in_block_ == 0)) {
+            ++in_block_offset_;
+            if (ARCTICDB_UNLIKELY(in_block_offset_ == block_size_)) {
                 advance_block();
             }
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
@@ -263,10 +254,8 @@ struct ColumnData {
 
         void load_current_block() {
             opt_block_ = parent_->template typed_block_at_position<TDT>(block_pos_);
-            if (ARCTICDB_LIKELY(opt_block_.has_value())) {
-                remaining_values_in_block_ = opt_block_->row_count();
-                data_.ptr_ = const_cast<typename TDT::DataTypeTag::raw_type*>(opt_block_->data());
-            }
+            block_size_ = opt_block_.has_value() ? opt_block_->row_count() : 0;
+            in_block_offset_ = 0;
         }
 
         void advance_block() {
@@ -281,44 +270,48 @@ struct ColumnData {
                     parent_ == other.parent_,
                     "ColumnDataIterator::equal called with different parent ColumnData*"
             );
-            return data_.ptr_ == other.data_.ptr_;
+            return block_pos_ == other.block_pos_ && in_block_offset_ == other.in_block_offset_;
         }
 
         typename base_type::reference dereference() const
         requires constant
         {
+            ARCTICDB_DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    opt_block_.has_value(),
+                    "Dereferencing end iterator in ColumnDataIterator"
+            );
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                data_.ptr_ = const_cast<RawType*>(opt_block_->data() + in_block_offset_);
                 return data_;
             } else {
-                ARCTICDB_DEBUG_CHECK(
-                        ErrorCode::E_ASSERTION_FAILURE,
-                        data_.ptr_ != nullptr,
-                        "Dereferencing nullptr in ColumnDataIterator"
-                );
-                return *data_.ptr_;
+                return *(opt_block_->data() + in_block_offset_);
             }
         }
 
         typename base_type::reference dereference() const
         requires(not constant)
         {
+            ARCTICDB_DEBUG_CHECK(
+                    ErrorCode::E_ASSERTION_FAILURE,
+                    opt_block_.has_value(),
+                    "Dereferencing end iterator in ColumnDataIterator"
+            );
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                data_.ptr_ = const_cast<RawType*>(opt_block_->data() + in_block_offset_);
                 return *const_cast<typename base_type::value_type*>(&data_);
             } else {
-                ARCTICDB_DEBUG_CHECK(
-                        ErrorCode::E_ASSERTION_FAILURE,
-                        data_.ptr_ != nullptr,
-                        "Dereferencing nullptr in ColumnDataIterator"
-                );
-                return *data_.ptr_;
+                return *const_cast<RawType*>(opt_block_->data() + in_block_offset_);
             }
         }
 
         const ColumnData* parent_{nullptr};
         size_t block_pos_{0};
         std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
-        std::size_t remaining_values_in_block_{0};
-        typename base_type::value_type data_;
+        size_t in_block_offset_{0};
+        size_t block_size_{0};
+        // Mutable is to allow assigning `ptr_` lazily on dereference for ENUMERATED
+        mutable typename base_type::value_type data_;
     };
 
     ColumnData(
@@ -360,28 +353,14 @@ struct ColumnData {
             typename TDT, IteratorType iterator_type = IteratorType::REGULAR,
             IteratorDensity iterator_density = IteratorDensity::DENSE>
     ColumnDataIterator<TDT, iterator_type, iterator_density, false> end() {
-        using RawType = typename TDT::DataTypeTag::raw_type;
-        RawType* end_ptr{nullptr};
-        if (!data_->blocks().empty()) {
-            auto block = data_->blocks().at(num_blocks() - 1);
-            auto typed_block_data = make_typed_block<TDT>(block);
-            end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
-        }
-        return ColumnDataIterator<TDT, iterator_type, iterator_density, false>(this, end_ptr);
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, false>::make_end(this);
     }
 
     template<
             typename TDT, IteratorType iterator_type = IteratorType::REGULAR,
             IteratorDensity iterator_density = IteratorDensity::DENSE>
     ColumnDataIterator<TDT, iterator_type, iterator_density, true> cend() const {
-        using RawType = typename TDT::DataTypeTag::raw_type;
-        RawType* end_ptr{nullptr};
-        if (!data_->blocks().empty()) {
-            auto block = data_->blocks().at(num_blocks() - 1);
-            auto typed_block_data = make_typed_block<TDT>(block);
-            end_ptr = const_cast<RawType*>(typed_block_data.data() + typed_block_data.row_count());
-        }
-        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>(this, end_ptr);
+        return ColumnDataIterator<TDT, iterator_type, iterator_density, true>::make_end(this);
     }
 
     // Returns a non-const DENSE iterator pointing at element `idx` of the column.
