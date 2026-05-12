@@ -9,12 +9,13 @@ Style nitpicks are handled by `build_tooling/format.py` — focus on substantive
 
 ## 1. PR TITLE & DESCRIPTION
 
-- **Title clarity**: The title must be descriptive enough to understand the PR's purpose
-  without reading the description. It should name the specific component or area affected
-  and describe the concrete change. Reject vague or generic titles such as "Changes",
-  "Fix", "Update", "WIP", "Misc", "Improvements", or bare issue numbers. Good titles
-  use an imperative verb and mention what is being changed, e.g. "Fix version chain
-  corruption on concurrent append" or "Add ZSTD compression support for string columns".
+- **Title clarity**: The title must adequately reflect the changes made — it should be
+  descriptive enough to understand the PR's purpose without reading the description. It
+  should name the specific component or area affected and describe the concrete change.
+  Reject vague or generic titles such as "Changes", "Update", "WIP", "Misc",
+  "Improvements", or bare issue numbers. Good titles use an imperative verb and mention
+  what is being changed, e.g. "Fix version chain corruption on concurrent append" or
+  "Add ZSTD compression support for string columns".
 - **Grammar and spelling**: Check for typos and unclear phrasing.
 - **Description completeness**: Explain *what* changed and *why*. Flag any significant
   diff changes not mentioned in the description.
