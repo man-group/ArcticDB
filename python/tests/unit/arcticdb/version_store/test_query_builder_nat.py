@@ -147,7 +147,8 @@ def test_filter_nat_col_col_all_nat_slice(
     ids=["nat_only", "nat_and_ts", "ts_only"],
 )
 @pytest.mark.parametrize("method", ["isin", "isnotin"])
-def test_filter_nat_isin(in_memory_version_store, column_stats_filtering_enabled_and_disabled, method, values):
+@pytest.mark.parametrize("column", ["col", "all_nat"])
+def test_filter_nat_isin(in_memory_version_store, column_stats_filtering_enabled_and_disabled, method, values, column):
     lib = in_memory_version_store
 
     df = pd.DataFrame(
@@ -159,20 +160,21 @@ def test_filter_nat_isin(in_memory_version_store, column_stats_filtering_enabled
                 pd.Timestamp("2024-01-04"),
                 pd.NaT,
             ],
+            "all_nat": pd.Series([pd.NaT] * 5, dtype="datetime64[ns]"),
         },
         index=pd.date_range("2000-01-01", periods=5),
     )
     lib.write(sym, df)
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+    lib.create_column_stats(sym, {"col": {"MINMAX"}, "all_nat": {"MINMAX"}})
 
     q = QueryBuilder()
-    q = q[getattr(q["col"], method)(values)]
+    q = q[getattr(q[column], method)(values)]
     result = lib.read(sym, query_builder=q).data
 
-    if method == "isin":
-        expected = df[df["col"].isin(values)]
-    else:
-        expected = df[~df["col"].isin(values)]
+    # NaT in the set is silently ignored, mirroring our NaN-in-set behaviour for floats.
+    non_nat_values = [v for v in values if not pd.isna(v)]
+    mask = df[column].isin(non_nat_values)
+    expected = df[mask] if method == "isin" else df[~mask]
     assert_frame_equal(expected, result)
 
 

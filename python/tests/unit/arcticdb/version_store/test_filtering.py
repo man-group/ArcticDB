@@ -651,6 +651,30 @@ def test_filter_isin_with_nan_in_set(
     assert_frame_equal(expected, result)
 
 
+def test_filter_isin_with_nat_in_set(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """NaT in the set is ignored, mirroring our NaN-in-set behaviour for floats tested above."""
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_with_nat_in_set"
+    df = pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["a"].isin([pd.NaT, pd.Timestamp("2024-01-03")])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [pd.Timestamp("2024-01-03")]})
+    assert_frame_equal(expected, result)
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin([pd.NaT, pd.Timestamp("2024-01-03")])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT]})
+    assert_frame_equal(expected, result)
+
+
 _uint64_max = np.iinfo(np.uint64).max
 
 

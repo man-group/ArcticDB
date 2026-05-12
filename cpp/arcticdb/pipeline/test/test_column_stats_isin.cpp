@@ -196,3 +196,64 @@ INSTANTIATE_TEST_SUITE_P(
                 StatsComparison::ALL_MATCH
         ))
 );
+
+namespace {
+
+Value make_timestamp_value(timestamp t) { return Value{t, DataType::NANOSECONDS_UTC64}; }
+
+} // namespace
+
+// Timestamp columns: NaT in the set is ignored, NaT rows never match isin and always match isnotin.
+class StatsMembershipNaTTest
+    : public ::testing::TestWithParam<
+              std::tuple<timestamp, timestamp, std::vector<int64_t>, StatsComparison, StatsComparison>> {};
+
+TEST_P(StatsMembershipNaTTest, IsinAndIsnotin) {
+    auto [block_min, block_max, set_values, expected_isin, expected_isnotin] = GetParam();
+    ColumnStatsValues csv{
+            std::optional<Value>{make_timestamp_value(block_min)}, std::optional<Value>{make_timestamp_value(block_max)}
+    };
+    auto vs = std::make_shared<ValueSet>(
+            NumericSetType{std::make_shared<std::unordered_set<int64_t>>(set_values.begin(), set_values.end())}
+    );
+    ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISIN), expected_isin);
+    ASSERT_EQ(stats_membership_comparator(csv, *vs, OperationType::ISNOTIN), expected_isnotin);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        BothStatsNaTWithNaTInSet, StatsMembershipNaTTest,
+        ::testing::Values(std::make_tuple(
+                NaT, NaT, std::vector<int64_t>{NaT, 5}, StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH
+        ))
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        BothStatsNaTNoNaTInSet, StatsMembershipNaTTest,
+        ::testing::Values(std::make_tuple(
+                NaT, NaT, std::vector<int64_t>{5, 20}, StatsComparison::NONE_MATCH, StatsComparison::ALL_MATCH
+        ))
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        SetIsJustNaT, StatsMembershipNaTTest,
+        ::testing::Values(std::make_tuple(
+                int64_t{1}, int64_t{10}, std::vector<int64_t>{NaT}, StatsComparison::NONE_MATCH,
+                StatsComparison::ALL_MATCH
+        ))
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        NaTAndInRangeTs, StatsMembershipNaTTest,
+        ::testing::Values(std::make_tuple(
+                int64_t{1}, int64_t{10}, std::vector<int64_t>{NaT, 5}, StatsComparison::UNKNOWN,
+                StatsComparison::UNKNOWN
+        ))
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        NaTAndOutOfRangeTs, StatsMembershipNaTTest,
+        ::testing::Values(std::make_tuple(
+                int64_t{10}, int64_t{20}, std::vector<int64_t>{NaT, 5}, StatsComparison::NONE_MATCH,
+                StatsComparison::ALL_MATCH
+        ))
+);

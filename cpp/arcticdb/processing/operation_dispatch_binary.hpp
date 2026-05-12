@@ -140,6 +140,13 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                                 output_bitset,
                                 sparse_missing_value_output,
                                 [&func, &typed_value_set](auto input_value) -> bool {
+                                    if constexpr (is_time_type(col_type_info::data_type)) {
+                                        // NaT values are returned iff it's a `q.isnotin` call. `q.isin` is always false
+                                        // for a NaT value, regardless of the value set.
+                                        if (input_value == NaT) {
+                                            return std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>;
+                                        }
+                                    }
                                     if constexpr (MembershipOperator::needs_uint64_special_handling<
                                                           typename col_type_info::RawType,
                                                           typename val_set_type_info::RawType>) {

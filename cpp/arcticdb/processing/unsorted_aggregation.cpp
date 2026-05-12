@@ -25,13 +25,12 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            auto is_nan = [](RawType v) {
+            auto is_nan = []([[maybe_unused]] RawType v) {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
                     return std::isnan(v);
                 } else if constexpr (is_time_type(type_info::data_type)) {
                     return v == NaT;
                 } else {
-                    (void)v;
                     return false;
                 }
             };
