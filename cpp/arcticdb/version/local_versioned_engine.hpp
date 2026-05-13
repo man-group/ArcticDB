@@ -10,6 +10,7 @@
 
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/storage/library.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -324,6 +325,10 @@ class LocalVersionedEngine : public VersionedEngine {
             const StreamId& stream_id, const VersionQuery& version_query
     );
 
+    CompactDataInfo compact_data_explain_plan_internal(
+            const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+    ) override;
+
     VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
     ) override;
@@ -453,6 +458,7 @@ class LocalVersionedEngine : public VersionedEngine {
     void add_to_symbol_list_on_compaction(
             const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
     );
+    UpdateInfo compact_data_preamble(const StreamId& stream_id);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

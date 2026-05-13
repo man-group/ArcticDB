@@ -413,7 +413,9 @@ void Column::unsparsify(size_t num_rows) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
-        auto dest = ChunkedBuffer::presized(dest_bytes);
+        auto alloc_type = data_.buffer().allocation_type();
+        auto dest = alloc_type == AllocationType::DETACHABLE ? ChunkedBuffer(dest_bytes, AllocationType::DETACHABLE)
+                                                             : ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
         util::expand_dense_buffer_and_promote_type<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
         std::swap(dest, data_.buffer());
@@ -791,6 +793,12 @@ void Column::inflate_string_arrays(const StringPool& string_pool) {
 
     CursoredBuffer<ChunkedBuffer> data;
     CursoredBuffer<Buffer> shapes;
+    // Preallocate shapes once for all rows. Without this each per-row
+    // inflate_string_array call would grow Buffer-backed shapes_ by 8 bytes,
+    // realloc+memcpy'ing the cumulative array — O(N^2) on tall string-array
+    // columns.
+    if (row_count() > 0)
+        shapes.buffer().reserve(row_count() * sizeof(shape_t));
     boost::container::small_vector<position_t, 1> offsets;
     for (position_t row = 0; row < row_count(); ++row) {
         auto string_refs = tensor_at<position_t>(row).value();

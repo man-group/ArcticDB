@@ -9,8 +9,13 @@ Style nitpicks are handled by `build_tooling/format.py` — focus on substantive
 
 ## 1. PR TITLE & DESCRIPTION
 
-- **Title clarity**: Concise, grammatically correct summary of *what* the PR does.
-  Avoid vague titles like "Changes" or "WIP".
+- **Title clarity**: The title must adequately reflect the changes made — it should be
+  descriptive enough to understand the PR's purpose without reading the description. It
+  should name the specific component or area affected and describe the concrete change.
+  Reject vague or generic titles such as "Changes", "Update", "WIP", "Misc",
+  "Improvements", or bare issue numbers. Good titles use an imperative verb and mention
+  what is being changed, e.g. "Fix version chain corruption on concurrent append" or
+  "Add ZSTD compression support for string columns".
 - **Grammar and spelling**: Check for typos and unclear phrasing.
 - **Description completeness**: Explain *what* changed and *why*. Flag any significant
   diff changes not mentioned in the description.
@@ -18,6 +23,11 @@ Style nitpicks are handled by `build_tooling/format.py` — focus on substantive
   defaults, exceptions) must be explicitly called out.
 - **Breaking changes labelled**: On-disk format or breaking changes must be highlighted
   and the PR labelled appropriately (`enhancement`, `bug`, etc.).
+- **`no-release-notes` label**: This label must be set on PRs that have no user-facing
+  impact (CI/build changes, internal refactors, test-only changes, doc-only changes,
+  developer tooling). It must NOT be set on PRs that add features, fix bugs, change
+  public API behaviour, or alter on-disk format — these all require release notes.
+  Flag the label as missing or incorrectly applied.
 - **Linked issues**: Reference related issues (e.g., "Fixes #1234").
 - **Scope match**: Title/description should match the actual scope of changes.
 
@@ -324,6 +334,8 @@ Key areas to verify:
 
 ## REVIEW SUMMARY CHECKLIST
 
+In your reviews only include items that need attention from the below, do not mention items that are fine.
+
 ```markdown
 ## ArcticDB Code Review Summary
 
@@ -374,13 +386,14 @@ Key areas to verify:
 - [ ] No buffer overflow potential in C++ code
 
 ### PR Title & Description
-- [ ] Title is clear, concise, and uses imperative verb
+- [ ] Title is descriptive — names the component/area and the concrete change (not generic like "Fix", "Update", "Changes")
 - [ ] Title and description are free of typos and grammatical errors
 - [ ] Description explains what changed and why
 - [ ] All significant changes in the diff are mentioned in the description
 - [ ] API/breaking changes explicitly called out in the description
 - [ ] Linked issues referenced where applicable
 - [ ] PR labelled appropriately (enhancement, bug, etc.)
+- [ ] `no-release-notes` label correctly set (present for internal-only changes, absent for user-facing changes)
 
 ### Documentation
 - [ ] New/modified public methods in `library.py`, `arctic.py`, `_store.py` have complete NumPy-format docstrings

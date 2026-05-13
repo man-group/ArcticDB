@@ -227,10 +227,12 @@ def unify_xml_for_run(run_id, download_dir):
 
     def parse_artifact_info_from_path(file_path):
         """Extract artifact information from the file path"""
-        # Example: run_16522631587_pytest-linux-cp38-{hypothesis,nonreg,scripts}-DefaultCache/extracted/pytest..xml
+        # Examples:
+        #   run_16522631587_pytest-linux-cp311-{hypothesis,nonreg,scripts}-DefaultCache/extracted/pytest.xml
+        #   run_16522631587_conda_pytest-linux_64-cp311-integration/pytest.xml
         path_parts = file_path.parts
 
-        # Find the run directory
+        # Find the path component that identifies the artifact (contains "pytest-")
         run_dir = None
         for part in path_parts:
             if "pytest-" in part:
@@ -238,28 +240,27 @@ def unify_xml_for_run(run_id, download_dir):
                 break
 
         if not run_dir:
-            return None, None
+            return None, None, None
 
-        # Extract artifact name and parse it
-        # run_16522631587_pytest-linux-cp38-{hypothesis,nonreg,scripts}-DefaultCache
+        # Strip the run_<id>_ prefix added by the manual download path
+        # e.g. run_16522631587_pytest-linux-cp311-integration-DefaultCache -> pytest-linux-cp311-integration-DefaultCache
         artifact_name = run_dir.replace(f"run_{run_id}_", "")
 
-        python_version = None
         py_match = re.search(r"cp(\d+)", artifact_name)
         test_data = artifact_name.split("-")
         test_type = test_data[3]
         cache_type = test_data[4] if len(test_data) > 4 else "DefaultCache"
 
         if py_match:
-            python_version = f"{py_match.group(1)}"
+            version_digits = py_match.group(1)
+            subversion = version_digits[1:]
+            assert subversion in ["9", "10", "11", "12", "13", "14"], version_digits
+            base_version = f"3.{subversion}"
+            is_conda = "conda" in artifact_name
+            python_version = f"conda-{base_version}" if is_conda else base_version
+            return python_version, test_type, cache_type
 
-        subversion = python_version[1:]
-
-        assert subversion in ["9", "10", "11", "12", "13", "14"], python_version
-
-        python_version = f"3.{subversion}"
-
-        return python_version, test_type, cache_type
+        return None, None, None
 
     xml_files = []
 

@@ -211,8 +211,12 @@ class ChunkedBufferImpl {
                 allocation_type_ == entity::AllocationType::DETACHABLE,
                 "block_at_offset is only valid for detachable buffers"
         );
-        auto it = std::lower_bound(block_offsets_.begin(), block_offsets_.end(), offset);
-        util::check(it != block_offsets_.end() && *it == offset, "No block found at offset {}", offset);
+        // upper_bound - 1 lands on the last entry equal to `offset`, skipping any zero-sized leading blocks that may be
+        // produced by truncate_first_block (which can set block_offsets_[0] == block_offsets_[1]).
+        auto it = std::ranges::upper_bound(block_offsets_, offset);
+        util::check(it != block_offsets_.begin(), "No block found at offset {}", offset);
+        --it;
+        util::check(*it == offset, "No block found at offset {}", offset);
         return blocks_[std::distance(block_offsets_.begin(), it)];
     }
 
@@ -646,29 +650,30 @@ class ChunkedBufferImpl {
 
   private:
     BlockType* copy_subset_to_block(BlockType* source, size_t pos, size_t size) {
-        auto result = [&]() {
-            if (allocation_type_ == entity::AllocationType::DETACHABLE) {
-                return create_detachable_block(size, source->offset() + pos);
-            } else {
-                return create_regular_block(size, source->offset() + pos);
-            }
-        }();
         switch (source->get_type()) {
-        case MemBlockType::DYNAMIC:
-        case MemBlockType::EXTERNAL_WITH_EXTRA_BYTES:
+        case MemBlockType::DYNAMIC: {
+            auto result = create_regular_block(size, source->offset() + pos);
             result->copy_from(source->ptr(pos), result->physical_bytes(), 0);
-            break;
+            return result;
+        }
+        case MemBlockType::EXTERNAL_WITH_EXTRA_BYTES: {
+            auto result = create_detachable_block(size, source->offset() + pos);
+            result->copy_from(source->ptr(pos), result->physical_bytes(), 0);
+            return result;
+        }
         case MemBlockType::EXTERNAL_PACKED: {
             auto* packed_src = static_cast<ExternalPackedMemBlock*>(source);
-            // Copying packed bits is less efficient than a memcpy.
-            // We don't use memcpy because it would result in a dest block with shift != 0
-            // Sparrow does not currently expose a convenient API to set a non-zero offset for bool columns.
-            // TODO: Use memcpy once sparrow exposes `slice_inplace` API. Monday ref: 11570513612
-            copy_packed_bits(packed_src->data(), packed_src->shift() + pos, size, result->data());
-            break;
+            const size_t src_bit_offset = packed_src->shift() + pos;
+            const size_t new_shift = src_bit_offset % 8;
+            const size_t byte_offset = src_bit_offset / 8;
+            const size_t num_bytes = (new_shift + size + 7) / 8;
+            auto* data = allocate_detachable_memory(num_bytes);
+            memcpy(data, packed_src->data() + byte_offset, num_bytes);
+            return create_external_block<ExternalPackedMemBlock>(data, size, source->offset() + pos, new_shift, true);
         }
+        default:
+            util::raise_rte("Unexpected block type in copy_subset_to_block");
         }
-        return result;
     }
 
     template<typename Block, typename... ExtraArgs>

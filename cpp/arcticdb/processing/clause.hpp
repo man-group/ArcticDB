@@ -860,6 +860,7 @@ struct MergeUpdateClause {
     ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_set_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
+    bool fake_index_name_ = false;
     MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
     ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
 
@@ -916,6 +917,8 @@ struct MergeUpdateClause {
             ProcessingUnit& proc, const StreamDescriptor& source_descriptor
     ) const;
 
+    size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
+
     bool is_update_only() const;
 
     /// For each timestamp range stores the first and last row in the source that overlaps with the row range. The
@@ -966,7 +969,8 @@ struct CompactDataClause {
 
     [[nodiscard]] std::string to_string() const;
 
-    // Public only for testing purposes
+    [[nodiscard]] bool row_ranges_all_acceptable_lengths(const std::set<RowRange>& row_ranges) const;
+
     [[nodiscard]] std::set<RowRange> structure_row_ranges(const std::set<RowRange>& row_ranges) const;
 };
 } // namespace arcticdb

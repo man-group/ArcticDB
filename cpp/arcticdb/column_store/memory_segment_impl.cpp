@@ -321,6 +321,11 @@ SegmentInMemoryImpl::SegmentInMemoryImpl() :
     descriptor_(std::make_shared<StreamDescriptor>()),
     string_pool_(std::make_shared<StringPool>()) {}
 
+SegmentInMemoryImpl::SegmentInMemoryImpl(Sparsity allow_sparse) :
+    descriptor_(std::make_shared<StreamDescriptor>()),
+    string_pool_(std::make_shared<StringPool>()),
+    allow_sparse_(allow_sparse) {}
+
 SegmentInMemoryImpl::SegmentInMemoryImpl(
         const StreamDescriptor& desc, size_t expected_column_size, AllocationType allocation_type,
         Sparsity allow_sparse, const std::optional<BlockConfigPerColumn>& block_config_per_column

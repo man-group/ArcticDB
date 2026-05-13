@@ -47,7 +47,7 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
             if (!entry.is_tombstoned(key)) {
                 oldest_loaded_undeleted_index = std::min(oldest_loaded_undeleted_index, key.version_id());
-                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_undeleted_timestamp, key.creation_ts());
             }
 
         } else if (key.type() == KeyType::TOMBSTONE) {
@@ -201,6 +201,18 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
     auto candidate_version_id = static_cast<SignedVersionId>(latest) + index + 1;
     return candidate_version_id >= 0 ? std::make_optional<VersionId>(static_cast<VersionId>(candidate_version_id))
                                      : std::nullopt;
+}
+
+inline std::optional<VersionId> resolve_version_id(SignedVersionId signed_version_id, const VersionMapEntry& entry) {
+    if (signed_version_id >= 0)
+        return static_cast<VersionId>(signed_version_id);
+
+    auto opt_latest = entry.get_first_index(true).first;
+
+    if (!opt_latest.has_value())
+        return std::nullopt;
+
+    return get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
 }
 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size);

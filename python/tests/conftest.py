@@ -333,6 +333,14 @@ def lmdb_library_factory(lmdb_storage, lib_name):
 
 
 @pytest.fixture
+def mem_library_factory(mem_storage, lib_name):
+    def f(library_options: LibraryOptions = LibraryOptions()):
+        return mem_storage.create_arctic().create_library(lib_name, library_options=library_options)
+
+    return f
+
+
+@pytest.fixture
 def s3_library_factory(s3_storage, lib_name):
     def f(library_options: LibraryOptions = LibraryOptions()):
         return s3_storage.create_arctic().create_library(lib_name, library_options=library_options)
@@ -1243,6 +1251,11 @@ def any_output_format(request) -> OutputFormat:
     return request.param
 
 
+@pytest.fixture(params=[OutputFormat.PYARROW, OutputFormat.POLARS])
+def arrow_output_format(request) -> OutputFormat:
+    return request.param
+
+
 @pytest.fixture(params=list(ArrowOutputStringFormat))
 def any_arrow_string_format(request) -> ArrowOutputStringFormat:
     return request.param
@@ -1667,6 +1680,30 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory) -> NativeVersi
 @pytest.fixture
 def in_memory_version_store_tiny_segment_dynamic(in_memory_store_factory) -> NativeVersionStore:
     return in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+
+
+@pytest.fixture
+def in_memory_version_store_arrow(in_memory_store_factory) -> NativeVersionStore:
+    store = in_memory_store_factory(dynamic_strings=True)
+    store.set_output_format(OutputFormat.PYARROW)
+    store._set_allow_arrow_input()
+    return store
+
+
+@pytest.fixture
+def in_memory_version_store_dynamic_schema_arrow(in_memory_store_factory) -> NativeVersionStore:
+    store = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
+    store.set_output_format(OutputFormat.PYARROW)
+    store._set_allow_arrow_input()
+    return store
+
+
+@pytest.fixture
+def in_memory_version_store_tiny_segment_arrow(in_memory_store_factory) -> NativeVersionStore:
+    store = in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    store.set_output_format(OutputFormat.PYARROW)
+    store._set_allow_arrow_input()
+    return store
 
 
 @pytest.fixture

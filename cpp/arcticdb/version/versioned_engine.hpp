@@ -9,8 +9,8 @@
 #pragma once
 
 #include <arcticdb/version/version_map.hpp>
-#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/storage/common.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
@@ -134,6 +134,10 @@ class VersionedEngine {
     virtual std::set<StreamId> get_incomplete_refs() = 0;
 
     virtual std::set<StreamId> get_active_incomplete_refs() = 0;
+
+    virtual CompactDataInfo compact_data_explain_plan_internal(
+            const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+    ) = 0;
 
     virtual VersionedItem compact_data_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions

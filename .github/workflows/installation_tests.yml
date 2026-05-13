@@ -263,6 +263,7 @@ jobs:
         echo "ARCTICDB_STORAGE_GCP=${{ env.real_gcp }}" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
         echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
+        echo "ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR=all" >> $GITHUB_ENV
     
     - name: Set environment variables based on arcticdb version for GCP
       if: ${{ env.SKIP_JOB != 'true' }}

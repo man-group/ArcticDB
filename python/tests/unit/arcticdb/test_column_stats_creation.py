@@ -8,7 +8,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import numpy as np
 import pandas as pd
+import polars as pl
+import pyarrow as pa
 import pytest
+from polars.testing import assert_frame_equal as pl_assert_frame_equal
 
 from arcticc.pb2.column_stats_pb2 import ColumnStatsHeader, ColumnStatsType
 from google.protobuf.any_pb2 import Any as ProtobufAny
@@ -32,39 +35,41 @@ df2 = pd.DataFrame(
 )
 
 
+def index_columns_to_pl(lib, sym):
+    pdf = lib.read_index(sym).reset_index()
+    return pl.from_pandas(pdf[["start_index", "end_index"]]).unique(maintain_order=True)
+
+
 def generate_symbol(lib, sym):
     lib.write(sym, df0)
     lib.append(sym, df1)
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    return index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min()]),
+        pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max()]),
+        pl.Series("v1_MIN(col_2)", [df0["col_2"].min(), df1["col_2"].min()]),
+        pl.Series("v1_MAX(col_2)", [df0["col_2"].max(), df1["col_2"].max()]),
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
-    expected_column_stats["v1_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
-    expected_column_stats["v1_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
-    expected_column_stats["v1_MIN(col_2)"] = [df0["col_2"].min(), df1["col_2"].min()]
-    expected_column_stats["v1_MAX(col_2)"] = [df0["col_2"].max(), df1["col_2"].max()]
-    return expected_column_stats
 
 
 def assert_stats_equal(received, expected):
-    # Use check_like because we don't care about column order
-    pd.testing.assert_frame_equal(received, expected, check_like=True, check_dtype=False)
-    # But also check the index, as we do care about the row order
-    pd.testing.assert_index_equal(received.index, expected.index)
+    assert isinstance(received, pa.Table)
+    assert isinstance(expected, pl.DataFrame)
+    received_pl = pl.from_arrow(received)
+    pl_assert_frame_equal(received_pl, expected, check_column_order=False, check_dtypes=False)
 
 
-def test_column_stats_basic_flow(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_basic_flow(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_basic_flow"
-    expected_column_stats = generate_symbol(lib, sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
-        axis=1,
-        inplace=True,
+    expected_column_stats = generate_symbol(lib, sym).select(
+        ["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]
     )
 
     column_stats_dict = {"col_1": {"MINMAX"}}
@@ -86,8 +91,14 @@ def test_column_stats_basic_flow(lmdb_version_store_tiny_segment, any_output_for
         lib.read_column_stats(sym)
 
 
-def test_column_stats_infinity(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_infinity(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_infinity"
     df0 = pd.DataFrame({"col_1": [np.inf, 0.5]}, index=pd.date_range("2000-01-01", periods=2))
@@ -96,15 +107,10 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment, any_output_forma
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]),
+        pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]),
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1, 2]]
-    expected_column_stats["v1_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min(), df2["col_1"].min()]
-    expected_column_stats["v1_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max(), df2["col_1"].max()]
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -113,8 +119,8 @@ def test_column_stats_infinity(lmdb_version_store_tiny_segment, any_output_forma
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
-    lib = lmdb_version_store_v1
+def test_column_stats_nan_values(lmdb_version_store, any_output_format):
+    lib = lmdb_version_store
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nan_values"
     df0 = pd.DataFrame({"col_1": [1.0, 3.0]}, index=pd.date_range("2000-01-01", periods=2))
@@ -122,21 +128,19 @@ def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
     df2 = pd.DataFrame({"col_1": [5.0, np.nan]}, index=pd.date_range("2000-01-05", periods=2))
     df3 = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
     df4 = pd.DataFrame({"col_1": [1.0, np.nan, 2.0]}, index=pd.date_range("2000-01-09", periods=3))
+    df5 = pd.DataFrame({"col_1": [np.nan, 1.0, 2.0, np.nan]}, index=pd.date_range("2000-01-12", periods=4))
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
     lib.append(sym, df4)
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
-    )
+    lib.append(sym, df5)
 
-    # Note that for df4 we have min=1.0 max=2.0 even though the values include np.nan
-    expected_column_stats["v1_MIN(col_1)"] = [1.0, np.nan, 5.0, np.nan, 1.0]
-    expected_column_stats["v1_MAX(col_1)"] = [3.0, np.nan, 5.0, np.nan, 2.0]
+    # We store nan stats iff the whole block is nan
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [1.0, 5.0, 5.0, np.nan, 1.0, 1.0]),
+        pl.Series("v1_MAX(col_1)", [3.0, 5.0, 5.0, np.nan, 2.0, 2.0]),
+    )
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -145,8 +149,27 @@ def test_column_stats_nan_values(lmdb_version_store_v1, any_output_format):
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_nat_values(lmdb_version_store_v1, any_output_format):
-    lib = lmdb_version_store_v1
+def test_column_stats_only_nan_values(lmdb_version_store, any_output_format):
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_values"
+    df = pd.DataFrame({"col_1": [np.nan, np.nan]}, index=pd.date_range("2000-01-07", periods=2))
+    lib.write(sym, df)
+
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [np.nan]),
+        pl.Series("v1_MAX(col_1)", [np.nan]),
+    )
+    column_stats_dict = {"col_1": {"MINMAX"}}
+
+    lib.create_column_stats(sym, column_stats_dict)
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
+def test_column_stats_nat_values(lmdb_version_store, any_output_format):
+    lib = lmdb_version_store
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nat_values"
     df0 = pd.DataFrame(
@@ -169,19 +192,23 @@ def test_column_stats_nat_values(lmdb_version_store_v1, any_output_format):
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series(
+            "v1_MIN(col_1)",
+            [pd.Timestamp("2020-01-01").value, None, None, None],
+            dtype=pl.Int64,
+        ).cast(pl.Datetime("ns")),
+        pl.Series(
+            "v1_MAX(col_1)",
+            [
+                pd.Timestamp("2020-06-01"),
+                pd.Timestamp("2025-01-01"),
+                pd.Timestamp("2025-01-01"),
+                pd.Timestamp("2025-02-01"),
+            ],
+            dtype=pl.Datetime("ns"),
+        ),
     )
-    expected_column_stats["v1_MIN(col_1)"] = [pd.Timestamp("2020-01-01"), pd.NaT, pd.NaT, pd.NaT]
-    expected_column_stats["v1_MAX(col_1)"] = [
-        pd.Timestamp("2020-06-01"),
-        pd.Timestamp("2025-01-01"),
-        pd.Timestamp("2025-01-01"),
-        pd.Timestamp("2025-02-01"),
-    ]
     column_stats_dict = {"col_1": {"MINMAX"}}
 
     lib.create_column_stats(sym, column_stats_dict)
@@ -190,16 +217,18 @@ def test_column_stats_nat_values(lmdb_version_store_v1, any_output_format):
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_as_of(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_as_of"
-    expected_column_stats = generate_symbol(lib, sym)
-    expected_column_stats = expected_column_stats.iloc[[0]]
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
-        axis=1,
-        inplace=True,
+    expected_column_stats = generate_symbol(lib, sym)[[0]].select(
+        ["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]
     )
     column_stats_dict = {"col_1": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict, as_of=0)
@@ -219,8 +248,14 @@ def test_column_stats_as_of(lmdb_version_store_tiny_segment, any_output_format):
         lib.read_column_stats(sym, as_of=0)
 
 
-def test_column_stats_as_of_version_doesnt_exist(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_as_of_version_doesnt_exist(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_as_of_version_doesnt_exist"
     generate_symbol(lib, sym)
@@ -237,8 +272,16 @@ def test_column_stats_as_of_version_doesnt_exist(lmdb_version_store_tiny_segment
 
 
 # TODO: When more than one column stat type is implemented, change this to add multiple indexes across multiple columns
-def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_multiple_indexes_different_columns(
+    version_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_multiple_indexes"
     expected_column_stats = generate_symbol(lib, sym)
@@ -253,17 +296,19 @@ def test_column_stats_multiple_indexes_different_columns(lmdb_version_store_tiny
     lib.drop_column_stats(sym, {"col_2": {"MINMAX"}})
     assert lib.get_column_stats_info(sym) == {"col_1": {"MINMAX"}}
 
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
-        axis=1,
-        inplace=True,
-    )
+    expected_column_stats = expected_column_stats.select(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"])
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_empty_dict(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_empty_dict(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_empty_dict"
     expected_column_stats = generate_symbol(lib, sym)
@@ -282,8 +327,14 @@ def test_column_stats_empty_dict(lmdb_version_store_tiny_segment, any_output_for
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_empty_set(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_empty_set(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_empty_set"
     expected_column_stats = generate_symbol(lib, sym)
@@ -302,8 +353,14 @@ def test_column_stats_empty_set(lmdb_version_store_tiny_segment, any_output_form
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_non_existent_column(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_non_existent_column(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_non_existent_column"
     expected_column_stats = generate_symbol(lib, sym)
@@ -326,8 +383,14 @@ def test_column_stats_non_existent_column(lmdb_version_store_tiny_segment, any_o
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_non_existent_stat_type(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_non_existent_stat_type(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_non_existent_stat_type"
     expected_column_stats = generate_symbol(lib, sym)
@@ -344,8 +407,14 @@ def test_column_stats_non_existent_stat_type(lmdb_version_store_tiny_segment, an
     assert_stats_equal(lib.read_column_stats(sym), expected_column_stats)
 
 
-def test_column_stats_pickled_symbol(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_pickled_symbol(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_pickled_symbol"
     lib.write(sym, 1)
@@ -356,8 +425,14 @@ def test_column_stats_pickled_symbol(lmdb_version_store_tiny_segment, any_output
         lib.create_column_stats(sym, column_stats_dict)
 
 
-def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_multiple_creates(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_multiple_creates"
     base_expected_column_stats = generate_symbol(lib, sym)
@@ -366,11 +441,8 @@ def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment, any_outp
     lib.create_column_stats(sym, column_stats_dict_1)
     assert lib.get_column_stats_info(sym) == column_stats_dict_1
 
-    expected_column_stats = base_expected_column_stats.copy()
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]),
-        axis=1,
-        inplace=True,
+    expected_column_stats = base_expected_column_stats.select(
+        ["start_index", "end_index", "v1_MIN(col_1)", "v1_MAX(col_1)"]
     )
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
@@ -391,8 +463,14 @@ def test_column_stats_multiple_creates(lmdb_version_store_tiny_segment, any_outp
     assert_stats_equal(column_stats, base_expected_column_stats)
 
 
-def test_column_stats_string_column_minmax(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_string_column_minmax(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_string_column_minmax"
     generate_symbol(lib, sym)
@@ -402,22 +480,23 @@ def test_column_stats_string_column_minmax(lmdb_version_store_tiny_segment, any_
         lib.create_column_stats(sym, column_stats_dict)
 
 
-def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_duplicated_primary_index(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_duplicated_primary_index"
 
     total_df = pd.concat((df0, df1))
     lib.write(sym, total_df)
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [df0["col_1"].min(), df1["col_1"].min()]),
+        pl.Series("v1_MAX(col_1)", [df0["col_1"].max(), df1["col_1"].max()]),
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
-    expected_column_stats["v1_MIN(col_1)"] = [df0["col_1"].min(), df1["col_1"].min()]
-    expected_column_stats["v1_MAX(col_1)"] = [df0["col_1"].max(), df1["col_1"].max()]
 
     column_stats_dict = {"col_1": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
@@ -427,8 +506,14 @@ def test_column_stats_duplicated_primary_index(lmdb_version_store_tiny_segment, 
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segment_dynamic, any_output_format):
-    lib = lmdb_version_store_tiny_segment_dynamic
+def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        dynamic_schema=True,
+        encoding_version=int(encoding_version),
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_dynamic_schema_missing_data"
 
@@ -439,49 +524,38 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     df4 = pd.DataFrame(
         {"col_1": [0.9, np.nan], "col_2": [np.nan, np.nan]}, index=pd.date_range("2000-01-09", periods=2)
     )
+    df5 = pd.DataFrame({"col_5": np.array([10, 20], dtype=np.int64)}, index=pd.date_range("2000-01-11", periods=2))
 
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
     lib.append(sym, df4)
+    lib.append(sym, df5)
 
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    # Slices that are missing the column come back as null via the validity bitmap. df4["col_2"] is
+    # all-NaN but the column is present so the stat is computed and stored as NaN, not null.
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series(
+            "v1_MIN(col_1)",
+            [df0["col_1"].min(), None, df2["col_1"].min(), None, df4["col_1"].min(), None],
+        ),
+        pl.Series(
+            "v1_MAX(col_1)",
+            [df0["col_1"].max(), None, df2["col_1"].max(), None, df4["col_1"].max(), None],
+        ),
+        pl.Series(
+            "v1_MIN(col_2)",
+            [df0["col_2"].min(), df1["col_2"].min(), None, None, df4["col_2"].min(), None],
+        ),
+        pl.Series(
+            "v1_MAX(col_2)",
+            [df0["col_2"].max(), df1["col_2"].max(), None, None, df4["col_2"].max(), None],
+        ),
+        pl.Series("v1_MIN(col_5)", [None, None, None, None, None, df5["col_5"].min()], dtype=pl.Int64),
+        pl.Series("v1_MAX(col_5)", [None, None, None, None, None, df5["col_5"].max()], dtype=pl.Int64),
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1, 2, 3, 4]]
-    expected_column_stats["v1_MIN(col_1)"] = [
-        df0["col_1"].min(),
-        np.nan,
-        df2["col_1"].min(),
-        np.nan,
-        df4["col_1"].min(),
-    ]
-    expected_column_stats["v1_MAX(col_1)"] = [
-        df0["col_1"].max(),
-        np.nan,
-        df2["col_1"].max(),
-        np.nan,
-        df4["col_1"].max(),
-    ]
-    expected_column_stats["v1_MIN(col_2)"] = [
-        df0["col_2"].min(),
-        df1["col_2"].min(),
-        np.nan,
-        np.nan,
-        df4["col_2"].min(),
-    ]
-    expected_column_stats["v1_MAX(col_2)"] = [
-        df0["col_2"].max(),
-        df1["col_2"].max(),
-        np.nan,
-        np.nan,
-        df4["col_2"].max(),
-    ]
-    column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}}
+    column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}, "col_5": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
     assert lib.get_column_stats_info(sym) == column_stats_dict
 
@@ -489,8 +563,16 @@ def test_column_stats_dynamic_schema_missing_data(lmdb_version_store_tiny_segmen
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segment_dynamic, any_output_format):
-    lib = lmdb_version_store_tiny_segment_dynamic
+def test_column_stats_dynamic_schema_types_changing(
+    version_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        dynamic_schema=True,
+        encoding_version=int(encoding_version),
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_dynamic_schema_types_changing"
 
@@ -523,51 +605,27 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
     lib.write(sym, df0)
     lib.append(sym, df1)
 
-    expected_column_stats = lib.read_index(sym)
-    expected_column_stats.drop(
-        expected_column_stats.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    def int_minmax(name):
+        return [
+            pl.Series(f"v1_MIN({name})", [int(df0[name].min()), int(df1[name].min())]),
+            pl.Series(f"v1_MAX({name})", [int(df0[name].max()), int(df1[name].max())]),
+        ]
+
+    def float_minmax(name):
+        return [
+            pl.Series(f"v1_MIN({name})", [float(df0[name].min()), float(df1[name].min())]),
+            pl.Series(f"v1_MAX({name})", [float(df0[name].max()), float(df1[name].max())]),
+        ]
+
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        *int_minmax("int_widening"),
+        *int_minmax("int_narrowing"),
+        *int_minmax("unsigned_to_wider_signed_int"),
+        *int_minmax("wider_signed_to_unsigned_int"),
+        *int_minmax("unsigned_to_signed_int_same_width"),
+        *float_minmax("int_to_float"),
+        *float_minmax("float_to_int"),
     )
-    expected_column_stats = expected_column_stats.iloc[[0, 1]]
-    expected_column_stats["v1_MIN(int_widening)"] = [df0["int_widening"].min(), df1["int_widening"].min()]
-    expected_column_stats["v1_MAX(int_widening)"] = [df0["int_widening"].max(), df1["int_widening"].max()]
-
-    expected_column_stats["v1_MIN(int_narrowing)"] = [df0["int_narrowing"].min(), df1["int_narrowing"].min()]
-    expected_column_stats["v1_MAX(int_narrowing)"] = [df0["int_narrowing"].max(), df1["int_narrowing"].max()]
-
-    expected_column_stats["v1_MIN(unsigned_to_wider_signed_int)"] = [
-        df0["unsigned_to_wider_signed_int"].min(),
-        df1["unsigned_to_wider_signed_int"].min(),
-    ]
-    expected_column_stats["v1_MAX(unsigned_to_wider_signed_int)"] = [
-        df0["unsigned_to_wider_signed_int"].max(),
-        df1["unsigned_to_wider_signed_int"].max(),
-    ]
-
-    expected_column_stats["v1_MIN(wider_signed_to_unsigned_int)"] = [
-        df0["wider_signed_to_unsigned_int"].min(),
-        df1["wider_signed_to_unsigned_int"].min(),
-    ]
-    expected_column_stats["v1_MAX(wider_signed_to_unsigned_int)"] = [
-        df0["wider_signed_to_unsigned_int"].max(),
-        df1["wider_signed_to_unsigned_int"].max(),
-    ]
-
-    expected_column_stats["v1_MIN(unsigned_to_signed_int_same_width)"] = [
-        df0["unsigned_to_signed_int_same_width"].min(),
-        df1["unsigned_to_signed_int_same_width"].min(),
-    ]
-    expected_column_stats["v1_MAX(unsigned_to_signed_int_same_width)"] = [
-        df0["unsigned_to_signed_int_same_width"].max(),
-        df1["unsigned_to_signed_int_same_width"].max(),
-    ]
-
-    expected_column_stats["v1_MIN(int_to_float)"] = [df0["int_to_float"].min(), df1["int_to_float"].min()]
-    expected_column_stats["v1_MAX(int_to_float)"] = [df0["int_to_float"].max(), df1["int_to_float"].max()]
-
-    expected_column_stats["v1_MIN(float_to_int)"] = [df0["float_to_int"].min(), df1["float_to_int"].min()]
-    expected_column_stats["v1_MAX(float_to_int)"] = [df0["float_to_int"].max(), df1["float_to_int"].max()]
     column_stats_dict = {
         "int_widening": {"MINMAX"},
         "int_narrowing": {"MINMAX"},
@@ -582,26 +640,29 @@ def test_column_stats_dynamic_schema_types_changing(lmdb_version_store_tiny_segm
 
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
-    assert column_stats.dtypes["v1_MIN(int_widening)"] == np.uint16
-    assert column_stats.dtypes["v1_MAX(int_widening)"] == np.uint16
 
-    assert column_stats.dtypes["v1_MIN(int_narrowing)"] == np.int16
-    assert column_stats.dtypes["v1_MAX(int_narrowing)"] == np.int16
+    schema = pl.from_arrow(column_stats).schema
 
-    assert column_stats.dtypes["v1_MIN(unsigned_to_wider_signed_int)"] == np.int32
-    assert column_stats.dtypes["v1_MAX(unsigned_to_wider_signed_int)"] == np.int32
+    assert schema["v1_MIN(int_widening)"] == pl.UInt16
+    assert schema["v1_MAX(int_widening)"] == pl.UInt16
 
-    assert column_stats.dtypes["v1_MIN(wider_signed_to_unsigned_int)"] == np.int32
-    assert column_stats.dtypes["v1_MAX(wider_signed_to_unsigned_int)"] == np.int32
+    assert schema["v1_MIN(int_narrowing)"] == pl.Int16
+    assert schema["v1_MAX(int_narrowing)"] == pl.Int16
 
-    assert column_stats.dtypes["v1_MIN(unsigned_to_signed_int_same_width)"] == np.int32
-    assert column_stats.dtypes["v1_MAX(unsigned_to_signed_int_same_width)"] == np.int32
+    assert schema["v1_MIN(unsigned_to_wider_signed_int)"] == pl.Int32
+    assert schema["v1_MAX(unsigned_to_wider_signed_int)"] == pl.Int32
 
-    assert column_stats.dtypes["v1_MIN(int_to_float)"] == np.float64
-    assert column_stats.dtypes["v1_MAX(int_to_float)"] == np.float64
+    assert schema["v1_MIN(wider_signed_to_unsigned_int)"] == pl.Int32
+    assert schema["v1_MAX(wider_signed_to_unsigned_int)"] == pl.Int32
 
-    assert column_stats.dtypes["v1_MIN(float_to_int)"] == np.float64
-    assert column_stats.dtypes["v1_MAX(float_to_int)"] == np.float64
+    assert schema["v1_MIN(unsigned_to_signed_int_same_width)"] == pl.Int32
+    assert schema["v1_MAX(unsigned_to_signed_int_same_width)"] == pl.Int32
+
+    assert schema["v1_MIN(int_to_float)"] == pl.Float64
+    assert schema["v1_MAX(int_to_float)"] == pl.Float64
+
+    assert schema["v1_MIN(float_to_int)"] == pl.Float64
+    assert schema["v1_MAX(float_to_int)"] == pl.Float64
 
 
 def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_output_format):
@@ -790,8 +851,14 @@ def header_all_entries(header):
             yield data_col_offset, entry
 
 
-def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_header_metadata"
     generate_symbol(lib, sym)
@@ -858,8 +925,14 @@ def test_column_stats_header_metadata(lmdb_version_store_tiny_segment, any_outpu
             assert field_name == "v1_MAX(col_2)"
 
 
-def test_column_stats_duplicated_column_names(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_duplicated_column_names(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_basic_flow_duplicated_column_names"
     df = pd.DataFrame([[7, 1, 6], [8, 2, 5]], index=pd.date_range("2000-01-01", periods=2))
@@ -886,19 +959,34 @@ def test_column_stats_duplicated_column_names(lmdb_version_store_tiny_segment, a
     assert len(stats_keys) == 1
 
     res = lib.read_column_stats(sym)
-    expected = pd.DataFrame(
-        {"end_index": [pd.Timestamp("2000-01-02") + pd.Timedelta(1)], "v1_MIN(col_0)": [7], "v1_MAX(col_0)": [8]}
+    expected = pl.DataFrame(
+        {
+            "start_index": pl.Series([pd.Timestamp("2000-01-01").value], dtype=pl.Int64).cast(pl.Datetime("ns")),
+            "end_index": (
+                pl.Series([(pd.Timestamp("2000-01-02") + pd.Timedelta(1)).value], dtype=pl.Int64).cast(
+                    pl.Datetime("ns")
+                )
+            ),
+            "v1_MIN(col_0)": [7],
+            "v1_MAX(col_0)": [8],
+        }
     )
-    expected.index = [pd.Timestamp("2000-01-01")]
-    expected.index.name = "start_index"
     assert_stats_equal(res, expected)
 
 
 @pytest.mark.parametrize("index_name", ("index", "some-other-name"))
-def test_column_stats_col_called_index(lmdb_version_store_tiny_segment, any_output_format, index_name):
+def test_column_stats_col_called_index(
+    version_store_factory, lib_name, encoding_version, any_output_format, index_name
+):
     """Check some edge cases where the data column's name matches the index column. 'index' is used as an internal
     name for un-named indexes, so using it can expose some bugs."""
-    lib = lmdb_version_store_tiny_segment
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_col_called_index"
     col_name = index_name or "index"
@@ -915,15 +1003,18 @@ def test_column_stats_col_called_index(lmdb_version_store_tiny_segment, any_outp
     else:
         expected_title = index_name
     res = lib.read_column_stats(sym)
-    expected = pd.DataFrame(
+    expected = pl.DataFrame(
         {
-            "end_index": [pd.Timestamp("2000-01-02") + pd.Timedelta(1)],
+            "start_index": pl.Series([pd.Timestamp("2000-01-01").value], dtype=pl.Int64).cast(pl.Datetime("ns")),
+            "end_index": (
+                pl.Series([(pd.Timestamp("2000-01-02") + pd.Timedelta(1)).value], dtype=pl.Int64).cast(
+                    pl.Datetime("ns")
+                )
+            ),
             f"v1_MIN({expected_title})": [0],
             f"v1_MAX({expected_title})": [1],
         }
     )
-    expected.index = [pd.Timestamp("2000-01-01")]
-    expected.index.name = "start_index"
     assert_stats_equal(res, expected)
 
     # Now do some filtering. We apply query builder filters to the index column first!
@@ -936,8 +1027,14 @@ def test_column_stats_col_called_index(lmdb_version_store_tiny_segment, any_outp
         assert res.values == [[0]]
 
 
-def test_column_stats_none_key(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_none_key(version_store_factory, lib_name, encoding_version, any_output_format):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_none_key"
     df = pd.DataFrame({None: [0, 1], "col_one": [2, 3]}, index=pd.date_range("2000-01-01", periods=2))
@@ -963,12 +1060,18 @@ def test_column_stats_none_key(lmdb_version_store_tiny_segment, any_output_forma
     ],
 )
 def test_column_stats_multiindex(
-    lmdb_version_store_tiny_segment, any_output_format, level_name, index_level_name, stored_col_name
+    version_store_factory, lib_name, encoding_version, any_output_format, level_name, index_level_name, stored_col_name
 ):
     """Column stats on a multiindex DataFrame: stats on inner index levels and data columns.
     The inner index level can be referenced by the user-facing name ("level"), the mangled name ("__idx__level"),
     or the __fkidx__ name for unnamed index levels."""
-    lib = lmdb_version_store_tiny_segment
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_multiindex"
 
@@ -1007,17 +1110,12 @@ def test_column_stats_multiindex(
 
     # Read and verify the stats
     stats = lib.read_column_stats(sym)
-    expected = lib.read_index(sym)
-    expected.drop(
-        expected.columns.difference(["start_index", "end_index"]),
-        axis=1,
-        inplace=True,
+    expected = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series(f"v1_MIN({stored_col_name})", [10, 30]),
+        pl.Series(f"v1_MAX({stored_col_name})", [20, 40]),
+        pl.Series("v1_MIN(val)", [100, 300]),
+        pl.Series("v1_MAX(val)", [200, 400]),
     )
-    expected = expected.iloc[[0, 1]]
-    expected[f"v1_MIN({stored_col_name})"] = [10, 30]
-    expected[f"v1_MAX({stored_col_name})"] = [20, 40]
-    expected["v1_MIN(val)"] = [100, 300]
-    expected["v1_MAX(val)"] = [200, 400]
     assert_stats_equal(stats, expected)
 
     # QueryBuilder filter on the inner index level
@@ -1039,7 +1137,7 @@ def test_column_stats_multiindex(
     assert lib.get_column_stats_info(sym) == {"val": {"MINMAX"}}
 
     stats = lib.read_column_stats(sym)
-    expected.drop(columns=[f"v1_MIN({stored_col_name})", f"v1_MAX({stored_col_name})"], inplace=True)
+    expected = expected.drop([f"v1_MIN({stored_col_name})", f"v1_MAX({stored_col_name})"])
     assert_stats_equal(stats, expected)
 
     # Drop all remaining stats
@@ -1050,8 +1148,16 @@ def test_column_stats_multiindex(
         lib.read_column_stats(sym)
 
 
-def test_column_stats_multiindex_same_name_as_data_col(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_multiindex_same_name_as_data_col(
+    version_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_multiindex"
 
@@ -1075,8 +1181,16 @@ def test_column_stats_multiindex_same_name_as_data_col(lmdb_version_store_tiny_s
         lib.create_column_stats(sym, column_stats_dict)
 
 
-def test_column_stats_multiindex_outer_level_not_possible(lmdb_version_store_tiny_segment, any_output_format):
-    lib = lmdb_version_store_tiny_segment
+def test_column_stats_multiindex_outer_level_not_possible(
+    version_store_factory, lib_name, encoding_version, any_output_format
+):
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym"
 
@@ -1099,10 +1213,18 @@ def test_column_stats_multiindex_outer_level_not_possible(lmdb_version_store_tin
     # with column stats.
 
 
-def test_column_stats_create_tiny_thread_pool(lmdb_version_store_tiny_segment, any_output_format, tiny_thread_pool):
+def test_column_stats_create_tiny_thread_pool(
+    version_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
+):
     """Simple test with tiny thread pool to check against deadlocks from the parallel load of the index key
     and the column stats key."""
-    lib = lmdb_version_store_tiny_segment
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_create_tiny_thread_pool"
     expected_column_stats = generate_symbol(lib, sym)
@@ -1120,10 +1242,18 @@ def test_column_stats_create_tiny_thread_pool(lmdb_version_store_tiny_segment, a
     assert_stats_equal(column_stats, expected_column_stats)
 
 
-def test_column_stats_drop_tiny_thread_pool(lmdb_version_store_tiny_segment, any_output_format, tiny_thread_pool):
+def test_column_stats_drop_tiny_thread_pool(
+    version_store_factory, lib_name, encoding_version, any_output_format, tiny_thread_pool
+):
     """Simple test with tiny thread pool to check against deadlocks from the parallel load of the index key
     and the column stats key."""
-    lib = lmdb_version_store_tiny_segment
+    lib = version_store_factory(
+        column_group_size=2,
+        segment_row_size=2,
+        encoding_version=int(encoding_version),
+        lmdb_config={"map_size": 2**30},
+        name=lib_name + f"_{encoding_version.name}",
+    )
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_drop_tiny_thread_pool"
     generate_symbol(lib, sym)

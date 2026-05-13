@@ -20,8 +20,6 @@ ColumnReslicer::ColumnReslicer(const ReslicingInfo& reslicing_info) : reslicing_
 void ColumnReslicer::push_back(std::shared_ptr<Column> column, std::shared_ptr<StringPool> string_pool) {
     if (column->is_sparse()) {
         sparse_ = true;
-        // Will be implemented in a future PR
-        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("compact_data not yet supported with sparse data");
     }
     if (type_.has_value()) {
         if (type_->data_type() == DataType::UTF_DYNAMIC64) {
@@ -59,7 +57,7 @@ void ColumnReslicer::push_back(size_t row_count) {
     sparse_ = true;
 }
 
-std::vector<std::optional<Column>> ColumnReslicer::reslice_columns(std::vector<StringPool>& string_pools) {
+std::vector<Column> ColumnReslicer::reslice_columns(std::vector<StringPool>& string_pools) {
     util::check(type_.has_value(), "ColumnReslicer::reslice_columns called without any calls to push_back");
     auto res = [this, &string_pools]() {
         if (!is_sequence_type(type_->data_type()) && numeric_types_all_same_) {
@@ -69,9 +67,7 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_columns(std::vector<S
         }
     }();
     for (auto&& [idx, col] : folly::enumerate(res)) {
-        if (col.has_value()) {
-            col->set_row_data(reslicing_info_.rows_in_slice(idx) - 1);
-        }
+        col.set_row_data(reslicing_info_.rows_in_slice(idx) - 1);
     }
     // This was a destructive process, reset the class so that it can be safely reused
     cols_or_row_counts_.clear();
@@ -81,7 +77,7 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_columns(std::vector<S
     return res;
 }
 
-std::vector<std::optional<Column>> ColumnReslicer::reslice_by_memcpy() {
+std::vector<Column> ColumnReslicer::reslice_by_memcpy() {
     // In theory, this could be done zero copy by adding external blocks to the output columns, referencing data in the
     // input columns. There are 2 arguments against this:
     // 1 - there will then be multiple (potentially very small) blocks written to disk, which will then need decoding
@@ -93,14 +89,18 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_memcpy() {
     auto type_size = get_type_size(type_->data_type());
     auto output_col = output_columns.begin();
     auto advance_output_col = [&]() {
-        while (output_col != output_columns.end() && !output_col->has_value()) {
+        while (output_col != output_columns.end() && output_col->row_count() == 0) {
             ++output_col;
         }
     };
     advance_output_col();
-    // This is safe as at least one output column must not be std::nullopt by construction
-    auto dest_ptr = output_col->value().buffer().data();
-    uint64_t output_col_capacity = type_size * output_col->value().row_count();
+    if (output_col == output_columns.end()) {
+        // There were no values in the input columns. The sparse maps of the output columns have already been correctly
+        // initialised, so we can just return them as-is
+        return output_columns;
+    }
+    auto dest_ptr = output_col->buffer().data();
+    uint64_t output_col_capacity = type_size * output_col->row_count();
     for (auto& col_or_row_count : cols_or_row_counts_) {
         if (auto* col_with_strings = std::get_if<ColumnWithStrings>(&col_or_row_count)) {
             const auto& input_blocks = col_with_strings->column_->buffer().blocks();
@@ -118,8 +118,8 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_memcpy() {
                         ++output_col;
                         advance_output_col();
                         if (output_col != output_columns.end()) {
-                            dest_ptr = output_col->value().buffer().data();
-                            output_col_capacity = type_size * output_col->value().row_count();
+                            dest_ptr = output_col->buffer().data();
+                            output_col_capacity = type_size * output_col->row_count();
                         }
                     }
                 }
@@ -143,7 +143,7 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_memcpy() {
     return output_columns;
 }
 
-std::vector<std::optional<Column>> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>& string_pools) {
+std::vector<Column> ColumnReslicer::reslice_by_iteration(std::vector<StringPool>& string_pools) {
     auto output_columns = initialise_output_columns();
     util::check(
             output_columns.size() == string_pools.size(),
@@ -155,14 +155,18 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_iteration(std::vec
     auto output_col = output_columns.begin();
     auto string_pool = string_pools.begin();
     auto advance_output_col = [&]() {
-        while (output_col != output_columns.end() && !output_col->has_value()) {
+        while (output_col != output_columns.end() && output_col->row_count() == 0) {
             ++output_col;
             ++string_pool;
         }
     };
     advance_output_col();
-    // This is safe as at least one output column must not be std::nullopt by construction
-    auto output_data = output_col->value().data();
+    if (output_col == output_columns.end()) {
+        // There were no values in the input columns. The sparse maps of the output columns have already been correctly
+        // initialised, so we can just return them as-is
+        return output_columns;
+    }
+    auto output_data = output_col->data();
     details::visit_type(type_->data_type(), [&](auto output_tag) {
         using output_type_info = ScalarTypeInfo<decltype(output_tag)>;
         auto output_it = output_data.begin<typename output_type_info::TDT>();
@@ -180,7 +184,7 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_iteration(std::vec
                             ++string_pool;
                             advance_output_col();
                             if (output_col != output_columns.end()) {
-                                output_data = output_col->value().data();
+                                output_data = output_col->data();
                                 output_it = output_data.begin<typename output_type_info::TDT>();
                                 output_end_it = output_data.end<typename output_type_info::TDT>();
                             }
@@ -226,10 +230,11 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_iteration(std::vec
         }
         // As we have allocated exactly as much space in the output data as was present in the input data, in the final
         // input column, we should advance output_it exactly to the end of the final output column
-        // This is safe, as at least one output column must have a value, so the find_if will never return rend
+        // This is safe, as at least one output column must have a value, so the find_if will never return rend. If
+        // there were no input values, we short-circuited out before the outer visitation above
         auto last_output_col =
-                std::next(std::find_if(output_columns.rbegin(), output_columns.rend(), [](const auto& opt_col) {
-                    return opt_col.has_value();
+                std::next(std::find_if(output_columns.rbegin(), output_columns.rend(), [](const auto& col) {
+                    return col.row_count() > 0;
                 })).base();
         util::check(
                 output_col == last_output_col && output_it == output_end_it,
@@ -239,13 +244,11 @@ std::vector<std::optional<Column>> ColumnReslicer::reslice_by_iteration(std::vec
     return output_columns;
 }
 
-std::vector<std::optional<Column>> ColumnReslicer::initialise_output_columns() const {
-    std::vector<std::optional<Column>> output_columns;
+std::vector<Column> ColumnReslicer::initialise_output_columns() const {
+    std::vector<Column> output_columns;
     output_columns.reserve(reslicing_info_.num_segments);
     const auto& type = *type_;
     if (sparse_) {
-        // This should "just work" for sparse columns, up to corner cases like all columns in an output segment having
-        // no values. Will need a lot of testing though, so push to future PR.
         uint64_t input_values{0};
         // Represents a global bitset for all of the input columns, with 0s where an entire row slice is missing
         util::BitSet bitset(reslicing_info_.total_rows);
@@ -288,17 +291,11 @@ std::vector<std::optional<Column>> ColumnReslicer::initialise_output_columns() c
             auto num_rows = reslicing_info_.rows_in_slice(idx);
             auto set_bits = bitset.count_range(output_rows, output_rows + num_rows - 1, bit_index);
             output_values += set_bits;
-            if (set_bits == 0) { // No values in the range of this output column
-                output_columns.emplace_back(std::nullopt);
-            } else if (set_bits == num_rows) {
-                output_columns.emplace_back(
-                        std::make_optional<Column>(type, num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED)
-                );
+            if (set_bits == num_rows) {
+                output_columns.emplace_back(type, num_rows, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             } else { // Output column is sparse
-                output_columns.emplace_back(
-                        std::make_optional<Column>(type, set_bits, AllocationType::PRESIZED, Sparsity::PERMITTED)
-                );
-                output_columns.back()->set_sparse_map(
+                output_columns.emplace_back(type, set_bits, AllocationType::PRESIZED, Sparsity::PERMITTED);
+                output_columns.back().set_sparse_map(
                         util::truncate_sparse_map(bitset, output_rows, output_rows + num_rows)
                 );
             }
@@ -312,9 +309,9 @@ std::vector<std::optional<Column>> ColumnReslicer::initialise_output_columns() c
         );
     } else {
         for (size_t idx = 0; idx < reslicing_info_.num_segments; ++idx) {
-            output_columns.emplace_back(std::make_optional<Column>(
+            output_columns.emplace_back(
                     type, reslicing_info_.rows_in_slice(idx), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
-            ));
+            );
         }
     }
     return output_columns;

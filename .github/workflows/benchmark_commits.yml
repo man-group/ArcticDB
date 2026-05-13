@@ -65,7 +65,8 @@ jobs:
         run: |
           . build_tooling/vcpkg_caching.sh # Linux follower needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
-          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT" | tee -a $GITHUB_ENV
+          VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           yum install -y awscli
         env:
@@ -127,8 +128,8 @@ jobs:
             fi
             echo "FINAL selection to execute SUITE=$SUITE"
             echo "SUITE=$SUITE" >> $GITHUB_ENV
-            # Now lets reduce logging
             echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
+            echo "ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR=all" >> $GITHUB_ENV
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request' || inputs.benchmark_all_tags == true

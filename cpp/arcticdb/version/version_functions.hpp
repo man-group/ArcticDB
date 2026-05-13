@@ -65,23 +65,12 @@ inline std::optional<AtomKey> get_specific_version(
 ) {
     LoadStrategy load_strategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, signed_version_id};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
-    VersionId version_id;
-    if (signed_version_id >= 0) {
-        version_id = static_cast<VersionId>(signed_version_id);
-    } else {
-        auto opt_latest = entry->get_first_index(true).first;
-        if (opt_latest.has_value()) {
-            auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
-            if (opt_version_id.has_value()) {
-                version_id = *opt_version_id;
-            } else {
-                return std::nullopt;
-            }
-        } else {
-            return std::nullopt;
-        }
-    }
-    return find_index_key_for_version_id(version_id, entry, include_deleted);
+    auto opt_version_id = resolve_version_id(signed_version_id, *entry);
+
+    if (!opt_version_id.has_value())
+        return std::nullopt;
+
+    return find_index_key_for_version_id(*opt_version_id, entry, include_deleted);
 }
 
 template<typename MatchingAcceptor, typename PrevAcceptor, typename NextAcceptor, typename KeyFilter>
