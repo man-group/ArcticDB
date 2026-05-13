@@ -574,7 +574,7 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> exponential_upper_bound(
     }
     auto [bracket_start, bracket_end] =
             search_detail::gallop_bracket<TDT, IT, ID>(begin, end, value, [](RawType probe, RawType v) {
-                return !(v < probe);
+                return probe <= v;
             });
     return upper_bound<TDT, IT, ID>(bracket_start, bracket_end, value);
 }
