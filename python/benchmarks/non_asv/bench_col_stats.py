@@ -1,41 +1,25 @@
 import argparse
-import atexit
-import shutil
+import json
 import signal
+import threading
 import time
 
 import numpy as np
 import pandas as pd
 import psutil
-
 from arcticdb import Arctic
 
 LMDB_PATH = "/tmp/arcticdb_bench_col_stats"
+SYMBOL_NAME = "test_symbol"
 
-
-def _cleanup():
-    shutil.rmtree(LMDB_PATH, ignore_errors=True)
-
-
-atexit.register(_cleanup)
 signal.signal(signal.SIGINT, lambda *_: exit(130))
 
-SCENARIOS = [
-    # (rows, cols)
-    (10, 10),
-    (1_000, 1_000),
-    (100_000, 1_000),
-    (100_000, 10_000),
-    (1_000_000, 1_000),
-    (1_000_000, 10_000),
-    (10_000_000, 1_000),
-]
-
 parser = argparse.ArgumentParser()
-parser.add_argument("--simple_tests", action="store_true", help="Run only the first 4 scenarios")
+parser.add_argument("--scenario", required=True, help="Scenario as ROWSxCOLS, e.g. 100000x1000")
+parser.add_argument("--operation", required=True, choices=["write_symbol", "create_stats"])
 args = parser.parse_args()
 
-scenarios = SCENARIOS[:2] if args.simple_tests else SCENARIOS
+rows, cols = map(int, args.scenario.split("x"))
 
 ac = Arctic(f"lmdb://{LMDB_PATH}")
 if not ac.has_library("bench"):
@@ -43,37 +27,41 @@ if not ac.has_library("bench"):
 lib = ac.get_library("bench")
 nvs = lib._nvs
 
-results = []
 
-for rows, cols in scenarios:
-    sym = f"r{rows}_c{cols}"
+def measure_peak_rss(operation_fn):
+    process = psutil.Process()
+    rss_baseline_mb = process.memory_info().rss / 1e6
+    peak_rss_delta_mb = [0.0]
+    stop_sampling = threading.Event()
 
-    df = pd.DataFrame(
+    def rss_sampler():
+        while not stop_sampling.is_set():
+            delta_mb = process.memory_info().rss / 1e6 - rss_baseline_mb
+            if delta_mb > peak_rss_delta_mb[0]:
+                peak_rss_delta_mb[0] = delta_mb
+            time.sleep(0.01)
+
+    sampler_thread = threading.Thread(target=rss_sampler, daemon=True)
+    sampler_thread.start()
+    start_time = time.time()
+    operation_fn()
+    elapsed_seconds = time.time() - start_time
+    stop_sampling.set()
+    sampler_thread.join()
+    return elapsed_seconds, peak_rss_delta_mb[0]
+
+
+if args.operation == "write_symbol":
+    dataframe = pd.DataFrame(
         np.random.rand(rows, cols).astype(np.float64),
         columns=[f"col_{i}" for i in range(cols)],
     )
+    elapsed_seconds, peak_rss_delta_mb = measure_peak_rss(lambda: lib.write(SYMBOL_NAME, dataframe))
+else:
+    column_stats_spec = {f"col_{i}": {"MINMAX"} for i in range(cols)}
+    elapsed_seconds, peak_rss_delta_mb = measure_peak_rss(
+        lambda: nvs.create_column_stats(SYMBOL_NAME, column_stats_spec)
+    )
+    nvs.drop_column_stats(SYMBOL_NAME)
 
-    t0 = time.time()
-    lib.write(sym, df)
-    write_time = time.time() - t0
-
-    col_stats = {f"col_{i}": {"MINMAX"} for i in range(cols)}
-
-    mem_before = psutil.Process().memory_info().rss / 1e6
-    t0 = time.time()
-    nvs.create_column_stats(sym, col_stats)
-    stats_time = time.time() - t0
-    mem_after = psutil.Process().memory_info().rss / 1e6
-
-    nvs.drop_column_stats(sym)
-    lib.delete(sym)
-
-    results.append((rows, cols, write_time, stats_time, mem_after - mem_before))
-    print(f"rows={rows:>10,}  cols={cols:>6,}  write={write_time:6.2f}s  stats={stats_time:6.2f}s  mem_delta={mem_after - mem_before:+.1f} MB")
-
-print()
-print(f"{'rows':>12}  {'cols':>6}  {'write_symbol_time':>8}  {'stats_create_time':>8}  {'consumed_memory_mb':>14}")
-print("-" * 60)
-
-for rows, cols, write_time, stats_time, mem_delta in results:
-    print(f"{rows:>12,}  {cols:>6,}  {write_time:>8.2f}  {stats_time:>8.2f}  {mem_delta:>+14.1f}")
+print(json.dumps({"elapsed_seconds": elapsed_seconds, "peak_rss_delta_mb": peak_rss_delta_mb}))
