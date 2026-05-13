@@ -48,8 +48,18 @@ def compare(current_df, master_df, threshold_pct):
     join_keys = ["test_name", "python_version", "test_type", "cache_type"]
 
     # Keep only passed tests – skipped/errored durations are meaningless.
-    cur = current_df.filter(pl.col("status") == "passed").select(join_keys + ["time"])
-    mst = master_df.filter(pl.col("status") == "passed").select(join_keys + ["time"])
+    # Deduplicate by taking the mean duration per test to avoid cartesian products
+    # when the same test appears multiple times (e.g. from overlapping XML artifacts).
+    cur = (
+        current_df.filter(pl.col("status") == "passed")
+        .group_by(join_keys)
+        .agg(pl.col("time").mean())
+    )
+    mst = (
+        master_df.filter(pl.col("status") == "passed")
+        .group_by(join_keys)
+        .agg(pl.col("time").mean())
+    )
 
     diverged = (
         cur.join(mst, on=join_keys, suffix="_master")
