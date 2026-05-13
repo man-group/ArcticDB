@@ -30,12 +30,10 @@ enum class WillAttemptCompaction : uint8_t {
 };
 
 struct LoadResult {
-    std::vector<AtomKey> symbol_list_keys_; // all SYMBOL_LIST keys, for deletion after compaction
-    std::optional<AtomKey> compaction_key_; // the latest compaction key found, if any
+    std::optional<AtomKey> compaction_key_;
     CollectionType symbols_;
-    size_t total_key_count_ = 0; // total number of SYMBOL_LIST keys, for compaction threshold
-
-    std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
+    size_t total_key_count_ = 0;
+    std::vector<VariantKey> symbol_list_keys_;
 };
 
 struct SymbolListData {
@@ -159,6 +157,13 @@ class SymbolList {
                 }
         );
 
+        // Build output before compaction — compact_internal frees symbols_ after writing them to storage
+        R output;
+        for (const auto& entry : load_result.symbols_) {
+            if (entry.action_ == ActionType::ADD)
+                output.insert(entry.stream_id_);
+        }
+
         if (will_attempt_compaction == WillAttemptCompaction::YES && needs_compaction(load_result)) {
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
             try {
@@ -177,12 +182,6 @@ class SymbolList {
             } catch (const std::exception& ex) {
                 log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
             }
-        }
-
-        R output;
-        for (auto& entry : load_result.symbols_) {
-            if (entry.action_ == ActionType::ADD)
-                output.insert(std::move(entry.stream_id_));
         }
 
         return output;
@@ -214,9 +213,7 @@ class SymbolList {
     [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
 };
 
-std::vector<Store::RemoveKeyResultType> delete_keys(
-        const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude
-);
+void delete_keys(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude);
 
 struct WriteSymbolTask : async::BaseTask {
     const std::shared_ptr<Store> store_;

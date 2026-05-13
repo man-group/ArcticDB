@@ -141,7 +141,10 @@ static void BM_symbol_list_load(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_symbol_list_load)->Arg(100'000)->Arg(1'000'000)->Unit(benchmark::kMillisecond)->Iterations(3);
+BENCHMARK(BM_symbol_list_load)->Arg(100'000)->Arg(300'000)->Unit(benchmark::kMillisecond)->Iterations(3);
+// Disabled in CI: 1M-symbol setup requires writing+compacting 1M journal entries (~30 s on CI hardware).
+// Run locally: make bench-cpp FILTER=BM_symbol_list_load/1000000
+// BENCHMARK(BM_symbol_list_load)->Arg(1'000'000)->Unit(benchmark::kMillisecond)->Iterations(3);
 
 // Benchmarks peak memory with many uncompacted journal entries per symbol.
 // This is the scenario where the AtomKey vector elimination matters most.
@@ -197,6 +200,9 @@ static void BM_symbol_list_load_many_entries(benchmark::State& state) {
 }
 
 BENCHMARK(BM_symbol_list_load_many_entries)->Args({1'000, 1'000})->Unit(benchmark::kMillisecond)->Iterations(1);
+// Disabled in CI: 300K-symbol setup writes 600K journal entries (~25 s on CI hardware).
+// Run locally: make bench-cpp FILTER=BM_symbol_list_load_many_entries/300000
+// BENCHMARK(BM_symbol_list_load_many_entries)->Args({300'000, 1})->Unit(benchmark::kMillisecond)->Iterations(1);
 
 // Benchmarks peak memory during a load that triggers compaction.
 // This measures the compaction path where keys are collected for deletion.
@@ -238,12 +244,15 @@ static void BM_symbol_list_compaction(benchmark::State& state) {
     ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
 }
 
-BENCHMARK(BM_symbol_list_compaction)
-        ->Args({1'000, 100})
-        ->Args({1'000, 1'000})
-        ->Args({10'000, 100})
-        ->Unit(benchmark::kMillisecond)
-        ->Iterations(1);
+BENCHMARK(BM_symbol_list_compaction)->Args({1'000, 100})->Unit(benchmark::kMillisecond)->Iterations(1);
+// Disabled in CI: 1M-entry cases each take ~20 s; 300K×1 setup writes 600K entries.
+// Run locally: make bench-cpp FILTER=BM_symbol_list_compaction
+// BENCHMARK(BM_symbol_list_compaction)
+//         ->Args({1'000, 1'000})
+//         ->Args({10'000, 100})
+//         ->Args({300'000, 1})
+//         ->Unit(benchmark::kMillisecond)
+//         ->Iterations(1);
 
 // ---- S3 mock variants: exercise the full S3 storage layer (serialization, key parsing) ----
 
@@ -286,7 +295,7 @@ static void BM_symbol_list_load_s3(benchmark::State& state) {
 
 BENCHMARK(BM_symbol_list_load_s3)->Arg(10'000)->Unit(benchmark::kMillisecond)->Iterations(1);
 
-static void BM_symbol_list_compaction_s3(benchmark::State& state) {
+[[maybe_unused]] static void BM_symbol_list_compaction_s3(benchmark::State& state) {
     auto version_map = std::make_shared<VersionMap>();
     auto num_symbols = state.range(0);
     auto entries_per_symbol = state.range(1);
@@ -319,4 +328,7 @@ static void BM_symbol_list_compaction_s3(benchmark::State& state) {
     ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
 }
 
-BENCHMARK(BM_symbol_list_compaction_s3)->Args({1'000, 100})->Unit(benchmark::kMillisecond)->Iterations(1);
+// Disabled in CI: S3 mock compaction takes ~40 s even for 1K×100 entries.
+// Run locally: make bench-cpp FILTER=BM_symbol_list_compaction_s3
+// BENCHMARK(BM_symbol_list_compaction_s3)->Args({1'000, 100})->Unit(benchmark::kMillisecond)->Iterations(1);
+// BENCHMARK(BM_symbol_list_compaction_s3)->Args({10'000, 10})->Unit(benchmark::kMillisecond)->Iterations(1);

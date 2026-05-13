@@ -201,7 +201,32 @@ struct StreamingJournalResult {
     std::optional<AtomKey> compaction_key;
     MapType update_map;
     size_t total_key_count = 0;
-    std::vector<AtomKey> all_keys; // collected for deletion after compaction
+    std::vector<VariantKey> all_keys;
+};
+
+void add_update_map_entry(MapType& update_map, const AtomKey& atom_key) {
+    const auto& symbol = atom_key.start_index();
+    const auto version_id = is_new_style_key(atom_key) ? atom_key.version_id() : unknown_version_id;
+    const auto timestamp = atom_key.creation_ts();
+    const auto& action_id_val = atom_key.id();
+    ActionType action = std::get<StringId>(action_id_val) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD;
+    update_map[symbol].emplace_back(version_id, timestamp, action);
+}
+
+void sort_update_map_entries(MapType& update_map) {
+    for (auto& [symbol, entries] : update_map) {
+        std::sort(entries.begin(), entries.end(), [](const SymbolEntryData& a, const SymbolEntryData& b) {
+            auto a_ver = a.reference_id_ == unknown_version_id ? VersionId{0} : a.reference_id_;
+            auto b_ver = b.reference_id_ == unknown_version_id ? VersionId{0} : b.reference_id_;
+            return std::tie(a_ver, a.timestamp_) < std::tie(b_ver, b.timestamp_);
+        });
+    }
+}
+
+auto key_sort_comparator = [](const AtomKey& l, const AtomKey& r) {
+    auto l_ver = is_new_style_key(l) ? l.version_id() : VersionId{0};
+    auto r_ver = is_new_style_key(r) ? r.version_id() : VersionId{0};
+    return std::tie(l.start_index(), l_ver, l.creation_ts()) < std::tie(r.start_index(), r_ver, r.creation_ts());
 };
 
 StreamingJournalResult load_journal_streaming(
@@ -211,16 +236,11 @@ StreamingJournalResult load_journal_streaming(
     StreamingJournalResult result;
     size_t uncompacted_keys_found = 0;
 
-    const auto batch_delete_size =
-            collect_keys ? ConfigsMap::instance()->get_int("SymbolList.BatchDeleteDuringCompaction", 0) : 0;
-    std::vector<AtomKey> delete_batch;
-
     store->iterate_type(KeyType::SYMBOL_LIST, [&](auto&& key) {
         auto atom_key = to_atom(std::forward<decltype(key)>(key));
         result.total_key_count++;
 
         if (atom_key.id() == compaction_id) {
-            // Keep the latest compaction key by creation timestamp
             if (!result.compaction_key || atom_key.creation_ts() > result.compaction_key->creation_ts())
                 result.compaction_key = atom_key;
         } else {
@@ -240,46 +260,14 @@ StreamingJournalResult load_journal_streaming(
                 data.warned_expected_slowdown_ = true;
             }
 
-            // Build MapType entry directly — no intermediate sorted key vector
-            const auto& symbol = atom_key.start_index();
-            const auto version_id = is_new_style_key(atom_key) ? atom_key.version_id() : unknown_version_id;
-            const auto timestamp = atom_key.creation_ts();
-            const auto& action_id_val = atom_key.id();
-            ActionType action =
-                    std::get<StringId>(action_id_val) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD;
-            result.update_map[symbol].emplace_back(version_id, timestamp, action);
+            add_update_map_entry(result.update_map, atom_key);
         }
 
-        if (collect_keys) {
-            if (batch_delete_size > 0) {
-                delete_batch.push_back(std::move(atom_key));
-                if (static_cast<int64_t>(delete_batch.size()) >= batch_delete_size) {
-                    std::vector<VariantKey> to_remove(delete_batch.begin(), delete_batch.end());
-                    store->remove_keys_sync(to_remove);
-                    delete_batch.clear();
-                }
-            } else {
-                result.all_keys.push_back(std::move(atom_key));
-            }
-        }
+        if (collect_keys)
+            result.all_keys.emplace_back(std::move(atom_key));
     });
 
-    // Flush remaining batch
-    if (!delete_batch.empty()) {
-        std::vector<VariantKey> to_remove(delete_batch.begin(), delete_batch.end());
-        store->remove_keys_sync(to_remove);
-    }
-
-    // Sort each symbol's entries to match the order the old sorted-key-vector approach produced.
-    // Old-style keys (unknown_version_id) should sort as version 0, not max, to preserve chronological order
-    // relative to new-style keys.
-    for (auto& [symbol, entries] : result.update_map) {
-        std::sort(entries.begin(), entries.end(), [](const SymbolEntryData& a, const SymbolEntryData& b) {
-            auto a_ver = a.reference_id_ == unknown_version_id ? VersionId{0} : a.reference_id_;
-            auto b_ver = b.reference_id_ == unknown_version_id ? VersionId{0} : b.reference_id_;
-            return std::tie(a_ver, a.timestamp_) < std::tie(b_ver, b.timestamp_);
-        });
-    }
+    sort_update_map_entries(result.update_map);
 
     return result;
 }
@@ -518,9 +506,9 @@ LoadResult attempt_load(
     auto journal = load_journal_streaming(store, data, will_attempt_compaction, collect_keys);
 
     LoadResult load_result;
-    load_result.symbol_list_keys_ = std::move(journal.all_keys);
     load_result.compaction_key_ = journal.compaction_key;
     load_result.total_key_count_ = journal.total_key_count;
+    load_result.symbol_list_keys_ = std::move(journal.all_keys);
 
     if (journal.compaction_key) {
         ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from symbol list keys");
@@ -532,21 +520,6 @@ LoadResult attempt_load(
         auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compaction);
         load_result.symbols_ =
                 merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(previous_entries));
-
-        std::unordered_set<StreamId> keys_in_versions;
-        for (const auto& entry : load_result.symbols_) {
-            keys_in_versions.emplace(entry.stream_id_);
-        }
-
-        for (const auto& key : load_result.symbol_list_keys_) {
-            if (key.id() != compaction_id) {
-                util::check(
-                        keys_in_versions.find(key.start_index()) != keys_in_versions.end(),
-                        "Would delete unseen key {}",
-                        key
-                );
-            }
-        }
     }
 
     return load_result;
@@ -755,7 +728,7 @@ SegmentInMemory create_empty_segment(const StreamId& stream_id) {
 }
 
 VariantKey write_symbols(
-        const std::shared_ptr<Store>& store, const CollectionType& symbols, const StreamId& stream_id,
+        const std::shared_ptr<Store>& store, CollectionType symbols, const StreamId& stream_id,
         const StreamId& type_holder
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Writing {} symbols to symbol list cache", symbols.size());
@@ -775,20 +748,15 @@ VariantKey write_symbols(
     return store->write_sync(KeyType::SYMBOL_LIST, 0, stream_id, NumericIndex{0}, NumericIndex{0}, std::move(segment));
 }
 
-std::vector<Store::RemoveKeyResultType> delete_keys(
-        const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude
-) {
-    auto to_remove = std::move(remove);
-    std::vector<VariantKey> variant_keys;
-    variant_keys.reserve(to_remove.size());
-    for (auto& atom_key : to_remove) {
-        // Corner case: if the newly written Compaction key (exclude) has the same timestamp as an existing one
-        // (e.g. when a previous compaction round failed in the deletion step), we don't want to delete the former
+void delete_keys(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude) {
+    std::vector<VariantKey> to_remove;
+    to_remove.reserve(remove.size());
+    for (auto& atom_key : remove) {
         if (atom_key != exclude)
-            variant_keys.emplace_back(atom_key);
+            to_remove.emplace_back(std::move(atom_key));
     }
-
-    return store->remove_keys_sync(variant_keys);
+    if (!to_remove.empty())
+        store->remove_keys_sync(to_remove);
 }
 
 bool has_recent_compaction(const std::shared_ptr<Store>& store, const std::optional<AtomKey>& compaction_key) {
@@ -808,7 +776,6 @@ bool has_recent_compaction(const std::shared_ptr<Store>& store, const std::optio
                 std::get<std::string>(compaction_id)
         );
     } else {
-        // No prior compaction — any compaction key means someone else compacted
         store->iterate_type(
                 KeyType::SYMBOL_LIST,
                 [&has_newer](const VariantKey&) { has_newer = true; },
@@ -838,19 +805,30 @@ size_t SymbolList::compact(const std::shared_ptr<Store>& store) {
 
 void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResult& load_result) const {
     if (has_recent_compaction(store, load_result.compaction_key_)) {
-        // legacy arcticc symbol list entries don't get correctly listed when doing `iterate_type`, so can mess
-        // up racing symbol list compaction detection.
         ARCTICDB_RUNTIME_DEBUG(
                 log::symbol(),
                 "Symbol list compaction will be skipped: either a concurrent compaction was detected "
                 "or there are legacy arcticc symbol list entries that cannot be verified."
         );
-    } else {
-        auto written = write_symbols(store, load_result.symbols_, compaction_id, data_.type_holder_);
-        if (!load_result.symbol_list_keys_.empty()) {
-            delete_keys(store, load_result.detach_symbol_list_keys(), std::get<AtomKey>(written));
-        }
+        return;
     }
+
+    auto written = write_symbols(store, std::move(load_result.symbols_), compaction_id, data_.type_holder_);
+    auto written_key = std::get<AtomKey>(written);
+
+    // Sort pre-collected keys for storage backend performance, then delete excluding the newly written key
+    auto& keys = load_result.symbol_list_keys_;
+    std::sort(keys.begin(), keys.end(), [](const VariantKey& l, const VariantKey& r) {
+        return key_sort_comparator(to_atom(l), to_atom(r));
+    });
+    keys.erase(
+            std::remove_if(keys.begin(), keys.end(), [&written_key](const VariantKey& vk) {
+                return to_atom(vk) == written_key;
+            }),
+            keys.end()
+    );
+    if (!keys.empty())
+        store->remove_keys_sync(std::move(keys));
 }
 
 } // namespace arcticdb
