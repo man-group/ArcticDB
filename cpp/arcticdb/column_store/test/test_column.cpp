@@ -279,6 +279,71 @@ TEST(ColumnData, Iterator) {
     }
 }
 
+TEST(ColumnData, IteratorSkipsEmptyBlocks) {
+    using namespace arcticdb;
+
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
+    // Trailing empty block
+    Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    std::array<int64_t, 3> data{10, 20, 30};
+    col.set_external_block(0, data.data(), data.size());
+    col.set_external_block(static_cast<ssize_t>(data.size()), static_cast<int64_t*>(nullptr), 0);
+    ASSERT_EQ(col.buffer().num_blocks(), 2u);
+    ASSERT_EQ(col.buffer().blocks()[0]->logical_size(), data.size() * sizeof(int64_t));
+    ASSERT_EQ(col.buffer().blocks()[1]->logical_size(), 0u);
+
+    auto column_data = col.data();
+    std::vector<int64_t> visited;
+    for (auto it = column_data.cbegin<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>(),
+              end = column_data.cend<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+         it != end;
+         ++it) {
+        visited.push_back(*it);
+    }
+    EXPECT_EQ(visited, (std::vector<int64_t>{10, 20, 30}));
+
+    // All-empty column: a single zero-size external block. begin must compare equal to end.
+    Column empty_col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    empty_col.set_external_block(0, static_cast<int64_t*>(nullptr), 0);
+    ASSERT_EQ(empty_col.buffer().num_blocks(), 1u);
+    ASSERT_EQ(empty_col.buffer().blocks()[0]->logical_size(), 0u);
+    auto empty_data = empty_col.data();
+    auto begin = empty_data.cbegin<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+    auto end = empty_data.cend<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+    EXPECT_EQ(begin, end);
+}
+
+// We should be able to differentiate iterators to same shared memory in different blocks.
+TEST(ColumnData, IteratorEqualityAcrossSharedExternalMemory) {
+    using namespace arcticdb;
+
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+    Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+
+    std::array<int64_t, 3> shared{100, 200, 300};
+    col.set_external_block(0, shared.data(), shared.size());
+    col.set_external_block(static_cast<ssize_t>(shared.size()), shared.data(), shared.size());
+
+    auto column_data = col.data();
+    auto it_in_block0 = column_data.citerator_at<TDT>(1);                 // (block 0, offset 1)
+    auto it_in_block1 = column_data.citerator_at<TDT>(shared.size() + 1); // (block 1, offset 1)
+
+    EXPECT_NE(it_in_block0, it_in_block1);
+    // Dereferences agree because both iterators see the same underlying memory.
+    EXPECT_EQ(*it_in_block0, *it_in_block1);
+
+    // And a full iteration
+    std::vector<int64_t> visited;
+    for (auto it = column_data.cbegin<TDT, IteratorType::REGULAR, IteratorDensity::DENSE>(),
+              end = column_data.cend<TDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+         it != end;
+         ++it) {
+        visited.push_back(*it);
+    }
+    EXPECT_EQ(visited, (std::vector<int64_t>{100, 200, 300, 100, 200, 300}));
+}
+
 TEST(ColumnData, LowerBound) {
     using namespace arcticdb;
 

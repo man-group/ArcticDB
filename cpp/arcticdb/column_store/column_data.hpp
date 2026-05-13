@@ -255,6 +255,13 @@ struct ColumnData {
         void load_current_block() {
             opt_block_ = parent_->template typed_block_at_position<TDT>(block_pos_);
             block_size_ = opt_block_.has_value() ? opt_block_->row_count() : 0;
+            // It is possible for arrow sparse data to have blocks with zero set rows.
+            // We need to skip all blocks with zero rows to get to the next iterator position.
+            while (ARCTICDB_UNLIKELY(opt_block_.has_value() && block_size_ == 0)) {
+                ++block_pos_;
+                opt_block_ = parent_->template typed_block_at_position<TDT>(block_pos_);
+                block_size_ = opt_block_.has_value() ? opt_block_->row_count() : 0;
+            }
             in_block_offset_ = 0;
         }
 
