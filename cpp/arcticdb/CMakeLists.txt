@@ -529,7 +529,6 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
-        processing/operation_dispatch_binary_operator_pow.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
@@ -887,27 +886,17 @@ if(ARCTICDB_THIN_ARCHIVES)
     set(CMAKE_C_ARCHIVE_FINISH   "true")
 endif()
 
-if(MSVC)
-    # On MSVC the static archive can exceed the 2 GB LNK1248 limit. Use an INTERFACE
-    # library instead so consumers receive the pre-compiled object files directly,
-    # bypassing the archive step entirely.
-    add_library(arcticdb_core_static INTERFACE)
-    target_sources(arcticdb_core_static INTERFACE $<TARGET_OBJECTS:arcticdb_core_object>)
-    # Disable default api so both UTF-8 and UTF-32 can be supported
-    target_compile_definitions(arcticdb_core_static INTERFACE PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
-    target_include_directories(arcticdb_core_static INTERFACE
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
-    target_link_libraries(arcticdb_core_static INTERFACE ${arcticdb_core_libraries})
-else()
-    add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
-    # Disable default api so both UTF-8 and UTF-32 can be supported
-    target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
-    target_include_directories(arcticdb_core_static PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>)
-    target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
-endif()
+add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
+
+# Disable default api so both UTF-8 and UTF-32 can be supported
+target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0 ENTT_ID_TYPE=std::uint64_t)
+
+target_include_directories(arcticdb_core_static PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+        )
+
+target_link_libraries(arcticdb_core_static PUBLIC ${arcticdb_core_libraries})
 
 add_library(arcticdb_core SHARED $<TARGET_OBJECTS:arcticdb_core_object>)
 
@@ -994,10 +983,8 @@ target_link_libraries(arcticdb_ext
         arcticdb_python)
 
 if (WIN32)
-    # /DEBUG causes the linker to emit a PDB. /OPT:REF removes unreferenced code;
-    # /OPT:ICF folds identical functions — both are safe alongside /DEBUG.
     target_link_options(arcticdb_ext
-            PRIVATE /DEBUG /OPT:REF /OPT:ICF)
+            PRIVATE $<$<CONFIG:Release>:/DEBUG> $<$<CONFIG:Release>:/OPT:REF>)
 endif()
 
 target_include_directories(arcticdb_ext
@@ -1074,6 +1061,7 @@ if(${TEST})
             pipeline/test/test_value.cpp
             pipeline/test/test_column_stats_data.cpp
             pipeline/test/test_column_stats_dispatch.cpp
+            pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
             pipeline/test/test_column_stats_isin.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp

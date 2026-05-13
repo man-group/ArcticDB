@@ -194,9 +194,8 @@ if(WIN32)
         )
     endif()
 
-    # /Z7 embeds debug info into .obj files (no compiler-managed PDB), which is required for
-    # sccache compatibility. LNK1248 (archive > 2 GB) is avoided by arcticdb_core_static being
-    # an INTERFACE library on MSVC — no static archive is created, so .obj size is not a concern.
+    # We always generate the debug info on Windows since those are not in the final .dll.
+    # sccache needs the /Z7 format, but the linker will still produce .pdb files.
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
         /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
