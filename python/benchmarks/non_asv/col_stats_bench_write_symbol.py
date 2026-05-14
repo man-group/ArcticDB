@@ -21,6 +21,7 @@ def main():
         ac.create_library("bench")
     lib = ac.get_library("bench")
 
+    total_elapsed = 0.0
 
     for chunk_start in range(0, rows, CHUNK_ROWS):
         chunk_row_count = min(CHUNK_ROWS, rows - chunk_start)
@@ -37,10 +38,12 @@ def main():
         else:
             lib.append(SYMBOL_NAME, chunk)
 
-    elapsed_seconds = time.time() - start_time
+        total_elapsed += (time.time() - start_time)
+
+
     peak_rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024  # ru_maxrss is KB on Linux
 
-    print(json.dumps({"elapsed_seconds": elapsed_seconds, "peak_rss_mb": peak_rss_mb}))
+    print(json.dumps({"elapsed_seconds": total_elapsed, "peak_rss_mb": peak_rss_mb}))
 
 
 if __name__ == "__main__":
