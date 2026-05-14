@@ -396,18 +396,19 @@ SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, con
     return snapshot_map;
 }
 
-MasterSnapshotMap get_master_snapshots_map(
+MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
         std::shared_ptr<Store> store,
         const std::optional<const std::tuple<const SnapshotVariantKey&, std::vector<IndexTypeKey>&>>&
                 get_keys_in_snapshot
 ) {
-    MasterSnapshotMap out;
+    MasterSnapshotMapWithStats out;
     iterate_snapshots(store, [&get_keys_in_snapshot, &out, &store](const VariantKey& sk) {
+        ++out.total_snapshots;
         auto snapshot_id = variant_key_id(sk);
         auto snapshot_segment = store->read_sync(sk).second;
         for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
             auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-            out[stream_index.id()][stream_index].insert(snapshot_id);
+            out.map[stream_index.id()][stream_index].insert(snapshot_id);
             if (get_keys_in_snapshot) {
                 auto [wanted_snap_key, sink] = *get_keys_in_snapshot;
                 if (wanted_snap_key == sk) {
@@ -417,6 +418,14 @@ MasterSnapshotMap get_master_snapshots_map(
         }
     });
     return out;
+}
+
+MasterSnapshotMap get_master_snapshots_map(
+        std::shared_ptr<Store> store,
+        const std::optional<const std::tuple<const SnapshotVariantKey&, std::vector<IndexTypeKey>&>>&
+                get_keys_in_snapshot
+) {
+    return get_master_snapshots_map_with_stats(std::move(store), get_keys_in_snapshot).map;
 }
 
 } // namespace arcticdb
