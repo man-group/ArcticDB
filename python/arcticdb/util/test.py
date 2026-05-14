@@ -156,10 +156,8 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     we could use to reproduce something or further analyze failures caused by
     a problems in test code or arctic
     """
-    print("-" * 80)
-    if SHORTER_LOGS:
-        print("No full dataframes dumps when shorter logs is activated")
-    else:
+    if not SHORTER_LOGS:
+        print("-" * 80)
         if isinstance(df, pd.DataFrame):
             print("dataframe : , ", label_for_df)
             print(df.to_csv())

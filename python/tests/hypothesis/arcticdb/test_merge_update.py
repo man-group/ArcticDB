@@ -1,3 +1,5 @@
+from collections import Counter
+
 import pandas as pd
 import numpy as np
 import pytest
@@ -14,6 +16,8 @@ from typing import List, Tuple, Optional
 
 from arcticdb.util.test import assert_frame_equal, merge
 from tests.util.mark import MACOS, WINDOWS
+
+from arcticdb.options import LibraryOptions
 
 pytestmark = pytest.mark.merge_update
 
@@ -183,4 +187,164 @@ def test_rowrange_merge_update(s3_version_store_v1, merge_args):
         return
     result = lib.read(symbol).data
     expected = merge(target[0], source, strategy=strategy, on=on)
+    assert_frame_equal(result, expected)
+
+
+########################################################################################
+##################################### MERGE INSERT #####################################
+########################################################################################
+
+# Writing an oracle function for merge insert is actually complicated. The hypothesis strategy takes a different
+# approach, starting from the end result and working backwards to generate the target and source dataframes. The steps
+# are as follows:
+# 1. Generate the end result first
+# 2. Select random rows from the end result. These rows will be the rows that will be inserted in in the target.
+# 2.1. The selected rows might appear more than once in the end result. Find all rows in the the dataframe that match
+#      on the set of on columns
+# 2.2 Remove all such rows from the end result
+# 2.3 Add the removed rows to the source dataframe
+# 3. Chose random rows from the datafrme computed on the previous step. These rows will be the rows to be updated
+# 3.1 Find all rows that match on the set of on columns and place random values in the rest of the columns. This will
+#     be the target.
+# 3.2 Place the set of selected rows in the source dataframe
+# 4. Now we have the end result, the target and the source.
+
+# Single sentinel used only when building match keys: None/NaN/NaT collapse to it so they compare equal, mirroring the
+# way the merge treats missing values (a source None matches a target NaN and vice versa). It is never written into the
+# data - target/source/expected are slices/reorders of the generated frame, so the real None/NaN values are preserved.
+_MISSING = object()
+
+
+def _row_keys(frame, on):
+    return [
+        (index, *[_MISSING if pd.isna(frame[col].iat[pos]) else frame[col].iat[pos] for col in on])
+        for pos, index in enumerate(frame.index)
+    ]
+
+
+@st.composite
+def merge_insert_dataframes(draw, column_names, column_dtypes, min_date, max_date, on):
+    merged_dataframe = draw(dataframe(column_names, column_dtypes, min_date, max_date))
+    merged_dataframe.sort_index(inplace=True)
+    inserted_row_indexes = sorted(draw(st.lists(st.integers(0, len(merged_dataframe) - 1), unique=True)))
+    keys = pd.Series(_row_keys(merged_dataframe, on), index=merged_dataframe.index)
+    inserted_keys = list(set(keys.iloc[inserted_row_indexes]))
+    # A row is a source (inserted) row if it shares an (index, on) key with a selected row. This pulls in every row with
+    # a matching key - e.g. a None and a NaN at the same index - because the merge would treat them as equal.
+    is_source = keys.isin(inserted_keys).to_numpy()
+    target_dataframe = merged_dataframe[~is_source]
+    source = merged_dataframe[is_source]
+    # Reconstruct expected the way the merge places rows: within each timestamp the target rows come first, then the
+    # inserted rows. Reorder by position (iloc) rather than pd.concat, which would collapse an object column's NaN to
+    # None; iloc preserves the exact None/NaN values.
+    order = sorted(range(len(merged_dataframe)), key=lambda i: (merged_dataframe.index[i], bool(is_source[i])))
+    expected = merged_dataframe.iloc[order]
+    return target_dataframe, source, expected
+
+
+@st.composite
+def merge_insert_arguments(draw):
+    on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True))
+    target, source, expected = draw(merge_insert_dataframes(COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on))
+    rows_per_segment = draw(st.integers(1, len(expected)))
+    cols_per_segment = draw(st.integers(1, len(COL_NAMES)))
+    return target, source, expected, on, cols_per_segment, rows_per_segment
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@given(merge_args=merge_insert_arguments())
+@settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+def test_datetime_insert(s3_storage, merge_args):
+    target, source, expected, on, cols_per_segment, rows_per_segment = merge_args
+    # A fresh library per hypothesis example: the drawn rows/columns_per_segment are library-level options, and the
+    # function-scoped fixture is not reset between examples, so recreate the library each time.
+    ac = s3_storage.create_arctic()
+    name = "test_datetime_insert"
+    if name in ac.list_libraries():
+        ac.delete_library(name)
+    lib = ac.create_library(
+        name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
+    )
+    lib.write("symbol", target)
+    lib.merge_experimental(
+        "symbol", source, strategy=MergeStrategy(matched="do_nothing", not_matched_by_target="insert"), on=on
+    )
+    result = lib.read("symbol").data
+    assert_frame_equal(result, expected)
+
+
+@st.composite
+def merge_update_insert_dataframes(draw, column_names, column_dtypes, min_date, max_date, on):
+    merged_dataframe = draw(dataframe(column_names, column_dtypes, min_date, max_date))
+    merged_dataframe.sort_index(inplace=True)
+    keys = pd.Series(_row_keys(merged_dataframe, on), index=merged_dataframe.index)
+
+    # Rows to insert (same rule as the insert-only case): any row sharing a selected key is a source-only row.
+    inserted_row_indexes = sorted(draw(st.lists(st.integers(0, len(merged_dataframe) - 1), unique=True)))
+    inserted_keys = list(set(keys.iloc[inserted_row_indexes]))
+    is_inserted = keys.isin(inserted_keys).to_numpy()
+
+    # Rows to update: chosen from the non-inserted rows whose (index, on) key is unique among the non-inserted rows, so
+    # each update source row matches exactly one target row. An updated row stays in the target (with fresh random
+    # values in its non-"on" columns) and a copy carrying the expected values is added to the source, so the merge's
+    # update restores it to the expected values.
+    non_inserted_positions = [i for i in range(len(merged_dataframe)) if not is_inserted[i]]
+    non_inserted_keys = [keys.iloc[i] for i in non_inserted_positions]
+    key_counts = Counter(non_inserted_keys)
+    updatable_positions = [i for i, key in zip(non_inserted_positions, non_inserted_keys) if key_counts[key] == 1]
+    is_updated = np.zeros(len(merged_dataframe), dtype=bool)
+    for position in draw(st.lists(st.sampled_from(updatable_positions), unique=True)) if updatable_positions else []:
+        is_updated[position] = True
+
+    # source = inserted rows + copies of the updated rows, all carrying the expected values. A single boolean slice (no
+    # pd.concat) keeps the exact None/NaN values, and it is index-sorted because merged_dataframe is sorted.
+    source = merged_dataframe[is_inserted | is_updated]
+
+    # target = the non-inserted rows; the updated rows get fresh random values in their non-"on" columns.
+    target = merged_dataframe[~is_inserted].copy(deep=True)
+    non_on_columns = [col for col in target.columns if col not in on]
+    updated_positions_in_target = np.flatnonzero(is_updated[~is_inserted])
+    if len(updated_positions_in_target) > 0 and non_on_columns:
+        replacement = draw(dataframe(column_names, column_dtypes, min_date, max_date))
+        picks = [draw(st.integers(0, len(replacement) - 1)) for _ in updated_positions_in_target]
+        for col in non_on_columns:
+            target.iloc[updated_positions_in_target, target.columns.get_loc(col)] = replacement.iloc[picks][
+                col
+            ].to_numpy()
+            # Restore the dtype in case the positional assignment upcast it (object columns keep None/NaN as-is).
+            if merged_dataframe[col].dtype != object:
+                target[col] = target[col].astype(merged_dataframe[col].dtype)
+
+    # expected = merged reordered so inserted rows follow the target rows at the same timestamp; updates stay in place.
+    order = sorted(range(len(merged_dataframe)), key=lambda i: (merged_dataframe.index[i], bool(is_inserted[i])))
+    expected = merged_dataframe.iloc[order]
+    return target, source, expected
+
+
+@st.composite
+def merge_update_insert_arguments(draw):
+    on = draw(st.lists(st.sampled_from(COL_NAMES), unique=True))
+    target, source, expected = draw(merge_update_insert_dataframes(COL_NAMES, DTYPES, MIN_DATE, MAX_DATE, on))
+    rows_per_segment = draw(st.integers(1, len(expected)))
+    cols_per_segment = draw(st.integers(1, len(COL_NAMES)))
+    return target, source, expected, on, cols_per_segment, rows_per_segment
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@given(merge_args=merge_update_insert_arguments())
+@settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
+def test_datetime_update_insert(s3_storage, merge_args):
+    target, source, expected, on, cols_per_segment, rows_per_segment = merge_args
+    ac = s3_storage.create_arctic()
+    name = "test_datetime_update_insert"
+    if name in ac.list_libraries():
+        ac.delete_library(name)
+    lib = ac.create_library(
+        name, library_options=LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=cols_per_segment)
+    )
+    lib.write("symbol", target)
+    lib.merge_experimental(
+        "symbol", source, strategy=MergeStrategy(matched="update", not_matched_by_target="insert"), on=on
+    )
+    result = lib.read("symbol").data
     assert_frame_equal(result, expected)

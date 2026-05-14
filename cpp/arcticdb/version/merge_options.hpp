@@ -12,11 +12,13 @@
 namespace arcticdb {
 enum class MergeAction : uint8_t { DO_NOTHING, UPDATE, INSERT };
 struct MergeStrategy {
-    MergeAction matched;
-    MergeAction not_matched_by_target;
+    MergeAction matched = MergeAction::DO_NOTHING;
+    MergeAction not_matched_by_target = MergeAction::DO_NOTHING;
     bool operator==(const MergeStrategy&) const = default;
     bool update_only() const;
     bool insert_only() const;
+    bool insert() const;
+    bool update() const;
 };
 
 } // namespace arcticdb

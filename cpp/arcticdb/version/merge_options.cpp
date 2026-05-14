@@ -16,4 +16,8 @@ bool MergeStrategy::update_only() const {
 bool MergeStrategy::insert_only() const {
     return matched == MergeAction::DO_NOTHING && not_matched_by_target == MergeAction::INSERT;
 }
+
+bool MergeStrategy::insert() const { return not_matched_by_target == MergeAction::INSERT; }
+
+bool MergeStrategy::update() const { return matched == MergeAction::UPDATE; }
 } // namespace arcticdb

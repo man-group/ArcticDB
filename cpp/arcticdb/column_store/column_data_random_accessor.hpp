@@ -15,7 +15,7 @@
 
 namespace arcticdb {
 
-template<typename TDT>
+template<util::type_descriptor_tag TDT>
 struct IColumnDataRandomAccessor {
     template<class Base>
     struct Interface : Base {
@@ -28,10 +28,10 @@ struct IColumnDataRandomAccessor {
     using Members = folly::PolyMembers<&T::at, &T::ptr_at>;
 };
 
-template<typename TDT>
+template<util::type_descriptor_tag TDT>
 using ColumnDataRandomAccessor = folly::Poly<IColumnDataRandomAccessor<TDT>>;
 
-template<typename TDT>
-requires(util::instantiation_of<TDT, TypeDescriptorTag> && (TDT::dimension() == Dimension::Dim0))
+template<util::type_descriptor_tag TDT>
+requires(TDT::dimension() == Dimension::Dim0)
 ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent);
 } // namespace arcticdb

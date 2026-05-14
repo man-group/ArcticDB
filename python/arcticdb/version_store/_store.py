@@ -4298,8 +4298,6 @@ class NativeVersionStore:
         source : pandas.DataFrame or pandas.Series
             The new data to merge. In the case of timeseries, the index must be sorted.
         strategy : Optional[MergeStrategy], default=MergeStrategy(matched="update", not_matched_by_target="insert")
-            !!! warning
-                Only `MergeStrategy(matched="update", not_matched_by_target="do_nothing")` is implemented
 
             Determines how to handle matched and unmatched rows. Accepted strategies are:
                 - MergeStrategy(matched="update", not_matched_by_target="do_nothing"): Update matched rows, leave others unchanged.
