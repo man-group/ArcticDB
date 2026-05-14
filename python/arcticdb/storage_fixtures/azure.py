@@ -248,8 +248,6 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
                 client.delete_container(timeout=timeout)
             except ResourceNotFoundError:
                 pass
-            except Exception as e:
-                get_logger().warning(f"Failed to delete container during cleanup: {e}")
 
         if b.client:
             if not b.is_real_azure():
