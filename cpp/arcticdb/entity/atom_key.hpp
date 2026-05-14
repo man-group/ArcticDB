@@ -89,12 +89,16 @@ class AtomKeyImpl {
     friend bool operator!=(const AtomKeyImpl& l, const AtomKeyImpl& r) { return !(l == r); }
 
     friend bool operator<(const AtomKeyImpl& l, const AtomKeyImpl& r) {
-        const auto lt = std::tie(l.id_, l.version_id_, l.index_start_, l.index_end_, l.creation_ts_);
-        const auto rt = std::tie(r.id_, r.version_id_, r.index_start_, r.index_end_, r.creation_ts_);
+        const auto lt = std::tie(
+                l.id_, l.version_id_, l.index_start_, l.index_end_, l.creation_ts_, l.key_type_, l.content_hash_
+        );
+        const auto rt = std::tie(
+                r.id_, r.version_id_, r.index_start_, r.index_end_, r.creation_ts_, r.key_type_, r.content_hash_
+        );
         return lt < rt;
     }
 
-    friend bool operator>(const AtomKeyImpl& l, const AtomKeyImpl& r) { return !(l < r) && (l != r); }
+    friend bool operator>(const AtomKeyImpl& l, const AtomKeyImpl& r) { return r < l; }
 
     size_t get_cached_hash() const {
         if (!hash_) {
@@ -236,6 +240,7 @@ struct AtomKeyPacked {
     AtomKeyPacked(const AtomKey& atom_key) :
         version_id_(atom_key.version_id()),
         creation_ts_(atom_key.creation_ts()),
+        content_hash_(atom_key.content_hash()),
         key_type_(atom_key.type()),
         index_start_(atom_key.start_time()),
         index_end_(atom_key.end_time()) {}
@@ -243,6 +248,13 @@ struct AtomKeyPacked {
     AtomKey to_atom_key(const StreamId& stream_id) const {
         return AtomKey(stream_id, version_id_, creation_ts_, content_hash_, index_start_, index_end_, key_type_);
     }
+
+    const auto& version_id() const { return version_id_; }
+    const auto& creation_ts() const { return creation_ts_; }
+    const auto& content_hash() const { return content_hash_; }
+    const auto& type() const { return key_type_; }
+    const auto& start_index() const { return index_start_; }
+    const auto& end_index() const { return index_end_; }
 
     VersionId version_id_ = 0;
     timestamp creation_ts_ = 0;
@@ -252,14 +264,29 @@ struct AtomKeyPacked {
     timestamp index_end_;
 
     friend bool operator==(const AtomKeyPacked& l, const AtomKeyPacked& r) {
-        return l.version_id_ == r.version_id_ && l.creation_ts_ == r.creation_ts_ &&
-               l.content_hash_ == r.content_hash_ && l.key_type_ == r.key_type_ && l.index_start_ == r.index_start_ &&
-               l.index_end_ == r.index_end_;
+        return l.version_id() == r.version_id() && l.creation_ts() == r.creation_ts() &&
+               l.content_hash() == r.content_hash() && l.start_index() == r.start_index() &&
+               l.end_index() == r.end_index() && l.type() == r.type();
     }
+
+    friend bool operator!=(const AtomKeyPacked& l, const AtomKeyPacked& r) { return !(l == r); }
+
+    friend bool operator<(const AtomKeyPacked& l, const AtomKeyPacked& r) {
+        const auto lt =
+                std::tie(l.version_id_, l.index_start_, l.index_end_, l.creation_ts_, l.key_type_, l.content_hash_);
+        const auto rt =
+                std::tie(r.version_id_, r.index_start_, r.index_end_, r.creation_ts_, r.key_type_, r.content_hash_);
+        return lt < rt;
+    }
+
+    friend bool operator>(const AtomKeyPacked& l, const AtomKeyPacked& r) { return r < l; }
 };
 constexpr size_t AtomKeyPackedSize = 40 + sizeof(int);
 static_assert(sizeof(AtomKeyPacked) == AtomKeyPackedSize);
 #pragma pack(pop)
+
+template<typename T>
+concept AtomKeyType = std::is_same_v<T, AtomKey> || std::is_same_v<T, AtomKeyPacked>;
 
 } // namespace arcticdb::entity
 
@@ -316,6 +343,29 @@ struct formatter<AtomKey> {
         return f.format(formattable, ctx);
     }
 };
+
+template<>
+struct formatter<arcticdb::entity::AtomKeyPacked> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::entity::AtomKeyPacked& k, FormatContext& ctx) const {
+        return fmt::format_to(
+                ctx.out(),
+                "{} v{} {}-{} ts{} hash{}",
+                k.key_type_,
+                k.version_id_,
+                k.index_start_,
+                k.index_end_,
+                k.creation_ts_,
+                k.content_hash_
+        );
+    }
+};
+
 } // namespace fmt
 
 namespace std {

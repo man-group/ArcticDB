@@ -1148,16 +1148,16 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
             get_matching_prev_and_next_versions(
                     entry,
                     key.version_id(), // Check 2)
-                    [](const AtomKey&) {},
-                    [&check, &not_to_delete](auto& prev) {
+                    [](const AtomKeyPacked&) {},
+                    [&check, &not_to_delete, &entry](auto& prev) {
                         if (check.prev_version)
-                            not_to_delete.insert(prev);
+                            not_to_delete.insert(prev.to_atom_key(entry->stream_id_));
                     },
-                    [&check, &not_to_delete](auto& next) {
+                    [&check, &not_to_delete, &entry](auto& next) {
                         if (check.next_version)
-                            not_to_delete.insert(next);
+                            not_to_delete.insert(next.to_atom_key(entry->stream_id_));
                     },
-                    [v = key.version_id()](const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
+                    [v = key.version_id()](const AtomKeyPacked& key, const std::shared_ptr<VersionMapEntry>& entry) {
                         // Can't use is_live_index_type_key() because the target version's index key might have
                         // already been tombstoned, so will miss it and thus not able to find the prev/next key.
                         return is_index_key_type(key.type()) && (key.version_id() == v || !entry->is_tombstoned(key));

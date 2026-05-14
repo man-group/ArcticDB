@@ -564,6 +564,8 @@ class Column {
 
     [[nodiscard]] ChunkedBuffer& buffer();
 
+    [[nodiscard]] const ChunkedBuffer& buffer() const;
+
     uint8_t* bytes_at(size_t bytes, size_t required);
 
     const uint8_t* bytes_at(size_t bytes, size_t required) const;

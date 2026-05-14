@@ -50,13 +50,14 @@ inline version_store::UpdateInfo get_latest_undeleted_version_and_next_version_i
     return {latest_undeleted_version, next_version_id};
 }
 
-inline std::vector<AtomKey> get_all_versions(
+template<AtomKeyType T = AtomKeyPacked>
+std::vector<T> get_all_versions(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
 ) {
     ARCTICDB_SAMPLE(GetAllVersions, 0)
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
-    return entry->get_indexes(false);
+    return entry->template get_indexes<T>(false);
 }
 
 inline std::optional<AtomKey> get_specific_version(
@@ -79,7 +80,7 @@ bool get_matching_prev_and_next_versions(
         PrevAcceptor prev_acceptor, NextAcceptor next_acceptor, KeyFilter key_filter
 ) {
     bool found_version = false;
-    const IndexTypeKey* last = nullptr;
+    const AtomKeyPacked* last = nullptr;
 
     for (const auto& item : entry->keys_) {
         if (key_filter(item, entry)) {
@@ -131,7 +132,7 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     std::unordered_map<VersionId, bool> result;
-    for (auto key : entry->get_tombstoned_indexes())
+    for (const auto& key : entry->template get_tombstoned_indexes<AtomKey>())
         result[key.version_id()] = store->key_exists(key).get();
 
     return result;
@@ -149,12 +150,12 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
         get_matching_prev_and_next_versions(
                 entry,
                 version_id,
-                [&res, &found](auto& matching) {
-                    res.keys_to_delete.push_back(matching);
+                [&res, &found, &entry](auto& matching) {
+                    res.keys_to_delete.push_back(matching.to_atom_key(entry->stream_id_));
                     found = true;
                 },
-                [&res](auto& prev) { res.could_share_data.emplace(prev); },
-                [&res](auto& next) { res.could_share_data.emplace(next); },
+                [&res, &entry](auto& prev) { res.could_share_data.emplace(prev.to_atom_key(entry->stream_id_)); },
+                [&res, &entry](auto& next) { res.could_share_data.emplace(next.to_atom_key(entry->stream_id_)); },
                 is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
         );
 
@@ -222,7 +223,7 @@ inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_a
     if (version_map->validate())
         entry->validate();
 
-    version_store::TombstoneVersionResult res{true, entry->head_->id()};
+    version_store::TombstoneVersionResult res{true, entry->stream_id_};
     res.keys_to_delete = std::move(tombstone_result.second);
 
     res.no_undeleted_left = true;
@@ -294,11 +295,11 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     return tombstone_versions_async(store, version_map, stream_id, version_ids).get();
 }
 
-inline std::optional<AtomKey> get_index_key_from_time(timestamp from_time, const std::vector<AtomKey>& keys) {
-    auto at_or_after =
-            std::lower_bound(std::begin(keys), std::end(keys), from_time, [](const AtomKey& v_key, timestamp cmp) {
-                return v_key.creation_ts() > cmp;
-            });
+template<AtomKeyType T>
+inline std::optional<T> get_index_key_from_time(timestamp from_time, const std::vector<T>& keys) {
+    auto at_or_after = std::lower_bound(std::begin(keys), std::end(keys), from_time, [](const T& v_key, timestamp cmp) {
+        return v_key.creation_ts() > cmp;
+    });
     // If iterator points to the last element, we didn't have any versions before that
     if (at_or_after == keys.end()) {
         return std::nullopt;
@@ -313,19 +314,29 @@ inline std::optional<AtomKey> load_index_key_from_time(
     LoadStrategy load_strategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, from_time};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     auto indexes = entry->get_indexes(false);
-    return get_index_key_from_time(from_time, indexes);
+    if (auto opt_index_key = get_index_key_from_time(from_time, indexes); opt_index_key.has_value()) {
+        return opt_index_key->to_atom_key(stream_id);
+    } else {
+        return std::nullopt;
+    }
 }
 
-inline std::vector<AtomKey> get_index_and_tombstone_keys(
+template<AtomKeyType T>
+std::vector<T> get_index_and_tombstone_keys(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
 ) {
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED};
     const auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
-    std::vector<AtomKey> res;
-    std::copy_if(std::begin(entry->keys_), std::end(entry->keys_), std::back_inserter(res), [&](const auto& key) {
-        return is_index_or_tombstone(key);
-    });
-
+    std::vector<T> res;
+    for (const auto& key : entry->keys_) {
+        if (is_index_or_tombstone(key.type())) {
+            if constexpr (std::is_same_v<T, AtomKey>) {
+                res.emplace_back(key.to_atom_key(entry->stream_id_));
+            } else { // AtomKeyPacked
+                res.emplace_back(key);
+            }
+        }
+    }
     return res;
 }
 

@@ -95,7 +95,7 @@ TEST(VersionMap, WithPredecessors) {
     ASSERT_EQ(latest.value(), key2);
     version_map->write_version(store, key3, key2);
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -134,7 +134,7 @@ TEST(VersionMap, TombstoneDelete) {
     ASSERT_EQ(del_res.keys_to_delete.front(), key2);
     ASSERT_THAT(del_res.could_share_data, UnorderedElementsAre(key1, key3));
 
-    std::vector<AtomKey> expected{key4, key3, key1};
+    std::vector<AtomKeyPacked> expected{key4, key3, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
@@ -190,7 +190,7 @@ TEST(VersionMap, PingPong) {
 
     left->write_version(store, key3, key2);
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto left_result = get_all_versions(store, left, id);
     ASSERT_EQ(left_result, expected);
     auto right_result = get_all_versions(store, right, id);
@@ -232,14 +232,14 @@ TEST(VersionMap, TestLoadsRefAndIteration) {
 
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
-    auto entry_iteration = std::make_shared<VersionMapEntry>();
+    auto entry_iteration = std::make_shared<VersionMapEntry>(id);
     version_map->load_via_iteration(store, id, entry_iteration);
 
-    auto entry_ref = std::make_shared<VersionMapEntry>();
+    auto entry_ref = std::make_shared<VersionMapEntry>(id);
     version_map->load_via_ref_key(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
 
     ASSERT_EQ(entry_iteration->head_, entry_ref->head_);
@@ -272,7 +272,7 @@ TEST(VersionMap, TestCompact) {
     ASSERT_EQ(store->num_atom_keys(), 2);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -296,7 +296,7 @@ TEST(VersionMap, TestCompactWithDelete) {
     ASSERT_EQ(store->num_atom_keys(), 2);
     ASSERT_EQ(store->num_ref_keys(), 1);
 
-    std::vector<AtomKey> expected{key3, key1};
+    std::vector<AtomKeyPacked> expected{key3, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -334,7 +334,7 @@ TEST(VersionMap, TestCompactWithDeleteTombstones) {
     ScopedConfig reload_interval("VersionMap.ReloadInterval", 0); // always reload
     version_map->compact(store, id);
 
-    std::vector<AtomKey> expected{key3, key1};
+    std::vector<AtomKeyPacked> expected{key3, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -371,7 +371,7 @@ void write_old_style_journal_entry(const AtomKey& key, std::shared_ptr<StreamSin
 TEST(VersionMap, GetNextVersionInEntry) {
     using namespace arcticdb;
 
-    auto entry = std::make_shared<VersionMapEntry>();
+    auto entry = std::make_shared<VersionMapEntry>("");
 
     ASSERT_FALSE(get_next_version_in_entry(entry, 5));
     ASSERT_FALSE(get_prev_version_in_entry(entry, 0));
@@ -446,11 +446,11 @@ TEST(VersionMap, ForceRewriteVersion) {
     const bool prevent_non_increasing_version_id = false;
     version_map->write_version(store, key3_new, key2, prevent_non_increasing_version_id);
 
-    std::vector<AtomKey> expected{key3_new, key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3_new, key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 
-    auto entry_ref = std::make_shared<VersionMapEntry>();
+    auto entry_ref = std::make_shared<VersionMapEntry>(id);
     version_map->load_via_ref_key(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
     ASSERT_EQ(get_prev_version_in_entry(entry_ref, 3).value(), 2);
 }
@@ -503,7 +503,7 @@ TEST(VersionMap, FixRefKey) {
     version_map->fix_ref_key(store, id);
     ASSERT_TRUE(version_map->check_ref_key(store, id));
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -604,7 +604,7 @@ TEST(VersionMap, RewriteVersionKeys) {
     ASSERT_TRUE(final_index_key1.has_value());
     ASSERT_TRUE(final_index_key2.has_value());
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -632,7 +632,7 @@ TEST(VersionMap, RecoverDeleted) {
     ASSERT_THROW({ get_all_versions(store, version_map, id); }, std::runtime_error);
     version_map->recover_deleted(store, id);
 
-    std::vector<AtomKey> expected{key3, key2, key1};
+    std::vector<AtomKeyPacked> expected{key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
 }
@@ -748,9 +748,9 @@ TEST(VersionMap, FollowingVersionChain) {
     write_alternating_deleted_undeleted(store, version_map, id);
 
     auto check_strategy_loads_to = [&](LoadStrategy load_strategy, VersionId should_load_to) {
-        auto ref_entry = VersionMapEntry{};
+        auto ref_entry = VersionMapEntry{id};
         read_symbol_ref(store, id, ref_entry);
-        auto follow_result = std::make_shared<VersionMapEntry>();
+        auto follow_result = std::make_shared<VersionMapEntry>(id);
 
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
         ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{should_load_to});
@@ -877,9 +877,9 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
     // Deleting should add a TOMBSTONE_ALL which should end searching for undeleted versions early.
     version_map->delete_all_versions(store, id);
 
-    auto ref_entry = VersionMapEntry{};
+    auto ref_entry = VersionMapEntry{id};
     read_symbol_ref(store, id, ref_entry);
-    auto follow_result = std::make_shared<VersionMapEntry>();
+    auto follow_result = std::make_shared<VersionMapEntry>(id);
 
     for (auto load_strategy :
          {LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(0)},
@@ -922,9 +922,9 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
     auto key2 = atom_key_with_version(id, 3, 3);
     version_map->write_and_prune_previous(store, key2, key);
 
-    auto ref_entry = VersionMapEntry{};
+    auto ref_entry = VersionMapEntry{id};
     read_symbol_ref(store, id, ref_entry);
-    auto follow_result = std::make_shared<VersionMapEntry>();
+    auto follow_result = std::make_shared<VersionMapEntry>(id);
 
     // LATEST should load only the latest version
     for (auto load_strategy :
@@ -1361,7 +1361,7 @@ TEST(VersionMap, TombstoneAllFromEntry) {
     StreamId id{"test"};
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
-    auto entry = std::make_shared<VersionMapEntry>();
+    auto entry = std::make_shared<VersionMapEntry>(id);
 
     auto key1 = atom_key_with_version(id, 0, 0);
     version_map->do_write(store, key1, entry);
