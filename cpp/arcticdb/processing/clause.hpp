@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/pipeline/write_options.hpp>
-
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
@@ -23,6 +21,7 @@
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/util/string_utils.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 
 #include <vector>
 #include <string>
@@ -31,6 +30,10 @@
 #include <ranges>
 
 namespace arcticdb {
+
+struct MergeUpdateInsertedRowsEntity {
+    size_t inserted_rows;
+};
 
 using ResampleOrigin = std::variant<std::string, timestamp>;
 
@@ -885,44 +888,70 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
+    class MatchRechord {
+      public:
+        MatchRechord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
+        void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
+        void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
+        void filter_matching_rows(
+                std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
+                std::span<const std::byte> source_data_bytes
+        );
+        void clone_source_match(size_t source_row_src, size_t source_row_dst, size_t row_slice);
+        void validate_rows_to_update(const MergeStrategy& strategy) const;
+        [[nodiscard]] size_t total_unmatched_source_rows() const;
+        [[nodiscard]] std::span<const std::vector<size_t>> matched_rows(size_t target_row_slice) const;
+        [[nodiscard]] bool is_source_row_matched(size_t source_row) const;
+
+      private:
+        /// For each row slice, for each source row, store all target rows that match it
+        std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
+        std::span<ProcessingUnit> row_slices_;
+        std::vector<size_t> source_row_matched_count_;
+        size_t total_matched_target_rows_count_ = 0;
+    };
 
   private:
-    bool update_and_insert(
-            const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
-            const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
+    std::pair<std::vector<ProcessingUnit>, bool> update_and_insert(
+            const MatchRechord& match_record, const StreamDescriptor& target_descriptor,
+            std::vector<ProcessingUnit>&& row_slices
+    ) const;
+
+    std::pair<std::vector<ProcessingUnit>, bool> update(
+            const MatchRechord& match_record, std::vector<ProcessingUnit>&& row_slices
     ) const;
 
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
 
-    /// @return Vector of size equal to the number of source data rows that are within the row slice being
-    /// processed. Each element is a vector of the rows from the target data that has the same index as the
-    /// corresponding source row
-    std::vector<std::vector<size_t>> filter_index_match(
-            const Column& target_index, const std::span<const timestamp> source_index, const ProcessingUnit& proc
-    ) const;
+    MatchRechord match(std::span<ProcessingUnit> row_slices) const;
 
-    std::vector<std::vector<size_t>> filter_on_additional_columns_match(
+    MatchRechord filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            const std::span<const NativeTensor> source_tensors, ProcessingUnit& proc,
-            std::optional<std::vector<std::vector<size_t>>>&& index_match
+            std::span<ProcessingUnit> proc, std::optional<MatchRechord>&& match_record
     ) const;
 
-    std::vector<std::vector<size_t>> initialize_rows_to_update_for_rowrange_indexed_data(
-            ProcessingUnit& proc, const StreamDescriptor& source_descriptor
+    MatchRechord initialize_rows_to_update_for_row_range_indexed_data(
+            std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor
     ) const;
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
 
     bool is_update_only() const;
 
-    /// For each timestamp range stores the first and last row in the source that overlaps with the row range. The
-    /// interval is closed in the start and open in the end: [start, end)
-    ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
-            source_start_end_for_row_range_;
+    /// For each processing group, identified by its row range, stores the first and last row in the source that
+    /// overlaps with it. The interval is closed in the start and open in the end: [start, end). The key is the row
+    /// range rather than the timestamp range because overlapping-window groups can share a timestamp range when
+    /// boundary index values repeat.
+    ankerl::unordered_dense::map<RowRange, std::pair<size_t, size_t>> source_start_end_for_row_range_;
+    std::pair<size_t, size_t> get_source_start_end(std::span<const ProcessingUnit> row_slice) const;
 
-    std::pair<size_t, size_t> get_source_start_end(const ProcessingUnit& proc) const;
+    [[nodiscard]] bool must_structure_by_time_slice() const;
+
+    std::span<const timestamp> get_source_index(std::span<const ProcessingUnit> row_slices) const;
+
+    std::span<const std::byte> get_source_data_bytes(size_t field_index, std::pair<size_t, size_t> range) const;
 };
 
 struct CompactDataClause {

@@ -46,6 +46,59 @@ std::vector<std::vector<EntityId>> structure_by_row_slice(
     return res;
 }
 
+template<typename T>
+requires util::any_of<T, RangesAndKey, RangesAndEntity>
+std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<T>& ranges) {
+    std::ranges::sort(ranges, [](const T& left, const T& right) {
+        return std::tie(left.row_range().first, left.col_range().first) <
+               std::tie(right.row_range().first, right.col_range().first);
+    });
+
+    std::vector<std::vector<size_t>> res;
+    RowRange previous_row_range{std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
+    for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
+        RowRange current_row_range{ranges_and_key.row_range()};
+        if (current_row_range != previous_row_range) {
+            res.emplace_back();
+        }
+        res.back().emplace_back(idx);
+        previous_row_range = current_row_range;
+    }
+    return res;
+}
+
+template std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndKey>& ranges);
+template std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<RangesAndEntity>& ranges);
+
+std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey> ranges) {
+    std::ranges::sort(ranges, [](const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.row_range().first, left.col_range().first) <
+               std::tie(right.row_range().first, right.col_range().first);
+    });
+    std::vector<std::vector<size_t>> res;
+    TimestampRange previous_time_range{std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::min()};
+    size_t overlapping_ranges{};
+    for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
+        const TimestampRange& current_time_range = ranges_and_key.key_.time_range();
+        if (previous_time_range.second <= current_time_range.first) {
+            res.emplace_back();
+            const TimestampRange& first_overlap = ranges[idx - overlapping_ranges].key_.time_range();
+            if (first_overlap.second - 1 == current_time_range.first) {
+                for (size_t i = idx - overlapping_ranges; i < idx; ++i) {
+                    res.back().emplace_back(i);
+                }
+                previous_time_range = first_overlap;
+            } else {
+                previous_time_range = current_time_range;
+            }
+            overlapping_ranges = 0;
+        }
+        overlapping_ranges += current_time_range.second != previous_time_range.second;
+        res.back().emplace_back(idx);
+    }
+    return res;
+}
+
 std::vector<std::vector<EntityId>> offsets_to_entity_ids(
         const std::vector<std::vector<size_t>>& offsets, const std::vector<RangesAndEntity>& ranges_and_entities
 ) {

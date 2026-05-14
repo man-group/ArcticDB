@@ -194,9 +194,10 @@ folly::Future<VersionedItem> read_modify_write_impl(
 );
 
 folly::Future<VersionedItem> merge_update_impl(
-        const std::shared_ptr<Store>& store, const VersionIdentifier& version_info, const ReadOptions& read_options,
+        const std::shared_ptr<Store>& store, const UpdateInfo& version_info, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
-        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source
+        std::vector<std::string>&& on, const MergeStrategy& strategy, std::shared_ptr<InputFrame> source,
+        std::shared_ptr<DeDupMap> de_dup_map
 );
 
 folly::Future<CompactDataInfo> compact_data_explain_plan_impl(

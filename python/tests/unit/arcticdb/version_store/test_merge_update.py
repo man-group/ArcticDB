@@ -8,16 +8,14 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pytest
 import pandas as pd
-from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge
+from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge, query_stats_operation_count
 import arcticdb
 from arcticdb.version_store import VersionedItem
 from arcticdb_ext.exceptions import SchemaException
 from arcticdb_ext.storage import KeyType
 import numpy as np
 from arcticdb.exceptions import (
-    StreamDescriptorMismatch,
     UserInputException,
-    SortingException,
     UnsortedDataException,
     StorageException,
     ArcticException,
@@ -25,6 +23,7 @@ from arcticdb.exceptions import (
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
+import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.merge_update
 
@@ -1037,13 +1036,60 @@ class TestMergeTimeseriesUpdate:
         with pytest.raises(UserInputException, match="E_DUPLICATE_COLUMN") as exc_info:
             lib.merge_experimental("sym", source, strategy=self.strategy, on=["my_duplicated_column"])
 
+    def test_on_colum_reorders_matched_rows(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 0, 0, 1, 1], "b": [1, 2, 3, 4, 5], "c": ["a", "b", "c", "d", "e"]},
+            index=pd.DatetimeIndex([pd.Timestamp(0)] * 5),
+        )
+        # The test matches on column "a". Note the order of the columns of a. This means that
+        # source[0]: updates target [1, 2]
+        # source[1]: updates target []
+        # source[2]: updates target [0, 3, 4]
+        # Meaning that flatten(rows_to_be_updated) is not a sorted list
+        source = pd.DataFrame(
+            {"a": [0, 2, 1], "b": [100, 200, 300], "c": ["A", "B", "C"]}, index=pd.DatetimeIndex([pd.Timestamp(0)] * 3)
+        )
+        expected = pd.DataFrame(
+            {"a": [1, 0, 0, 1, 1], "b": [300, 100, 100, 300, 300], "c": ["C", "A", "A", "C", "C"]},
+            index=pd.DatetimeIndex([pd.Timestamp(0)] * 5),
+        )
+        generic_merge_test(lib, "sym", target, source, self.strategy, expected, on=["a"])
+
 
 class TestMergeTimeseriesInsert:
+
+    def setup_method(self):
+        self.strategy = MergeStrategy("do_nothing", "insert")
+
+    def test_insert_past_row_slice_boundary_is_not_dropped(self, lmdb_library_factory):
+        # Regression test: an unmatched insert row that falls in the gap between two row slices used to be dropped.
+        # With rows_per_segment=2 the target [10, 20, 30] is sliced into [10, 20] and [30]; inserting the unmatched
+        # rows at 15 and 25 must keep both (25 previously landed past the first slice's end and was lost).
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
+        target = pd.DataFrame(
+            {"a": [0, 1, 2]},
+            index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(20), pd.Timestamp(30)]),
+        )
+        lib.write("sym", target)
+        source = pd.DataFrame(
+            {"a": [100, 101]},
+            index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(25)]),
+        )
+        lib.merge_experimental("sym", source, strategy=self.strategy)
+        expected = pd.DataFrame(
+            {"a": [0, 100, 1, 101, 2]},
+            index=pd.DatetimeIndex(
+                [pd.Timestamp(10), pd.Timestamp(15), pd.Timestamp(20), pd.Timestamp(25), pd.Timestamp(30)]
+            ),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
     @pytest.mark.parametrize(
         "strategy",
         (MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), MergeStrategy("do_nothing", "insert")),
     )
-    def test_basic(self, lmdb_library, monkeypatch, strategy):
+    def test_basic(self, lmdb_library, strategy):
         lib = lmdb_library
 
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
@@ -1052,20 +1098,6 @@ class TestMergeTimeseriesInsert:
         source = pd.DataFrame(
             {"a": [-1, -2, -3], "b": [-1.0, -2.0, -3.0]},
             index=pd.DatetimeIndex(["2023-01-01", "2024-01-01 10:00:00", "2025-01-04"]),
-        )
-        monkeypatch.setattr(
-            lib.__class__,
-            "merge_experimental",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=write_vit.symbol,
-                library=write_vit.library,
-                data=None,
-                version=1,
-                metadata=write_vit.metadata,
-                host=write_vit.host,
-                timestamp=write_vit.timestamp + 1,
-            ),
-            raising=False,
         )
 
         merge_vit = lib.merge_experimental("sym", source, strategy=strategy)
@@ -1077,7 +1109,6 @@ class TestMergeTimeseriesInsert:
         assert merge_vit.data is None
 
         expected = pd.concat([target, source]).sort_index()
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 1))
         assert_frame_equal(lib.read("sym").data, expected)
 
     @pytest.mark.parametrize(
@@ -1118,24 +1149,10 @@ class TestMergeTimeseriesInsert:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library, monkeypatch):
+    def test_writes_new_version_even_if_nothing_is_changed(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        write_vit = lib.write("sym", target)
-        monkeypatch.setattr(
-            lib,
-            "merge_experimental",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=write_vit.symbol,
-                library=write_vit.library,
-                data=None,
-                version=write_vit.version + 1,
-                metadata=write_vit.metadata,
-                host=write_vit.host,
-                timestamp=write_vit.timestamp + 1,
-            ),
-            raising=False,
-        )
+        lib.write("sym", target)
         source = pd.DataFrame(
             {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]}, index=pd.date_range("2024-01-01", periods=3)
         )
@@ -1144,34 +1161,16 @@ class TestMergeTimeseriesInsert:
         )
         assert merge_vit.version == 1
 
-        monkeypatch.setattr(
-            lib,
-            "read",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=merge_vit.symbol,
-                library=merge_vit.library,
-                data=target,
-                version=merge_vit.version,
-                metadata=merge_vit.metadata,
-                host=merge_vit.host,
-                timestamp=merge_vit.timestamp,
-            ),
-        )
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(read_vit, merge_vit)
         assert_frame_equal(read_vit.data, target)
 
         lt = lib._dev_tools.library_tool()
-        monkeypatch.setattr(
-            lt,
-            "find_keys_for_symbol",
-            mock_find_keys_for_symbol({KeyType.TABLE_DATA: 1, KeyType.TABLE_INDEX: 1, KeyType.VERSION: 2}),
-        )
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 1
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_index_and_column(self, lmdb_library, monkeypatch):
+    def test_index_and_column(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
@@ -1187,7 +1186,6 @@ class TestMergeTimeseriesInsert:
                 ]
             ),
         )
-        monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
         lib.merge_experimental(
             "sym", source, on=["a"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         )
@@ -1195,11 +1193,10 @@ class TestMergeTimeseriesInsert:
         # The first row is matched, but the strategy for matched rows is DO_NOTHING, so no update
         # the rest rows are inserted
         expected = pd.concat([target, source.tail(len(source) - 1)]).sort_index()
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_on_multiple_columns(self, lmdb_library, monkeypatch):
+    def test_on_multiple_columns(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame(
             {
@@ -1232,89 +1229,406 @@ class TestMergeTimeseriesInsert:
             ),
         )
 
-        monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
         lib.merge_experimental(
             "sym", source, on=["b", "d", "e"], strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT)
         )
         expected = pd.concat([target, source.tail(len(source) - 1)]).sort_index()
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_does_not_throw_when_target_row_is_matched_more_than_once_when_matched_is_do_nothing(
-        self, lmdb_library, monkeypatch
-    ):
+    def test_does_not_throw_when_target_row_is_matched_more_than_once_when_matched_is_do_nothing(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         lib.write("sym", target)
 
         source = pd.DataFrame(
-            {"a": [1, 2, 4], "b": [1.0, 2.0, 4.0]},
+            {"a": [1, 2, 40], "b": [1.0, 2.0, 40.0]},
             index=pd.DatetimeIndex(
                 [
                     pd.Timestamp("2024-01-01"),  # Matches first row of target
                     pd.Timestamp("2024-01-01"),  # Also matches first row of target
-                    pd.Timestamp("2024-01-04"),
+                    pd.Timestamp("2024-01-02 00:00:01"),
                 ]
             ),
         )
 
-        monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
         lib.merge_experimental("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
         expected = pd.DataFrame(
-            {"a": [1, 2, 3, 4], "b": [1.0, 2.0, 3.0, 4.0]}, index=pd.date_range("2024-01-01", periods=4)
+            {
+                "a": [
+                    1,
+                    2,
+                    40,
+                    3,
+                ],
+                "b": [1.0, 2.0, 40.0, 3.0],
+            },
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp("2024-01-01"),
+                    pd.Timestamp("2024-01-02"),
+                    pd.Timestamp("2024-01-02 00:00:01"),
+                    pd.Timestamp("2024-01-03"),
+                ]
+            ),
         )
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_target_is_empty(self, lmdb_library, monkeypatch):
+    def test_target_is_empty(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
-        write_vit = lib.write("sym", target)
-
+        write_vit = lib.write("sym", target, metadata={"meta": "data"})
+        assert write_vit.version == 0
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
-        monkeypatch.setattr(
-            lib.__class__,
-            "merge_experimental",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=write_vit.symbol,
-                library=write_vit.library,
-                data=None,
-                version=1,
-                metadata=None,
-                host=write_vit.host,
-                timestamp=write_vit.timestamp + 1,
-            ),
-            raising=False,
+        merge_vit = lib.merge_experimental(
+            "sym", source, strategy=MergeStrategy("do_nothing", "insert"), metadata={"new_meta": "new_data"}
         )
-        merge_vit = lib.merge_experimental("sym", source, strategy=MergeStrategy("do_nothing", "insert"))
+        assert merge_vit.version == 1
         expected = source
-        monkeypatch.setattr(
-            lib,
-            "read",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=merge_vit.symbol,
-                library=merge_vit.library,
-                data=expected,
-                version=merge_vit.version,
-                metadata=merge_vit.metadata,
-                host=merge_vit.host,
-                timestamp=merge_vit.timestamp,
-            ),
-        )
         read_vit = lib.read("sym")
+        assert read_vit.metadata == {"new_meta": "new_data"}
         assert_vit_equals_except_data(merge_vit, read_vit)
         assert_frame_equal(read_vit.data, expected)
 
+    def test_insert_within_single_segment(self, lmdb_library):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+        )
+        lib.write("sym", target)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300, 400], "b": [100.0, 200.0, 300.0, 400.0]},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(2),
+                    pd.Timestamp(2),
+                    pd.Timestamp(6),
+                    pd.Timestamp(9),
+                ]
+            ),
+        )
+        lib.merge_experimental("sym", source, self.strategy)
+        expected = pd.concat([target, source]).sort_index()
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "source,expected",
+        [
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [0, 1, 100], "b": [100.0, 200.0, 300.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                ),
+                pd.DataFrame(
+                    {"a": [0, 1, 2, 3, 4, 5, 100, 6], "b": [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 300.0, 6.0]},
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(6),
+                        ]
+                    ),
+                ),
+                id="Match_first_equal_run_Insert_in_second_equal_run.",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [0, 100, 3], "b": [100.0, 200.0, 300.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                ),
+                pd.DataFrame(
+                    {"a": [0, 1, 100, 2, 3, 4, 5, 6], "b": [0.0, 1.0, 200, 2.0, 3.0, 4.0, 5.0, 6.0]},
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(6),
+                        ]
+                    ),
+                ),
+                id="Match_in_second_equal_run_Insert_in_first.",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [0, 100, 1, 2, 5, 200, 4, 3], "b": [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]},
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                        ]
+                    ),
+                ),
+                pd.DataFrame(
+                    {
+                        "a": [0, 1, 100, 2, 3, 4, 5, 200, 6],
+                        "b": [0.0, 1.0, 200.0, 2.0, 3.0, 4.0, 5.0, 600.0, 6.0],
+                    },
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(6),
+                        ]
+                    ),
+                ),
+                id="Match_in_both_equal_index_runs_and_insert_in_both.",
+            ),
+        ],
+    )
+    def test_within_single_segment_match_on_column(self, lmdb_library, source, expected):
+        lib = lmdb_library
+        index = pd.DatetimeIndex(
+            [
+                pd.Timestamp(0),
+                pd.Timestamp(0),
+                pd.Timestamp(5),
+                pd.Timestamp(5),
+                pd.Timestamp(5),
+                pd.Timestamp(5),
+                pd.Timestamp(6),
+            ]
+        )
+        target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
+            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+            pd.DataFrame({"a": [10], "b": [10.0]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            pd.DataFrame(
+                {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])
+            ),
+            pd.DataFrame(
+                {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(10)])
+            ),
+            pd.DataFrame(
+                {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)])
+            ),
+            pd.DataFrame(
+                {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]},
+                index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+            ),
+        ],
+    )
+    def test_within_single_segment_matched_rows_stay_the_same(self, lmdb_library, source):
+        lib = lmdb_library
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+        )
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, target)
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                pd.DataFrame({"a": [10], "b": [20.0], "c": [True]}, index=pd.DatetimeIndex([pd.Timestamp(2)])),
+                id="Insert_single_row_in_first_segment",
+            ),
+            pytest.param(
+                pd.DataFrame({"a": [10], "b": [20.0], "c": [True]}, index=pd.DatetimeIndex([pd.Timestamp(21)])),
+                id="Insert_single_row_in_second_segment",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [10, 100], "b": [20.0, 200.0], "c": [False, True]},
+                    index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(26)]),
+                ),
+                id="Insert_single_value_in_both_segments",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {
+                        "a": [10, 20, 30, 40, 50, 1000, 2000],
+                        "b": [60.0, 70.0, 80.0, 90.0, 100.0, 3000, 4000],
+                        "c": [True, False, False, True, True, True, False],
+                    },
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(1),
+                            pd.Timestamp(2),
+                            pd.Timestamp(3),
+                            pd.Timestamp(7),
+                            pd.Timestamp(9),
+                            pd.Timestamp(21),
+                            pd.Timestamp(26),
+                        ]
+                    ),
+                ),
+                id="Insert_multiple_values_in_both_segments",
+            ),
+        ],
+    )
+    def test_within_two_segments(self, lmdb_library, source):
+        lib = lmdb_library
+        seg0 = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": [True, False, True]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+        )
+        lib.write("sym", seg0)
+        seg1 = pd.DataFrame(
+            {"a": [4, 5, 6], "b": [4.0, 5.0, 6.0], "c": [False, True, False]},
+            index=pd.DatetimeIndex([pd.Timestamp(20), pd.Timestamp(25), pd.Timestamp(30)]),
+        )
+        lib.append("sym", seg1)
+        expected = pd.concat([seg0, seg1, source]).sort_index()
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            ],
+        ],
+    )
+    def test_insert_before_first_segment_start(self, in_memory_store_factory, target):
+        lib = in_memory_store_factory()
+        for tgt in target:
+            lib.append("sym", tgt)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)])
+        )
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        index_key = lib.read_index("sym")
+        assert index_key.index[0] == source.index[0]
+        assert index_key["end_index"][0] == pd.Timestamp(6)
+        assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            ],
+        ],
+    )
+    def test_insert_after_last_segment_end(self, in_memory_store_factory, target):
+        lib = in_memory_store_factory()
+        for tgt in target:
+            lib.append("sym", tgt)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(15), pd.Timestamp(16)])
+        )
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        index_key = lib.read_index("sym")
+        assert index_key.index[-1] == target[-1].index[0]
+        assert index_key["end_index"][-1] == pd.Timestamp(17)
+        assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            ],
+        ],
+    )
+    def test_insert_before_first_segment_start_and_after_last_segment_end(self, lmdb_library, target):
+        lib = lmdb_library
+        for tgt in target:
+            lib.append("sym", tgt)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300, 400, 500, 600]},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(0),
+                    pd.Timestamp(0),
+                    pd.Timestamp(1),
+                    pd.Timestamp(15),
+                    pd.Timestamp(15),
+                    pd.Timestamp(16),
+                ]
+            ),
+        )
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
+
+    def test_insert_between_two_segments_appends_to_first(self, in_memory_store_factory):
+        lib = in_memory_store_factory()
+        seg0 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
+        lib.write("sym", seg0)
+        seg1 = pd.DataFrame({"a": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(15)]))
+        lib.append("sym", seg1)
+        source = pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(7)]))
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        assert_frame_equal(lib.read("sym").data, pd.concat([seg0, seg1, source]).sort_index())
+        lt = lib.library_tool()
+        segments = [lt.read_to_dataframe(key) for key in lt.dataframe_to_keys(lt.read_index("sym"), "sym")]
+        segments[0].index.name = None
+        segments[1].index.name = None
+        assert_frame_equal(segments[0], pd.concat([seg0, source]).sort_index())
+        assert_frame_equal(segments[1], seg1)
+
 
 class TestMergeTimeseriesUpdateAndInsert:
+
+    def setup_method(self):
+        self.strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
 
     @pytest.mark.parametrize(
         "strategy",
         (None, MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), MergeStrategy("update", "insert")),
     )
-    def test_basic(self, lmdb_library, monkeypatch, strategy):
+    def test_basic(self, lmdb_library, strategy):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -1326,21 +1640,6 @@ class TestMergeTimeseriesUpdateAndInsert:
             index=pd.DatetimeIndex(
                 [pd.Timestamp("2024-01-01 15:00:00"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02 01:00:00")]
             ),
-        )
-
-        monkeypatch.setattr(
-            lib.__class__,
-            "merge_experimental",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=write_vit.symbol,
-                library=write_vit.library,
-                data=None,
-                version=1,
-                metadata=write_vit.metadata,
-                host=write_vit.host,
-                timestamp=write_vit.timestamp + 1,
-            ),
-            raising=False,
         )
 
         merge_vit = (
@@ -1368,30 +1667,11 @@ class TestMergeTimeseriesUpdateAndInsert:
             ),
         )
 
-        monkeypatch.setattr(
-            lib,
-            "read",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=merge_vit.symbol,
-                library=merge_vit.library,
-                data=expected,
-                version=merge_vit.version,
-                metadata=merge_vit.metadata,
-                host=merge_vit.host,
-                timestamp=merge_vit.timestamp,
-            ),
-        )
-
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(read_vit, merge_vit)
         assert_frame_equal(read_vit.data, expected)
 
         lt = lib._dev_tools.library_tool()
-        monkeypatch.setattr(
-            lt,
-            "find_keys_for_symbol",
-            mock_find_keys_for_symbol({KeyType.TABLE_DATA: 2, KeyType.TABLE_INDEX: 2, KeyType.VERSION: 2}),
-        )
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
@@ -1507,7 +1787,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             assert_vit_equals_except_data(merge_vit, read_vit)
             assert_frame_equal(read_vit.data, expected)
 
-    def test_on_index_and_column(self, lmdb_library, monkeypatch):
+    def test_on_index_and_column(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -1525,7 +1805,6 @@ class TestMergeTimeseriesUpdateAndInsert:
                 ]
             ),
         )
-        monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
         lib.merge_experimental("sym", source, on=["a"])
 
         expected = pd.DataFrame(
@@ -1541,12 +1820,11 @@ class TestMergeTimeseriesUpdateAndInsert:
                 ]
             ),
         )
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
 
         assert_frame_equal(received, expected)
 
-    def test_on_multiple_columns(self, lmdb_library, monkeypatch):
+    def test_on_multiple_columns(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame(
             {
@@ -1579,10 +1857,7 @@ class TestMergeTimeseriesUpdateAndInsert:
             ),
         )
 
-        monkeypatch.setattr(lib.__class__, "merge_experimental", lambda *args, **kwargs: None, raising=False)
-        lib.merge_experimental(
-            "sym", source, on=["b", "d", "e"], strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
-        )
+        lib.merge_experimental("sym", source, on=["b", "d", "e"])
         expected = pd.DataFrame(
             {
                 "a": [10, 2, 20, 3, 30, 4, 40, 50],
@@ -1604,69 +1879,779 @@ class TestMergeTimeseriesUpdateAndInsert:
                 ]
             ),
         )
-
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
-    def test_target_is_empty(self, lmdb_library, monkeypatch):
+    def test_target_is_empty(self, lmdb_library):
         lib = lmdb_library
         target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
         write_vit = lib.write("sym", target)
-
         source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
-        monkeypatch.setattr(
-            lib.__class__,
-            "merge_experimental",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=write_vit.symbol,
-                library=write_vit.library,
-                data=None,
-                version=1,
-                metadata=None,
-                host=write_vit.host,
-                timestamp=write_vit.timestamp + 1,
-            ),
-            raising=False,
-        )
         merge_vit = lib.merge_experimental("sym", source)
         expected = source
-        monkeypatch.setattr(
-            lib,
-            "read",
-            lambda *args, **kwargs: VersionedItem(
-                symbol=merge_vit.symbol,
-                library=merge_vit.library,
-                data=expected,
-                version=merge_vit.version,
-                metadata=merge_vit.metadata,
-                host=merge_vit.host,
-                timestamp=merge_vit.timestamp,
-            ),
-        )
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
         assert_frame_equal(read_vit.data, expected)
 
-    @pytest.mark.skip(reason="Not implemented yet")
-    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library):
+    @pytest.mark.parametrize(
+        "source",
+        [
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [10, 20], "b": [10.0, 20.0]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0)])
+                ),
+                id="No_unmatched",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [10, 20, 30], "b": [10.0, 20.0, 30.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(2)]),
+                ),
+                id="Contains_unmatched",
+            ),
+        ],
+    )
+    def test_throws_when_target_row_is_matched_more_than_once(self, lmdb_library, source):
         lib = lmdb_library
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
-        lib.write("sym", target)
-
-        source = pd.DataFrame(
+        target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)]),
+        )
+        lib.write("sym", target)
+        with pytest.raises(UserInputException):
+            lib.merge_experimental("sym", source, strategy=self.strategy)
+
+    @pytest.mark.parametrize(
+        "source,expected",
+        [
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [0, 1, 100], "b": [100.0, 200.0, 300.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                ),
+                pd.DataFrame(
+                    {"a": [0, 1, 2, 3, 4, 5, 100, 6], "b": [100.0, 200.0, 2.0, 3.0, 4.0, 5.0, 300.0, 6.0]},
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(6),
+                        ]
+                    ),
+                ),
+                id="Match_first_equal_run_Insert_in_second_equal_run",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [0, 100, 3], "b": [100.0, 200.0, 300.0]},
+                    index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+                ),
+                pd.DataFrame(
+                    {"a": [0, 1, 100, 2, 3, 4, 5, 6], "b": [100.0, 1.0, 200, 2.0, 300.0, 4.0, 5.0, 6.0]},
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(6),
+                        ]
+                    ),
+                ),
+                id="Match_in_second_equal_run_Insert_in_first",
+            ),
+            pytest.param(
+                pd.DataFrame(
+                    {"a": [0, 100, 1, 2, 5, 200, 4, 3], "b": [100.0, 200.0, 300.0, 400.0, 500.0, 600.0, 700.0, 800.0]},
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                        ]
+                    ),
+                ),
+                pd.DataFrame(
+                    {
+                        "a": [0, 1, 100, 2, 3, 4, 5, 200, 6],
+                        "b": [100.0, 300.0, 200.0, 400.0, 800.0, 700.0, 500.0, 600.0, 6.0],
+                    },
+                    index=pd.DatetimeIndex(
+                        [
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(0),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(5),
+                            pd.Timestamp(6),
+                        ]
+                    ),
+                ),
+                id="Match_in_both_equal_index_runs_and_insert_in_both",
+            ),
+        ],
+    )
+    def test_within_single_segment_match_on_column(self, lmdb_library, source, expected):
+        lib = lmdb_library
+        index = pd.DatetimeIndex(
+            [
+                pd.Timestamp(0),
+                pd.Timestamp(0),
+                pd.Timestamp(5),
+                pd.Timestamp(5),
+                pd.Timestamp(5),
+                pd.Timestamp(5),
+                pd.Timestamp(6),
+            ]
+        )
+        target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_before_first_segment_start_and_update_first_value(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
+        lib.merge_experimental("sym", source, self.strategy)
+        expected = pd.DataFrame(
+            {"a": [10, 20, 2]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(5)])
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_before_first_segment_start_and_update_first_value_on(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
+        lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        expected = pd.DataFrame(
+            {"a": [10, 1, 20, 2]},
+            index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_after_last_and_match_last(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
+        lib.merge_experimental("sym", source, self.strategy)
+        expected = pd.DataFrame(
+            {"a": [1, 10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)])
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_after_last_and_match_last_on(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
+        lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        expected = pd.DataFrame(
+            {"a": [1, 2, 10, 20]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(5), pd.Timestamp(10)]),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+
+class TestMergeUpdateInsertIndexSpansMultipleSegments:
+    """End-to-end translation of the C++ fixture ``MergeUpdateInsertIndexSpansMultipleSegments``
+    (cpp/arcticdb/processing/test/test_merge_update.cpp): a single index value spans a segment boundary. The C++ tests
+    assert on the internal processing-unit output; here we only check the final read result of an update+insert merge.
+    The fixture's layout is reproduced with rows_per_segment=5 and columns_per_segment=1 (matching cols_per_segment=1).
+    """
+
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+    def _run(self, lmdb_library_factory, target, source, expected, on):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=5, columns_per_segment=1))
+        lib.write("sym", target)
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_last_index_value_same_as_next_segment_first_two_overlapping_segments(self, lmdb_library_factory):
+        target = pd.DataFrame(
+            {"a": np.arange(27, dtype=np.int64), "b": np.arange(27, dtype=np.int32)},
             index=pd.DatetimeIndex(
                 [
-                    pd.Timestamp("2024-01-01"),  # Matches first row of target
-                    pd.Timestamp("2024-01-01"),  # Also matches first row of target
-                    pd.Timestamp("2024-01-03"),
+                    pd.Timestamp(v)
+                    for v in [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        9,
+                        9,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                    ]
                 ]
             ),
         )
-        strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
-        with pytest.raises(UserInputException):
-            lib.merge_experimental("sym", source, strategy=strategy)
+        source = pd.DataFrame(
+            {"a": np.array([10, 8, 120], dtype=np.int64), "b": np.array([100, 200, 300], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [9, 9, 9]]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        10,
+                        11,
+                        120,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25,
+                        26,
+                    ],
+                    dtype=np.int64,
+                ),
+                "b": np.array(
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        200,
+                        9,
+                        100,
+                        11,
+                        300,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25,
+                        26,
+                    ],
+                    dtype=np.int32,
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                    ]
+                ]
+            ),
+        )
+        self._run(lmdb_library_factory, target, source, expected, on=["a"])
+
+    def test_last_index_value_same_as_next_segment_first_three_overlapping_segments(self, lmdb_library_factory):
+        target = pd.DataFrame(
+            {"a": np.arange(27, dtype=np.int64), "b": np.arange(27, dtype=np.int32)},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+                ]
+            ),
+        )
+        source = pd.DataFrame(
+            {
+                "a": np.array([100, 10, 8, 120, 15, 17, 100], dtype=np.int64),
+                "b": np.array([100, 200, 300, 400, 500, 600, 700], dtype=np.int32),
+            },
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [8, 9, 9, 9, 9, 10, 11]]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        100,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        120,
+                        17,
+                        18,
+                        100,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25,
+                        26,
+                    ],
+                    dtype=np.int64,
+                ),
+                "b": np.array(
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        100,
+                        300,
+                        9,
+                        200,
+                        11,
+                        12,
+                        13,
+                        14,
+                        500,
+                        16,
+                        400,
+                        600,
+                        18,
+                        700,
+                        19,
+                        20,
+                        21,
+                        22,
+                        23,
+                        24,
+                        25,
+                        26,
+                    ],
+                    dtype=np.int32,
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        8,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        10,
+                        11,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        17,
+                        18,
+                        19,
+                    ]
+                ]
+            ),
+        )
+        self._run(lmdb_library_factory, target, source, expected, on=["a"])
+
+    def test_two_groups_of_segments_with_matching_last_index_value(self, lmdb_library_factory):
+        target = pd.DataFrame(
+            {"a": np.arange(27, dtype=np.int64), "b": np.arange(27, dtype=np.int32)},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 11, 12, 13, 14]
+                ]
+            ),
+        )
+        source = pd.DataFrame(
+            {
+                "a": np.array([100, 11, 16, 13, 100, 8, 200, 19, 100, 17, 20, 300, 400, 23, 500], dtype=np.int64),
+                "b": np.array([i * 100 for i in range(15)], dtype=np.int32),
+            },
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [8, 9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 13]]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        100,
+                        8,
+                        9,
+                        10,
+                        11,
+                        12,
+                        13,
+                        14,
+                        15,
+                        16,
+                        100,
+                        200,
+                        17,
+                        18,
+                        19,
+                        20,
+                        21,
+                        22,
+                        100,
+                        300,
+                        23,
+                        400,
+                        24,
+                        25,
+                        500,
+                        26,
+                    ],
+                    dtype=np.int64,
+                ),
+                "b": np.array(
+                    [
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        0,
+                        500,
+                        9,
+                        10,
+                        100,
+                        12,
+                        300,
+                        14,
+                        15,
+                        200,
+                        400,
+                        600,
+                        900,
+                        18,
+                        700,
+                        1000,
+                        21,
+                        22,
+                        800,
+                        1100,
+                        1300,
+                        1200,
+                        24,
+                        25,
+                        1400,
+                        26,
+                    ],
+                    dtype=np.int32,
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [
+                        1,
+                        2,
+                        3,
+                        4,
+                        5,
+                        6,
+                        7,
+                        8,
+                        8,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        9,
+                        10,
+                        10,
+                        10,
+                        10,
+                        10,
+                        10,
+                        10,
+                        10,
+                        11,
+                        11,
+                        12,
+                        13,
+                        13,
+                        14,
+                    ]
+                ]
+            ),
+        )
+        self._run(lmdb_library_factory, target, source, expected, on=["a"])
+
+
+class TestMergeUpdateInsertIndexSpansMultipleSegmentsChain:
+    """End-to-end translation of the C++ fixture ``MergeUpdateInsertIndexSpansMultipleSegmentsChain``
+    (cpp/arcticdb/processing/test/test_merge_update.cpp): the same index value chains across several segments. The C++
+    tests assert on the internal processing-unit output; here we only check the final read result of an update+insert
+    merge. The fixture's layout is reproduced with rows_per_segment=3 and columns_per_segment=1 (matching
+    cols_per_segment=1). Shared target index [0,1,2,4,5,6,6,6,6,6,10,11,11,13,15,15,16,17,17,19,20], a=b=0..20.
+    """
+
+    strategy = MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT)
+
+    _CHAIN_INDEX = [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]
+
+    def _chain_target(self):
+        return pd.DataFrame(
+            {"a": np.arange(21, dtype=np.int64), "b": np.arange(21, dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX]),
+        )
+
+    def _run(self, lmdb_library_factory, source, expected, on):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=3, columns_per_segment=1))
+        lib.write("sym", self._chain_target())
+        lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_source_in_row_slice_0(self, lmdb_library_factory):
+        source = pd.DataFrame(
+            {"a": np.array([0, 10], dtype=np.int64), "b": np.array([100, 200], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [0, 2]]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [0, 1, 2, 10, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int64
+                ),
+                "b": np.array(
+                    [100, 1, 2, 200, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int32
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [pd.Timestamp(v) for v in [0, 1, 2, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
+            ),
+        )
+        self._run(lmdb_library_factory, source, expected, on=["a"])
+
+    def test_source_in_row_slice_1_value_is_not_in_multiple_segments(self, lmdb_library_factory):
+        source = pd.DataFrame(
+            {"a": np.array([4], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(5)]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.arange(21, dtype=np.int64),
+                "b": np.array(
+                    [0, 1, 2, 3, 100, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int32
+                ),
+            },
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in self._CHAIN_INDEX]),
+        )
+        self._run(lmdb_library_factory, source, expected, on=["a"])
+
+    def test_source_in_row_slice_1_value_is_in_multiple_segments(self, lmdb_library_factory):
+        source = pd.DataFrame(
+            {"a": np.array([9, 5, 6, 100], dtype=np.int64), "b": np.array([100, 200, 300, 400], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(v) for v in [6, 6, 6, 6]]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int64
+                ),
+                "b": np.array(
+                    [0, 1, 2, 3, 4, 200, 300, 7, 8, 100, 400, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+                    dtype=np.int32,
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [pd.Timestamp(v) for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
+            ),
+        )
+        self._run(lmdb_library_factory, source, expected, on=["a"])
+
+    def test_source_in_row_slice_3(self, lmdb_library_factory):
+        source = pd.DataFrame(
+            {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(11)]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 100, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int64
+                ),
+                "b": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 100, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int32
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]
+                ]
+            ),
+        )
+        self._run(lmdb_library_factory, source, expected, on=["a"])
+
+    def test_source_in_row_slice_5(self, lmdb_library_factory):
+        source = pd.DataFrame(
+            {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(15)]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 100, 16, 17, 18, 19, 20], dtype=np.int64
+                ),
+                "b": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 100, 16, 17, 18, 19, 20], dtype=np.int32
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(v)
+                    for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 10, 11, 11, 13, 15, 15, 15, 16, 17, 17, 19, 20]
+                ]
+            ),
+        )
+        self._run(lmdb_library_factory, source, expected, on=["a"])
+
+    def test_insert_in_row_slice_3_without_column_matching(self, lmdb_library_factory):
+        # on=None matches on the index only; index 7 is absent from the target so the row is inserted.
+        source = pd.DataFrame(
+            {"a": np.array([100], dtype=np.int64), "b": np.array([100], dtype=np.int32)},
+            index=pd.DatetimeIndex([pd.Timestamp(7)]),
+        )
+        expected = pd.DataFrame(
+            {
+                "a": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int64
+                ),
+                "b": np.array(
+                    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 100, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20], dtype=np.int32
+                ),
+            },
+            index=pd.DatetimeIndex(
+                [pd.Timestamp(v) for v in [0, 1, 2, 4, 5, 6, 6, 6, 6, 6, 7, 10, 11, 11, 13, 15, 15, 16, 17, 17, 19, 20]]
+            ),
+        )
+        self._run(lmdb_library_factory, source, expected, on=None)
 
 
 @pytest.mark.parametrize(
@@ -2583,3 +3568,110 @@ class TestMergeMultiindexUpdate:
         lib.write("sym", target)
         with pytest.raises(TypeError):
             lib.merge_experimental("sym", source, strategy=self.strategy, on=on)
+
+
+@pytest.mark.parametrize(
+    "target_segments, source, expected",
+    [
+        pytest.param(
+            [
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+            ],
+            pd.DataFrame({"a": [1000, 1001, 1002, 1003]}, index=pd.DatetimeIndex([30, 40, 50, 60])),
+            pd.DataFrame(
+                {"a": [0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 1003]},
+                index=pd.DatetimeIndex([10, 10, 10, 30, 30, 30, 30, 40, 50, 60]),
+            ),
+            id="end_trailing",
+        ),
+        pytest.param(
+            [
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+                pd.DataFrame({"a": [6]}, index=pd.DatetimeIndex([100])),
+            ],
+            pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([30, 40, 50])),
+            pd.DataFrame(
+                {"a": [0, 1, 2, 3, 4, 5, 1000, 1001, 1002, 6]},
+                index=pd.DatetimeIndex([10, 10, 10, 30, 30, 30, 30, 40, 50, 100]),
+            ),
+            id="middle_gap",
+        ),
+        pytest.param(
+            [
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+            ],
+            pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([1, 2, 30])),
+            pd.DataFrame(
+                {"a": [1000, 1001, 0, 1, 2, 3, 4, 5, 1002]},
+                index=pd.DatetimeIndex([1, 2, 10, 10, 10, 30, 30, 30, 30]),
+            ),
+            id="beginning_prepend",
+        ),
+        pytest.param(
+            [
+                pd.DataFrame({"a": [0]}, index=pd.DatetimeIndex([10])),
+                pd.DataFrame({"a": [1, 2, 3]}, index=pd.DatetimeIndex([10, 10, 30])),
+                pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 30])),
+            ],
+            pd.DataFrame({"a": [1000, 1001]}, index=pd.DatetimeIndex([20, 30])),
+            pd.DataFrame(
+                {"a": [0, 1, 2, 1000, 3, 4, 5, 1001]},
+                index=pd.DatetimeIndex([10, 10, 10, 20, 30, 30, 30, 30]),
+            ),
+            id="within_span",
+        ),
+    ],
+)
+def test_merge_insert_with_repeated_boundary_timestamps(lmdb_library, target_segments, source, expected):
+    lib = lmdb_library
+    lib.write("sym", target_segments[0])
+    for segment in target_segments[1:]:
+        lib.append("sym", segment)
+
+    lt = lib._dev_tools.library_tool()
+    assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == len(target_segments)
+
+    lib.merge_experimental("sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"])
+    assert_frame_equal(lib.read("sym").data, expected)
+
+
+def test_merge_insert_into_back_shared_middle_group(lmdb_library):
+    lib = lmdb_library
+    lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20])))
+    lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30])))
+    lib.append("sym", pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 40])))
+    lib.append("sym", pd.DataFrame({"a": [6, 7]}, index=pd.DatetimeIndex([40, 50])))
+    assert len(lib._dev_tools.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
+
+    source = pd.DataFrame({"a": [1000, 1001, 1002]}, index=pd.DatetimeIndex([15, 25, 35]))
+    lib.merge_experimental("sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT), on=["a"])
+
+    expected = pd.DataFrame(
+        {"a": [0, 1000, 1, 2, 1001, 3, 4, 1002, 5, 6, 7]},
+        index=pd.DatetimeIndex([10, 15, 20, 20, 25, 30, 30, 35, 40, 40, 50]),
+    )
+    assert_frame_equal(lib.read("sym").data, expected)
+
+
+def test_merge_insert_only_into_chain_with_shared_boundaries(lmdb_library):
+    lib = lmdb_library
+    lib.write("sym", pd.DataFrame({"a": [0, 1]}, index=pd.DatetimeIndex([10, 20])))
+    lib.append("sym", pd.DataFrame({"a": [2, 3]}, index=pd.DatetimeIndex([20, 30])))
+    lib.append("sym", pd.DataFrame({"a": [4, 5]}, index=pd.DatetimeIndex([30, 40])))
+    lib.append("sym", pd.DataFrame({"a": [6, 7]}, index=pd.DatetimeIndex([40, 50])))
+    assert len(lib._dev_tools.library_tool().find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
+
+    source = pd.DataFrame({"a": [1000]}, index=pd.DatetimeIndex([25]))
+    lib.merge_experimental("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT), on=["a"])
+
+    expected = pd.DataFrame(
+        {"a": [0, 1, 2, 1000, 3, 4, 5, 6, 7]},
+        index=pd.DatetimeIndex([10, 20, 20, 25, 30, 30, 40, 40, 50]),
+    )
+    assert_frame_equal(lib.read("sym").data, expected)

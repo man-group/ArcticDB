@@ -133,6 +133,8 @@ class SegmentInMemory {
 
     position_t add_column(FieldRef field_ref, size_t num_rows, AllocationType presize);
 
+    position_t add_column(const Field& field, Column&& column);
+
     [[nodiscard]] size_t num_blocks() const;
 
     void append(const SegmentInMemory& other);

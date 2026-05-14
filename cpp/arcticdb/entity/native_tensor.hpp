@@ -141,6 +141,55 @@ struct NativeTensor {
         return (&(reinterpret_cast<const T*>(ptr)[signed_pos]));
     }
 
+    template<typename T>
+    std::span<const T> span(size_t offset = 0, size_t count = std::dynamic_extent) const {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, ndim() == 1, "Cannot create a span from a multi-dimensional tensor"
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                elsize() == sizeof(T),
+                "Mismatched tensor byte size {} and span element type size {}",
+                elsize(),
+                sizeof(T)
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                count == std::dynamic_extent || count <= nbytes() / sizeof(T) - offset,
+                "Span count {} is out of bounds for tensor of size {}",
+                count,
+                nbytes() / sizeof(T)
+        );
+        return std::span<const T>(
+                static_cast<const T*>(ptr) + offset,
+                count == std::dynamic_extent ? nbytes() / sizeof(T) - offset : count
+        );
+    }
+
+    template<typename T>
+    std::span<T> span(size_t offset = 0, size_t count = std::dynamic_extent) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, ndim() == 1, "Cannot create a span from a multi-dimensional tensor"
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                elsize() == sizeof(T),
+                "Mismatched tensor byte size {} and span element type size {}",
+                elsize(),
+                sizeof(T)
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                count == std::dynamic_extent || count <= nbytes() / sizeof(T) - offset,
+                "Span count {} is out of bounds for tensor of size {}",
+                count,
+                nbytes() / sizeof(T)
+        );
+        return std::span<T>(
+                static_cast<T*>(ptr) + offset, count == std::dynamic_extent ? nbytes() / sizeof(T) - offset : count
+        );
+    }
+
     // returns number of elements, not bytesize
     [[nodiscard]] ssize_t size() const { return calc_elements(shape(), ndim()); }
 
@@ -259,6 +308,7 @@ struct TypedTensor : public NativeTensor {
     }
 
     const T* data() const { return static_cast<const T*>(NativeTensor::data()); }
+    std::span<const T> span() const { return std::span<const T>(data(), size()); }
 
   private:
     void check_ptr_within_bounds(const NativeTensor& tensor, size_t rows) {

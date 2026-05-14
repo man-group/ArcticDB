@@ -141,6 +141,7 @@ std::string_view StringPool::get_const_view(offset_t o) const { return block_.co
 void StringPool::clear() {
     map_.clear();
     block_.clear();
+    shapes_.clear();
 }
 
 const Buffer& StringPool::shapes() const {

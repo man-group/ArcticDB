@@ -1103,6 +1103,7 @@ if(${TEST})
             processing/test/test_unsorted_aggregation.cpp
             processing/test/test_merge_update.cpp
             storage/test/test_lmdb_cve.cpp
+            processing/test/test_split_by_time_slice.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
@@ -1293,6 +1294,7 @@ if(${TEST})
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
             processing/test/rapidcheck_compact_data.cpp
+            processing/test/rapidcheck_merge_update.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_bitset.cpp
