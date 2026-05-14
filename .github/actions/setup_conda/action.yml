@@ -1,0 +1,78 @@
+name: 'Setup Conda Environment'
+description: 'Install conda environment via micromamba with automatic retry on transient failures'
+inputs:
+  platform:
+    description: 'Platform identifier for cache key (e.g. linux_64, win_64)'
+    required: true
+  max-retries:
+    description: 'Maximum number of attempts for shell init and environment creation'
+    required: false
+    default: '3'
+runs:
+  using: "composite"
+  steps:
+    - name: Download micromamba
+      uses: mamba-org/setup-micromamba@v2.0.6
+      with:
+        init-shell: none
+        download-micromamba: true
+        post-cleanup: 'none'
+
+    - name: Restore cached conda environment
+      id: cache-conda
+      uses: actions/cache@v4
+      with:
+        path: ~/micromamba/envs/arcticdb
+        key: conda-env-${{inputs.platform}}-${{hashFiles('environment-dev.yml')}}
+
+    - name: Init micromamba and create environment
+      shell: bash
+      env:
+        MAX_RETRIES: ${{inputs.max-retries}}
+        CACHE_HIT: ${{steps.cache-conda.outputs.cache-hit}}
+        MAMBA_ROOT_PREFIX: ~/micromamba
+      run: |
+        set -uo pipefail
+
+        MAMBA_BIN=~/micromamba-bin/micromamba
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          MAMBA_BIN=~/micromamba-bin/micromamba.exe
+        fi
+
+        for attempt in $(seq 1 "$MAX_RETRIES"); do
+          echo "::group::micromamba setup (attempt $attempt of $MAX_RETRIES)"
+
+          if "$MAMBA_BIN" shell init -s bash -r "$MAMBA_ROOT_PREFIX" --log-level warning 2>&1; then
+            eval "$("$MAMBA_BIN" shell hook -s bash -r "$MAMBA_ROOT_PREFIX")"
+
+            if [[ "$CACHE_HIT" == "true" ]]; then
+              echo "Environment restored from cache, skipping create"
+              echo "::endgroup::"
+              break
+            fi
+
+            if "$MAMBA_BIN" create -f environment-dev.yml -n arcticdb -y \
+                -r "$MAMBA_ROOT_PREFIX" --log-level warning 2>&1; then
+              echo "::endgroup::"
+              break
+            fi
+          fi
+
+          echo "::endgroup::"
+
+          if [[ "$attempt" -eq "$MAX_RETRIES" ]]; then
+            echo "::error::All $MAX_RETRIES attempts to set up conda environment failed"
+            exit 1
+          fi
+
+          echo "::warning::Attempt $attempt failed, retrying in 10s..."
+          sleep 10
+        done
+
+    - name: Enable auto-activation for subsequent steps
+      shell: bash
+      run: |
+        # Append activation to .bashrc so `bash -l {0}` steps get the environment
+        # (matches what setup-micromamba does internally)
+        echo 'micromamba activate arcticdb' >> ~/.bashrc
+        echo "MAMBA_ROOT_PREFIX=$HOME/micromamba" >> "$GITHUB_ENV"

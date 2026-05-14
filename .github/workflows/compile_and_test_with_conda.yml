@@ -51,14 +51,9 @@ jobs:
         id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
+        uses: ./.github/actions/setup_conda
         with:
-          environment-file: environment-dev.yml
-          environment-name: arcticdb
-          init-shell: bash
-          cache-environment: true
-          cache-environment-key: conda-env-${{inputs.platform}}
-          post-cleanup: 'none'
+          platform: ${{inputs.platform}}
 
       - name: Setup MSVC
         if: runner.os == 'Windows'
@@ -143,14 +138,9 @@ jobs:
         id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
+        uses: ./.github/actions/setup_conda
         with:
-          environment-file: environment-dev.yml
-          environment-name: arcticdb
-          init-shell: bash
-          cache-environment: true
-          cache-environment-key: conda-env-${{inputs.platform}}
-          post-cleanup: 'none'
+          platform: ${{inputs.platform}}
 
       - name: Configure C++ Tests
         run: |
@@ -230,14 +220,9 @@ jobs:
         id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.6
+        uses: ./.github/actions/setup_conda
         with:
-          environment-file: environment-dev.yml
-          environment-name: arcticdb
-          init-shell: bash
-          cache-environment: true
-          cache-environment-key: conda-env-${{inputs.platform}}
-          post-cleanup: 'none'
+          platform: ${{inputs.platform}}
 
       - name: Install ArcticDB from artifacts
         run: |
