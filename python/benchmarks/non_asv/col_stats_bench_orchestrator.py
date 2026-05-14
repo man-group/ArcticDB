@@ -9,17 +9,16 @@ from pathlib import Path
 LMDB_PATH = "/tmp/arcticdb_bench_col_stats"
 WARMUP_RUNS = 2
 RUNS = 10
-WRITE_SYMBOL_SCRIPT = Path(__file__).parent / "bench_write_symbol.py"
-CREATE_STATS_SCRIPT = Path(__file__).parent / "bench_col_stats.py"
+WRITE_SYMBOL_SCRIPT = Path(__file__).parent / "col_stats_bench_write_symbol.py"
+CREATE_STATS_SCRIPT = Path(__file__).parent / "col_stats_bench_create_stats.py"
 
 SCENARIOS = [
     (10, 10),
-    (500,500),
-    (400,400),
-    (500,500),
+    (400, 400),
+    (500, 500),
+    (700, 700),
+    (900, 900),
     (1_000, 1_000),
-    (700,700),
-    (900,900),
 ]
 
 # SCENARIOS = [
