@@ -151,6 +151,14 @@ void for_each_segment_entry(const SegmentInMemory& seg, Visitor&& visitor) {
     }
 
     // New-style: columns 0-2 are additions, columns 3-5 are deletions
+    util::check(
+            seg.column(0).row_count() == seg.column(1).row_count() &&
+                    seg.column(0).row_count() == seg.column(2).row_count(),
+            "Column mismatch in symbol segment additions: {} {} {}",
+            seg.column(0).row_count(),
+            seg.column(1).row_count(),
+            seg.column(2).row_count()
+    );
     for (auto i = 0L; i < seg.column(0).row_count(); ++i) {
         visitor(stream_id_from_segment(data_type, seg, i, 0),
                 VersionId{scalar_at<uint64_t>(seg, i, 1)},
@@ -159,6 +167,14 @@ void for_each_segment_entry(const SegmentInMemory& seg, Visitor&& visitor) {
     }
 
     if (seg.descriptor().field_count() == 6) {
+        util::check(
+                seg.column(3).row_count() == seg.column(4).row_count() &&
+                        seg.column(3).row_count() == seg.column(5).row_count(),
+                "Column mismatch in symbol segment deletions: {} {} {}",
+                seg.column(3).row_count(),
+                seg.column(4).row_count(),
+                seg.column(5).row_count()
+        );
         for (auto i = 0L; i < seg.column(3).row_count(); ++i) {
             visitor(stream_id_from_segment(data_type, seg, i, 3),
                     VersionId{scalar_at<uint64_t>(seg, i, 4)},
@@ -520,6 +536,25 @@ LoadResult attempt_load(
         auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compaction);
         load_result.symbols_ =
                 merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(previous_entries));
+
+        // Verify every journal key we'd delete during compaction corresponds to a symbol in the
+        // merged output. Uses binary search (symbols_ is sorted by stream_id_ after merge).
+        if (collect_keys) {
+            for (const auto& key : load_result.symbol_list_keys_) {
+                auto stream_id = StreamId{std::get<StringIndex>(to_atom(key).start_index())};
+                auto it = std::lower_bound(
+                        load_result.symbols_.begin(),
+                        load_result.symbols_.end(),
+                        stream_id,
+                        [](const SymbolListEntry& entry, const StreamId& id) { return entry.stream_id_ < id; }
+                );
+                util::check(
+                        it != load_result.symbols_.end() && it->stream_id_ == stream_id,
+                        "Would delete unseen key {}",
+                        key
+                );
+            }
+        }
     }
 
     return load_result;
@@ -822,9 +857,11 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
         return key_sort_comparator(to_atom(l), to_atom(r));
     });
     keys.erase(
-            std::remove_if(keys.begin(), keys.end(), [&written_key](const VariantKey& vk) {
-                return to_atom(vk) == written_key;
-            }),
+            std::remove_if(
+                    keys.begin(),
+                    keys.end(),
+                    [&written_key](const VariantKey& vk) { return to_atom(vk) == written_key; }
+            ),
             keys.end()
     );
     if (!keys.empty())

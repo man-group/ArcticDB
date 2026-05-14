@@ -1035,6 +1035,55 @@ TEST_F(SymbolListSuite, DirectPathEquivalence) {
     EXPECT_EQ(direct_result.size(), 60u);
 }
 
+TEST_F(SymbolListSuite, DirectPathEquivalenceWithTrueDeletes) {
+    // Setup: add symbols and force compaction
+    for (int i = 0; i < 50; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 0);
+        auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    ConfigsMap::instance()->set_int("SymbolList.MaxDelta", 0);
+    {
+        SymbolList sl{version_map_};
+        sl.load<std::set<StreamId>>(version_map_, store_, false);
+    }
+
+    // Add new symbols
+    for (int i = 50; i < 60; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::add_symbol(store_, StreamId{symbol}, 1);
+        auto key = atom_key_builder().version_id(1).build(symbol, KeyType::TABLE_INDEX);
+        version_map_->write_version(store_, key, std::nullopt);
+    }
+
+    // Delete symbols 0-9 via both the symbol list journal AND the version map
+    for (int i = 0; i < 10; ++i) {
+        auto symbol = fmt::format("sym_{}", i);
+        SymbolList::remove_symbol(store_, StreamId{symbol}, 1);
+        version_map_->tombstone_from_key_or_all(store_, StreamId{symbol});
+    }
+
+    ConfigsMap::instance()->unset_int("SymbolList.MaxDelta");
+
+    SymbolList sl1{version_map_};
+    auto compaction_result = sl1.load<std::set<StreamId>>(version_map_, store_, false);
+
+    SymbolList sl2{version_map_};
+    auto direct_result = sl2.load<std::set<StreamId>>(version_map_, store_, true);
+
+    EXPECT_EQ(compaction_result, direct_result);
+    // 50 original - 10 deleted + 10 new = 50
+    EXPECT_EQ(direct_result.size(), 50u);
+    // Verify deleted symbols are absent
+    for (int i = 0; i < 10; ++i)
+        EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 0u);
+    // Verify new symbols are present
+    for (int i = 50; i < 60; ++i)
+        EXPECT_EQ(direct_result.count(StreamId{fmt::format("sym_{}", i)}), 1u);
+}
+
 struct SymbolListRace : SymbolListSuite, testing::WithParamInterface<std::tuple<char, bool, bool, bool>> {};
 
 TEST_P(SymbolListRace, Run) {
