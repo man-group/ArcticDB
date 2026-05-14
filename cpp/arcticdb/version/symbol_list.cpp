@@ -538,18 +538,17 @@ LoadResult attempt_load(
                 merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(previous_entries));
 
         // Verify every journal key we'd delete during compaction corresponds to a symbol in the
-        // merged output. Uses binary search (symbols_ is sorted by stream_id_ after merge).
+        // merged output. Guards against silent data loss from merge bugs.
+        // O(N*M) but only runs once per library (version-keys path, before any compaction exists).
         if (collect_keys) {
             for (const auto& key : load_result.symbol_list_keys_) {
                 auto stream_id = StreamId{std::get<StringIndex>(to_atom(key).start_index())};
-                auto it = std::lower_bound(
-                        load_result.symbols_.begin(),
-                        load_result.symbols_.end(),
-                        stream_id,
-                        [](const SymbolListEntry& entry, const StreamId& id) { return entry.stream_id_ < id; }
-                );
                 util::check(
-                        it != load_result.symbols_.end() && it->stream_id_ == stream_id,
+                        std::any_of(
+                                load_result.symbols_.begin(),
+                                load_result.symbols_.end(),
+                                [&stream_id](const SymbolListEntry& e) { return e.stream_id_ == stream_id; }
+                        ),
                         "Would delete unseen key {}",
                         key
                 );
