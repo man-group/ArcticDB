@@ -15,7 +15,6 @@ on:
       version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
       run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
-      DEBUG_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       cmake_extra_args:  {default: "", type: string, required: false, description: 'Additional CMake arguments to pass during configuration'}
       ref: {default: "", type: string, required: false, description: 'The git ref (branch or tag) that is being built'}
 jobs:
@@ -634,10 +633,6 @@ jobs:
         if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.DEBUG_ENABLED == '1' }}  
-        
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}        
         uses: ./.github/actions/enable_logging
