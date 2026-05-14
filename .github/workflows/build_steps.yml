@@ -633,6 +633,12 @@ jobs:
         if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
 
+      # SSH into the container and stop at this step (for debugging only)
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
+      #   with:
+      #     limit-access-to-actor: true
+        
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}        
         uses: ./.github/actions/enable_logging
