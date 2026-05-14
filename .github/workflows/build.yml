@@ -512,9 +512,7 @@ jobs:
       !cancelled()
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
-    permissions:
-      contents: write
-      pull-requests: write
+    permissions: {contents: write}
 
   can_merge:
     needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]
