@@ -539,20 +539,17 @@ LoadResult attempt_load(
 
         // Verify every journal key we'd delete during compaction corresponds to a symbol in the
         // merged output. Guards against silent data loss from merge bugs.
-        // O(N*M) but only runs once per library (version-keys path, before any compaction exists).
         if (collect_keys) {
-            for (const auto& key : load_result.symbol_list_keys_) {
-                auto stream_id = StreamId{std::get<StringIndex>(to_atom(key).start_index())};
+            std::unordered_set<StreamId> symbols_in_merge;
+            for (const auto& entry : load_result.symbols_)
+                symbols_in_merge.emplace(entry.stream_id_);
+
+            for (const auto& key : load_result.symbol_list_keys_)
                 util::check(
-                        std::any_of(
-                                load_result.symbols_.begin(),
-                                load_result.symbols_.end(),
-                                [&stream_id](const SymbolListEntry& e) { return e.stream_id_ == stream_id; }
-                        ),
+                        symbols_in_merge.count(StreamId{std::get<StringIndex>(to_atom(key).start_index())}) > 0,
                         "Would delete unseen key {}",
                         key
                 );
-            }
         }
     }
 
