@@ -39,7 +39,7 @@ Configuration options are read once when the `Library` instance is created, and 
 
 ### VersionMap.ReloadInterval
 
-ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol.  This cache is invalidated after 5 seconds by default.
+ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol.  This cache is invalidated after 2 seconds by default.
 
 As a result of this caching, it is theoretically possible for two independent library instances to disagree as to what the latest version of a symbol is for a short period of time.
 
