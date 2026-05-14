@@ -43,30 +43,25 @@ def load_df(lib, symbol):
     return df
 
 
-def compare(current_df, master_df, threshold_pct):
-    """Return a DataFrame of tests whose duration diverged by more than threshold_pct."""
+def compare(current_df, master_df, threshold_pct, min_duration=0.01):
+    """Return a DataFrame of tests whose duration diverged by more than threshold_pct.
+
+    Tests where both master and current durations are below min_duration are excluded
+    to avoid reporting noise from tests that are pretty fast already.
+    """
     join_keys = ["test_name", "python_version", "test_type", "cache_type"]
 
     # Keep only passed tests – skipped/errored durations are meaningless.
     # Deduplicate by taking the mean duration per test to avoid cartesian products
     # when the same test appears multiple times (e.g. from overlapping XML artifacts).
-    cur = (
-        current_df.filter(pl.col("status") == "passed")
-        .group_by(join_keys)
-        .agg(pl.col("time").mean())
-    )
-    mst = (
-        master_df.filter(pl.col("status") == "passed")
-        .group_by(join_keys)
-        .agg(pl.col("time").mean())
-    )
+    cur = current_df.filter(pl.col("status") == "passed").group_by(join_keys).agg(pl.col("time").mean())
+    mst = master_df.filter(pl.col("status") == "passed").group_by(join_keys).agg(pl.col("time").mean())
 
     diverged = (
         cur.join(mst, on=join_keys, suffix="_master")
         .filter(pl.col("time_master") > 0)
-        .with_columns(
-            ((pl.col("time") - pl.col("time_master")) / pl.col("time_master") * 100).alias("pct_change")
-        )
+        .filter((pl.col("time") >= min_duration) | (pl.col("time_master") >= min_duration))
+        .with_columns(((pl.col("time") - pl.col("time_master")) / pl.col("time_master") * 100).alias("pct_change"))
         .filter(pl.col("pct_change").abs() > threshold_pct)
         .sort("pct_change", descending=True)
     )
@@ -121,8 +116,11 @@ def format_report(diverged, master_symbol, threshold_pct):
 @click.command()
 @click.option("--run-id", type=str, required=True, help="Run ID of the current build")
 @click.option("--threshold", type=float, default=10.0, help="Percentage change threshold (default: 10)")
+@click.option(
+    "--min-duration", type=float, default=0.01, help="Ignore tests where both durations are below this (default: 0.01s)"
+)
 @click.option("--output", type=str, default=None, help="Write report to this file (for PR comments)")
-def main(run_id, threshold, output):
+def main(run_id, threshold, min_duration, output):
     lib = get_results_lib("pytest_results")
 
     current_symbol = find_symbol(lib, run_id=run_id)
@@ -147,7 +145,7 @@ def main(run_id, threshold, output):
     current_df = load_df(lib, current_symbol)
     master_df = load_df(lib, master_symbol)
 
-    diverged = compare(current_df, master_df, threshold)
+    diverged = compare(current_df, master_df, threshold, min_duration)
     report = format_report(diverged, master_symbol, threshold)
     print(report)
 
