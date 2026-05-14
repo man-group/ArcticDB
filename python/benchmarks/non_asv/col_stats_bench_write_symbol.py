@@ -21,14 +21,17 @@ def main():
         ac.create_library("bench")
     lib = ac.get_library("bench")
 
-    start_time = time.time()
 
     for chunk_start in range(0, rows, CHUNK_ROWS):
         chunk_row_count = min(CHUNK_ROWS, rows - chunk_start)
+        
         chunk = pd.DataFrame(
             np.random.rand(chunk_row_count, cols).astype(np.float64),
             columns=column_names,
         )
+
+        start_time = time.time()
+
         if chunk_start == 0:
             lib.write(SYMBOL_NAME, chunk)
         else:
