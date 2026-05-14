@@ -89,6 +89,10 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
         total_input_rows += col->row_count();
     }
     const auto max_output_rows = std::min(bucket_boundaries.size() - 1, total_input_rows);
+    // Below this rows/bucket threshold, element-by-element iteration benchmarked to beat galloping search.
+    constexpr size_t linear_scan_threshold = 32;
+    const size_t num_buckets = bucket_boundaries.size() > 1 ? bucket_boundaries.size() - 1 : 1;
+    const bool use_linear_scan = (total_input_rows / num_buckets) < linear_scan_threshold;
     const auto max_index_column_bytes = max_output_rows * get_type_size(data_type);
     auto output_index_column = std::make_shared<Column>(
             TypeDescriptor(data_type, Dimension::Dim0),
@@ -129,15 +133,19 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
                 it, cend, std::max(date_range.first - 1, inclusive_bucket_end(*std::prev(bucket_end_it)))
         );
 
-        // Advances `it` to beginning of next bucket or first element after `date_range.second`
         auto advance_it = [&]() {
-            // At the end of `for` it is guaranteed that it points before bucket_end_it, so we need to advance by at
-            // least one.
-            ++it;
-            it = exponential_upper_bound(it, cend, std::min(date_range.second, inclusive_bucket_end(*bucket_end_it)));
+            const auto advance_until = std::min(date_range.second, inclusive_bucket_end(*bucket_end_it));
+            if (use_linear_scan) {
+                while (ARCTICDB_LIKELY(it != cend && it->value() <= advance_until)) {
+                    ++it;
+                }
+            } else {
+                ++it;
+                it = exponential_upper_bound(it, cend, advance_until);
+            }
         };
         for (; it != cend && it->value() <= date_range.second; advance_it()) {
-            if (!current_bucket.contains(it->value())) {
+            if (ARCTICDB_LIKELY(!current_bucket.contains(it->value()))) {
                 advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_end_it, it->value());
 
                 if (bucket_end_it == bucket_boundaries.end()) {
@@ -150,7 +158,7 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
                 current_bucket_added_to_index = false;
             }
 
-            if (!current_bucket_added_to_index) {
+            if (ARCTICDB_LIKELY(!current_bucket_added_to_index)) {
                 *output_index_column_it++ =
                         label_boundary == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
                 ++output_index_column_row_count;
