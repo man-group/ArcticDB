@@ -1,7 +1,5 @@
-import atexit
 import json
 import shutil
-import signal
 import statistics
 import subprocess
 import sys
@@ -15,10 +13,6 @@ SYMBOL_NAME = "test_symbol"
 CREATE_STATS_WARMUP_RUNS = 2
 CREATE_STATS_RUNS = 10
 WORKER_SCRIPT = Path(__file__).parent / "bench_col_stats.py"
-
-atexit.register(lambda: shutil.rmtree(LMDB_PATH, ignore_errors=True))
-signal.signal(signal.SIGINT, lambda *_: exit(130))
-signal.signal(signal.SIGTERM, lambda *_: exit(143))
 
 SCENARIOS = [
     (500, 500),
@@ -55,8 +49,8 @@ def print_results(results):
     header = (
         f"{'rows':>12}  {'cols':>6}"
         f"  {'write_time_s':>{column_width}}"
-        f"  {'stats_time_min':>{column_width}}  {'stats_time_max':>{column_width}}  {'stats_time_var':>{column_width}}"
-        f"  {'stats_rss_min_mb':>{column_width}}  {'stats_rss_max_mb':>{column_width}}  {'stats_rss_var_mb':>{column_width}}"
+        f"  {'stats_time_mean':>{column_width}}  {'stats_time_median':>{column_width}}  {'stats_time_max':>{column_width}}"
+        f"  {'stats_rss_mean_mb':>{column_width}}  {'stats_rss_median_mb':>{column_width}}  {'stats_rss_max_mb':>{column_width}}"
     )
     print()
     print(header)
@@ -68,8 +62,8 @@ def print_results(results):
         print(
             f"{result.rows:>12,}  {result.cols:>6,}"
             f"  {result.symbol_write_time:>{column_width}.2f}"
-            f"  {min(elapsed_times):>{column_width}.2f}  {max(elapsed_times):>{column_width}.2f}  {statistics.variance(elapsed_times):>{column_width}.4f}"
-            f"  {min(memory_values):>{column_width}.1f}  {max(memory_values):>{column_width}.1f}  {statistics.variance(memory_values):>{column_width}.2f}"
+            f"  {statistics.mean(elapsed_times):>{column_width}.2f}  {statistics.median(elapsed_times):>{column_width}.2f}  {max(elapsed_times):>{column_width}.2f}"
+            f"  {statistics.mean(memory_values):>{column_width}.1f}  {statistics.median(memory_values):>{column_width}.1f}  {max(memory_values):>{column_width}.1f}"
         )
 
 
@@ -110,15 +104,21 @@ def measure(scenario, index, results):
     ac.get_library("bench").delete(SYMBOL_NAME)
 
 
-shutil.rmtree(LMDB_PATH, ignore_errors=True)
+def cleanup():
+    shutil.rmtree(LMDB_PATH, ignore_errors=True)
 
-results = [ScenarioResult() for _ in SCENARIOS]
 
-try:
+def run():
+    cleanup()
+    results = [ScenarioResult() for _ in SCENARIOS]
     for index, scenario in enumerate(SCENARIOS):
         print(f"\n=== scenario {scenario[0]}x{scenario[1]} ===", file=sys.stderr)
         measure(scenario, index, results)
-finally:
-    shutil.rmtree(LMDB_PATH, ignore_errors=True)
+    print_results(results)
 
-print_results(results)
+
+if __name__ == "__main__":
+    try:
+        run()
+    finally:
+        cleanup()
