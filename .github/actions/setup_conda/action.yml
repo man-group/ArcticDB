@@ -72,7 +72,29 @@ runs:
     - name: Enable auto-activation for subsequent steps
       shell: bash
       run: |
-        # Append activation to .bashrc so `bash -l {0}` steps get the environment
-        # (matches what setup-micromamba does internally)
-        echo 'micromamba activate arcticdb' >> ~/.bashrc
-        echo "MAMBA_ROOT_PREFIX=$HOME/micromamba" >> "$GITHUB_ENV"
+        MAMBA_ROOT_PREFIX="$HOME/micromamba"
+        MAMBA_BIN="$HOME/micromamba-bin/micromamba"
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          MAMBA_BIN="$HOME/micromamba-bin/micromamba.exe"
+        fi
+
+        # Activate the environment to discover CONDA_PREFIX
+        eval "$("$MAMBA_BIN" shell hook -s bash -r "$MAMBA_ROOT_PREFIX")"
+        micromamba activate arcticdb
+
+        # Export via GITHUB_ENV/GITHUB_PATH so all subsequent steps get the
+        # conda environment regardless of shell type (bash -l, bash, pwsh).
+        echo "MAMBA_ROOT_PREFIX=$MAMBA_ROOT_PREFIX" >> "$GITHUB_ENV"
+        echo "CONDA_PREFIX=$CONDA_PREFIX" >> "$GITHUB_ENV"
+        echo "$CONDA_PREFIX/bin" >> "$GITHUB_PATH"
+        if [[ "$RUNNER_OS" == "Windows" ]]; then
+          echo "$CONDA_PREFIX/Library/bin" >> "$GITHUB_PATH"
+          echo "$CONDA_PREFIX/Scripts" >> "$GITHUB_PATH"
+        fi
+
+        # Also write to shell rc files for `bash -l {0}` steps that need
+        # the full micromamba shell integration (e.g. conda activate/deactivate).
+        for rc in ~/.bashrc ~/.bash_profile ~/.profile; do
+          echo 'eval "$('"$MAMBA_BIN"' shell hook -s bash -r '"$MAMBA_ROOT_PREFIX"')"' >> "$rc"
+          echo 'micromamba activate arcticdb' >> "$rc"
+        done
