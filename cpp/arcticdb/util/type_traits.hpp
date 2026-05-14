@@ -27,4 +27,31 @@ concept instantiation_of = is_instantiation_of_v<T, TT>;
 
 template<typename T, typename... U>
 concept any_of = std::disjunction_v<std::is_same<T, U>...>;
+
+template<typename T>
+concept type_descriptor_tag = instantiation_of<T, entity::TypeDescriptorTag>;
+
+template<typename T>
+struct function_arg_types : function_arg_types<decltype(&std::decay_t<T>::operator())> {};
+
+// Free function
+template<typename ReturnType, typename... Args>
+struct function_arg_types<ReturnType (*)(Args...)> {
+    using args_t = std::tuple<Args...>;
+    using return_t = ReturnType;
+};
+
+// Member method
+template<typename ClassType, typename ReturnType, typename... Args>
+struct function_arg_types<ReturnType (ClassType::*)(Args...)> {
+    using args_t = std::tuple<Args...>;
+    using return_t = ReturnType;
+};
+
+template<typename ClassType, typename ReturnType, typename... Args>
+struct function_arg_types<ReturnType (ClassType::*)(Args...) const> {
+    using args_t = std::tuple<Args...>;
+    using return_t = ReturnType;
+};
+
 } // namespace arcticdb::util

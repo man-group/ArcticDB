@@ -52,8 +52,7 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
     ranges_and_keys = std::move(new_ranges_and_keys);
 }
 
-template<typename TDT>
-requires util::instantiation_of<TDT, TypeDescriptorTag>
+template<util::type_descriptor_tag TDT>
 position_t write_py_string_to_pool_or_throw(
         PyObject* const py_string_object, const size_t row_in_segment, const RowRange& row_range,
         std::optional<ScopedGILLock>& gil_lock, StringPool& new_string_pool, const std::string_view column_name
@@ -68,8 +67,7 @@ position_t write_py_string_to_pool_or_throw(
     );
 }
 
-template<typename TDT>
-requires util::instantiation_of<TDT, TypeDescriptorTag>
+template<util::type_descriptor_tag TDT>
 void rebuild_sequence_column_in_new_pool(
         Column& target_column, const StringPool& old_string_pool, StringPool& new_string_pool,
         const util::BitSet* rows_to_add_in_new_pool = nullptr
@@ -95,81 +93,8 @@ void rebuild_sequence_column_in_new_pool(
     }
 }
 
-/// When merge update is performed on a string column the string pool is rebuild from scratch, thus we must iterate over
-/// all rows in the column. When the column is a part of a timeseries all target rows stored in rows_to_update will be
-/// ordered (i.e. sorted(flatten(rows_to_update)) = true). This means we can iterate over the target column row and
-/// at the same time forward iterate on the source rows. It's a nested loop but the complexity is O(n + m + k)
-/// where n is the total number of rows in the target, m are the rows in the source, and k are the total matches between
-/// source and target (i.e. sum(rows_to_update[i] for i in range(len(rows_to_update))))
-template<typename TDT>
-requires util::instantiation_of<TDT, TypeDescriptorTag>
-bool merge_update_string_column_timeseries(
-        Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field,
-        const RowRange& row_range, const StringPool& target_string_pool,
-        const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
-) {
-    bool is_column_changed = false;
-    if constexpr (is_fixed_string_type(TDT::data_type())) {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                "Fixed string sequences are not supported for merge update"
-        );
-    } else if constexpr (is_dynamic_string_type(TDT::data_type())) {
-        // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
-        // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
-        // If such a string is encountered in a column, then the GIL will be held until that whole column has
-        // been processed, on the assumption that if a column has one such string it will probably have many.
-        std::optional<ScopedGILLock> gil_lock;
-        // TODO: Create new column in case of insertion
-        auto source_row_it = rows_to_update.begin();
-        auto next_target_row_to_update = source_row_it->begin();
-        // TODO: Handle sparse target columns Monday 10756321294
-        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
-            source_row_it = std::find_if(
-                    source_row_it,
-                    rows_to_update.end(),
-                    [&, new_row = false](const std::vector<size_t>& vec) mutable {
-                        // TODO: Handle inserts. Empty vec means insert.
-                        next_target_row_to_update = std::find_if(
-                                new_row ? vec.begin() : next_target_row_to_update,
-                                vec.end(),
-                                [&](const int64_t target_row_to_update) { return target_row_to_update >= row.idx(); }
-                        );
-                        if (next_target_row_to_update == vec.end()) {
-                            new_row = true;
-                        }
-                        return next_target_row_to_update != vec.end();
-                    }
-            );
-            const bool current_target_row_is_matched = source_row_it != rows_to_update.end() &&
-                                                       next_target_row_to_update != source_row_it->end() &&
-                                                       static_cast<int64_t>(*next_target_row_to_update) == row.idx();
-            if (current_target_row_is_matched) {
-                is_column_changed = true;
-                const auto py_string_object = source_column_view[source_row_it - rows_to_update.begin()];
-                row.value() = write_py_string_to_pool_or_throw<TDT>(
-                        py_string_object, row.idx(), row_range, gil_lock, new_string_pool, target_field.name()
-                );
-            } else {
-                if (is_a_string(row.value())) {
-                    const std::string_view string_in_target = target_string_pool.get_const_view(row.value());
-                    const OffsetString offset_in_new_pool = new_string_pool.get(string_in_target);
-                    row.value() = offset_in_new_pool.offset();
-                }
-            }
-        });
-    }
-    return is_column_changed;
-}
-
-/// When merge update is performed on a string column the string pool is rebuild from scratch, thus we must iterate over
-/// all rows in the column. When the column is *not* part of a timeseries the rows in rows_to_update are in random
-/// order. To avoid having quadratic complexity (i.e. O(n * k) where n are the rows in the target and k are all matches
-/// i.e. sum(rows_to_update[i] for i in range(len(rows_to_update)))) we invert the loops and iterate over all
-/// rows_to_update perform the update and then add additional loop over all rows in target to rebuild the string pool.
-/// Asymptotically this will yield the same complexity as the timeseries case but practically is a bit slower.
-template<typename TDT>
-requires util::instantiation_of<TDT, TypeDescriptorTag>
-bool merge_update_string_column_rowrange(
+template<util::type_descriptor_tag TDT>
+bool merge_update_string_column(
         Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field,
         const RowRange& row_range, const StringPool& target_string_pool,
         const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
@@ -213,8 +138,7 @@ struct MergeUpdateStringColumnFlags {
     bool data_not_changed = false;
 };
 
-template<typename TDT>
-requires util::instantiation_of<TDT, TypeDescriptorTag>
+template<util::type_descriptor_tag TDT>
 bool merge_update_string_column(
         Column& target_column, const MergeUpdateStringColumnFlags& flags,
         const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field, const RowRange& row_range,
@@ -224,29 +148,17 @@ bool merge_update_string_column(
     if (flags.data_not_changed) {
         rebuild_sequence_column_in_new_pool<TDT>(target_column, target_string_pool, new_string_pool);
         return false;
-    } else {
-        if (flags.is_timeseries) {
-            return merge_update_string_column_timeseries<TDT>(
-                    target_column,
-                    rows_to_update,
-                    target_field,
-                    row_range,
-                    target_string_pool,
-                    source_column_view,
-                    new_string_pool
-            );
-        } else {
-            return merge_update_string_column_rowrange<TDT>(
-                    target_column,
-                    rows_to_update,
-                    target_field,
-                    row_range,
-                    target_string_pool,
-                    source_column_view,
-                    new_string_pool
-            );
-        }
     }
+
+    return merge_update_string_column<TDT>(
+            target_column,
+            rows_to_update,
+            target_field,
+            row_range,
+            target_string_pool,
+            source_column_view,
+            new_string_pool
+    );
 }
 
 struct NaNAwareFloatComparator {
@@ -271,7 +183,8 @@ struct NaNAwareFloatHasher {
 };
 
 template<
-        typename SourceTDT, typename TargetTDT, typename SourceValueRawType = TargetTDT::DataTypeTag::raw_type,
+        util::type_descriptor_tag SourceTDT, util::type_descriptor_tag TargetTDT,
+        typename SourceValueRawType = TargetTDT::DataTypeTag::raw_type,
         typename TargetValueRawType = TargetTDT::DataTypeTag::raw_type>
 requires std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>
 std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
@@ -305,8 +218,7 @@ std::variant<bool, convert::StringEncodingError> are_merge_values_matching(
     }
 }
 
-template<typename TDT>
-requires util::instantiation_of<TDT, TypeDescriptorTag>
+template<util::type_descriptor_tag TDT>
 auto map_column_values_to_rows(const ColumnWithStrings& column) {
     constexpr static bool is_target_sequence_type = is_sequence_type(TDT::data_type());
     constexpr static bool is_target_floating_point_type = is_floating_point_type(TDT::data_type());
@@ -333,6 +245,141 @@ auto map_column_values_to_rows(const ColumnWithStrings& column) {
     return target_values;
 }
 
+template<util::type_descriptor_tag TargetColumnTypeDescriptorTag, typename SourceRawType>
+Column merge(
+        const Column& target_index, const std::span<const timestamp> source_index, const Column& target,
+        const std::span<const SourceRawType> source_data, const std::span<const std::vector<size_t>> rows_to_update,
+        const size_t num_rows_to_insert, const MergeStrategy strategy
+) {
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            source_index.size() == source_data.size(),
+            "Source data size must match the index size"
+    );
+    ARCTICDB_DEBUG_CHECK(
+            ErrorCode::E_ASSERTION_FAILURE,
+            source_index.size() == rows_to_update.size(),
+            "For each source data row in the segment there must be exactly one vector of target rows that must be "
+            "updated by that source row."
+    );
+    using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    if constexpr (!is_sequence_type(TargetColumnTypeDescriptorTag::data_type())) {
+        Column new_column(
+                target.type(),
+                target.row_count() + num_rows_to_insert,
+                AllocationType::PRESIZED,
+                Sparsity::NOT_PERMITTED
+        );
+        ColumnData new_column_data = new_column.data();
+        auto new_column_it = new_column_data.begin<TargetColumnTypeDescriptorTag>();
+        auto new_data = random_accessor<TargetColumnTypeDescriptorTag>(&new_column_data);
+
+        ColumnData target_index_data = target_index.data();
+        auto target_index_it = target_index_data.begin<IndexType>();
+        const auto target_index_end = target_index_data.end<IndexType>();
+
+        ColumnData target_column_data = target.data();
+        auto target_data = random_accessor<TargetColumnTypeDescriptorTag>(&target_column_data);
+        size_t target_row_idx = 0;
+
+        size_t source_row_idx = 0;
+
+        size_t new_column_row_idx = 0;
+
+        // Stable merge target and source into the new column. If there is a sequence of repeated index values and new
+        // rows must be inserted, the new rows will appear after the rows from the target
+        while (target_index_it != target_index_end && source_row_idx < source_index.size()) {
+            // Target index values are smaller than the source index value. If the index is different, it's impossible
+            // to perform an update. Just copy the target data to the output buffer
+            while (target_index_it != target_index_end && *target_index_it < source_index[source_row_idx]) {
+                *new_column_it++ = target_data[target_row_idx++];
+                ++new_column_row_idx;
+                ++target_index_it;
+            }
+
+            // Target index values are equal to the source index values. Since the index is matching, it's possible to
+            // perform both an update and an insert. First, copy all target values to the output buffer and then append
+            // the new values. In case rows_to_update[source_row_idx] is not empty, then an update must happen. The
+            // update is performed in place in the new output buffer. It is crucial to take into account that the
+            // indexes in rows_to_update[source_row_idx] are pointing to rows in the original column (before any
+            // insertions happened)
+
+            // Source and target index values are equal. Copy the target data first.
+            const timestamp equal_run_index_value = *target_index_it;
+            // Since the index is ordered, no index in source_index[source_row_idx] can be less than target_row_idx.
+            // The number of inserted is used to correct for the fact that rows_to_update[source_row_idx] refers rows
+            // in the original column.
+            const size_t inserted_rows = new_column_row_idx - target_row_idx;
+            while (target_index_it != target_index_end && *target_index_it == equal_run_index_value &&
+                   source_index[source_row_idx] == equal_run_index_value) {
+                *new_column_it++ = target_data[target_row_idx++];
+                ++new_column_row_idx;
+                ++target_index_it;
+            }
+
+            // For each source row equal to the target row, there are two options.
+            // * source_index[source_row_idx] is non-empty -> the output buffer must be updated using inserted_rows as
+            //   an offset
+            // * source_index[source_row_idx] is empty -> insertion must happen by appending to the end of the output
+            //   buffer.
+            while (source_row_idx < source_index.size() && source_index[source_row_idx] == equal_run_index_value) {
+                if (rows_to_update[source_row_idx].empty()) {
+                    *new_column_it++ = source_data[source_row_idx];
+                    ++new_column_row_idx;
+                } else if (strategy.matched == MergeAction::UPDATE) {
+                    for (const size_t target_row_to_update : rows_to_update[source_row_idx]) {
+                        new_data[target_row_to_update + inserted_rows] = source_data[source_row_idx];
+                    }
+                }
+                ++source_row_idx;
+            }
+
+            if (target_index_it == target_index_end) {
+                break;
+            }
+
+            // Target index values are larger than the source index value. Append the source data to the output buffer.
+            while (source_row_idx < source_index.size() && *target_index_it > source_index[source_row_idx]) {
+                *new_column_it++ = source_data[source_row_idx++];
+                ++new_column_row_idx;
+            }
+        }
+        // Not all target rows were processed, copy the rest
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                static_cast<position_t>(target_row_idx) <= target.row_count(),
+                "Cannot consume more target rows than there are in the target column"
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                static_cast<position_t>(target_row_idx) >= target.row_count() ||
+                        new_column_it != new_column_data.end<TargetColumnTypeDescriptorTag>(),
+                "There are {} target rows to insert but the output buffer is exhausted",
+                target.row_count() - static_cast<position_t>(target_row_idx)
+        );
+        while (static_cast<position_t>(target_row_idx) < target.row_count()) {
+            *new_column_it++ = target_data[target_row_idx++];
+        }
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                source_row_idx >= source_index.size() ||
+                        new_column_it != new_column_data.end<TargetColumnTypeDescriptorTag>(),
+                "There are {} source rows to insert but the output buffer is exhausted",
+                source_index.size() - source_row_idx
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                source_row_idx <= source_index.size(),
+                "Cannot consume more source rows than there are in the source column"
+        );
+        // Not all source rows were processed, copy the rest
+        std::copy(source_data.begin() + source_row_idx, source_data.end(), new_column_it);
+        return new_column;
+    } else {
+        internal::raise<ErrorCode::E_NOT_IMPLEMENTED>("Insertion is not implemented for string columns yet");
+    }
+}
+
 } // namespace
 
 namespace arcticdb {
@@ -348,9 +395,6 @@ MergeUpdateClause::MergeUpdateClause(
     strategy_(strategy),
     source_(std::move(source)) {
     std::erase_if(on_, [&](const std::string& column) { return !on_set_.insert(column).second; });
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            strategy_.not_matched_by_target == MergeAction::DO_NOTHING, "Merge cannot perform insertion at the moment"
-    );
 }
 
 std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
@@ -389,16 +433,27 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
         ranges_and_keys.clear();
         return {};
     }
-    std::span index(static_cast<const IndexType::DataTypeTag::raw_type*>(index_tensor.data()), source_->num_rows);
+
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+            strategy_.not_matched_by_target == MergeAction::DO_NOTHING ||
+                    !(source_ends_before_first_row_slice || source_starts_after_the_last_row_slice),
+            "Insertion is not implemented for cases when the value to be inserted does not lie within the "
+            "boundaries of a segment"
+    );
+
+    std::span index(index_tensor.data(), source_->num_rows);
+    // TODO: Needed only to track if there are source rows not contained in any segment.
+    std::pair<size_t, size_t> spanned_source_row_range{0, 0};
     for (size_t row_slice_idx = 0; row_slice_idx < offsets.size(); ++row_slice_idx) {
-        // TODO: Add logic for insertion.
+        // TODO: Add logic for insertion when the source index value is not contained in any segment
         const TimestampRange& time_range = ranges_and_keys[offsets[row_slice_idx].front()].key_.time_range();
         if (source_start_end_for_row_range_.contains(time_range)) {
             row_slices_to_keep.push_back(row_slice_idx);
             continue;
         }
-        const auto source_range_start = std::ranges::lower_bound(index, time_range.first);
+        const auto source_range_start = ranges::lower_bound(index, time_range.first);
         if (source_range_start == index.end()) {
+            // All remaining row ranges start after the last index value of the source, thus not match is possible.
             break;
         }
         if (*source_range_start < time_range.second) {
@@ -406,10 +461,23 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
             const std::pair<size_t, size_t> source_row_range = {
                     source_range_start - index.begin(), source_range_end - index.begin()
             };
+            internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+                    strategy_.not_matched_by_target == MergeAction::DO_NOTHING ||
+                            spanned_source_row_range.first <= source_row_range.second,
+                    "Insertion is not implemented for cases when the value to be inserted does not lie within the "
+                    "boundaries of any segment segment"
+            );
+            spanned_source_row_range.second = std::max(spanned_source_row_range.second, source_row_range.second);
             source_start_end_for_row_range_.insert({time_range, source_row_range});
             row_slices_to_keep.push_back(row_slice_idx);
         }
     }
+    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+            strategy_.not_matched_by_target == MergeAction::DO_NOTHING ||
+                    spanned_source_row_range == std::pair{0, source_->num_rows},
+            "Insertion is not implemented for cases when the value to be inserted does not lie within the "
+            "boundaries of a segment"
+    );
     filter_selected_ranges_and_keys_and_reindex_entities(row_slices_to_keep, offsets, ranges_and_keys);
     return offsets;
 }
@@ -436,40 +504,52 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
             std::shared_ptr<RowRange>,
             std::shared_ptr<ColRange>,
             std::shared_ptr<AtomKey>>(*component_manager_, std::move(entity_ids));
-    // TODO: Add exception handling two source rows matching the same target row. This should be done in the
-    // function
-    //  handling the "on" parameter matching multiple columns. Monday 10655943156
-    auto matched = [&]() -> std::optional<std::vector<std::vector<size_t>>> {
+    auto [matched, num_matched_rows] = [&]() -> std::pair<std::optional<std::vector<std::vector<size_t>>>, size_t> {
         std::optional<std::vector<std::vector<size_t>>> result;
+        size_t matched_count = 0;
         if (source_->has_index()) {
             using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
             const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
-            result.emplace(filter_index_match(
+            auto [index_match, matched_rows_count] = filter_index_match(
                     proc.segments_->front()->column(0), std::span(index_tensor.data(), source_->num_rows), proc
-            ));
+            );
+            result.emplace(std::move(index_match));
+            matched_count += matched_rows_count;
         }
-        return result;
+        return {result, matched_count};
     }();
     // TODO: Source and target descriptor can differ for dynamic schema
-    matched = filter_on_additional_columns_match(
-            source_->desc(), source_->desc(), source_->field_tensors(), proc, std::move(matched)
+
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !source_->has_segment(), "Arrow format is not supported as input for merge update"
     );
-    if (source_->has_segment()) {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Arrow format is not supported as input for merge update"
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            source_->has_tensors(), "Input frame does not contain neither a segment nor tensors"
+    );
+    std::tie(matched, num_matched_rows) = filter_on_additional_columns_match(
+            source_->desc(), source_->desc(), source_->field_tensors(), proc, std::move(matched), num_matched_rows
+    );
+    if (update_and_insert(
+                source_->opt_index_tensor(), source_->field_tensors(), source_->desc(), proc, *matched, num_matched_rows
+        )) {
+        const size_t entity_count = proc.segments_->size();
+        const size_t inserted_rows_count = matched->size() - num_matched_rows;
+        return component_manager_->add_entities(
+                std::move(*proc.segments_),
+                std::move(*proc.row_ranges_),
+                std::move(*proc.col_ranges_),
+                std::vector<EntityFetchCount>(entity_count, 1),
+                std::vector(entity_count, MergeUpdateInsertedRowsEntity{inserted_rows_count})
         );
-    } else if (source_->has_tensors()) {
-        if (update_and_insert(source_->field_tensors(), source_->desc(), proc, *matched)) {
-            return push_entities(*component_manager_, std::move(proc));
-        }
-    } else {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Input frame does not contain neither a segment nor tensors");
     }
+
     return {};
 }
 
-std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_for_rowrange_indexed_data(
-        ProcessingUnit& proc, const StreamDescriptor& source_descriptor
-) const {
+std::pair<std::vector<std::vector<size_t>>, size_t> MergeUpdateClause::
+        initialize_rows_to_update_for_rowrange_indexed_data(
+                ProcessingUnit& proc, const StreamDescriptor& source_descriptor
+        ) const {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !on_.empty(),
             "MergeUpdate requires at least one column in the \"on\" parameter when the DataFrame is not a "
@@ -485,13 +565,14 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
     result.resize(source_->num_rows);
     const size_t source_field_position = field_index_for_matching_on_column(column_name, source_descriptor);
     const Field& source_field = source_descriptor.field(source_field_position);
+    size_t num_matched_rows = 0;
     details::visit_type(source_field.type().data_type(), [&](auto source_field_dt) {
         using SourceTDT = ScalarTagType<std::decay_t<decltype(source_field_dt)>>;
         using SourceRawType = typename SourceTDT::DataTypeTag::raw_type;
         const ColumnWithStrings target_column = std::get<ColumnWithStrings>(proc.get(ColumnName{column_name}));
         details::visit_type(target_column.column_->type().data_type(), [&](auto target_field_dt) {
             using TargetTDT = ScalarTagType<decltype(target_field_dt)>;
-            if constexpr (std::is_same_v<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>) {
+            if constexpr (std::same_as<std::decay_t<SourceTDT>, std::decay_t<TargetTDT>>) {
                 using SourceType =
                         std::conditional_t<is_sequence_type(SourceTDT::data_type()), PyObject* const, SourceRawType>;
                 auto target_values_to_rows = map_column_values_to_rows<TargetTDT>(target_column);
@@ -525,6 +606,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                     } else {
                         result[source_row_idx] = target_values_to_rows[source_value];
                     }
+                    num_matched_rows += !result[source_row_idx].empty();
                 }
             } else {
                 schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
@@ -535,7 +617,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
             }
         });
     });
-    return result;
+    return std::pair{std::move(result), num_matched_rows};
 }
 
 std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(const ProcessingUnit& proc) const {
@@ -555,8 +637,9 @@ std::pair<size_t, size_t> MergeUpdateClause::get_source_start_end(const Processi
 }
 
 bool MergeUpdateClause::update_and_insert(
-        const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
-        const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
+        const std::optional<NativeTensor>& index_tensor, const std::span<const NativeTensor> source_tensors,
+        const StreamDescriptor& source_descriptor, const ProcessingUnit& proc,
+        const std::span<const std::vector<size_t>> rows_to_update, size_t num_matched_rows
 ) const {
     const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
     const std::span<const std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
@@ -564,22 +647,58 @@ bool MergeUpdateClause::update_and_insert(
     const auto [source_row_start, source_row_end] = get_source_start_end(proc);
     bool row_slice_changed = false;
     const bool is_timeseries = source_->desc().index().type() == IndexDescriptor::Type::TIMESTAMP;
-    util::BitSet matched_target_rows(row_ranges.front()->diff());
-    // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
-    // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday: 10655963947
-    for (size_t source_row_idx = 0; source_row_idx < rows_to_update.size(); ++source_row_idx) {
-        for (const size_t target_row : rows_to_update[source_row_idx]) {
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    !matched_target_rows[target_row],
-                    "Multiple source rows match the same target row. This is not allowed as it's not clear which "
-                    "source row should be used for the update. Target row is {}, the second source row to match it is "
-                    "{}",
-                    target_row,
-                    source_row_idx + source_row_start
-            );
-            matched_target_rows[target_row] = true;
+
+    if (strategy_.update_only() && num_matched_rows == 0) {
+        return false;
+    }
+
+    if (strategy_.insert_only() && rows_to_update.size() == num_matched_rows) {
+        return false;
+    }
+
+    if (strategy_.matched == MergeAction::UPDATE && num_matched_rows > 0) {
+        // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
+        // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday: 10655963947
+        util::BitSet matched_target_rows(row_ranges.front()->diff());
+        for (size_t source_row_idx = 0; source_row_idx < rows_to_update.size(); ++source_row_idx) {
+            for (const size_t target_row : rows_to_update[source_row_idx]) {
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        !matched_target_rows[target_row],
+                        "Multiple source rows match the same target row. This is not allowed as it's not clear which "
+                        "source row should be used for the update. Target row is {}, the second source row to match it "
+                        "is {}",
+                        target_row,
+                        source_row_idx + source_row_start
+                );
+                matched_target_rows[target_row] = true;
+            }
         }
     }
+
+    const size_t rows_to_insert =
+            strategy_.not_matched_by_target == MergeAction::INSERT ? rows_to_update.size() - num_matched_rows : 0;
+
+    std::optional<Column> new_index = [&] {
+        std::optional<Column> result;
+        if (rows_to_insert > 0 && is_timeseries) {
+            using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+            const std::span source_data(
+                    static_cast<const timestamp*>(index_tensor->data()) + source_row_start,
+                    source_row_end - source_row_start
+            );
+            result.emplace(merge<IndexType>(
+                    target_segments[0]->column(0),
+                    source_data,
+                    target_segments[0]->column(0),
+                    source_data,
+                    rows_to_update,
+                    rows_to_insert,
+                    strategy_
+            ));
+        }
+        return result;
+    }();
+
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row
     // being updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
@@ -603,8 +722,7 @@ bool MergeUpdateClause::update_and_insert(
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         util::is_cstyle_array<RawType>(source_tensors[column_position_in_source]),
                         "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data type "
-                        "{} of "
-                        "size {} bytes but the stride is {} bytes",
+                        "{} of size {} bytes but the stride is {} bytes",
                         target_field.name(),
                         target_field.type(),
                         sizeof(RawType),
@@ -624,56 +742,69 @@ bool MergeUpdateClause::update_and_insert(
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
                 );
-                if constexpr (is_sequence_type(DataTypeTag::data_type)) {
-                    // String columns are always recreated from scratch regardless if an update or insert is
-                    // happening. This is done because the string pool must be updated. With data read from disk,
-                    // the map_ member of the pool is not populated. Which means that the mapping between a string
-                    // and offset in the pool is missing. To get it, we need to rebuild the pool anyway.
-                    segment_contains_string_column = true;
-                    const MergeUpdateStringColumnFlags column_update_flags{
-                            .is_timeseries = is_timeseries,
-                            .data_not_changed = on_set_.contains(target_field.name()) && strategy_.update_only()
-                    };
-                    row_slice_changed |= merge_update_string_column<ScalarType>(
-                            target_column,
-                            column_update_flags,
-                            rows_to_update,
-                            target_field,
-                            *row_ranges[segment_idx],
-                            target_segment.string_pool(),
-                            source_data,
-                            new_string_pool
-                    );
-                } else {
-                    if (is_update_only() && on_set_.contains(target_field.name())) {
-                        return;
-                    }
-                    ColumnData target_column_data = target_column.data();
-                    if (is_timeseries) {
-                        auto target_row_to_update_it = target_column_data.begin<ScalarType>();
-                        size_t target_row_to_update_idx = 0;
-                        for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
-                            // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
-                            row_slice_changed |= !rows_to_update[source_row_idx].empty();
-                            for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
-                                const size_t rows_to_skip = target_row_idx - target_row_to_update_idx;
-                                std::advance(target_row_to_update_it, rows_to_skip);
-                                *target_row_to_update_it = source_data[source_row_idx];
-                                target_row_to_update_idx = target_row_idx;
-                            }
-                        }
+
+                if (strategy_.update_only() || rows_to_insert == 0) {
+                    if constexpr (is_sequence_type(DataTypeTag::data_type)) {
+                        // String columns are always recreated from scratch regardless if an update or insert is
+                        // happening. This is done because the string pool must be updated. With data read from disk,
+                        // the map_ member of the pool is not populated. Which means that the mapping between a string
+                        // and offset in the pool is missing. To get it, we need to rebuild the pool anyway.
+                        segment_contains_string_column = true;
+                        const MergeUpdateStringColumnFlags column_update_flags{
+                                .is_timeseries = is_timeseries,
+                                .data_not_changed = on_set_.contains(target_field.name()) && strategy_.update_only()
+                        };
+                        row_slice_changed |= merge_update_string_column<ScalarType>(
+                                target_column,
+                                column_update_flags,
+                                rows_to_update,
+                                target_field,
+                                *row_ranges[segment_idx],
+                                target_segment.string_pool(),
+                                source_data,
+                                new_string_pool
+                        );
                     } else {
+                        if (on_set_.contains(target_field.name())) {
+                            return;
+                        }
+                        ColumnData target_column_data = target_column.data();
                         auto target = random_accessor<ScalarType>(&target_column_data);
                         for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
-                            // TODO: Handle insert. Empty rows_to_update[source_row_idx] means that update must be done
                             row_slice_changed |= !rows_to_update[source_row_idx].empty();
                             for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
                                 target[target_row_idx] = source_data[source_row_idx];
                             }
                         }
                     }
+                } else {
+                    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
+                            is_timeseries, "Merge update with insertion is implemented only for timeseries"
+                    );
+                    const std::span source_index(
+                            static_cast<const timestamp*>(index_tensor->data()) + source_row_start,
+                            source_row_end - source_row_start
+                    );
+                    const Column& target_index = target_segment.column(0);
+                    target_segment.column(column_index_in_slice) = merge<ScalarType>(
+                            target_index,
+                            source_index,
+                            target_column,
+                            source_data,
+                            rows_to_update,
+                            rows_to_insert,
+                            strategy_
+                    );
+                    row_slice_changed = true;
                 }
             });
+        }
+        if (rows_to_insert > 0) {
+            if (new_index) {
+                const bool is_last_segment = segment_idx == target_segments.size() - 1;
+                target_segment.column(0) = is_last_segment ? std::move(*new_index) : new_index->clone();
+            }
+            target_segment.set_row_data(target_segment.row_count() + rows_to_insert - 1);
         }
         if (segment_contains_string_column) {
             target_segment.set_string_pool(std::make_shared<StringPool>(std::move(new_string_pool)));
@@ -693,7 +824,7 @@ bool MergeUpdateClause::update_and_insert(
 ///
 /// Complexity: $$O(m * log_2(n) + n)$$ where: m is the count of source rows in the bounds of the segment, n is the
 /// number of target rows in the segment.
-std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
+std::pair<std::vector<std::vector<size_t>>, size_t> MergeUpdateClause::filter_index_match(
         const Column& target_index, const std::span<const timestamp> source_index, const ProcessingUnit& proc
 ) const {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
@@ -712,7 +843,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
     size_t source_row = source_row_start;
     const size_t source_rows_in_row_slice = source_row_end - source_row;
     std::vector<std::vector<size_t>> matched_rows(source_rows_in_row_slice);
-    size_t target_row = 0;
+    size_t target_row = 0, num_matched_rows = 0;
     // This loop can be inverted so that if source_row_end - source_row_start is > len(target) the complexity becomes
     // O(n * log_2(m)) where: m is the count of source rows in the bounds of the segment, n is the number of target rows
     // in the segment.
@@ -729,6 +860,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
         }
         target_row = *target_match_it;
         while (target_row < last_target_row_to_consider && target_index_accessor.at(target_row) == source_ts) {
+            num_matched_rows += matched_rows[source_row - source_row_start].empty();
             matched_rows[source_row - source_row_start].push_back(target_row);
             ++target_row;
         }
@@ -737,18 +869,19 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(
         while (++source_row < source_row_end && source_index[source_row] == source_ts) {
             const size_t source_row_offset = source_row - source_row_start;
             matched_rows[source_row_offset] = matched_rows[source_row_offset - 1];
+            num_matched_rows += !matched_rows[source_row_offset].empty();
         }
     }
-    return matched_rows;
+    return std::pair{std::move(matched_rows), num_matched_rows};
 }
 
 /// Complexity: $$O(c * n * m)$$ m is the count of source rows in the bounds of the segment, n is the  number of target
 /// rows in the segment. c is the number of columns in MergeUpdateClause::on_. It can be reached if the data in source
 /// and target is the same up to the very last column in MergeUpdateClause::on_.
-std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns_match(
+std::pair<std::vector<std::vector<size_t>>, size_t> MergeUpdateClause::filter_on_additional_columns_match(
         const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
         const std::span<const NativeTensor> source_tensors, ProcessingUnit& proc,
-        std::optional<std::vector<std::vector<size_t>>>&& index_match
+        std::optional<std::vector<std::vector<size_t>>>&& index_match, size_t num_matched_rows
 ) const {
     ranges::subrange on = on_;
     std::vector<std::vector<size_t>> matched_rows;
@@ -769,11 +902,12 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                 source_index_type,
                 target_index_type
         );
-        matched_rows = initialize_rows_to_update_for_rowrange_indexed_data(proc, source_descriptor);
+        std::tie(matched_rows, num_matched_rows) =
+                initialize_rows_to_update_for_rowrange_indexed_data(proc, source_descriptor);
         on = on.next();
     }
     if (on.empty()) {
-        return matched_rows;
+        return std::pair{std::move(matched_rows), num_matched_rows};
     }
     const auto [source_row_start, source_row_end] = get_source_start_end(proc);
     // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
@@ -812,25 +946,33 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
                         if constexpr (std::same_as<std::decay_t<SourceDataTypeTag>, std::decay_t<TargetDataTypeTag>>) {
                             auto target_accessor = random_accessor<TargetTDT>(&target_data);
                             for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
-                                std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row_idx) {
-                                    const TargetRawType target_value = target_accessor.at(target_row_idx);
-                                    const auto& source_value = source_data[source_row_idx];
-                                    auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
-                                            source_value, target_value, *target_column.string_pool_, scoped_gil_lock
-                                    );
-                                    if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {
-                                        return util::variant_match(
-                                                are_values_equal,
-                                                [](const bool equal) { return !equal; },
-                                                [&](convert::StringEncodingError& err) -> bool {
-                                                    err.row_index_in_slice_ = source_row_idx;
-                                                    err.raise(column_name, source_row_start);
-                                                }
+                                if (!matched_rows.empty()) {
+                                    std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row_idx) {
+                                        const TargetRawType target_value = target_accessor.at(target_row_idx);
+                                        const auto& source_value = source_data[source_row_idx];
+                                        auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
+                                                source_value, target_value, *target_column.string_pool_, scoped_gil_lock
                                         );
-                                    } else {
-                                        return !std::get<bool>(are_values_equal);
-                                    }
-                                });
+                                        if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {
+                                            return util::variant_match(
+                                                    are_values_equal,
+                                                    [](const bool equal) { return !equal; },
+                                                    [&](convert::StringEncodingError& err) -> bool {
+                                                        err.row_index_in_slice_ = source_row_idx;
+                                                        err.raise(column_name, source_row_start);
+                                                    }
+                                            );
+                                        } else {
+                                            return !std::get<bool>(are_values_equal);
+                                        }
+                                    });
+                                    ARCTICDB_DEBUG_CHECK(
+                                            ErrorCode::E_ASSERTION_FAILURE,
+                                            num_matched_rows > 0 || !matched_rows[source_row_idx].empty(),
+                                            ""
+                                    );
+                                    num_matched_rows -= matched_rows[source_row_idx].empty();
+                                }
                             }
                         } else {
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
@@ -844,7 +986,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_on_additional_columns
             );
         });
     }
-    return matched_rows;
+    return std::pair{std::move(matched_rows), num_matched_rows};
 }
 
 const ClauseInfo& MergeUpdateClause::clause_info() const { return clause_info_; }

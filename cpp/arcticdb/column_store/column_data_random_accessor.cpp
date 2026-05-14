@@ -168,8 +168,8 @@ class ColumnDataRandomAccessorDense {
     ChunkedBufferRandomAccessor<TDT> chunked_buffer_random_accessor_;
 };
 
-template<typename TDT>
-requires(util::instantiation_of<TDT, TypeDescriptorTag> && (TDT::dimension() == Dimension::Dim0))
+template<util::type_descriptor_tag TDT>
+requires(TDT::dimension() == Dimension::Dim0)
 ColumnDataRandomAccessor<TDT> random_accessor(ColumnData* parent) {
     bool sparse = parent->bit_vector() != nullptr;
     if (parent->buffer().num_blocks() == 1) {

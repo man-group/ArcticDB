@@ -17,6 +17,8 @@ struct MergeStrategy {
     bool operator==(const MergeStrategy&) const = default;
     bool update_only() const;
     bool insert_only() const;
+    bool insert() const;
+    bool update() const;
 };
 
 } // namespace arcticdb

@@ -128,6 +128,18 @@ class ComponentManager {
         return get_entities_impl<Args...>(ids, false);
     }
 
+    template<typename ProcessComponents>
+    void process_entities(ProcessComponents&& process_fn) {
+        using ArgTypes = util::function_arg_types<std::decay_t<ProcessComponents>>::args_t;
+        using NoRefArgs = decltype([]<typename... Ts>(std::tuple<Ts...>*) {
+            return std::tuple<std::remove_reference_t<Ts>...>{};
+        }(static_cast<ArgTypes*>(nullptr)));
+        return [&]<typename... Args>(std::tuple<Args...>*) {
+            auto view = registry_.view<Args...>();
+            return view.each(std::forward<ProcessComponents>(process_fn));
+        }(static_cast<NoRefArgs*>(nullptr));
+    }
+
   private:
     void decrement_entity_fetch_count(EntityId id);
     void update_entity_fetch_count(EntityId id, EntityFetchCount count);

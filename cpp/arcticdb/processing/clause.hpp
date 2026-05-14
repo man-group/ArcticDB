@@ -32,6 +32,10 @@
 
 namespace arcticdb {
 
+struct MergeUpdateInsertedRowsEntity {
+    size_t inserted_rows;
+};
+
 using ResampleOrigin = std::variant<std::string, timestamp>;
 
 using RangesAndKey = pipelines::RangesAndKey;
@@ -893,8 +897,9 @@ struct MergeUpdateClause {
 
   private:
     bool update_and_insert(
-            const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
-            const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
+            const std::optional<NativeTensor>& index_tensor, const std::span<const NativeTensor> source_tensors,
+            const StreamDescriptor& source_descriptor, const ProcessingUnit& proc,
+            const std::span<const std::vector<size_t>> rows_to_update, size_t num_matched_rows
     ) const;
 
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
@@ -904,17 +909,17 @@ struct MergeUpdateClause {
     /// @return Vector of size equal to the number of source data rows that are within the row slice being
     /// processed. Each element is a vector of the rows from the target data that has the same index as the
     /// corresponding source row
-    std::vector<std::vector<size_t>> filter_index_match(
+    std::pair<std::vector<std::vector<size_t>>, size_t> filter_index_match(
             const Column& target_index, const std::span<const timestamp> source_index, const ProcessingUnit& proc
     ) const;
 
-    std::vector<std::vector<size_t>> filter_on_additional_columns_match(
+    std::pair<std::vector<std::vector<size_t>>, size_t> filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
             const std::span<const NativeTensor> source_tensors, ProcessingUnit& proc,
-            std::optional<std::vector<std::vector<size_t>>>&& index_match
+            std::optional<std::vector<std::vector<size_t>>>&& index_match, size_t num_matched_rows
     ) const;
 
-    std::vector<std::vector<size_t>> initialize_rows_to_update_for_rowrange_indexed_data(
+    std::pair<std::vector<std::vector<size_t>>, size_t> initialize_rows_to_update_for_rowrange_indexed_data(
             ProcessingUnit& proc, const StreamDescriptor& source_descriptor
     ) const;
 
