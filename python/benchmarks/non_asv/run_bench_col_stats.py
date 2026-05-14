@@ -12,6 +12,7 @@ from arcticdb import Arctic
 
 LMDB_PATH = "/tmp/arcticdb_bench_col_stats"
 SYMBOL_NAME = "test_symbol"
+CREATE_STATS_WARMUP_RUNS = 2
 CREATE_STATS_RUNS = 10
 WORKER_SCRIPT = Path(__file__).parent / "bench_col_stats.py"
 
@@ -94,6 +95,10 @@ def measure(scenario, index, results):
     print(f"  [write_symbol] {rows}x{cols}", file=sys.stderr)
     write_result = run_subprocess("write_symbol", rows, cols)
     results[index].symbol_write_time = write_result["elapsed_seconds"]
+
+    for warmup_number in range(1, CREATE_STATS_WARMUP_RUNS + 1):
+        print(f"  [create_stats] warmup {warmup_number}/{CREATE_STATS_WARMUP_RUNS}", file=sys.stderr)
+        run_subprocess("create_stats", rows, cols)
 
     for run_number in range(1, CREATE_STATS_RUNS + 1):
         print(f"  [create_stats] run {run_number}/{CREATE_STATS_RUNS}", file=sys.stderr)
