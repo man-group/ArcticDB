@@ -20,12 +20,14 @@ def main():
     start = time.time()
     nvs.create_column_stats(SYMBOL_NAME, column_stats_spec)
     end = time.time()
+    
+    peak_rss_mb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
     nvs.drop_column_stats(SYMBOL_NAME)
 
     print(json.dumps({
         "elapsed_seconds": end - start,
-        "peak_rss_mb": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024,
+        "peak_rss_mb": peak_rss_mb / 1024,
     }))
 
 
