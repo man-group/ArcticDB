@@ -2211,11 +2211,17 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
             );
         }
 
-        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions, false);
+        specific_versions = batch_get_specific_versions(
+                store(),
+                version_map(),
+                sym_versions,
+                BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
+        );
+
         std::vector<std::string> missing;
         for (const auto& [symbol, versions] : sym_versions) {
             for (auto version : versions) {
-                if (!specific_versions->count(std::make_pair(symbol, version))) {
+                if (!specific_versions->contains(std::make_pair(symbol, version))) {
                     missing.push_back(fmt::format("{}:{}", symbol, version));
                 }
             }

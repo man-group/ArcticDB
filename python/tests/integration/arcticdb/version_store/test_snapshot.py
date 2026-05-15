@@ -565,7 +565,7 @@ def test_add_to_snapshot_rejects_deleted_version(basic_store_delayed_deletes_v1,
 
 
 @pytest.mark.storage
-def test_add_to_snapshot_rejects_tombstoned_version_kept_alive_by_other_snapshot(basic_store_delayed_deletes_v1):
+def test_add_to_snapshot_allows_tombstoned_version_kept_alive_by_other_snapshot(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
     ver = lib.write("tombstoned_sym", 1).version
     lib.snapshot("protecting_snap")
@@ -574,15 +574,15 @@ def test_add_to_snapshot_rejects_tombstoned_version_kept_alive_by_other_snapshot
     lib.write("existing_sym", 100)
     lib.snapshot("target_snap")
 
-    snap_versions_before = lib.list_versions(snapshot="target_snap")
-    with pytest.raises(NoSuchVersionException):
-        lib.add_to_snapshot("target_snap", ["tombstoned_sym"], [ver])
+    lib.add_to_snapshot("target_snap", ["tombstoned_sym"], [ver])
 
-    # target_snap should be unchanged after the failed add
-    snap_versions_after = lib.list_versions(snapshot="target_snap")
-    assert len(snap_versions_after) == len(snap_versions_before)
+    # target_snap should now contain both existing_sym and tombstoned_sym:v0
+    snap_versions = lib.list_versions(snapshot="target_snap")
+    snap_symbols = {v["symbol"] for v in snap_versions}
+    assert snap_symbols == {"existing_sym", "tombstoned_sym"}
+    assert lib.read("tombstoned_sym", as_of="target_snap").data == 1
     assert lib.read("existing_sym", as_of="target_snap").data == 100
-    # protecting_snap should still be intact and readable
+    # protecting_snap should still be intact
     assert lib.read("tombstoned_sym", as_of="protecting_snap").data == 1
 
 

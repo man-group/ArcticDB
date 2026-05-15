@@ -803,7 +803,10 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # remove from snapshot operation succeeds even symbol exists but version does not exist
     lib.remove_from_snapshot("snap", ["s2"], [2])
-    lib.add_to_snapshot("snap", ["s2", "s1"], [4343, 45949345])
+
+    # we don't allow adding non-existent versions to snapshot
+    with pytest.raises(NoSuchVersionException):
+        lib.add_to_snapshot("snap", ["s2", "s1"], [4343, 45949345])
 
     # Verify the snapshot state is not changed
     assert 100 == lib.read("s1", as_of="snap").data
