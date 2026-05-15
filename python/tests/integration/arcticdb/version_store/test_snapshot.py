@@ -542,67 +542,67 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
 
 @pytest.mark.parametrize("delete_via", ["prune", "delete"])
 @pytest.mark.storage
-def test_add_to_snapshot_rejects_deleted_version(basic_store_delayed_deletes_v1, sym, delete_via):
+def test_add_to_snapshot_rejects_deleted_version(basic_store_delayed_deletes_v1, delete_via):
     lib = basic_store_delayed_deletes_v1
-    lib.write("other", 100)
+    lib.write("existing_sym", 100)
     lib.snapshot("snap")
 
-    ver = lib.write(sym, 1).version
+    ver = lib.write("deleted_sym", 1).version
 
     if delete_via == "prune":
-        lib.write(sym, 2)  # tombstones v0 via pruning
+        lib.write("deleted_sym", 2)  # tombstones v0 via pruning
     else:
-        lib.delete(sym)
-        
-    with pytest.raises(NoSuchVersionException):
-        lib.add_to_snapshot("snap", [sym], [ver])
+        lib.delete("deleted_sym")
 
-    # Snapshot should be unchanged - still contains only "other"
+    with pytest.raises(NoSuchVersionException):
+        lib.add_to_snapshot("snap", ["deleted_sym"], [ver])
+
+    # Snapshot should be unchanged - still contains only "existing_sym"
     snap_versions = lib.list_versions(snapshot="snap")
     assert len(snap_versions) == 1
-    assert snap_versions[0]["symbol"] == "other"
-    assert lib.read("other", as_of="snap").data == 100
+    assert snap_versions[0]["symbol"] == "existing_sym"
+    assert lib.read("existing_sym", as_of="snap").data == 100
 
 
 @pytest.mark.storage
-def test_add_to_snapshot_rejects_tombstoned_version_kept_alive_by_other_snapshot(basic_store_delayed_deletes_v1, sym):
+def test_add_to_snapshot_rejects_tombstoned_version_kept_alive_by_other_snapshot(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
-    ver = lib.write(sym, 1).version
+    ver = lib.write("tombstoned_sym", 1).version
     lib.snapshot("protecting_snap")
-    lib.write(sym, 2)  # tombstones v0 via pruning; data kept alive by protecting_snap
+    lib.write("tombstoned_sym", 2)  # tombstones v0 via pruning; data kept alive by protecting_snap
 
-    lib.write("other", 100)
+    lib.write("existing_sym", 100)
     lib.snapshot("target_snap")
 
     snap_versions_before = lib.list_versions(snapshot="target_snap")
     with pytest.raises(NoSuchVersionException):
-        lib.add_to_snapshot("target_snap", [sym], [ver])
+        lib.add_to_snapshot("target_snap", ["tombstoned_sym"], [ver])
 
     # target_snap should be unchanged after the failed add
     snap_versions_after = lib.list_versions(snapshot="target_snap")
     assert len(snap_versions_after) == len(snap_versions_before)
-    assert lib.read("other", as_of="target_snap").data == 100
+    assert lib.read("existing_sym", as_of="target_snap").data == 100
     # protecting_snap should still be intact and readable
-    assert lib.read(sym, as_of="protecting_snap").data == 1
+    assert lib.read("tombstoned_sym", as_of="protecting_snap").data == 1
 
 
 @pytest.mark.storage
 def test_add_to_snapshot_rejects_multiple_deleted_versions(basic_store_delayed_deletes_v1):
     lib = basic_store_delayed_deletes_v1
-    lib.write("other", 100)
+    lib.write("existing_sym", 100)
     lib.snapshot("snap")
 
-    ver_a = lib.write("A", 1).version
-    lib.delete("A")
-    ver_b = lib.write("B", 1).version
-    lib.delete("B")
-    with pytest.raises(NoSuchVersionException, match="A"):
-        lib.add_to_snapshot("snap", ["A", "B"], [ver_a, ver_b])
+    ver_a = lib.write("deleted_sym_a", 1).version
+    lib.delete("deleted_sym_a")
+    ver_b = lib.write("deleted_sym_b", 1).version
+    lib.delete("deleted_sym_b")
+    with pytest.raises(NoSuchVersionException, match=r"deleted_sym_a.*deleted_sym_b|deleted_sym_b.*deleted_sym_a"):
+        lib.add_to_snapshot("snap", ["deleted_sym_a", "deleted_sym_b"], [ver_a, ver_b])
 
-    # Snapshot should be unchanged - still contains only "other"
+    # Snapshot should be unchanged - still contains only "existing_sym"
     snap_versions = lib.list_versions(snapshot="snap")
     assert len(snap_versions) == 1
-    assert lib.read("other", as_of="snap").data == 100
+    assert lib.read("existing_sym", as_of="snap").data == 100
 
 
 def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):

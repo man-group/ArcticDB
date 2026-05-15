@@ -492,7 +492,6 @@ void PythonVersionStore::add_to_snapshot(
         retained_keys.emplace_back(std::move(key));
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
-    
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
@@ -540,7 +539,6 @@ void PythonVersionStore::remove_from_snapshot(
         }
     }
 
-    
     write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
