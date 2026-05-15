@@ -10,7 +10,7 @@ import pytest
 
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.util.test import query_stats_operation_count
-from arcticdb_ext.exceptions import KeyNotFoundException
+from arcticdb_ext.exceptions import InternalException, KeyNotFoundException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 
 
@@ -388,7 +388,10 @@ def test_broken_version_chain(lmdb_version_store_v1, latest_only):
     # This is the entry for writing version 1
     key_to_delete = version_keys[1]
     lib_tool.remove(key_to_delete)
-    with pytest.raises(KeyNotFoundException) as e:
+    # The version chain traversal raises KeyNotFoundException directly, but if the
+    # symbol list load path hits the missing key first, ExponentialBackoff retries and
+    # eventually throws InternalException ("Exhausted retry attempts").
+    with pytest.raises((KeyNotFoundException, InternalException)) as e:
         lib.list_versions(latest_only=latest_only)
     assert broken_sym in str(e.value)
 
