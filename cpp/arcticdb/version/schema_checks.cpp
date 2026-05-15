@@ -2,18 +2,8 @@
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
-namespace arcticdb {
-
-std::string_view normalization_operation_str(NormalizationOperation operation) {
-    switch (operation) {
-    case APPEND:
-        return "APPEND";
-    case UPDATE:
-        return "UPDATE";
-    default:
-        util::raise_rte("Unknown operation type {}", static_cast<uint8_t>(operation));
-    }
-}
+namespace {
+using namespace arcticdb;
 
 IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) {
     if (left == right) {
@@ -29,13 +19,56 @@ IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, c
 }
 
 void check_normalization_index_match(
-        NormalizationOperation operation, const StreamDescriptor& old_descriptor, const pipelines::InputFrame& frame,
-        bool empty_types
+        NormalizationOperation operation, const pipelines::index::IndexSegmentReader& existing_isr,
+        const pipelines::InputFrame& frame, bool empty_types
 ) {
-    const IndexDescriptor::Type old_idx_kind = old_descriptor.index().type();
+    const IndexDescriptor::Type old_idx_kind = existing_isr.tsd().as_stream_descriptor().index().type();
     const IndexDescriptor::Type new_idx_kind = frame.desc().index().type();
+
+    // In case of multiindex we require the multiindex fields in the input to match the mutliindex fields on disk even
+    // when dynamic schema is used. This is because it's too hard to keep the normalization metadata in sync.
+    if (existing_isr.tsd().normalization().has_df()) {
+        const auto& existing_common = existing_isr.tsd().normalization().df().common();
+        if (existing_common.has_multi_index()) {
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    frame.norm_meta.has_df() && frame.norm_meta.df().common().has_multi_index(),
+                    "Cannot append/update multi-indexed data to non-multi-indexed data and vice versa"
+            );
+            const auto& existing_multiindex = existing_common.multi_index();
+            const auto& new_multiindex = frame.norm_meta.df().common().multi_index();
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    existing_multiindex.field_count() == new_multiindex.field_count(),
+                    "Multi-index field count mismatch. On disk frame has {} fields, new frame has {} fields",
+                    existing_multiindex.field_count(),
+                    new_multiindex.field_count()
+            );
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    existing_multiindex.is_int() == new_multiindex.is_int(),
+                    "When using Pandas Multiindex the names of all columns in the Multiindex must match between "
+                    "append/update input and what's on disk even with dynamic schema"
+            );
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    std::ranges::equal(existing_multiindex.fake_field_pos(), new_multiindex.fake_field_pos()),
+                    "Unnamed columns between existing and new multiindex must match"
+            );
+            // See _PandasNormalizer::_index_to_records it sets the field count to len(index.levels) - 1
+            const size_t multiindex_fields = new_multiindex.field_count() + 1;
+            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                    std::ranges::equal(
+                            existing_isr.tsd().as_stream_descriptor().fields() | std::views::take(multiindex_fields),
+                            frame.desc().fields() | std::views::take(multiindex_fields),
+                            std::ranges::equal_to{},
+                            [](const Field& field) { return field.name(); },
+                            [](const Field& field) { return field.name(); }
+                    ),
+                    "When using Pandas Multiindex the names of all columns in the Multiindex must match between "
+                    "append/update input and what's on disk even with dynamic schema"
+            );
+        }
+    }
+
     if (operation == UPDATE) {
-        const bool new_is_timeseries = std::holds_alternative<arcticdb::stream::TimeseriesIndex>(frame.index);
+        const bool new_is_timeseries = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
         util::check_rte(
                 (old_idx_kind == IndexDescriptor::Type::TIMESTAMP || old_idx_kind == IndexDescriptor::Type::EMPTY) &&
                         new_is_timeseries,
@@ -72,6 +105,29 @@ void check_normalization_index_match(
         }
     }
 }
+
+std::string_view normalization_operation_str(NormalizationOperation operation) {
+    switch (operation) {
+    case APPEND:
+        return "APPEND";
+    case UPDATE:
+        return "UPDATE";
+    default:
+        util::raise_rte("Unknown operation type {}", static_cast<uint8_t>(operation));
+    }
+}
+} // namespace
+
+namespace arcticdb {
+
+StreamDescriptorMismatch::StreamDescriptorMismatch(
+        const char* preamble, const StreamId& stream_id, const StreamDescriptor& existing,
+        const StreamDescriptor& new_val, NormalizationOperation operation
+) :
+    ArcticSpecificException(fmt::format(
+            "{}: {}; stream_id=\"{}\"; existing=\"{}\"; new_val=\"{}\"", preamble,
+            normalization_operation_str(operation), stream_id, existing.fields(), new_val.fields()
+    )) {}
 
 bool index_names_match(const StreamDescriptor& df_in_store_descriptor, const StreamDescriptor& new_df_descriptor) {
     auto df_in_store_index_field_count = df_in_store_descriptor.index().field_count();
@@ -142,11 +198,11 @@ void fix_descriptor_mismatch_or_throw(
         NormalizationOperation operation, bool dynamic_schema, const pipelines::index::IndexSegmentReader& existing_isr,
         const pipelines::InputFrame& new_frame, bool empty_types
 ) {
-    const auto& old_sd = existing_isr.tsd().as_stream_descriptor();
-    check_normalization_index_match(operation, old_sd, new_frame, empty_types);
+    check_normalization_index_match(operation, existing_isr, new_frame, empty_types);
 
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
 
+    const auto& old_sd = existing_isr.tsd().as_stream_descriptor();
     // We need to check that the index names match regardless of the dynamic schema setting
     if (!index_names_match(old_sd, new_frame.desc())) {
         throw StreamDescriptorMismatch(
@@ -167,6 +223,7 @@ void fix_descriptor_mismatch_or_throw(
                 operation
         );
     }
+
     if (dynamic_schema && new_frame.norm_meta.has_series() && existing_isr.tsd().normalization().has_series()) {
         const bool both_dont_have_name = !new_frame.norm_meta.series().common().has_name() &&
                                          !existing_isr.tsd().normalization().series().common().has_name();

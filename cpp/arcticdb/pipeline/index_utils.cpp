@@ -8,7 +8,7 @@
 
 #include <arcticdb/pipeline/index_utils.hpp>
 
-#include "python/normalization_utils.hpp"
+#include <arcticdb/python/normalization_utils.hpp>
 
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
@@ -96,7 +96,30 @@ proto::descriptors::NormalizationMetadata merge_normalization_metadata(
         if (result.has_series()) {
             *result.mutable_series()->mutable_common()->mutable_index() = new_frame.norm_meta.series().common().index();
         } else if (result.has_df()) {
-            *result.mutable_df()->mutable_common()->mutable_index() = new_frame.norm_meta.df().common().index();
+            if (result.df().common().has_index()) {
+                *result.mutable_df()->mutable_common()->mutable_index() = new_frame.norm_meta.df().common().index();
+            } else if (result.df().common().has_multi_index()) {
+                *result.mutable_df()->mutable_common()->mutable_multi_index() =
+                        new_frame.norm_meta.df().common().multi_index();
+            }
+        }
+    } else if (existing_tsd.index().type() == IndexDescriptor::Type::TIMESTAMP) {
+        // See Monday 12029540807
+        // It's a known bug that the new metadata overwrites the timezone but it's an API break to fix it.
+        if (result.has_df()) {
+            if (result.df().common().has_multi_index()) {
+                result.mutable_df()->mutable_common()->mutable_multi_index()->set_tz(
+                        new_frame.norm_meta.df().common().multi_index().tz()
+                );
+            } else {
+                result.mutable_df()->mutable_common()->mutable_index()->set_tz(
+                        new_frame.norm_meta.df().common().index().tz()
+                );
+            }
+        } else if (result.has_series()) {
+            result.mutable_series()->mutable_common()->mutable_index()->set_tz(
+                    new_frame.norm_meta.series().common().index().tz()
+            );
         }
     }
     return result;

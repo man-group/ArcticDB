@@ -27,7 +27,12 @@ from numpy.testing import assert_equal, assert_array_equal
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 
 from arcticdb import QueryBuilder, concat
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticException
+from arcticdb.exceptions import (
+    ArcticDbNotYetImplemented,
+    ArcticException,
+    NormalizationException,
+    ArcticNativeException,
+)
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     get_custom_normalizer,
@@ -55,7 +60,6 @@ from arcticdb.util.test import (
     assert_series_equal,
 )
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
-from arcticdb.exceptions import ArcticNativeException
 import arcticc.pb2.descriptors_pb2 as descriptors_pb2
 
 from tests.util.mark import param_dict, ZONE_INFO_MARK
@@ -286,6 +290,60 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert isinstance(end_ts, datetime.datetime)
     assert start_ts == index[0]
     assert end_ts == index[-1]
+
+
+@pytest.mark.parametrize("action", [lambda lib, sym, df: lib.append(sym, df), lambda lib, sym, df: lib.update(sym, df)])
+class TestTimezoneIsOverwritten:
+    """
+    See Monday 12029540807
+    It's a known bug that with append/update the metadata will overwrite the timezone. It's a breaking change to fix it.
+    Wait for version 7 to be released.
+    """
+
+    def test_dataframe_with_different_index_timezone(self, in_memory_store_factory, action):
+        lib = in_memory_store_factory()
+        sym = "test_append_with_different_index_timezone"
+        df1 = pd.DataFrame(
+            {"value": [1]},
+            index=pd.date_range(pd.Timestamp("2025-01-01"), periods=1, tz="America/New_York"),
+        )
+        lib.write(sym, df1)
+        df2 = pd.DataFrame(
+            {"value": [2]},
+            index=pd.date_range(pd.Timestamp("2025-01-02"), periods=1, tz="Europe/London"),
+        )
+        action(lib, sym, df2)
+        assert lib.read(sym).data.index.tz == df2.index.tz
+
+    def test_series_with_different_index_timezone(self, in_memory_store_factory, action):
+        lib = in_memory_store_factory()
+        sym = "test_append_with_different_index_timezone"
+        series1 = pd.Series(
+            [1],
+            index=pd.date_range(pd.Timestamp("2025-01-01"), periods=1, tz="America/New_York"),
+        )
+        lib.write(sym, series1)
+        series2 = pd.Series(
+            [2],
+            index=pd.date_range(pd.Timestamp("2025-01-02"), periods=1, tz="Europe/London"),
+        )
+        action(lib, sym, series2)
+        assert lib.read(sym).data.index.tz == series2.index.tz
+
+    def test_multiindex_with_different_index_timezone(self, in_memory_store_factory, action):
+        lib = in_memory_store_factory()
+        sym = "multiindex_with_different_index_timezone"
+        df1 = pd.DataFrame(
+            {"a": [1]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp(0, tz="America/New_York"), 1)], names=["date", "value"]),
+        )
+        lib.write(sym, df1)
+        df2 = pd.DataFrame(
+            {"a": [2]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp(1, tz="Europe/London"), 2)], names=["date", "value"]),
+        )
+        action(lib, sym, df2)
+        assert lib.read(sym).data.index.levels[0].tz == df2.index.levels[0].tz
 
 
 @pytest.mark.parametrize(
@@ -1417,7 +1475,7 @@ class TestNonStringColumnNameNormalization:
         if set(df1.columns) | set(df2.columns) == {100, None}:
             # With these column names pandas creates an index that is of dtype=float64 and casts the column names to float
             # so they become 100.0 and np.nan. The concatenated column names list becomes [100.0, np.nan] and it does not
-            # contain the None column. The None column is not added to the final result.
+            # contain the None column.
             expected_data = {
                 col_name: list(df1[col_name]) if col_name in df2.columns else list(df1[col_name]) + [np.nan] * 3
                 for col_name in df1.columns
@@ -1435,16 +1493,16 @@ class TestNonStringColumnNameNormalization:
             expected.columns = expected_names if len(expected_names) else pd.RangeIndex(start=0, stop=0, step=1)
         return expected
 
-    def test_append_with_different_col_name_normalization(self, lmdb_version_store_dynamic_schema_v1, to_write, to_add):
-        lib = lmdb_version_store_dynamic_schema_v1
+    def test_append_with_different_col_name_normalization(self, in_memory_store_factory, to_write, to_add):
+        lib = in_memory_store_factory(dynamic_schema=True)
         lib.write("sym", to_write)
         lib.append("sym", to_add)
         result = lib.read("sym").data
         expected = self.concat(to_write, to_add)
         assert_frame_equal(result, expected)
 
-    def test_update_with_different_col_name_normalization(self, lmdb_version_store_dynamic_schema_v1, to_write, to_add):
-        lib = lmdb_version_store_dynamic_schema_v1
+    def test_update_with_different_col_name_normalization(self, in_memory_store_factory, to_write, to_add):
+        lib = in_memory_store_factory(dynamic_schema=True)
         lib.write("sym", to_write)
         lib.update("sym", to_add)
         result = lib.read("sym").data
@@ -1457,4 +1515,97 @@ class TestNonStringColumnNameNormalization:
         lib.write("sym1", to_add)
         result = concat(lib.read_batch(["sym0", "sym1"], lazy=True), "outer").collect().data
         expected = self.concat(to_write, to_add)
+        assert_frame_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "to_write",
+    [
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", "dt"])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=[None, "dt"])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", None])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a", 1)], names=["dt", "level1", "level2"]),
+        ),
+        pd.DataFrame(
+            {"level2": [1.0], "a": [1.0]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"]),
+        ),
+        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([("x", 1)], names=["str_level", "int_level"])),
+        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([(1, "a")], names=["int_level", "str_level"])),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", 1])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", "1"])
+        ),
+    ],
+)
+@pytest.mark.parametrize(
+    "to_append",
+    [
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", "dt"])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=[None, "dt"])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", None])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a", 1)], names=["dt", "level1", "level2"]),
+        ),
+        pd.DataFrame(
+            {"level2": [1.0], "a": [1.0]},
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"]),
+        ),
+        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([("x", 1)], names=["str_level", "int_level"])),
+        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([(1, "a")], names=["int_level", "str_level"])),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", 1])
+        ),
+        pd.DataFrame(
+            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", "1"])
+        ),
+    ],
+)
+def test_different_multiindex_fails_with_dynamic_schema(in_memory_store_factory, sym, to_write, to_append):
+    """
+    Tests for multiindex validation in check_normalization_index_match (schema_checks.cpp).
+    With dynamic schema, multiindex field names must still match between writes and appends/updates.
+    """
+    lib = in_memory_store_factory(dynamic_schema=True)
+    lib.write(sym, to_write)
+
+    # See Monday 12026895610
+    to_write_index_names = [str(name) if type(name) == int else name for name in to_write.index.names]
+    to_append_index_names = [str(name) if type(name) == int else name for name in to_append.index.names]
+    should_fail = to_write.index.nlevels != to_append.index.nlevels or to_write_index_names != to_append_index_names
+
+    if should_fail:
+        with pytest.raises(NormalizationException):
+            lib.append(sym, to_append)
+    else:
+        lib.append(sym, to_append)
+        result = lib.read(sym).data
+        expected_to_write = to_write.copy(deep=True)
+        expected_to_append = to_append.copy(deep=True)
+        expected_to_write.index = expected_to_write.index.set_names(to_write_index_names)
+        expected_to_append.index = expected_to_append.index.set_names(to_append_index_names)
+        expected = pd.concat([expected_to_write, expected_to_append])
         assert_frame_equal(result, expected)

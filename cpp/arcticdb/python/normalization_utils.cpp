@@ -254,8 +254,18 @@ void accumulate_norm_metadata_column_names(ColumnNameMapParent& accumulated, con
 
 void accumulate_norm_metadata_column_names(NormalizationMetadata& accumulated, const NormalizationMetadata& new_entry) {
     if (accumulated.has_df()) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                new_entry.has_df(),
+                "Mismatching normalization metadata types in accumulation"
+        );
         accumulate_norm_metadata_column_names(*accumulated.mutable_df(), new_entry.df());
     } else if (accumulated.has_series()) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                new_entry.has_series(),
+                "Mismatching normalization metadata types in accumulation"
+        );
         accumulate_norm_metadata_column_names(*accumulated.mutable_series(), new_entry.series());
     }
 }

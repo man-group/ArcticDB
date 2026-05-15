@@ -1162,7 +1162,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         n_indexes = len(item.index_columns)
         idx_type = norm_meta.common.WhichOneof("index_type")
 
-        columns, denormed_columns, data, denormed_columns_cotain_none = _denormalize_columns(
+        columns, denormed_columns, data, denormed_columns_contain_none = _denormalize_columns(
             item, norm_meta, idx_type, n_indexes
         )
 
@@ -1206,7 +1206,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         if denormed_columns is not None:
             # Set the dtype to object otherwise columns with names int(1) and None will become 1.0 and np.nan, because
             # Pandas assumes this is a float64 array
-            if denormed_columns_cotain_none:
+            if denormed_columns_contain_none:
                 df.columns = pd.Index(denormed_columns, dtype=object)
             else:
                 df.columns = denormed_columns
