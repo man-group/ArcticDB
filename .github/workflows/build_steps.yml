@@ -633,7 +633,8 @@ jobs:
         if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
 
-      # SSH into the container and stop at this step (for debugging only)
+      # SSH into the container and stop at this step
+      # This is left only for reference on how to use this for debugging on personal branches, having this on master is a security risk.
       # - name: Setup tmate session
       #   uses: mxschmitt/action-tmate@v3
       #   with:
