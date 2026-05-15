@@ -23,7 +23,6 @@ class CompactDataBase:
     def __init__(self):
         self.logger = get_logger()
         self.SYM = "sym"
-        self.repeat = 5
         # This is important, because compaction is a destructive process, we must call setup before each measurement
         self.number = 1
 
@@ -78,13 +77,17 @@ class CompactDataBase:
 class CompactDataNumericStaticSchema(CompactDataBase):
     def __init__(self):
         super().__init__()
+        # 50 iterations takes around 10s
+        self.repeat = (50, 100, 30)
         self.LIB_NAME = "compact_data_numeric_static_schema"
         self.CONNECTION_STRING = "lmdb://compact_data_numeric_static_schema"
         self.DYNAMIC_SCHEMA = False
         self.param_names = self.base_param_names
+        # Note that ColumnDataBase._setup will need modifying if num_columns>127 added for the non-column-sliced case
         self.params = [
             [
                 (1_000_000, 10_000, 100_000),
+                (100_000, 100_000, 10_000),
             ],  # (num_rows, initial_rows_per_segment, target_rows_per_segment)
             [2, 10, 100],  # num_columns
             [False, True],  # column_slicing
@@ -105,13 +108,17 @@ class CompactDataNumericStaticSchema(CompactDataBase):
 class CompactDataStringsStaticSchema(CompactDataBase):
     def __init__(self):
         super().__init__()
+        # 5 iterations takes around 10s
+        self.repeat = (5, 10, 30)
         self.LIB_NAME = "compact_data_strings_static_schema"
         self.CONNECTION_STRING = "lmdb://compact_data_strings_static_schema"
         self.DYNAMIC_SCHEMA = False
         self.param_names = self.base_param_names + ["num_unique_strings"]
+        # Note that ColumnDataBase._setup will need modifying if num_columns>127 added for the non-column-sliced case
         self.params = [
             [
                 (1_000_000, 10_000, 100_000),
+                (100_000, 100_000, 10_000),
             ],  # (num_rows, initial_rows_per_segment, target_rows_per_segment)
             [2, 10],  # num_columns
             [False, True],  # column_slicing
@@ -135,6 +142,8 @@ class CompactDataStringsStaticSchema(CompactDataBase):
 class CompactDataNumericDynamicSchema(CompactDataBase):
     def __init__(self):
         super().__init__()
+        # 5 iterations takes around 340s
+        self.repeat = (5, 10, 500)
         self.LIB_NAME = "compact_data_numeric_dynamic_schema"
         self.CONNECTION_STRING = "lmdb://compact_data_numeric_dynamic_schema"
         self.DYNAMIC_SCHEMA = True

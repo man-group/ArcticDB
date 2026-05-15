@@ -32,7 +32,7 @@ enum class ProcessingStructure {
     HASH_BUCKETED,
     ALL,
     MULTI_SYMBOL,
-    SINGLE_COLUMN_MULTI_ROW_SLICES
+    ONE_COL_SLICE_MULTIPLE_ROW_SLICES
 };
 
 struct KeepCurrentIndex {};

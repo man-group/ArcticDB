@@ -1243,8 +1243,8 @@ CompactDataClause::CompactDataClause(uint64_t rows_per_segment) : rows_per_segme
     min_rows_per_segment_ = std::max((2 * rows_per_segment_) / 3, uint64_t(1));
     // If rows_per_segment_ == 2 max_rows_per_segment_ would be 2 without the std::max
     max_rows_per_segment_ = std::max((4 * rows_per_segment_) / 3, rows_per_segment_ + 1);
-    clause_info_.input_structure_ = ProcessingStructure::SINGLE_COLUMN_MULTI_ROW_SLICES;
-    clause_info_.output_structure_ = ProcessingStructure::SINGLE_COLUMN_MULTI_ROW_SLICES;
+    clause_info_.input_structure_ = ProcessingStructure::ONE_COL_SLICE_MULTIPLE_ROW_SLICES;
+    clause_info_.output_structure_ = ProcessingStructure::ONE_COL_SLICE_MULTIPLE_ROW_SLICES;
     clause_info_.can_combine_with_column_selection_ = false;
 }
 
