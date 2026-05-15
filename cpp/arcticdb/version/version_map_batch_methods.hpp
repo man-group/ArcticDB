@@ -320,6 +320,7 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                         (*output)[std::pair(sym_version.first, version)] = version_details.key_.value();
                     } else if (option == BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT &&
                                version_details.version_status_ == VersionStatus::TOMBSTONED) {
+                        // Need to allow tombstoned version but referenced in other snapshot(s) can be "re-snapshot"
                         log::version().warn(
                                 "Version {} for symbol {} is tombstoned, need to check snapshots (this can be slow)",
                                 version,
