@@ -1,25 +1,27 @@
 import json
-import shutil
 import statistics
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-LMDB_PATH = "/tmp/arcticdb_bench_col_stats"
+from ahl.mongo import NativeMongoose
+
+
 WARMUP_RUNS = 2
 RUNS = 10
 WRITE_SYMBOL_SCRIPT = Path(__file__).parent / "col_stats_bench_write_symbol.py"
 CREATE_STATS_SCRIPT = Path(__file__).parent / "col_stats_bench_create_stats.py"
 
 SCENARIOS = [
-    (10, 10),
-    (400, 400),
-    (500, 500),
-    (700, 700),
-    (900, 900),
-    (1_000, 1_000),
-]
+      (400, 400),
+      (400, 1_000),
+      (500, 500),
+      (600, 800),
+      (800, 600),
+      (800, 1_000),
+      (1_000, 1_000),
+  ]
 
 # SCENARIOS = [
 #     (10, 10),
@@ -27,7 +29,7 @@ SCENARIOS = [
 #     (100_000, 1_000),
 #     (100_000, 10_000),
 #     (1_000_000, 1_000),
-#     (1_000_000, 10_000),
+#     (1_000_000, 5_000),
 #     (10_000_000, 1_000),
 # ]
 
@@ -47,14 +49,13 @@ def run_subprocess(script, args, label):
     try:
         completed = subprocess.run(
             [sys.executable, str(script), *map(str, args)],
-            capture_output=True, text=True, check=True,
+            stdout=subprocess.PIPE, stderr=sys.stderr, text=True, check=True,
         )
         return json.loads(completed.stdout)
     except subprocess.CalledProcessError as e:
-        shutil.rmtree(LMDB_PATH, ignore_errors=True)
         killed_by_signal = e.returncode < 0
         reason = f"killed by signal {-e.returncode}" if killed_by_signal else f"exit code {e.returncode}"
-        raise RuntimeError(f"[{label}] subprocess failed ({reason}):\n{e.stderr}") from None
+        raise RuntimeError(f"[{label}] subprocess failed ({reason})") from None
 
 
 def measure(scenario, index):
@@ -74,10 +75,11 @@ def measure(scenario, index):
     for i in range(1, RUNS + 1):
         print(f"  [create_stats] run {i}/{RUNS}", file=sys.stderr)
         r = run_subprocess(CREATE_STATS_SCRIPT, [cols], "create_stats")
+
         results[index].stats_create_times.append(r["elapsed_seconds"])
         results[index].stats_rss_use.append(r["peak_rss_mb"])
 
-    shutil.rmtree(LMDB_PATH, ignore_errors=True)
+    cleanup()
 
 
 def print_results():
@@ -104,7 +106,11 @@ def print_results():
 
 
 def cleanup():
-    shutil.rmtree(LMDB_PATH, ignore_errors=True)
+    lib = NativeMongoose("mktdatad").get_library("pmarkovski.columns_stats", api="v2")
+    try:
+        lib.delete("test_symbol")
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
