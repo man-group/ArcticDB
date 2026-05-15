@@ -59,6 +59,7 @@ jobs:
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
 
       - name: Setup MSVC
         if: runner.os == 'Windows'
@@ -151,6 +152,7 @@ jobs:
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
 
       - name: Configure C++ Tests
         run: |
@@ -238,6 +240,7 @@ jobs:
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
 
       - name: Install ArcticDB from artifacts
         run: |

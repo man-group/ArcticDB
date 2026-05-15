@@ -225,12 +225,13 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
-        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml" 
+        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml"
         environment-name: arcticdb
         init-shell: >-
           bash
         cache-environment: true
         post-cleanup: 'all'
+        micromamba-version: '2.1.0-0'
 
     - name: (conda) Install other dependencies ${{ env.conda_file }}
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}

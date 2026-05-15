@@ -203,7 +203,7 @@ jobs:
       - name: Setup micromamba
         uses: mamba-org/setup-micromamba@v2
         with:
-          micromamba-version: 2.1.0-0
+          micromamba-version: '2.1.0-0'
 
       - name: Install libmambapy
         shell: bash -el {0}
