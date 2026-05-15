@@ -2211,7 +2211,20 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
             );
         }
 
-        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
+        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions, false);
+        std::string missing_versions;
+        for (const auto& [symbol, versions] : sym_versions) {
+            for (auto version : versions) {
+                if (specific_versions->count(std::make_pair(symbol, version)) == 0) {
+                    missing_versions += fmt::format("{}:{} ", symbol, version);
+                }
+            }
+        }
+        if (!missing_versions.empty()) {
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                    "add_to_snapshot: the following versions do not exist or have been deleted: {}", missing_versions
+            );
+        }
         std::vector<StreamId> latest_ids;
         std::copy_if(
                 std::begin(stream_ids),
