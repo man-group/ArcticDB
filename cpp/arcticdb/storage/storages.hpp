@@ -203,6 +203,8 @@ class Storages {
 
     void remove(std::span<VariantKey> variant_keys, storage::RemoveOpts opts) { primary().remove(variant_keys, opts); }
 
+    [[nodiscard]] std::optional<size_t> max_delete_batch_size() const { return primary().max_delete_batch_size(); }
+
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
 
     void move_storage(KeyType key_type, timestamp horizon, size_t storage_index = 0) {

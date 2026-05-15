@@ -211,41 +211,30 @@ void do_remove_impl(
 ) {
     ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
     auto fmt_db = [](auto&& k) { return variant_key_type(k); };
-    std::vector<std::string> to_delete;
-    static const size_t delete_object_limit = std::min(
-            BATCH_SUBREQUEST_LIMIT,
-            static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT))
+
+    util::check(
+            variant_keys.size() <= BATCH_SUBREQUEST_LIMIT,
+            "Azure do_remove_impl called with {} keys, which exceeds BATCH_SUBREQUEST_LIMIT={}. "
+            "AsyncStore is responsible for chunking inputs to max_delete_batch_size().",
+            variant_keys.size(),
+            BATCH_SUBREQUEST_LIMIT
     );
 
-    auto submit_batch = [&azure_client, &request_timeout](auto& to_delete) {
-        try {
-            azure_client.delete_blobs(to_delete, request_timeout);
-        } catch (const Azure::Core::RequestFailedException& e) {
-            std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-            raise_azure_exception(e, failed_objects);
-        }
-        to_delete.clear();
-    };
-
     (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db))
-            .foreach ([&root_folder,
-                       b = std::move(bucketizer),
-                       delete_object_limit = delete_object_limit,
-                       &to_delete,
-                       &submit_batch](auto&& group
-                      ) { // bypass incorrect 'set but no used" error for delete_object_limit
+            .foreach ([&root_folder, &azure_client, &request_timeout, b = std::move(bucketizer)](auto&& group) {
                 auto key_type_dir = key_type_folder(root_folder, group.key());
+                std::vector<std::string> to_delete;
+                to_delete.reserve(group.size());
                 for (auto k : folly::enumerate(group.values())) {
-                    auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
-                    to_delete.emplace_back(std::move(blob_name));
-                    if (to_delete.size() == delete_object_limit) {
-                        submit_batch(to_delete);
-                    }
+                    to_delete.emplace_back(object_path(b.bucketize(key_type_dir, *k), *k));
+                }
+                try {
+                    azure_client.delete_blobs(to_delete, request_timeout);
+                } catch (const Azure::Core::RequestFailedException& e) {
+                    std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+                    raise_azure_exception(e, failed_objects);
                 }
             });
-    if (!to_delete.empty()) {
-        submit_batch(to_delete);
-    }
 }
 
 std::string prefix_handler(
@@ -357,6 +346,13 @@ void AzureStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
 
 void AzureStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
     detail::do_remove_impl(std::move(variant_keys), root_folder_, *azure_client_, FlatBucketizer{}, request_timeout_);
+}
+
+std::optional<size_t> AzureStorage::max_delete_batch_size() const {
+    return std::min(
+            BATCH_SUBREQUEST_LIMIT,
+            static_cast<size_t>(ConfigsMap::instance()->get_int("AzureStorage.DeleteBatchSize", BATCH_SUBREQUEST_LIMIT))
+    );
 }
 
 bool AzureStorage::do_iterate_type_until_match(
