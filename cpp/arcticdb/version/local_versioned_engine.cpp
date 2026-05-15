@@ -1211,6 +1211,7 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
     log::version().debug("Number of Data keys to be deleted: {}", vks_data_to_delete.size());
 
     stats.index_keys_deleted = vks_to_delete.size();
+    stats.column_stats_keys_deleted = vks_column_stats.size();
     stats.data_keys_deleted = vks_data_to_delete.size();
 
     if (dry_run) {

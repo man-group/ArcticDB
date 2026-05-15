@@ -52,10 +52,15 @@ struct KeySizesInfo {
     size_t compressed_size; // bytes
 };
 
+/**
+ * These statistics record the number of deletions *attempted*. In particular note that we attempt
+ * to delete column stats keys without checking whether they exist first.
+ */
 struct DeleteTreesStats {
     size_t index_keys_considered = 0;
     size_t index_keys_protected_by_snapshots = 0;
     size_t index_keys_deleted = 0;
+    size_t column_stats_keys_deleted = 0;
     size_t data_keys_deleted = 0;
 };
 

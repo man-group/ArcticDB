@@ -17,6 +17,7 @@
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/version/snapshot.hpp>
+#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
@@ -1192,6 +1193,7 @@ TEST(DeleteTreesResponsiblyStats, CountsConsideredAndDeleted) {
     EXPECT_EQ(stats.index_keys_considered, 3u);
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
     EXPECT_EQ(stats.index_keys_deleted, 3u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
     EXPECT_GT(stats.data_keys_deleted, 0u);
 }
 
@@ -1211,6 +1213,7 @@ TEST(DeleteTreesResponsiblyStats, CountsKeysProtectedBySnapshots) {
     EXPECT_EQ(stats.index_keys_considered, 3u);
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 1u);
     EXPECT_EQ(stats.index_keys_deleted, 2u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 2u);
 }
 
@@ -1229,6 +1232,7 @@ TEST(DeleteTreesResponsiblyStats, DryRunReportsCountsButDoesNotDelete) {
     EXPECT_EQ(stats.index_keys_considered, 3u);
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
     EXPECT_EQ(stats.index_keys_deleted, 3u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
     EXPECT_EQ(stats.data_keys_deleted, 3u);
 
     EXPECT_TRUE(f.store->key_exists(f.k0).get());
@@ -1260,5 +1264,6 @@ TEST(DeleteTreesResponsiblyStats, IndexKeyWithMultipleDataKeys) {
     EXPECT_EQ(stats.index_keys_considered, 1u);
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
     EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 1u);
     EXPECT_EQ(stats.data_keys_deleted, 2u);
 }

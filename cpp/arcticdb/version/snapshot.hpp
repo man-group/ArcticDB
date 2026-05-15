@@ -102,6 +102,8 @@ struct MasterSnapshotMapWithStats {
 
 /**
  * Map the index keys in every snapshot, additionally reporting the total number of snapshots iterated.
+ *
+ * The stats are used by the enterprise repo for delayed-deletes logging.
  */
 MasterSnapshotMapWithStats get_master_snapshots_map_with_stats(
         std::shared_ptr<Store> store,
