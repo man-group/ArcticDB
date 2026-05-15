@@ -70,6 +70,7 @@ def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
     df = sample_dataframe()
     print("LEN: ", len(names))
     written_symbols = set()
+    attempted_symbols = set()
     for i, name in enumerate(names):
         try:
             object_version_store.write(name, df)
@@ -79,13 +80,12 @@ def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
             pass
         except Exception:
             print(f"Exception! name = {name}  ,  char({i})")
-            # A transient error (e.g. network curlCode 7) may leave the symbol persisted on
-            # the server even though the client did not see success. Reconcile here so the
-            # final assertion does not fail when the write actually succeeded.
-            try:
-                if object_version_store.has_symbol(name):
-                    written_symbols.add(name)
-            except Exception:
-                pass
+            attempted_symbols.add(name)
 
-    assert set(object_version_store.list_symbols()) == written_symbols
+    actual_symbols = set(object_version_store.list_symbols())
+    # Symbols that we successfully wrote must be present
+    assert written_symbols <= actual_symbols, f"Missing symbols: {written_symbols - actual_symbols}"
+    # Any extra symbols on the server must be ones where the write hit a transient error
+    # (e.g. network curlCode 7) — the server may have persisted them despite the client error
+    unexpected = actual_symbols - written_symbols - attempted_symbols
+    assert not unexpected, f"Unexpected symbols on server: {unexpected}"
