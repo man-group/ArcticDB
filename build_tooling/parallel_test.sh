@@ -43,8 +43,8 @@ print_faulthandler_crashes() {
     fi
 }
 
-# Disable set -e around pytest so we can capture the exit code,
-# print faulthandler crash dumps, and optionally retry on OOM.
+# Disable set -e around pytest so we can capture the exit code
+# and print faulthandler crash dumps.
 set +e
 
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
@@ -57,25 +57,6 @@ if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
 
     exit_code=${PIPESTATUS[0]}
     print_faulthandler_crashes
-    # Retry with reduced parallelism if OOM‑killed
-    if [ "$exit_code" -eq 137 ]; then
-        # If already at 2 workers or fewer, fall back to serial (-n 0)
-        if echo "$PYTEST_XDIST_MODE" | grep -qE '^\s*-n\s*[012]\b'; then
-            oom_retry_mode="-n 0"
-            echo "⚠️  pytest OOM‑killed (137) — already at low parallelism, retrying serially (-n 0)..."
-        else
-            oom_retry_mode="-n 2"
-            echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
-        fi
-        sleep 5
-        $catch python -u -m pytest --timeout=3600 --timeout_method=thread $oom_retry_mode -v \
-            --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
-            --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
-            --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-            $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -u -r "s#^(tests/.*/([^/]+\.py))?#\2#"
-        exit_code=${PIPESTATUS[0]}
-        print_faulthandler_crashes
-    fi
 
 else
     echo "Executing tests with additional pytest argiments:"
@@ -89,24 +70,6 @@ else
 
     exit_code=$?
     print_faulthandler_crashes
-    # Retry with reduced parallelism if OOM‑killed
-    if [ "$exit_code" -eq 137 ]; then
-        if echo "$PYTEST_XDIST_MODE" | grep -qE '^\s*-n\s*[012]\b'; then
-            oom_retry_mode="-n 0"
-            echo "⚠️  pytest OOM‑killed (137) — already at low parallelism, retrying serially (-n 0)..."
-        else
-            oom_retry_mode="-n 2"
-            echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
-        fi
-        sleep 5
-        $catch python -u -m pytest --timeout=3600 --timeout_method=thread $oom_retry_mode -v \
-            --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
-            --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
-            --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
-            $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS 2>&1
-        exit_code=$?
-        print_faulthandler_crashes
-    fi
 fi
 
 exit $exit_code
