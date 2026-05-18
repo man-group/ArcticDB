@@ -25,17 +25,13 @@ class CompactDataBase:
         self.SYM = "sym"
         # This is important, because compaction is a destructive process, we must call setup before each measurement
         self.number = 1
+        self.warmup_time = 0
 
         self.base_param_names = [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
             "num_columns",
             "column_slicing",
         ]
-
-    def setup_cache(self):
-        start = time.time()
-        self._setup_cache()
-        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
     def _setup_cache(self):
         ac = Arctic(self.CONNECTION_STRING)
@@ -93,6 +89,13 @@ class CompactDataNumericStaticSchema(CompactDataBase):
             [False, True],  # column_slicing
         ]
 
+    # ASV's setup_cache discovery logic will only run the method once if it is in the base class, even if that base
+    # class has multiple classes inheriting from it
+    def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
     def setup(self, row_params, num_columns, column_slicing):
         num_rows = row_params[0]
         df = pd.DataFrame({f"col_{i}": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)})
@@ -126,6 +129,13 @@ class CompactDataStringsStaticSchema(CompactDataBase):
         ]
         self.unique_strings = random_strings_of_length(max(self.params[3]), length=10, unique=True, kind="ascii")
 
+    # ASV's setup_cache discovery logic will only run the method once if it is in the base class, even if that base
+    # class has multiple classes inheriting from it
+    def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
     def setup(self, row_params, num_columns, column_slicing, num_unique_strings):
         num_rows = row_params[0]
         unique_strings = self.unique_strings[:num_unique_strings]
@@ -157,6 +167,13 @@ class CompactDataNumericDynamicSchema(CompactDataBase):
         # The setup for this is much slower than static schema as we must call append repeatedly to produce row-slices
         # with missing columns
         self.timeout = 500
+
+    # ASV's setup_cache discovery logic will only run the method once if it is in the base class, even if that base
+    # class has multiple classes inheriting from it
+    def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
     def setup(self, row_params, num_columns):
         num_rows, initial_rows_per_segment, _ = row_params
