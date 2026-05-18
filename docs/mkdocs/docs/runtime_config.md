@@ -142,7 +142,7 @@ The available streams are visible in the [source code](https://github.com/man-gr
 * `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](technical/on_disk_storage.md#version-layer) linked list
 * `storage` - contains information about individual operations that interact with the storage device (read object, write object, delete object, etc)
 
-The available log levels in decreasing order of verbosity are are `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. 
+The available log levels in decreasing order of verbosity are `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. 
 By default, all streams are set to the `INFO` level.
 
 There are two ways to configure log levels: 
