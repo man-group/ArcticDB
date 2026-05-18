@@ -2197,39 +2197,42 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
     std::shared_ptr<std::unordered_map<StreamId, AtomKey>> latest_versions;
-    std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> specific_versions;
+    std::shared_ptr<std::unordered_map<StreamId, AtomKey>> specific_versions;
     if (!version_queries.empty()) {
-        auto sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
+        auto multi_sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
 
         auto symbol_with_more_than_one_version =
-                std::ranges::find_if(sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
+                std::ranges::find_if(multi_sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
 
-        if (symbol_with_more_than_one_version != sym_versions.end()) {
+        if (symbol_with_more_than_one_version != multi_sym_versions.end()) {
             auto stream_id = symbol_with_more_than_one_version->first;
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
             );
         }
 
-        specific_versions = batch_get_specific_versions(
+        std::map<StreamId, VersionId> sym_versions;
+        for (const auto& [symbol, versions] : multi_sym_versions) {
+            sym_versions[symbol] = versions.front();
+        }
+
+        auto result = batch_get_specific_version(
                 store(),
                 version_map(),
                 sym_versions,
                 BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
         );
+        specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>(std::move(result.found));
 
-        std::vector<std::string> missing;
-        for (const auto& [symbol, versions] : sym_versions) {
-            for (auto version : versions) {
-                if (!specific_versions->contains(std::make_pair(symbol, version))) {
-                    missing.push_back(fmt::format("{}:{}", symbol, version));
-                }
+        if (!result.rejected.empty()) {
+            std::vector<std::string> rejected_strs;
+            for (const auto& [symbol, version] : result.rejected) {
+                rejected_strs.push_back(fmt::format("{}:{}", symbol, version));
             }
-        }
-        if (!missing.empty()) {
             missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                    "add_to_snapshot: the following versions do not exist or have been deleted: {}",
-                    fmt::join(missing, ", ")
+                    "add_to_snapshot: the following versions do not exist or have been deleted "
+                    "and are not preserved in any other snapshot: {}",
+                    fmt::join(rejected_strs, ", ")
             );
         }
         std::vector<StreamId> latest_ids;
@@ -2241,7 +2244,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
         );
         latest_versions = batch_get_latest_version(store(), version_map(), latest_ids, false);
     } else {
-        specific_versions = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
+        specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
         latest_versions = batch_get_latest_version(store(), version_map(), stream_ids, false);
     }
 

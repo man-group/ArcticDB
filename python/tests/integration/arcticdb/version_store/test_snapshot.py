@@ -540,10 +540,15 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     assert lib.read(symB, as_of="s2").data == 1
 
 
+@pytest.fixture(params=["basic_store_delayed_deletes_v1", "basic_store_prune_previous"])
+def tombstone_store(request, basic_store_factory):
+    return request.getfixturevalue(request.param)
+
+
 @pytest.mark.parametrize("delete_via", ["prune", "delete"])
 @pytest.mark.storage
-def test_add_to_snapshot_rejects_deleted_version(basic_store_delayed_deletes_v1, delete_via):
-    lib = basic_store_delayed_deletes_v1
+def test_add_to_snapshot_rejects_deleted_version(tombstone_store, delete_via):
+    lib = tombstone_store
     lib.write("existing_sym", 100)
     lib.snapshot("snap")
 
@@ -565,8 +570,8 @@ def test_add_to_snapshot_rejects_deleted_version(basic_store_delayed_deletes_v1,
 
 
 @pytest.mark.storage
-def test_add_to_snapshot_allows_tombstoned_version_kept_alive_by_other_snapshot(basic_store_delayed_deletes_v1):
-    lib = basic_store_delayed_deletes_v1
+def test_add_to_snapshot_allows_tombstoned_version_kept_alive_by_other_snapshot(tombstone_store):
+    lib = tombstone_store
     ver = lib.write("tombstoned_sym", 1).version
     lib.snapshot("protecting_snap")
     lib.write("tombstoned_sym", 2)  # tombstones v0 via pruning; data kept alive by protecting_snap
@@ -587,8 +592,8 @@ def test_add_to_snapshot_allows_tombstoned_version_kept_alive_by_other_snapshot(
 
 
 @pytest.mark.storage
-def test_add_to_snapshot_rejects_multiple_deleted_versions(basic_store_delayed_deletes_v1):
-    lib = basic_store_delayed_deletes_v1
+def test_add_to_snapshot_rejects_multiple_deleted_versions(tombstone_store):
+    lib = tombstone_store
     lib.write("existing_sym", 100)
     lib.snapshot("snap")
 
@@ -603,6 +608,28 @@ def test_add_to_snapshot_rejects_multiple_deleted_versions(basic_store_delayed_d
     snap_versions = lib.list_versions(snapshot="snap")
     assert len(snap_versions) == 1
     assert lib.read("existing_sym", as_of="snap").data == 100
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_allows_version_behind_tombstone_all_if_in_snapshot(tombstone_store):
+    """v0 <- v1 <- tombstone_all <- v2, where v0 is protected by another snapshot."""
+    lib = tombstone_store
+    lib.write("sym", 10)  # v0
+    lib.snapshot("protecting_snap", versions={"sym": 0})  # explicitly protects v0
+    lib.write("sym", 20)  # v1
+    lib.delete("sym")  # tombstone_all over v0 and v1
+    lib.write("sym", 30)  # v2
+
+    lib.write("existing_sym", 100)
+    lib.snapshot("target_snap")
+
+    lib.add_to_snapshot("target_snap", ["sym"], [0])
+
+    snap_versions = lib.list_versions(snapshot="target_snap")
+    snap_symbols = {v["symbol"] for v in snap_versions}
+    assert snap_symbols == {"existing_sym", "sym"}
+    assert lib.read("sym", as_of="target_snap").data == 10
+    assert lib.read("existing_sym", as_of="target_snap").data == 100
 
 
 def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):
