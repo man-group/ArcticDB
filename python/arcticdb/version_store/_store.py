@@ -3974,14 +3974,14 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
-    def compact_data_explain_plan_experimental(
+    def compact_data_explain_plan(
         self,
         symbol: str,
         rows_per_segment: Optional[int] = None,
     ) -> CompactDataInfo:
         """
-        Do a dry run of compact_data_experimental, demonstrating what the impact would be of calling
-        compact_data_experimental without actually modifying any data on disk.
+        Do a dry run of compact_data, demonstrating what the impact would be of calling compact_data without actually
+        modifying any data on disk.
 
         Parameters
         ----------
@@ -3995,7 +3995,7 @@ class NativeVersionStore:
         -------
         CompactDataInfo
             Structure containing information about what the fragmentation of the symbol looks like currently, and what
-            it would look like after a call to compact_data_experimental.
+            it would look like after a call to compact_data.
 
         Raises
         ------
@@ -4012,7 +4012,7 @@ class NativeVersionStore:
         >>> df = pd.DataFrame({"col": np.arange(100_000)})
         >>> for idx in range(100):
         >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
-        >>> compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+        >>> compact_data_info = lib.compact_data_explain_plan("sym")
         >>> compact_data_info.row_slices_before
         [0, 1000, 2000, ..., 99000, 100000]
         >>> compact_data_info.row_slices_after
@@ -4035,7 +4035,7 @@ class NativeVersionStore:
         res = self.version_store._compact_data_explain_plan(symbol, rows_per_segment)
         return res
 
-    def compact_data_experimental(
+    def compact_data(
         self,
         symbol: str,
         rows_per_segment: Optional[int] = None,
@@ -4053,11 +4053,8 @@ class NativeVersionStore:
         Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
 
         !!! warning
-            This API is under development and is subject to change. The API is not subject to semver and can change in
-            minor or patch releases.
-
-            Note that compacting dynamic schema data can produce sparse data, even if the input data was dense, and
-            resampling does not yet support sparse data.
+            Compacting dynamic schema data can produce sparse data, even if the input data was dense, and resampling
+            does not yet support sparse data.
 
         Parameters
         ----------
@@ -4093,7 +4090,7 @@ class NativeVersionStore:
         >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
         >>> len(lib.read_index("sym"))
         100
-        >>> lib.compact_data_experimental("sym")
+        >>> lib.compact_data("sym")
         >>> len(lib.read_index("sym"))
         1
         """
@@ -4110,7 +4107,6 @@ class NativeVersionStore:
         cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
 
-    # TODO: Mark these and Library methods as deprecated
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
@@ -4133,6 +4129,9 @@ class NativeVersionStore:
         -------
         bool
         """
+        log.warning(
+            "is_symbol_fragmented is deprecated and will be removed in a future release. Please use compact_data_explain_plan instead."
+        )
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
     def defragment_symbol_data(
@@ -4200,6 +4199,9 @@ class NativeVersionStore:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
+        log.warning(
+            "defragment_symbol_data is deprecated and will be removed in a future release. Please use compact_data instead."
+        )
         self._validate_kwargs("defragment_symbol_data", {"prune_previous_version"}, kwargs)
 
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
