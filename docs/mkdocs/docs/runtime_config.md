@@ -39,7 +39,7 @@ Configuration options are read once when the `Library` instance is created, and 
 
 ### VersionMap.ReloadInterval
 
-ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol.  This cache is invalidated after 5 seconds by default.
+ArcticDB library instances maintain a short-lived cache containing what it believes is the latest version for every encountered symbol.  This cache is invalidated after 2 seconds by default.
 
 As a result of this caching, it is theoretically possible for two independent library instances to disagree as to what the latest version of a symbol is for a short period of time.
 
@@ -142,7 +142,7 @@ The available streams are visible in the [source code](https://github.com/man-gr
 * `version` - contains information about versions being read, created, or destroyed, and traversal of the [version layer](technical/on_disk_storage.md#version-layer) linked list
 * `storage` - contains information about individual operations that interact with the storage device (read object, write object, delete object, etc)
 
-The available log levels in decreasing order of verbosity are are `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. 
+The available log levels in decreasing order of verbosity are `DEBUG`, `INFO`, `WARN`, `ERROR`, `CRITICAL`, `OFF`. 
 By default, all streams are set to the `INFO` level.
 
 There are two ways to configure log levels: 

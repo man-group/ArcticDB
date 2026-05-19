@@ -651,6 +651,30 @@ def test_filter_isin_with_nan_in_set(
     assert_frame_equal(expected, result)
 
 
+def test_filter_isin_with_nat_in_set(
+    lmdb_version_store_v1, any_output_format, column_stats_filtering_enabled_and_disabled
+):
+    """NaT in the set is ignored, mirroring our NaN-in-set behaviour for floats tested above."""
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_isin_with_nat_in_set"
+    df = pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")]})
+    lib.write(symbol, df)
+    lib.create_column_stats(symbol, {"a": {"MINMAX"}})
+
+    q = QueryBuilder()
+    q = q[q["a"].isin([pd.NaT, pd.Timestamp("2024-01-03")])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [pd.Timestamp("2024-01-03")]})
+    assert_frame_equal(expected, result)
+
+    q = QueryBuilder()
+    q = q[q["a"].isnotin([pd.NaT, pd.Timestamp("2024-01-03")])]
+    result = lib.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": [pd.Timestamp("2024-01-01"), pd.NaT]})
+    assert_frame_equal(expected, result)
+
+
 _uint64_max = np.iinfo(np.uint64).max
 
 
@@ -1630,6 +1654,43 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, met
     assert_frame_equal(expected, received)
 
 
+@pytest.mark.parametrize(
+    "dtype, compare_value",
+    [
+        (np.float64, 1000.0),
+        (np.datetime64, pd.Timestamp("2030-01-01")),
+        (str, "absent"),
+    ],
+    ids=["float64", "datetime64", "str"],
+)
+def test_filter_ne_dynamic_missing_column_drops_missing_rows(
+    lmdb_version_store_dynamic_schema_v1, dtype, compare_value, any_output_format
+):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_filter_ne_dynamic_missing_column_drops_missing_rows"
+    if dtype is np.float64:
+        df_0 = pd.DataFrame({"a": np.array([1.0, 2.0], dtype=dtype)}, index=np.arange(2))
+        df_1 = pd.DataFrame({"b": np.array([10.0, 20.0], dtype=np.float64)}, index=np.arange(2, 4))
+    elif dtype is np.datetime64:
+        df_0 = pd.DataFrame({"a": np.array(["2024-01-01", "2024-01-02"], dtype="datetime64[ns]")}, index=np.arange(2))
+        df_1 = pd.DataFrame({"b": np.array([10.0, 20.0], dtype=np.float64)}, index=np.arange(2, 4))
+    else:
+        df_0 = pd.DataFrame({"a": ["x", "y"]}, index=np.arange(2))
+        df_1 = pd.DataFrame({"b": ["p", "q"]}, index=np.arange(2, 4))
+    lib.write(symbol, df_0)
+    lib.append(symbol, df_1)
+
+    full_df = lib.read(symbol).data
+    expected = full_df.loc[df_0.index]
+
+    q = QueryBuilder()
+    q = q[q["a"] != compare_value]
+    received = lib.read(symbol, query_builder=q).data
+
+    assert_frame_equal(expected, received)
+
+
 # Defrag removes column slicing and therefore basically makes any symbol dynamic
 def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
@@ -1817,29 +1878,3 @@ def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynami
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     assert not expected.empty
-
-
-@pytest.mark.xfail(reason="Filtering does not have special handling for NaT. Monday: 11688915824")
-def test_column_stats_select_nat_values(in_memory_version_store, column_stats_filtering_enabled_and_disabled):
-    lib = in_memory_version_store
-
-    ts = pd.date_range("2000-01-01", periods=2)
-    df0 = pd.DataFrame({"col": [pd.Timestamp("2020-01-01"), pd.NaT]}, index=ts)
-    df1 = pd.DataFrame(
-        {"col": [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-06-01")]},
-        index=pd.date_range("2000-01-03", periods=2),
-    )
-
-    sym = "sym"
-    lib.write(sym, df0)
-    lib.append(sym, df1)
-
-    lib.create_column_stats(sym, {"col": {"MINMAX"}})
-
-    q = QueryBuilder()
-    q = q[q["col"] == pd.NaT]
-    result = lib.read(sym, query_builder=q).data
-
-    full_df = pd.concat([df0, df1])
-    expected = full_df[full_df["col"] == pd.NaT]
-    assert_frame_equal(expected, result)

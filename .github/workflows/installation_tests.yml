@@ -73,11 +73,6 @@ on:
         options:
           - "1"
           - "0"
-      debug_enabled:
-        type: boolean
-        description: 'Run the build with debugging enabled'
-        required: false
-        default: false                  
       run_enable_logging:
         description: 'Enabled debug logging'
         type: boolean
@@ -225,12 +220,13 @@ jobs:
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
-        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml" 
+        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml"
         environment-name: arcticdb
         init-shell: >-
           bash
         cache-environment: true
         post-cleanup: 'all'
+        micromamba-version: '2.1.0-0'
 
     - name: (conda) Install other dependencies ${{ env.conda_file }}
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
@@ -284,10 +280,6 @@ jobs:
     - name: Set ArcticDB Debug Logging
       if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
       uses: ./.github/actions/enable_logging
-
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
-      if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
       if: ${{ env.SKIP_JOB != 'true' }}

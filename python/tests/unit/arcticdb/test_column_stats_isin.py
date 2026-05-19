@@ -347,3 +347,160 @@ def test_column_stats_isin_with_and(in_memory_version_store, clear_query_stats, 
     expected = full_df[(full_df["col_1"] > 2) & full_df["col_2"].isin([30, 40])]
     assert_frame_equal(expected, result)
     assert table_data_reads == 1, f"Expected 1 TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr,pandas_expr,expected_reads",
+    [
+        # seg0 = [NaT, NaT], seg1 = [2024-01-01, 2024-01-02]
+        # NaT in the set is ignored, since NaT rows never match isin and always match isnotin.
+        pytest.param(
+            lambda q: q["col"].isin([pd.NaT]),
+            lambda df: df["col"].isin([]),
+            0,
+            id="isin_nat_only",
+        ),
+        pytest.param(
+            lambda q: q["col"].isin([pd.NaT, pd.Timestamp("2025-01-01")]),
+            lambda df: df["col"].isin([pd.Timestamp("2025-01-01")]),
+            0,
+            id="isin_nat_and_out_of_range_ts",
+        ),
+        pytest.param(
+            lambda q: q["col"].isin([pd.Timestamp("2024-01-01")]),
+            lambda df: df["col"].isin([pd.Timestamp("2024-01-01")]),
+            1,
+            id="isin_in_range_ts_only",
+        ),
+        pytest.param(
+            lambda q: q["col"].isin([pd.Timestamp("2025-01-01")]),
+            lambda df: df["col"].isin([pd.Timestamp("2025-01-01")]),
+            0,
+            id="isin_out_of_range_ts_only",
+        ),
+        pytest.param(
+            lambda q: q["col"].isnotin([pd.NaT]),
+            lambda df: ~df["col"].isin([]),
+            2,
+            id="isnotin_nat_only",
+        ),
+        pytest.param(
+            lambda q: q["col"].isnotin([pd.NaT, pd.Timestamp("2024-01-01")]),
+            lambda df: ~df["col"].isin([pd.Timestamp("2024-01-01")]),
+            2,
+            id="isnotin_nat_and_in_range_ts_boundary",
+        ),
+        pytest.param(
+            lambda q: q["col"].isnotin([pd.NaT, pd.Timestamp("2024-01-01") + pd.Timedelta(seconds=1)]),
+            lambda df: ~df["col"].isin([pd.Timestamp("2024-01-01") + pd.Timedelta(seconds=1)]),
+            2,
+            id="isnotin_nat_and_in_range_ts_inside",
+        ),
+        pytest.param(
+            lambda q: q["col"].isnotin([pd.Timestamp("2024-01-01")]),
+            lambda df: ~df["col"].isin([pd.Timestamp("2024-01-01")]),
+            2,
+            id="isnotin_in_range_ts_only",
+        ),
+        pytest.param(
+            lambda q: q["col"].isnotin([pd.Timestamp("2025-01-01")]),
+            lambda df: ~df["col"].isin([pd.Timestamp("2025-01-01")]),
+            2,
+            id="isnotin_out_of_range_ts_only",
+        ),
+    ],
+)
+def test_column_stats_isin_nat_timestamp(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr, expected_reads
+):
+    lib = in_memory_version_store
+
+    df0 = pd.DataFrame(
+        {"col": pd.Series([pd.NaT, pd.NaT], dtype="datetime64[ns]")},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"col": [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[pandas_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
+
+
+@pytest.mark.parametrize(
+    "query_expr,pandas_expr,expected_reads",
+    [
+        # seg0 = [INT64_MIN, INT64_MIN], seg1 = [5, 10].
+        # Guards against the time-type stats_all_nat dispatch wrongly firing for int64 columns where stats happen to be INT64_MIN.
+        pytest.param(
+            lambda q: q["col"].isin([np.iinfo(np.int64).min]),
+            lambda df: df["col"].isin([np.iinfo(np.int64).min]),
+            1,
+            id="isin_int64_min_only",
+        ),
+        pytest.param(
+            lambda q: q["col"].isin([np.iinfo(np.int64).min, 100]),
+            lambda df: df["col"].isin([np.iinfo(np.int64).min, 100]),
+            1,
+            id="isin_int64_min_and_out_of_range",
+        ),
+        pytest.param(
+            lambda q: q["col"].isin([7]),
+            lambda df: df["col"].isin([7]),
+            1,
+            id="isin_in_seg1_range",
+        ),
+        pytest.param(
+            lambda q: q["col"].isnotin([7]),
+            lambda df: ~df["col"].isin([7]),
+            2,
+            id="isnotin_in_seg1_range",
+        ),
+    ],
+)
+def test_column_stats_isin_int64_min_not_treated_as_nat(
+    in_memory_version_store, clear_query_stats, column_stats_filtering_enabled, query_expr, pandas_expr, expected_reads
+):
+    lib = in_memory_version_store
+
+    int64_min = np.iinfo(np.int64).min
+    df0 = pd.DataFrame(
+        {"col": np.array([int64_min, int64_min], dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"col": np.array([5, 10], dtype=np.int64)},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+
+    lib.create_column_stats(sym, {"col": {"MINMAX"}})
+
+    qs.enable()
+    q = QueryBuilder()
+    q = q[query_expr(q)]
+    qs.reset_stats()
+    result = lib.read(sym, query_builder=q).data
+    table_data_reads = get_table_data_read_count()
+
+    full_df = pd.concat([df0, df1])
+    expected = full_df[pandas_expr(full_df)]
+    assert_frame_equal(expected, result)
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"

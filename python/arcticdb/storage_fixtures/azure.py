@@ -57,8 +57,8 @@ class AzureContainer(StorageFixture):
 
         # The retry_policy instance will be modified by the pipeline, so cannot be constant
         return {
-            "connection_timeout": 1,
-            "read_timeout": 2,
+            "connection_timeout": 5,
+            "read_timeout": 10,
             "retry_policy": LinearRetry(retry_total=3, backoff=1),
             "connection_verify": self.factory.client_cert_file,
         }
@@ -247,17 +247,16 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             try:
                 client.delete_container(timeout=timeout)
             except ResourceNotFoundError:
-                # Container didn't exist — that's fine, treat as success
                 pass
 
         if b.client:
             if not b.is_real_azure():
                 # This code is only for Azurite cleaning, it is faster than this for Azure
                 if b._admin_client:
-                    delete_container_safely(b._admin_client, timeout=3)
+                    delete_container_safely(b._admin_client, timeout=10)
                     b._admin_client.close()
                 else:
-                    delete_container_safely(b.client, timeout=3)
+                    delete_container_safely(b.client, timeout=10)
 
 
 def find_ca_certs():

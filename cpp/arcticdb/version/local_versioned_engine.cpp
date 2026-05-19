@@ -159,6 +159,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
             return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
+                    .thenValueInline([](auto&&) { return folly::Unit{}; }) // drop the DeleteTreesStats
                     .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
                         log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
                     });
@@ -1055,13 +1056,15 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
-folly::Future<folly::Unit> delete_trees_responsibly(
+folly::Future<DeleteTreesStats> delete_trees_responsibly(
         std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted, const PreDeleteChecks& check, const bool dry_run
 ) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
+    DeleteTreesStats stats;
+    stats.index_keys_considered = orig_keys_to_delete.size();
     util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
@@ -1071,7 +1074,8 @@ folly::Future<folly::Unit> delete_trees_responsibly(
 
     // Remove any keys considered for deletion that are covered by a snapshot.
     if (check.snapshots) {
-        keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete](const auto& target_key) {
+        keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete, &stats](const auto& target_key
+                                 ) {
             // snapshot map is {symbol: {index_key: {snapshots...}}}
             if (auto find_symbol = snapshot_map.find(target_key.id()); find_symbol != snapshot_map.end()) {
                 const auto& keys_map = find_symbol->second;
@@ -1087,6 +1091,7 @@ folly::Future<folly::Unit> delete_trees_responsibly(
                                 target_key.id(),
                                 target_key.version_id()
                         );
+                        ++stats.index_keys_protected_by_snapshots;
                         return true;
                     }
                 }
@@ -1170,6 +1175,7 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     storage::ReadKeyOpts read_opts;
     read_opts.ignores_missing_key_ = true;
     auto data_keys_to_be_deleted = recurse_index_keys(store, *keys_to_delete, read_opts);
+    stats.data_keys_considered = data_keys_to_be_deleted.size();
     log::version().debug("Candidate: {} total of data keys", data_keys_to_be_deleted.size());
 
     read_opts.dont_warn_about_missing_key = true;
@@ -1205,35 +1211,39 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     );
     log::version().debug("Number of Data keys to be deleted: {}", vks_data_to_delete.size());
 
-    folly::Future<folly::Unit> remove_keys_fut;
-    if (!dry_run) {
-        ARCTICDB_TRACE(
-                log::version(), fmt::format("Column Stats keys to be deleted: {}", fmt::join(vks_column_stats, ", "))
-        );
-        ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
-        ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
+    stats.index_keys_deleted = vks_to_delete.size();
+    stats.column_stats_keys_deleted = vks_column_stats.size();
+    stats.data_keys_deleted = vks_data_to_delete.size();
 
-        // Parallel deletion of column-stats, index, and data keys. The previous sequential order
-        // (stats → index → data) provided a narrower window for dangling references on partial failure,
-        // but since all reads already set ignores_missing_key_ = true, a reader encountering a dangling
-        // index→data reference will simply skip the missing data key. The parallelism is a worthwhile
-        // trade-off for the performance gain on batch deletes.
-        remove_keys_fut = folly::collectAll(
-                                  store->remove_keys(std::move(vks_column_stats), remove_opts),
-                                  store->remove_keys(std::move(vks_to_delete), remove_opts),
-                                  store->remove_keys(std::move(vks_data_to_delete), remove_opts)
-        )
-                                  .via(&async::io_executor())
-                                  .thenValue([](auto&& results) {
-                                      // Re-throw first error, if any, to preserve the error propagation
-                                      // behaviour of the previous sequential chain.
-                                      std::get<0>(results).throwUnlessValue();
-                                      std::get<1>(results).throwUnlessValue();
-                                      std::get<2>(results).throwUnlessValue();
-                                      return folly::Unit();
-                                  });
+    if (dry_run) {
+        return folly::makeFuture(stats);
     }
-    return remove_keys_fut;
+    ARCTICDB_TRACE(
+            log::version(), fmt::format("Column Stats keys to be deleted: {}", fmt::join(vks_column_stats, ", "))
+    );
+    ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
+    ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
+
+    // Parallel deletion of column-stats, index, and data keys. The previous sequential order
+    // (stats → index → data) provided a narrower window for dangling references on partial failure,
+    // but since all reads already set ignores_missing_key_ = true, a reader encountering a dangling
+    // index→data reference will simply skip the missing data key. The parallelism is a worthwhile
+    // trade-off for the performance gain on batch deletes.
+    return folly::collectAll(
+                   store->remove_keys(std::move(vks_column_stats), remove_opts),
+                   store->remove_keys(std::move(vks_to_delete), remove_opts),
+                   store->remove_keys(std::move(vks_data_to_delete), remove_opts)
+    )
+            .via(&async::io_executor())
+            .thenValueInline([](auto&& results) {
+                // Re-throw first error, if any, to preserve the error propagation
+                // behaviour of the previous sequential chain.
+                std::get<0>(results).throwUnlessValue();
+                std::get<1>(results).throwUnlessValue();
+                std::get<2>(results).throwUnlessValue();
+                return folly::Unit();
+            })
+            .thenValueInline([stats](folly::Unit) { return stats; });
 }
 
 void LocalVersionedEngine::remove_incomplete(const StreamId& stream_id) {
