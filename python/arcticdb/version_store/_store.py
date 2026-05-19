@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 from dataclasses import dataclass
 import datetime
+import inspect
 import os
 import sys
 from warnings import warn
@@ -896,10 +897,11 @@ class NativeVersionStore:
         )
         if self._valid_item_type(item):
             if parallel or incomplete:
+                stacklevel = 3 if inspect.stack()[1].filename.endswith("arcticdb/version_store/library.py") else 2
                 warn(
                     "Staging data with write() is deprecated. Use stage() instead.",
                     DeprecationWarning,
-                    stacklevel=2,
+                    stacklevel=stacklevel,
                 )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
@@ -1047,6 +1049,8 @@ class NativeVersionStore:
         if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
+                    # Note that the V2 API has never called append with the incomplete kwarg, so we don't need the
+                    # stacklevel switching behaviour
                     warn(
                         "Staging data with append() is deprecated. Use stage() instead.",
                         DeprecationWarning,
@@ -4109,6 +4113,9 @@ class NativeVersionStore:
 
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
+        This method has been deprecated and will be removed in a future release. Please use compact_data_explain_plan
+        instead.
+
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
         value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).
 
@@ -4129,8 +4136,11 @@ class NativeVersionStore:
         -------
         bool
         """
-        log.warning(
-            "is_symbol_fragmented is deprecated and will be removed in a future release. Please use compact_data_explain_plan instead."
+        stacklevel = 3 if inspect.stack()[1].filename.endswith("arcticdb/version_store/library.py") else 2
+        warn(
+            "is_symbol_fragmented is deprecated and will be removed in a future release. Please use compact_data_explain_plan instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
         )
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
@@ -4142,6 +4152,8 @@ class NativeVersionStore:
         **kwargs,
     ) -> VersionedItem:
         """
+        This method has been deprecated and will be removed in a future release. Please use compact_data instead.
+
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
 
@@ -4199,8 +4211,11 @@ class NativeVersionStore:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
-        log.warning(
-            "defragment_symbol_data is deprecated and will be removed in a future release. Please use compact_data instead."
+        stacklevel = 3 if inspect.stack()[1].filename.endswith("arcticdb/version_store/library.py") else 2
+        warn(
+            "defragment_symbol_data is deprecated and will be removed in a future release. Please use compact_data instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
         )
         self._validate_kwargs("defragment_symbol_data", {"prune_previous_version"}, kwargs)
 
