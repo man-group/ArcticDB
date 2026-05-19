@@ -80,9 +80,28 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                 auto set_min_raw = static_cast<RightType>(set_min->get<SetRawType>());
                 auto set_max_raw = static_cast<RightType>(set_max->get<SetRawType>());
 
-                // Do one pass where we evaluate stats against the min and max values in the set.
-                // If this gives an ambiguous result, do a second pass where we evaluate stats against each element in
-                // the set.
+                if constexpr (is_time_type(StatsTag::data_type)) {
+                    // We do not return NaT rows with .isin([NaT]), which is the same as our behaviour
+                    // for NaN. Therefore the values in the set do not matter if the block is all NaT.
+                    // It's sufficient to just check the set's minimum to calculate nat_in_set since NaT =
+                    // std::numeric_limits<timestamp>::min()
+                    const bool stats_all_nat = static_cast<timestamp>(stats_min) == NaT;
+                    if (stats_all_nat) {
+                        util::check(
+                                static_cast<timestamp>(stats_max) == NaT,
+                                "Should have NaT in stats iff the entire block is NaT"
+                        );
+                        return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
+                    }
+                    const bool nat_in_set = static_cast<timestamp>(set_min_raw) == NaT;
+                    if (nat_in_set && set_min_raw == set_max_raw) {
+                        // Set is just {NaT}
+                        return is_isin ? StatsComparison::NONE_MATCH : StatsComparison::ALL_MATCH;
+                    }
+                }
+
+                // Evaluate stats against the min and max values in the set. If this gives an ambiguous result,
+                // evaluate stats against each element in the set.
 
                 // We evaluate as if the operator is IsIn. If it's IsNotIn, we just flip the result at the end.
                 StatsComparison isin_result;
@@ -96,6 +115,13 @@ StatsComparison stats_membership_comparator(const ColumnStatsValues& stats, Valu
                     auto typed_set = value_set.get_set<SetRawType>();
                     isin_result = StatsComparison::NONE_MATCH;
                     for (const auto& elem : *typed_set) {
+                        if constexpr (is_time_type(StatsTag::data_type)) {
+                            // The case where the set is just {NaT} is handled above. When the set is {NaT, Other}
+                            // we can just exclude NaT from consideration.
+                            if (static_cast<timestamp>(elem) == NaT) {
+                                continue;
+                            }
+                        }
                         auto elem_raw = static_cast<RightType>(elem);
                         auto comparison = EqualsOperator{}(ValueRange<LeftType>{stats_min, stats_max}, elem_raw);
 

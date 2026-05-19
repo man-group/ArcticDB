@@ -12,6 +12,7 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -139,6 +140,13 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                                 output_bitset,
                                 sparse_missing_value_output,
                                 [&func, &typed_value_set](auto input_value) -> bool {
+                                    if constexpr (is_time_type(col_type_info::data_type)) {
+                                        // NaT values are returned iff it's a `q.isnotin` call. `q.isin` is always false
+                                        // for a NaT value, regardless of the value set.
+                                        if (input_value == NaT) {
+                                            return std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>;
+                                        }
+                                    }
                                     if constexpr (MembershipOperator::needs_uint64_special_handling<
                                                           typename col_type_info::RawType,
                                                           typename val_set_type_info::RawType>) {
@@ -238,6 +246,14 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                         output_bitset,
                         sparse_missing_value_output,
                         [&func](auto left_value, auto right_value) -> bool {
+                            if constexpr (is_time_type(left_type_info::data_type)) {
+                                if (static_cast<timestamp>(left_value) == NaT)
+                                    return std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
+                            }
+                            if constexpr (is_time_type(right_type_info::data_type)) {
+                                if (static_cast<timestamp>(right_value) == NaT)
+                                    return std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
+                            }
                             return func(
                                     static_cast<typename comp::left_type>(left_value),
                                     static_cast<typename comp::right_type>(right_value)
@@ -321,11 +337,28 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                 typename arcticdb::Comparable<ValType, ColType>,
                                 typename arcticdb::Comparable<ColType, ValType>>;
                         auto value = static_cast<typename comp::right_type>(val.get<ValType>());
+                        constexpr bool val_is_time = is_time_type(val_type_info::data_type);
+                        constexpr bool nat_result = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
+                        if constexpr (val_is_time) {
+                            if (static_cast<timestamp>(value) == NaT) {
+                                // Every row produces nat_result regardless of its value, so fill the bitset
+                                // directly instead of scanning the column.
+                                output_bitset.resize(column_with_strings.column_->last_row() + 1);
+                                if constexpr (nat_result) {
+                                    output_bitset.set();
+                                }
+                                return;
+                            }
+                        }
                         arcticdb::transform<typename col_type_info::TDT>(
                                 *column_with_strings.column_,
                                 output_bitset,
                                 sparse_missing_value_output,
                                 [&func, value](auto input_value) -> bool {
+                                    if constexpr (is_time_type(col_type_info::data_type)) {
+                                        if (static_cast<timestamp>(input_value) == NaT)
+                                            return std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
+                                    }
                                     if constexpr (arguments_reversed) {
                                         return func(value, static_cast<typename comp::left_type>(input_value));
                                     } else {

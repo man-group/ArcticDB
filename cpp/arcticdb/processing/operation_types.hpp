@@ -62,6 +62,15 @@ std::optional<StatsComparison> check_scalar_for_nan(T value, StatsComparison nan
     return std::nullopt;
 }
 
+inline std::optional<StatsComparison> check_time_stats_for_nat(
+        timestamp min_val, timestamp query_value, StatsComparison nat_result
+) {
+    if (min_val == NaT || query_value == NaT) {
+        return nat_result;
+    }
+    return std::nullopt;
+}
+
 // If reordering this enum, is_binary_operation may also need to be changed
 enum class OperationType : uint8_t {
     // Unary
