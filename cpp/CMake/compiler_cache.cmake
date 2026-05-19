@@ -86,14 +86,16 @@ function(prepend_cache_if_not_existing CACHE_PROGRAM_PATH CACHE_NAME)
                 set(CACHE_ALREADY_SET TRUE)
                 break()
             elseif("${LAUNCHER}" STREQUAL "${CACHE_NAME}")
-                message(
-                    "Compiler cache ${CACHE_NAME} already set in ${LAUNCHER_LIST} with different path. Existing path: \
-                    ${LAUNCHER}, required path: ${CACHE_PROGRAM_PATH}. Replacing the existing path with required path."
-                )
-                list(FIND ${LAUNCHER_LIST} "${LAUNCHER_PATH}" idx)
-                list(REMOVE_AT ${LAUNCHER_LIST} ${idx})
-                list(INSERT ${LAUNCHER_LIST} ${idx} "${CACHE_PROGRAM_PATH}")
-                set(${LAUNCHER_LIST} ${${LAUNCHER_LIST}} PARENT_SCOPE)
+                if(NOT "${ARCTICDB_COMPILER_CACHE}" STREQUAL "AUTO")
+                    message(
+                        "Compiler cache ${CACHE_NAME} already set in ${LAUNCHER_LIST} with different path. Existing path: \
+                        ${LAUNCHER}, required path: ${CACHE_PROGRAM_PATH}. Replacing the existing path with required path."
+                    )
+                    list(FIND ${LAUNCHER_LIST} "${LAUNCHER_PATH}" idx)
+                    list(REMOVE_AT ${LAUNCHER_LIST} ${idx})
+                    list(INSERT ${LAUNCHER_LIST} ${idx} "${CACHE_PROGRAM_PATH}")
+                    set(${LAUNCHER_LIST} ${${LAUNCHER_LIST}} PARENT_SCOPE)
+                endif()
                 set(CACHE_ALREADY_SET TRUE)
                 break()
             endif()
