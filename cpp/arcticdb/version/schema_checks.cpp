@@ -18,6 +18,84 @@ IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, c
     return IndexDescriptor::Type::UNKNOWN;
 }
 
+/// Checks if the two multiindex are compatible for append/update. For that to be true the filed name, count and order
+/// must match even for dynamic schema. Does not check types.
+template<typename CommonNormalization>
+requires util::any_of<
+        CommonNormalization, proto::descriptors::NormalizationMetadata_Pandas,
+        proto::descriptors::NormalizationMetadata_NormalisedTimeSeries>
+void check_multiindex_matches(
+        const CommonNormalization& existing_common, const StreamDescriptor& existing_stream_descriptor,
+        const CommonNormalization& new_common, const StreamDescriptor& new_stream_descriptor
+) {
+    normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+            !(existing_common.has_multi_index() ^ new_common.has_multi_index()),
+            "Cannot append/update multi-indexed data to non-multi-indexed data and vice versa"
+    );
+    if (existing_common.has_multi_index()) {
+        const auto& existing_multiindex = existing_common.multi_index();
+        const auto& new_multiindex = new_common.multi_index();
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                existing_multiindex.field_count() == new_multiindex.field_count(),
+                "Multi-index field count mismatch. On disk frame has {} fields, new frame has {} fields",
+                existing_multiindex.field_count(),
+                new_multiindex.field_count()
+        );
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                existing_multiindex.is_int() == new_multiindex.is_int(),
+                "When using Pandas Multiindex the names of all columns in the Multiindex must match between "
+                "append/update input and what's on disk even with dynamic schema"
+        );
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                std::ranges::equal(existing_multiindex.fake_field_pos(), new_multiindex.fake_field_pos()),
+                "Unnamed columns between existing and new multiindex must match"
+        );
+        // See _PandasNormalizer::_index_to_records it sets the field count to len(index.levels) - 1
+        const size_t multiindex_fields = new_multiindex.field_count() + 1;
+        normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
+                std::ranges::equal(
+                        existing_stream_descriptor.fields() | std::views::take(multiindex_fields),
+                        new_stream_descriptor.fields() | std::views::take(multiindex_fields),
+                        std::ranges::equal_to{},
+                        [](const Field& field) { return field.name(); },
+                        [](const Field& field) { return field.name(); }
+                ),
+                "When using Pandas Multiindex the names of all columns in the Multiindex must match between "
+                "append/update input and what's on disk even with dynamic schema"
+        );
+    }
+}
+
+void check_multiindex_matches(
+        const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputFrame& frame
+) {
+    if (existing_isr.tsd().normalization().has_df()) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                frame.norm_meta.has_df(),
+                "Existing data is a pandas dataframe but the new data is not"
+        );
+        check_multiindex_matches(
+                existing_isr.tsd().normalization().df().common(),
+                existing_isr.tsd().as_stream_descriptor(),
+                frame.norm_meta.df().common(),
+                frame.desc()
+        );
+    } else if (existing_isr.tsd().normalization().has_series()) {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                frame.norm_meta.has_series(),
+                "Existing data is a pandas series but the new data is not"
+        );
+        check_multiindex_matches(
+                existing_isr.tsd().normalization().series().common(),
+                existing_isr.tsd().as_stream_descriptor(),
+                frame.norm_meta.series().common(),
+                frame.desc()
+        );
+    }
+}
+
 void check_normalization_index_match(
         NormalizationOperation operation, const pipelines::index::IndexSegmentReader& existing_isr,
         const pipelines::InputFrame& frame, bool empty_types
@@ -27,45 +105,7 @@ void check_normalization_index_match(
 
     // In case of multiindex we require the multiindex fields in the input to match the mutliindex fields on disk even
     // when dynamic schema is used. This is because it's too hard to keep the normalization metadata in sync.
-    if (existing_isr.tsd().normalization().has_df()) {
-        const auto& existing_common = existing_isr.tsd().normalization().df().common();
-        if (existing_common.has_multi_index()) {
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                    frame.norm_meta.has_df() && frame.norm_meta.df().common().has_multi_index(),
-                    "Cannot append/update multi-indexed data to non-multi-indexed data and vice versa"
-            );
-            const auto& existing_multiindex = existing_common.multi_index();
-            const auto& new_multiindex = frame.norm_meta.df().common().multi_index();
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                    existing_multiindex.field_count() == new_multiindex.field_count(),
-                    "Multi-index field count mismatch. On disk frame has {} fields, new frame has {} fields",
-                    existing_multiindex.field_count(),
-                    new_multiindex.field_count()
-            );
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                    existing_multiindex.is_int() == new_multiindex.is_int(),
-                    "When using Pandas Multiindex the names of all columns in the Multiindex must match between "
-                    "append/update input and what's on disk even with dynamic schema"
-            );
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                    std::ranges::equal(existing_multiindex.fake_field_pos(), new_multiindex.fake_field_pos()),
-                    "Unnamed columns between existing and new multiindex must match"
-            );
-            // See _PandasNormalizer::_index_to_records it sets the field count to len(index.levels) - 1
-            const size_t multiindex_fields = new_multiindex.field_count() + 1;
-            normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-                    std::ranges::equal(
-                            existing_isr.tsd().as_stream_descriptor().fields() | std::views::take(multiindex_fields),
-                            frame.desc().fields() | std::views::take(multiindex_fields),
-                            std::ranges::equal_to{},
-                            [](const Field& field) { return field.name(); },
-                            [](const Field& field) { return field.name(); }
-                    ),
-                    "When using Pandas Multiindex the names of all columns in the Multiindex must match between "
-                    "append/update input and what's on disk even with dynamic schema"
-            );
-        }
-    }
+    check_multiindex_matches(existing_isr, frame);
 
     if (operation == UPDATE) {
         const bool new_is_timeseries = std::holds_alternative<stream::TimeseriesIndex>(frame.index);

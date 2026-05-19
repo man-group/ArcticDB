@@ -330,7 +330,7 @@ class TestTimezoneIsOverwritten:
         action(lib, sym, series2)
         assert lib.read(sym).data.index.tz == series2.index.tz
 
-    def test_multiindex_with_different_index_timezone(self, in_memory_store_factory, action):
+    def test_dataframe_multiindex_with_different_index_timezone(self, in_memory_store_factory, action):
         lib = in_memory_store_factory()
         sym = "multiindex_with_different_index_timezone"
         df1 = pd.DataFrame(
@@ -344,6 +344,21 @@ class TestTimezoneIsOverwritten:
         )
         action(lib, sym, df2)
         assert lib.read(sym).data.index.levels[0].tz == df2.index.levels[0].tz
+
+    def test_series_multiindex_with_different_index_timezone(self, in_memory_store_factory, action):
+        lib = in_memory_store_factory()
+        sym = "multiindex_with_different_index_timezone"
+        series1 = pd.Series(
+            [1],
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp(0, tz="America/New_York"), 1)], names=["date", "value"]),
+        )
+        lib.write(sym, series1)
+        series2 = pd.Series(
+            [2],
+            index=pd.MultiIndex.from_tuples([(pd.Timestamp(1, tz="Europe/London"), 2)], names=["date", "value"]),
+        )
+        action(lib, sym, series2)
+        assert lib.read(sym).data.index.levels[0].tz == series2.index.levels[0].tz
 
 
 @pytest.mark.parametrize(
@@ -1519,93 +1534,90 @@ class TestNonStringColumnNameNormalization:
 
 
 @pytest.mark.parametrize(
-    "to_write",
+    "data_to_write, index_to_write",
     [
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", "dt"])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=[None, "dt"])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", None])
-        ),
-        pd.DataFrame(
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", "dt"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=[None, "dt"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", None])),
+        (
             {"a": [1.0]},
-            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a", 1)], names=["dt", "level1", "level2"]),
+            pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a", 1)], names=["dt", "level1", "level2"]),
         ),
-        pd.DataFrame(
+        (
             {"level2": [1.0], "a": [1.0]},
-            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"]),
+            pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"]),
         ),
-        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([("x", 1)], names=["str_level", "int_level"])),
-        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([(1, "a")], names=["int_level", "str_level"])),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", 1])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", "1"])
-        ),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("x", 1)], names=["str_level", "int_level"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(1, "a")], names=["int_level", "str_level"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", 1])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", "1"])),
     ],
 )
 @pytest.mark.parametrize(
-    "to_append",
+    "data_to_append, index_to_append",
     [
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", "dt"])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=[None, "dt"])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", None])
-        ),
-        pd.DataFrame(
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", "dt"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=[None, "dt"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("a", pd.Timestamp("2025-01-01"))], names=["level1", None])),
+        (
             {"a": [1.0]},
-            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a", 1)], names=["dt", "level1", "level2"]),
+            pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a", 1)], names=["dt", "level1", "level2"]),
         ),
-        pd.DataFrame(
+        (
             {"level2": [1.0], "a": [1.0]},
-            index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"]),
+            pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["dt", "level1"]),
         ),
-        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([("x", 1)], names=["str_level", "int_level"])),
-        pd.DataFrame({"a": [1.0]}, index=pd.MultiIndex.from_tuples([(1, "a")], names=["int_level", "str_level"])),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", 1])
-        ),
-        pd.DataFrame(
-            {"a": [1.0]}, index=pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", "1"])
-        ),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([("x", 1)], names=["str_level", "int_level"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(1, "a")], names=["int_level", "str_level"])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", 1])),
+        ({"a": [1.0]}, pd.MultiIndex.from_tuples([(pd.Timestamp("2025-01-01"), "a")], names=["level0", "1"])),
     ],
 )
-def test_different_multiindex_fails_with_dynamic_schema(in_memory_store_factory, sym, to_write, to_append):
+def test_different_multiindex_fails_with_dynamic_schema(
+    in_memory_store_factory,
+    data_to_write,
+    data_to_append,
+    index_to_write,
+    index_to_append,
+):
     """
     Tests for multiindex validation in check_normalization_index_match (schema_checks.cpp).
     With dynamic schema, multiindex field names must still match between writes and appends/updates.
     """
     lib = in_memory_store_factory(dynamic_schema=True)
-    lib.write(sym, to_write)
+    symbols = ["df", "series"]
+    for sym in symbols:
+        if sym == "series" and (len(data_to_write) > 1 or len(data_to_append) > 1):
+            continue
 
-    # See Monday 12026895610
-    to_write_index_names = [str(name) if type(name) == int else name for name in to_write.index.names]
-    to_append_index_names = [str(name) if type(name) == int else name for name in to_append.index.names]
-    should_fail = to_write.index.nlevels != to_append.index.nlevels or to_write_index_names != to_append_index_names
+        if sym == "series":
+            to_write = pd.Series(next(iter(data_to_write.values())), index=index_to_write)
+            to_append = pd.Series(next(iter(data_to_append.values())), index=index_to_append)
+        else:
+            to_write = pd.DataFrame(data_to_write, index=index_to_write)
+            to_append = pd.DataFrame(data_to_append, index=index_to_append)
 
-    if should_fail:
-        with pytest.raises(NormalizationException):
+        lib.write(sym, to_write)
+
+        # See Monday 12026895610
+        to_write_index_names = [str(name) if type(name) == int else name for name in to_write.index.names]
+        to_append_index_names = [str(name) if type(name) == int else name for name in to_append.index.names]
+        should_fail = to_write.index.nlevels != to_append.index.nlevels or to_write_index_names != to_append_index_names
+
+        if should_fail:
+            with pytest.raises(NormalizationException):
+                lib.append(sym, to_append)
+        else:
             lib.append(sym, to_append)
-    else:
-        lib.append(sym, to_append)
-        result = lib.read(sym).data
-        expected_to_write = to_write.copy(deep=True)
-        expected_to_append = to_append.copy(deep=True)
-        expected_to_write.index = expected_to_write.index.set_names(to_write_index_names)
-        expected_to_append.index = expected_to_append.index.set_names(to_append_index_names)
-        expected = pd.concat([expected_to_write, expected_to_append])
-        assert_frame_equal(result, expected)
+            result = lib.read(sym).data
+            expected_to_write = to_write.copy(deep=True)
+            expected_to_append = to_append.copy(deep=True)
+            expected_to_write.index = expected_to_write.index.set_names(to_write_index_names)
+            expected_to_append.index = expected_to_append.index.set_names(to_append_index_names)
+            expected = pd.concat([expected_to_write, expected_to_append])
+            if sym == "series":
+                assert_series_equal(result, expected)
+            else:
+                assert_frame_equal(result, expected)

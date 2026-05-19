@@ -16,6 +16,60 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 
+namespace {
+using namespace arcticdb;
+
+template<typename T>
+concept common_normalization = util::any_of<
+        T, proto::descriptors::NormalizationMetadata_Pandas,
+        proto::descriptors::NormalizationMetadata_NormalisedTimeSeries>;
+
+template<common_normalization CommonNormalization>
+void set_index(CommonNormalization& dest_common, const CommonNormalization& source_common) {
+    if (dest_common.has_index()) {
+        *dest_common.mutable_index() = source_common.index();
+    } else if (dest_common.has_multi_index()) {
+        *dest_common.mutable_multi_index() = source_common.multi_index();
+    }
+}
+
+template<common_normalization CommonNormalization>
+void set_tz(CommonNormalization& dest, const CommonNormalization& source) {
+    if (dest.has_multi_index()) {
+        dest.mutable_multi_index()->set_tz(source.multi_index().tz());
+    } else {
+        dest.mutable_index()->set_tz(source.index().tz());
+    }
+}
+
+void merge_rowrange_index(
+        proto::descriptors::NormalizationMetadata& dest, const proto::descriptors::NormalizationMetadata& source
+) {
+    // The current behavior is the last modification operation is setting the index name. See Monday 9797097831, it
+    // would be best to require that index names are always matching. This is the case for datetime index because
+    // it's a physical column. It's a potentially breaking change. Covered in:
+    // test_append.py::test_append_series_with_different_row_range_index_name
+    if (dest.has_series()) {
+        set_index(*dest.mutable_series()->mutable_common(), source.series().common());
+    } else if (dest.has_df()) {
+        set_index(*dest.mutable_df()->mutable_common(), source.df().common());
+    }
+}
+
+void merge_timeseries_index(
+        proto::descriptors::NormalizationMetadata& dest, const proto::descriptors::NormalizationMetadata& source
+) {
+    // See Monday 12029540807
+    // It's a known bug that the new metadata overwrites the timezone but it's an API break to fix it.
+    if (dest.has_series()) {
+        set_tz(*dest.mutable_series()->mutable_common(), source.series().common());
+    } else if (dest.has_df()) {
+        set_tz(*dest.mutable_df()->mutable_common(), source.df().common());
+    }
+}
+
+} // namespace
+
 namespace arcticdb::pipelines::index {
 
 template<class IndexType>
@@ -89,38 +143,9 @@ proto::descriptors::NormalizationMetadata merge_normalization_metadata(
     }
 
     if (existing_tsd.index().type() == IndexDescriptor::Type::ROWCOUNT) {
-        // The current behavior is the last modification operation is setting the index name. See Monday 9797097831, it
-        // would be best to require that index names are always matching. This is the case for datetime index because
-        // it's a physical column. It's a potentially breaking change. Covered in:
-        // test_append.py::test_append_series_with_different_row_range_index_name
-        if (result.has_series()) {
-            *result.mutable_series()->mutable_common()->mutable_index() = new_frame.norm_meta.series().common().index();
-        } else if (result.has_df()) {
-            if (result.df().common().has_index()) {
-                *result.mutable_df()->mutable_common()->mutable_index() = new_frame.norm_meta.df().common().index();
-            } else if (result.df().common().has_multi_index()) {
-                *result.mutable_df()->mutable_common()->mutable_multi_index() =
-                        new_frame.norm_meta.df().common().multi_index();
-            }
-        }
+        merge_rowrange_index(result, new_frame.norm_meta);
     } else if (existing_tsd.index().type() == IndexDescriptor::Type::TIMESTAMP) {
-        // See Monday 12029540807
-        // It's a known bug that the new metadata overwrites the timezone but it's an API break to fix it.
-        if (result.has_df()) {
-            if (result.df().common().has_multi_index()) {
-                result.mutable_df()->mutable_common()->mutable_multi_index()->set_tz(
-                        new_frame.norm_meta.df().common().multi_index().tz()
-                );
-            } else {
-                result.mutable_df()->mutable_common()->mutable_index()->set_tz(
-                        new_frame.norm_meta.df().common().index().tz()
-                );
-            }
-        } else if (result.has_series()) {
-            result.mutable_series()->mutable_common()->mutable_index()->set_tz(
-                    new_frame.norm_meta.series().common().index().tz()
-            );
-        }
+        merge_timeseries_index(result, new_frame.norm_meta);
     }
     return result;
 }
