@@ -52,7 +52,21 @@ struct KeySizesInfo {
     size_t compressed_size; // bytes
 };
 
-folly::Future<folly::Unit> delete_trees_responsibly(
+/**
+ * These statistics record the number of deletions *attempted*. In particular note that we attempt
+ * to delete column stats keys without checking whether they exist first.
+ */
+struct DeleteTreesStats {
+    size_t index_keys_considered = 0;
+    size_t index_keys_protected_by_snapshots = 0;
+    size_t index_keys_deleted = 0;
+    size_t column_stats_keys_deleted = 0;
+    size_t data_keys_considered = 0;
+    size_t data_keys_deleted = 0;
+};
+
+// The stats are used by the enterprise repo for logging
+folly::Future<DeleteTreesStats> delete_trees_responsibly(
         std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
