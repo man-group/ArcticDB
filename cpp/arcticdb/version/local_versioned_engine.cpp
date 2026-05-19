@@ -2230,7 +2230,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
                 rejected_strs.push_back(fmt::format("{}:{}", symbol, version));
             }
             missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
-                    "add_to_snapshot: the following versions do not exist or have been deleted "
+                    "add_to_snapshot: the following versions have been deleted "
                     "and are not preserved in any other snapshot: {}",
                     fmt::join(rejected_strs, ", ")
             );
