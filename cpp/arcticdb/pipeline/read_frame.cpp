@@ -396,11 +396,9 @@ void decode_or_expand(
             if (is_arrow) {
                 bv->resize(mapping.num_rows_);
                 handle_truncation(*bv, mapping.truncate_);
-                if (bv->count() != bv->size()) {
-                    auto first_offset_after_truncation = mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0
-                                                                                 ) * dest_type_desc.get_type_bytes();
-                    create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE);
-                }
+                auto first_offset_after_truncation =
+                        mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0) * dest_type_desc.get_type_bytes();
+                create_dense_bitmap_if_any_nulls(first_offset_after_truncation, *bv, dest_column);
             }
         } else {
             SliceDataSink sink(dest, dest_bytes);

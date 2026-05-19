@@ -11,7 +11,7 @@ import pytest
 from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb.version_store._normalization import denormalize_dataframe
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.types import DataType
+from arcticdb_ext.types import DataType, IndexKind
 from arcticdb_ext.exceptions import SchemaException, InternalException, StorageException
 from arcticdb_ext.version_store import Slicing
 from arcticdb_ext.stream import SegmentInMemory
@@ -371,6 +371,54 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
+
+
+def test_read_descriptor_table_index_key(lmdb_version_store):
+    """
+    This covers a bug with the v2 encoding where we could not read descriptors properly.
+
+    With V2 encoding the header layout is:
+
+    ...
+    SegmentDescriptorMagic segment_descriptor_magic_;
+    SegmentDescriptor segment_descriptor_;
+    SegmentIdentifierHeader identifier_header_;
+    Optional<OpaqueField> identifier_data_;
+    DescriptorFieldsMagic descriptor_magic_;
+    CompressedField<FieldList> descriptor_fields_;
+    ...
+
+    and we had a bug where we were not skipping from the SegmentDescriptor to the descriptor fields.
+
+    See https://github.com/man-group/ArcticDB/pull/3024#discussion_r3166985448
+    """
+    lib = lmdb_version_store
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    df = pd.DataFrame({"col_1": [1, 2], "col_2": [3.0, 4.0]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.write(sym, df)
+
+    index_keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, sym)
+    assert len(index_keys) == 1
+    descriptor = lib_tool.read_descriptor(index_keys[0])
+    fields = descriptor.fields()
+    actual = [(field.name, field.type.data_type()) for field in fields]
+    assert actual == [
+        ("start_index", DataType.NANOSECONDS_UTC64),
+        ("end_index", DataType.NANOSECONDS_UTC64),
+        ("version_id", DataType.UINT64),
+        ("stream_id", DataType.ASCII_DYNAMIC64),
+        ("creation_ts", DataType.UINT64),
+        ("content_hash", DataType.UINT64),
+        ("index_type", DataType.UINT8),
+        ("key_type", DataType.UINT8),
+        ("start_col", DataType.UINT64),
+        ("end_col", DataType.UINT64),
+        ("start_row", DataType.UINT64),
+        ("end_row", DataType.UINT64),
+    ]
+    assert descriptor.id() == "sym"
+    assert descriptor.index.kind() == IndexKind.ROWCOUNT
 
 
 @pytest.mark.parametrize("slicing", [Slicing.NoSlicing, Slicing.RowSlicing])

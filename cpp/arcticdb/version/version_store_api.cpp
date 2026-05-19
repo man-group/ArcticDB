@@ -851,7 +851,7 @@ ReadResult PythonVersionStore::read_column_stats_version(
 ) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::PANDAS);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::ARROW);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
