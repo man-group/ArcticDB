@@ -21,9 +21,9 @@ function(set_pdb_name_per_translation_unit)
     if(MSVC AND "${ARCTICDB_PDB_GENERATION_MODE}" STREQUAL "TU")
         if(NOT "${CMAKE_MSVC_DEBUG_INFORMATION_FORMAT}" STREQUAL "ProgramDatabase")
             message(WARNING
-                "ARCTICDB_PDB_GENERATION_MODE set to ${ARCTICDB_PDB_GENERATION_MODE}, but \
-                CMAKE_MSVC_DEBUG_INFORMATION_FORMAT is ${CMAKE_MSVC_DEBUG_INFORMATION_FORMAT} (not ProgramDatabase). \
-                Generation of PDBs per TU makes sense only if debug format is ProgramDatabase (/Zi or /ZI are set)"
+                "ARCTICDB_PDB_GENERATION_MODE set to ${ARCTICDB_PDB_GENERATION_MODE}, but"
+                "CMAKE_MSVC_DEBUG_INFORMATION_FORMAT is ${CMAKE_MSVC_DEBUG_INFORMATION_FORMAT} (not ProgramDatabase). "
+                "Generation of PDBs per TU makes sense only if debug format is ProgramDatabase (/Zi or /ZI are set)"
             )
             return()
         endif()
@@ -35,8 +35,8 @@ function(set_pdb_name_per_translation_unit)
 
         if(CMAKE_GENERATOR MATCHES "Visual Studio" AND NOT _ARCTICDB_ARCTICDB_PDB_GENERATION_MODE_WARNED)
             message(AUTHOR_WARNING
-                "Setting ARCTICDB_PDB_GENERATION_MODE to TU will result in single threaded builds with MSBuild even if \
-                /MP is set"
+                "Setting ARCTICDB_PDB_GENERATION_MODE to TU will result in single threaded builds with MSBuild even "
+                "if /MP is set"
             )
             set(_ARCTICDB_ARCTICDB_PDB_GENERATION_MODE_WARNED ON PARENT_SCOPE)
         endif()
