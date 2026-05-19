@@ -81,11 +81,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          submodules: recursive
-          fetch-depth: 0
+          fetch-depth: ${{ startsWith(github.ref, 'refs/tags/') && 0 || 1 }}
           ref: ${{ inputs.ref }}
 
-      - name: Convert to Full Clone
+      - name: Init submodules
         run: |
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git submodule update --init --recursive
@@ -664,7 +663,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
-          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 2 --dist worksteal' || inputs.pytest_xdist_mode}}
+          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 0' || inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)

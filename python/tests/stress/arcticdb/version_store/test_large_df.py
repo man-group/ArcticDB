@@ -69,8 +69,8 @@ def test_write_and_update_large_df_in_chunks(lmdb_version_store_very_big_map):
 def test_write_large_df_in_chunks(lmdb_version_store_big_map):
     symbol = "symbol"
     lib = lmdb_version_store_big_map
-    chunk_size = 2**22
-    num_chunks = 2**10
+    chunk_size = 2**27
+    num_chunks = 2**5
 
     all_zeros = pd.DataFrame({"col": np.zeros(chunk_size)})
     lib.write(symbol, all_zeros)

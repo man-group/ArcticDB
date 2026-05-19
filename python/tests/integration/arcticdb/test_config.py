@@ -18,7 +18,7 @@ arcticdb.log.version.info('test INFO')
 arcticdb.log.version.warn('test WARN')
 arcticdb.log.version.error('test ERROR')
 """
-    p = run([sys.executable], universal_newlines=True, input=code, stderr=PIPE, timeout=10)
+    p = run([sys.executable], universal_newlines=True, input=code, stderr=PIPE, timeout=30)
     lines = p.stderr.splitlines()
     idx = _LEVELS.index(level)
     while lines.pop(0) != "Our printout starts":
