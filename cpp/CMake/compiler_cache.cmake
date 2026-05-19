@@ -7,21 +7,13 @@
 # * AUTO tries to find a compiler cache in the order sccache|ccache. If nothing is found the script exits (but does
 #   not fail). If the executable is found but CMAKE_C(XX)_COMPILER_LAUNCHER the script will not change anything.
 function(set_arcticdb_compiler_cache)
-    set(ALLOWED_VALUES "CCACHE" "SCCACHE" "OFF" "CUSTOM" "AUTO")
-    if(NOT ARCTICDB_COMPILER_CACHE IN_LIST ALLOWED_VALUES)
-        message(FATAL_ERROR "Unknown value of the ARCTICDB_COMPILER_CACHE variable: ${ARCTICDB_COMPILER_CACHE}")
-    endif()
-
+    
+    validate_compiler_cache_value()
     if("${ARCTICDB_COMPILER_CACHE}" STREQUAL "OFF")
         return()
     endif()
 
     if("${ARCTICDB_COMPILER_CACHE}" STREQUAL "CUSTOM")
-        if(NOT ARCTICDB_COMPILER_CACHE_PATH)
-            message(FATAL_ERROR
-                "ARCTICDB_COMPILER_CACHE set to ${ARCTICDB_COMPILER_CACHE} but ARCTICDB_COMPILER_CACHE_PATH was not set"
-            )
-        endif()
         set(CACHE_PROGRAM_PATH ${ARCTICDB_COMPILER_CACHE_PATH})
     elseif("${ARCTICDB_COMPILER_CACHE}" STREQUAL "AUTO")
         set(CACHES_TO_TRY sccache ccache)
@@ -84,5 +76,19 @@ function(set_arcticdb_compiler_cache)
         endif()
         list(PREPEND CMAKE_CXX_COMPILER_LAUNCHER ${CACHE_PROGRAM_PATH})
         set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_CXX_COMPILER_LAUNCHER} PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(validate_compiler_cache_value)
+    string(TO_UPPER ${ARCTICDB_COMPILER_CACHE} CACHE_UPPER)
+    set(ALLOWED_VALUES "CCACHE" "SCCACHE" "OFF" "CUSTOM" "AUTO")
+    if(NOT CACHE_UPPER IN_LIST ALLOWED_VALUES)
+        message(FATAL_ERROR "Unknown value of the ARCTICDB_COMPILER_CACHE variable: ${ARCTICDB_COMPILER_CACHE}")
+    endif()
+
+    if("${ARCTICDB_COMPILER_CACHE}" STREQUAL "CUSTOM" AND NOT ARCTICDB_COMPILER_CACHE_PATH)
+        message(FATAL_ERROR
+            "ARCTICDB_COMPILER_CACHE set to ${ARCTICDB_COMPILER_CACHE} but ARCTICDB_COMPILER_CACHE_PATH was not set"
+        )
     endif()
 endfunction()
