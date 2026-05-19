@@ -49,7 +49,7 @@ function(set_arcticdb_compiler_cache)
         )
     endif()
     
-    prepend_cache_if_not_existing(${CACHE_PROGRAM_PATH} ${CACHE_PROGRAM_NAME})
+    prepend_cache_if_not_existing("${CACHE_PROGRAM_PATH}" "${CACHE_PROGRAM_NAME}")
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_CXX_COMPILER_LAUNCHER} PARENT_SCOPE)
     set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_C_COMPILER_LAUNCHER} PARENT_SCOPE)
 endfunction()
