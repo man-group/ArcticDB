@@ -80,7 +80,7 @@ function(set_arcticdb_compiler_cache)
 endfunction()
 
 function(validate_compiler_cache_value)
-    string(TO_UPPER ${ARCTICDB_COMPILER_CACHE} CACHE_UPPER)
+    string(TOUPPER ${ARCTICDB_COMPILER_CACHE} CACHE_UPPER)
     set(ALLOWED_VALUES "CCACHE" "SCCACHE" "OFF" "CUSTOM" "AUTO")
     if(NOT CACHE_UPPER IN_LIST ALLOWED_VALUES)
         message(FATAL_ERROR "Unknown value of the ARCTICDB_COMPILER_CACHE variable: ${ARCTICDB_COMPILER_CACHE}")
