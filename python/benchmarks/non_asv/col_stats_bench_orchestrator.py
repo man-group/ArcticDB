@@ -13,15 +13,9 @@ RUNS = 10
 WRITE_SYMBOL_SCRIPT = Path(__file__).parent / "col_stats_bench_write_symbol.py"
 CREATE_STATS_SCRIPT = Path(__file__).parent / "col_stats_bench_create_stats.py"
 
-SCENARIOS = [
-    (10, 10),
-    (1_000, 1_000),
-    (100_000, 1_000),
-    (100_000, 10_000),
-    (1_000_000, 1_000),
-    (1_000_000, 5_000),
-    (10_000_000, 1_000),
-]
+BASE_ROWS = 100_000
+BASE_COLS = 127
+
 
 @dataclass
 class Result:
@@ -32,7 +26,7 @@ class Result:
     stats_rss_use: list = field(default_factory=list)
 
 
-results = [Result() for _ in SCENARIOS]
+results = []
 
 
 def run_subprocess(script, args, label):
@@ -43,55 +37,81 @@ def run_subprocess(script, args, label):
         )
         return json.loads(completed.stdout)
     except subprocess.CalledProcessError as e:
-        killed_by_signal = e.returncode < 0
-        reason = f"killed by signal {-e.returncode}" if killed_by_signal else f"exit code {e.returncode}"
-        raise RuntimeError(f"[{label}] subprocess failed ({reason})") from None
+        raise MemoryError(f"[{label}] exited with code {e.returncode}") from None
 
 
-def measure(scenario, index):
-    rows, cols = scenario
-    results[index].rows = rows
-    results[index].cols = cols
-
+def measure(rows, cols):
     print(f"  [write_symbol] {rows}x{cols}", file=sys.stderr)
-    results[index].symbol_write_time = run_subprocess(
+    write_time = run_subprocess(
         WRITE_SYMBOL_SCRIPT, [rows, cols], "write_symbol"
     )["elapsed_seconds"]
 
-    for i in range(1, WARMUP_RUNS + 1):
-        print(f"  [create_stats] warmup {i}/{WARMUP_RUNS}", file=sys.stderr)
-        run_subprocess(CREATE_STATS_SCRIPT, [cols], "create_stats")
+    result = Result(rows=rows, cols=cols, symbol_write_time=write_time)
+    results.append(result)
 
-    for i in range(1, RUNS + 1):
-        print(f"  [create_stats] run {i}/{RUNS}", file=sys.stderr)
-        r = run_subprocess(CREATE_STATS_SCRIPT, [cols], "create_stats")
+    try:
+        for i in range(1, WARMUP_RUNS + 1):
+            print(f"  [create_stats] warmup {i}/{WARMUP_RUNS}", file=sys.stderr)
+            run_subprocess(CREATE_STATS_SCRIPT, [cols], "create_stats")
 
-        results[index].stats_create_times.append(r["elapsed_seconds"])
-        results[index].stats_rss_use.append(r["peak_rss_mb"])
+        for i in range(1, RUNS + 1):
+            print(f"  [create_stats] run {i}/{RUNS}", file=sys.stderr)
+            r = run_subprocess(CREATE_STATS_SCRIPT, [cols], "create_stats")
+            result.stats_create_times.append(r["elapsed_seconds"])
+            result.stats_rss_use.append(r["peak_rss_mb"])
+    except MemoryError:
+        print(f"  OOM during stats collection after {len(result.stats_create_times)} run(s), stopping phase", file=sys.stderr)
+        raise
+    finally:
+        cleanup()
 
-    cleanup()
+
+def run_phase(scenario_gen):
+    for rows, cols in scenario_gen:
+        print(f"\n=== scenario {rows:,}x{cols:,} ===", file=sys.stderr)
+        try:
+            measure(rows, cols)
+        except MemoryError as e:
+            print(f"  OOM: {e}, stopping phase", file=sys.stderr)
+            break
+
+
+def row_scenarios():
+    rows = BASE_ROWS
+    while True:
+        yield rows, BASE_COLS
+        rows *= 10
+
+
+def col_scenarios():
+    cols = BASE_COLS * 10
+    while True:
+        yield BASE_ROWS, cols
+        cols *= 10
 
 
 def print_results():
-    cw = 14
+    cw = 20
     header = (
         f"{'rows':>12}  {'cols':>8}"
         f"  {'write_s':>{cw}}"
-        f"  {'time_mean':>{cw}}  {'time_median':>{cw}}  {'time_max':>{cw}}"
-        f"  {'rss_mean_mb':>{cw}}  {'rss_median_mb':>{cw}}  {'rss_max_mb':>{cw}}"
+        f"  {'col_stats_mean_s':>{cw}}  {'col_stats_max_s':>{cw}}"
+        f"  {'col_stats_mean_rss_mb':>{cw}}  {'col_stats_max_rss_mb':>{cw}}"
     )
     print()
     print(header)
     print("-" * len(header))
 
     for r in results:
+        if not r.stats_create_times:
+            continue
         t = r.stats_create_times
         m = r.stats_rss_use
         print(
             f"{r.rows:>12,}  {r.cols:>8,}"
             f"  {r.symbol_write_time:>{cw}.2f}"
-            f"  {statistics.mean(t):>{cw}.2f}  {statistics.median(t):>{cw}.2f}  {max(t):>{cw}.2f}"
-            f"  {statistics.mean(m):>{cw}.1f}  {statistics.median(m):>{cw}.1f}  {max(m):>{cw}.1f}"
+            f"  {statistics.mean(t):>{cw}.2f}  {max(t):>{cw}.2f}"
+            f"  {statistics.mean(m):>{cw}.1f}  {max(m):>{cw}.1f}"
         )
 
 
@@ -106,9 +126,10 @@ def cleanup():
 if __name__ == "__main__":
     cleanup()
     try:
-        for i, scenario in enumerate(SCENARIOS):
-            print(f"\n=== scenario {scenario[0]}x{scenario[1]} ===", file=sys.stderr)
-            measure(scenario, i)
+        run_phase(row_scenarios())
+        run_phase(col_scenarios())
+    except Exception as e:
+        print(f"Benchmark aborted unexpectedly: {e}", file=sys.stderr)
     finally:
         cleanup()
     print_results()
