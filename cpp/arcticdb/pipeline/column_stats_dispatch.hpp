@@ -136,10 +136,7 @@ StatsComparison stats_comparator(const ColumnStatsValues& stats_lhs, const Value
                     constexpr auto nat_result = std::is_same_v<F, NotEqualsOperator> ? StatsComparison::ALL_MATCH
                                                                                      : StatsComparison::NONE_MATCH;
                     if (auto r = check_time_stats_for_nat(
-                                static_cast<timestamp>(min_val),
-                                static_cast<timestamp>(max_val),
-                                static_cast<timestamp>(query_value),
-                                nat_result
+                                static_cast<timestamp>(min_val), static_cast<timestamp>(query_value), nat_result
                         )) {
                         return *r;
                     }

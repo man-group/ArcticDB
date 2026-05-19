@@ -1872,13 +1872,13 @@ def all_recursive_metastructure_versions(request):
 @pytest.fixture
 def column_stats_filtering_enabled():
     with config_context("ColumnStats.UseForQueries", 1):
-        yield
+        yield True
 
 
 @pytest.fixture
 def column_stats_filtering_disabled():
     with config_context("ColumnStats.UseForQueries", 0):
-        yield
+        yield False
 
 
 @pytest.fixture(params=["column_stats_filtering_enabled", "column_stats_filtering_disabled"])

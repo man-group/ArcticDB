@@ -25,7 +25,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            auto is_nan = []([[maybe_unused]] RawType v) {
+            auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
                     return std::isnan(v);
                 } else if constexpr (is_time_type(type_info::data_type)) {
@@ -48,7 +48,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 const auto& curr = static_cast<RawType>(value);
                 if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
                     // Skip NaN/NaT as they don't generate a stable ordering
-                    if (is_nan(curr)) {
+                    if (is_nat_or_nan(curr)) {
                         any_nan = true;
                         return;
                     }

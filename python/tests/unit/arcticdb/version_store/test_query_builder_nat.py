@@ -10,8 +10,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, query_stats_operation_count
 from arcticdb.version_store.processing import QueryBuilder
+import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
 
@@ -99,17 +100,21 @@ def test_filter_nat_col_col(in_memory_version_store, column_stats_filtering_enab
 
 
 @pytest.mark.parametrize(
-    "query_expr",
+    "query_expr, expected_reads",
     [
-        lambda x: x["a"] == x["b"],
-        lambda x: x["a"] != x["b"],
-        lambda x: x["a"] < x["b"],
-        lambda x: x["a"] >= x["b"],
+        (lambda x: x["a"] == x["b"], 1),
+        (lambda x: x["a"] != x["b"], 2),
+        (lambda x: x["a"] < x["b"], 1),
+        (lambda x: x["a"] >= x["b"], 1),
+        (lambda x: x["b"] == x["a"], 1),
+        (lambda x: x["b"] != x["a"], 2),
+        (lambda x: x["b"] < x["a"], 1),
+        (lambda x: x["b"] >= x["a"], 1),
     ],
-    ids=["eq", "ne", "lt", "ge"],
+    ids=["eq", "ne", "lt", "ge", "eq-flipped", "ne-flipped", "lt-flipped", "ge-flipped"],
 )
 def test_filter_nat_col_col_all_nat_slice(
-    in_memory_version_store, column_stats_filtering_enabled_and_disabled, query_expr
+    in_memory_version_store, column_stats_filtering_enabled_and_disabled, clear_query_stats, query_expr, expected_reads
 ):
     lib = in_memory_version_store
 
@@ -128,13 +133,19 @@ def test_filter_nat_col_col_all_nat_slice(
     lib.append(sym, df1)
     lib.create_column_stats(sym, {"a": {"MINMAX"}, "b": {"MINMAX"}})
 
+    qs.enable()
     q = QueryBuilder()
     q = q[query_expr(q)]
+    qs.reset_stats()
     result = lib.read(sym, query_builder=q).data
+    table_data_reads = query_stats_operation_count(qs.get_query_stats(), "Memory_GetObject", "TABLE_DATA")
 
     full_df = pd.concat([df0, df1])
     expected = full_df[query_expr(full_df)]
     assert_frame_equal(expected, result)
+    if not column_stats_filtering_enabled_and_disabled:
+        expected_reads = 2
+    assert table_data_reads == expected_reads, f"Expected {expected_reads} TABLE_DATA read(s), got {table_data_reads}"
 
 
 @pytest.mark.parametrize(

@@ -63,9 +63,9 @@ std::optional<StatsComparison> check_scalar_for_nan(T value, StatsComparison nan
 }
 
 inline std::optional<StatsComparison> check_time_stats_for_nat(
-        timestamp min_val, timestamp max_val, timestamp query_value, StatsComparison nat_result
+        timestamp min_val, timestamp query_value, StatsComparison nat_result
 ) {
-    if (min_val == NaT || max_val == NaT || query_value == NaT) {
+    if (min_val == NaT || query_value == NaT) {
         return nat_result;
     }
     return std::nullopt;
