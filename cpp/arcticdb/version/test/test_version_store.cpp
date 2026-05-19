@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/util/key_utils.hpp>
 
 #include <chrono>
 #include <thread>
@@ -1194,7 +1195,8 @@ TEST(DeleteTreesResponsiblyStats, CountsConsideredAndDeleted) {
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
     EXPECT_EQ(stats.index_keys_deleted, 3u);
     EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
-    EXPECT_GT(stats.data_keys_deleted, 0u);
+    EXPECT_EQ(stats.data_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_considered, 3u);
 }
 
 TEST(DeleteTreesResponsiblyStats, CountsKeysProtectedBySnapshots) {
@@ -1214,6 +1216,7 @@ TEST(DeleteTreesResponsiblyStats, CountsKeysProtectedBySnapshots) {
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 1u);
     EXPECT_EQ(stats.index_keys_deleted, 2u);
     EXPECT_EQ(stats.column_stats_keys_deleted, 2u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 2u);
 }
 
@@ -1233,6 +1236,7 @@ TEST(DeleteTreesResponsiblyStats, DryRunReportsCountsButDoesNotDelete) {
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
     EXPECT_EQ(stats.index_keys_deleted, 3u);
     EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_considered, 3u);
     EXPECT_EQ(stats.data_keys_deleted, 3u);
 
     EXPECT_TRUE(f.store->key_exists(f.k0).get());
@@ -1265,5 +1269,42 @@ TEST(DeleteTreesResponsiblyStats, IndexKeyWithMultipleDataKeys) {
     EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
     EXPECT_EQ(stats.index_keys_deleted, 1u);
     EXPECT_EQ(stats.column_stats_keys_deleted, 1u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
     EXPECT_EQ(stats.data_keys_deleted, 2u);
+}
+
+TEST(DeleteTreesResponsiblyStats, DataKeysConsideredCountsBeforeExclusion) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto pvs = get_test_engine<version_store::PythonVersionStore>({}, "store");
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+
+    StreamId sym{"sym"};
+    SlicingPolicy slicing = FixedSlicer{/*col_per_slice=*/127, /*row_per_slice=*/2};
+
+    auto wrapper0 = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    auto k0 = write_frame(IndexPartialKey{sym, 0}, wrapper0.frame_, slicing, store, std::make_shared<DeDupMap>()).get();
+
+    auto de_dup_map = std::make_shared<DeDupMap>();
+    for (const auto& data_key : get_data_keys(store, k0, storage::ReadKeyOpts{})) {
+        de_dup_map->insert_key(data_key);
+    }
+    auto wrapper1 = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    auto k1 = write_frame(IndexPartialKey{sym, 1}, wrapper1.frame_, slicing, store, de_dup_map).get();
+
+    version_store::PreDeleteChecks checks{
+            /*snapshots=*/false, /*version_visible=*/false, /*prev_version=*/false, /*next_version=*/false, {k1}
+    };
+    MasterSnapshotMap empty_snap_map;
+    auto stats = version_store::delete_trees_responsibly(
+                         store, version_map, {k0}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 1u);
+    EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 0u);
 }

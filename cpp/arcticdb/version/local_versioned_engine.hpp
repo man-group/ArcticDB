@@ -61,6 +61,7 @@ struct DeleteTreesStats {
     size_t index_keys_protected_by_snapshots = 0;
     size_t index_keys_deleted = 0;
     size_t column_stats_keys_deleted = 0;
+    size_t data_keys_considered = 0;
     size_t data_keys_deleted = 0;
 };
 
