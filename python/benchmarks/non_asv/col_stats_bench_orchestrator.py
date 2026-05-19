@@ -15,7 +15,7 @@ CREATE_STATS_SCRIPT = Path(__file__).parent / "col_stats_bench_create_stats.py"
 
 BASE_ROWS = 100_000
 BASE_COLS = 127
-
+MULTIPLIER = 3
 
 @dataclass
 class Result:
@@ -80,14 +80,14 @@ def row_scenarios():
     rows = BASE_ROWS
     while True:
         yield rows, BASE_COLS
-        rows *= 10
+        rows *= MULTIPLIER
 
 
 def col_scenarios():
     cols = BASE_COLS * 10
     while True:
         yield BASE_ROWS, cols
-        cols *= 10
+        cols *= MULTIPLIER
 
 
 def print_results():
