@@ -36,22 +36,20 @@ function(set_arcticdb_compiler_cache)
         find_program(CACHE_PROGRAM_PATH ${CACHE_PROGRAM_NAME})
         if(NOT CACHE_PROGRAM_PATH)
             message(FATAL_ERROR
-                "ARCTICDB_COMPILER_CACHE set to ${ARCTICDB_COMPILER_CACHE} but ${ARCTICDB_COMPILER_CACHE} cannot be
-                found. Consider setting ARCTICDB_COMPILER_CACHE to CUSTOM and using ARCTICDB_COMPILER_CACHE_PATH"
+                "ARCTICDB_COMPILER_CACHE set to ${ARCTICDB_COMPILER_CACHE} but ${ARCTICDB_COMPILER_CACHE} cannot be "
+                "found. Consider setting ARCTICDB_COMPILER_CACHE to CUSTOM and using ARCTICDB_COMPILER_CACHE_PATH"
             )
         endif()
     endif()
 
     if(MSVC AND CACHE_PROGRAM_PATH AND NOT ${ARCTICDB_PDB_GENERATION_MODE} STREQUAL "TU")
         message(FATAL_ERROR
-            "In order to use a compiler cache with MSVC a .pdb must be generated per each TU. Consider setting
-            ARCTICDB_PDB_GENERATION_MODE to TU."
+            "In order to use a compiler cache with MSVC a .pdb must be generated per each TU. Consider setting "
+            "ARCTICDB_PDB_GENERATION_MODE to TU."
         )
     endif()
     
-    prepend_cache_if_not_existing(${CACHE_PROGRAM_PATH} ${CACHE_PROGRAM_NAME})
-    set(CMAKE_CXX_COMPILER_LAUNCHER ${CMAKE_CXX_COMPILER_LAUNCHER} PARENT_SCOPE)
-    set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_C_COMPILER_LAUNCHER} PARENT_SCOPE)
+    prepend_cache_if_not_existing("${CACHE_PROGRAM_PATH}" "${CACHE_PROGRAM_NAME}")
 endfunction()
 
 # Check if the value of the cache variable ARCTICDB_COMPILER_CACHE is correct. Fail if not.
@@ -86,14 +84,16 @@ function(prepend_cache_if_not_existing CACHE_PROGRAM_PATH CACHE_NAME)
                 set(CACHE_ALREADY_SET TRUE)
                 break()
             elseif("${LAUNCHER}" STREQUAL "${CACHE_NAME}")
-                message(
-                    "Compiler cache ${CACHE_NAME} already set in ${LAUNCHER_LIST} with different path. Existing path: \
-                    ${LAUNCHER}, required path: ${CACHE_PROGRAM_PATH}. Replacing the existing path with required path."
-                )
-                list(FIND ${LAUNCHER_LIST} "${LAUNCHER_PATH}" idx)
-                list(REMOVE_AT ${LAUNCHER_LIST} ${idx})
-                list(INSERT ${LAUNCHER_LIST} ${idx} "${CACHE_PROGRAM_PATH}")
-                set(${LAUNCHER_LIST} ${${LAUNCHER_LIST}} PARENT_SCOPE)
+                if(NOT "${ARCTICDB_COMPILER_CACHE}" STREQUAL "AUTO")
+                    message(
+                        "Compiler cache ${CACHE_NAME} already set in ${LAUNCHER_LIST} with different path. Existing path: "
+                        "${LAUNCHER}, required path: ${CACHE_PROGRAM_PATH}. Replacing the existing path with required path."
+                    )
+                    list(FIND ${LAUNCHER_LIST} "${LAUNCHER_PATH}" idx)
+                    list(REMOVE_AT ${LAUNCHER_LIST} ${idx})
+                    list(INSERT ${LAUNCHER_LIST} ${idx} "${CACHE_PROGRAM_PATH}")
+                    set(${LAUNCHER_LIST} ${${LAUNCHER_LIST}} CACHE STRING "" FORCE)
+                endif()
                 set(CACHE_ALREADY_SET TRUE)
                 break()
             endif()
@@ -102,14 +102,14 @@ function(prepend_cache_if_not_existing CACHE_PROGRAM_PATH CACHE_NAME)
             if(${${LAUNCHER_LIST}})
                 message(
                     WARNING
-                    "Setting compiler cache ${CACHE_PROGRAM_PATH} on top of non-empty ${LAUNCHER_LIST}: \
-                    ${${LAUNCHER_LIST}}"
+                    "Setting compiler cache ${CACHE_PROGRAM_PATH} on top of non-empty ${LAUNCHER_LIST}:"
+                    "${${LAUNCHER_LIST}}"
                 )
             else()
                 message("ArcticDB setting compiler cache ${CACHE_NAME}: ${CACHE_PROGRAM_PATH}")
             endif()
             list(PREPEND ${LAUNCHER_LIST} ${CACHE_PROGRAM_PATH})
-            set(${LAUNCHER_LIST} ${${LAUNCHER_LIST}} PARENT_SCOPE)
+            set(${LAUNCHER_LIST} ${${LAUNCHER_LIST}} CACHE STRING "" FORCE)
         endif()
     endforeach()
 endfunction()
