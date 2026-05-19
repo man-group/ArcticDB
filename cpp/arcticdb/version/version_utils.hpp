@@ -203,6 +203,18 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
                                      : std::nullopt;
 }
 
+inline std::optional<VersionId> resolve_version_id(SignedVersionId signed_version_id, const VersionMapEntry& entry) {
+    if (signed_version_id >= 0)
+        return static_cast<VersionId>(signed_version_id);
+
+    auto opt_latest = entry.get_first_index(true).first;
+
+    if (!opt_latest.has_value())
+        return std::nullopt;
+
+    return get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
+}
+
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size);
 
 inline bool is_positive_version_query(const LoadStrategy& load_strategy) {

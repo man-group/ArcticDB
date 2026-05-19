@@ -26,7 +26,6 @@ namespace arcticdb {
 // - Combining an arbitrary number of segments into a single one - by providing max_rows_per_segment to the constructor
 //   that is >= the total number of rows in the input segments
 // - Splitting a segment into a set of (approximately) equally sized smaller segments
-// Currently does not support sparse data, this limitation will be removed in future PRs.
 class SegmentReslicer {
   public:
     explicit SegmentReslicer(uint64_t max_rows_per_segment);

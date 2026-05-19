@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <algorithm>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
@@ -1001,9 +1002,13 @@ VersionedItem LocalVersionedEngine::write_segment(
     return versioned_item;
 }
 
-// Steps of delete_trees_responsibly:
+/**
+ * For an index key considered for deletion (target_key) we protect the nearest versions to it (above and below)
+ * that are included in snapshots from deletion. This is because the index key may be dedup'd against an earlier
+ * version in a snapshot, or a later version in a snapshot may be dedup'd against this index key.
+ */
 void copy_versions_nearest_to_target(
-        const MasterSnapshotMap::value_type::second_type& keys_map, const IndexTypeKey& target_key,
+        const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map, const IndexTypeKey& target_key,
         util::ContainerFilterWrapper<std::unordered_set<IndexTypeKey>>& not_to_delete
 ) {
     const auto target_version = target_key.version_id();
@@ -1011,7 +1016,7 @@ void copy_versions_nearest_to_target(
     const IndexTypeKey* least_higher_version = nullptr;
     const IndexTypeKey* greatest_lower_version = nullptr;
 
-    for (const auto& pair : keys_map) {
+    for (const auto& pair : index_key_to_snapshot_map) {
         const auto& key = pair.first;
         if (key != target_key) {
             const auto version = key.version_id();
@@ -1061,15 +1066,14 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
     // Each section below performs these checks:
-    // 1) remove any keys_to_delete that is still visible,
-    // 2) find any other index key that could share data with the keys_to_delete
+    // 1) remove any keys_to_delete that are still visible
+    // 2) find any other index key that could share data with the keys_to_delete (due to dedup).
 
-    // Check snapshot:
+    // Remove any keys considered for deletion that are covered by a snapshot.
     if (check.snapshots) {
         keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete](const auto& target_key) {
-            // symbol -> IndexTypeKey -> set<SnapshotId>
-            auto find_symbol = snapshot_map.find(target_key.id());
-            if (find_symbol != snapshot_map.end()) {
+            // snapshot map is {symbol: {index_key: {snapshots...}}}
+            if (auto find_symbol = snapshot_map.find(target_key.id()); find_symbol != snapshot_map.end()) {
                 const auto& keys_map = find_symbol->second;
                 auto snaps_itr = keys_map.find(target_key);
                 if (snaps_itr != keys_map.end()) {
@@ -1092,7 +1096,8 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         });
     }
 
-    // Check versions:
+    // Remove any keys considered for deletion that are still undeleted in the version chain, or which may share
+    // keys with undeleted versions via the dedup mechanism.
     auto load_type = check.calc_load_type();
     if (load_type != LoadType::NOT_LOADED) {
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
@@ -1323,21 +1328,40 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
     return versioned_item;
 }
 
-VersionedItem LocalVersionedEngine::compact_data_internal(
-        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
-) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
-    py::gil_scoped_release release_gil;
+UpdateInfo LocalVersionedEngine::compact_data_preamble(const StreamId& stream_id) {
     UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
             update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
     );
     // We could make this work by compacting the leaf nodes, but it is not obviously worth the effort at this stage
+    // Leaf nodes of recursively normalized data cannot become fragmented through appends/updates, so it would only be
+    // useful for changing the slicing by an explicitly provided rows_per_segment
     schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
             update_info.previous_index_key_->type() != KeyType::MULTI_KEY,
             "Cannot compact data of recursively normalized symbol {}",
             stream_id
     );
+    return update_info;
+}
+
+CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data_explain_plan");
+    py::gil_scoped_release release_gil;
+    UpdateInfo update_info = compact_data_preamble(stream_id);
+    return compact_data_explain_plan_impl(
+                   store(), update_info, rows_per_segment.value_or(get_write_options().segment_row_size)
+    )
+            .get();
+}
+
+VersionedItem LocalVersionedEngine::compact_data_internal(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
+    py::gil_scoped_release release_gil;
+    UpdateInfo update_info = compact_data_preamble(stream_id);
     auto versioned_item = compact_data_impl(
                                   store(),
                                   VersionedItem{*update_info.previous_index_key_},
@@ -2059,12 +2083,25 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 ) {
     std::map<StreamId, VersionVectorType> sym_versions;
     WarnVersionTypeNotHandled warner;
+
     for (const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index].content_;
-        if (std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
-        else
+
+        if (!std::holds_alternative<SpecificVersionQuery>(query)) {
             warner.warn(*stream_id);
+            continue;
+        }
+
+        const auto version_id = std::get<SpecificVersionQuery>(query).version_id_;
+
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                version_id >= 0,
+                "Negative version numbers are not supported in add_to_snapshot. Got version {} for symbol '{}'",
+                version_id,
+                *stream_id
+        );
+
+        sym_versions[*stream_id].emplace_back(version_id);
     }
     return sym_versions;
 }
@@ -2112,8 +2149,8 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
         auto restore_fut =
                 async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key->id(), *key, maybe_prev});
         if (maybe_prev && maybe_prev->deleted) {
-            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a symbol
-            // list entry for it
+            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a
+            // symbol list entry for it
             auto overall_fut =
                     std::move(restore_fut).via(&async::io_executor()).thenValue([this](auto&& restore_result) {
                         WriteSymbolTask(store(),
@@ -2163,6 +2200,17 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
     std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> specific_versions;
     if (!version_queries.empty()) {
         auto sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
+
+        auto symbol_with_more_than_one_version =
+                std::ranges::find_if(sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
+
+        if (symbol_with_more_than_one_version != sym_versions.end()) {
+            auto stream_id = symbol_with_more_than_one_version->first;
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
+            );
+        }
+
         specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
         std::vector<StreamId> latest_ids;
         std::copy_if(
@@ -2318,8 +2366,8 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
-// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
-// operations
+// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
+// listing operations
 static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
@@ -2441,7 +2489,8 @@ VersionedItem LocalVersionedEngine::merge_internal(
         if (source->empty()) {
             ARCTICDB_RUNTIME_DEBUG(
                     log::version(),
-                    "Merging into existing data with an empty source has no effect. \n No new version is being created "
+                    "Merging into existing data with an empty source has no effect. \n No new version is being "
+                    "created "
                     "for symbol='{}', and the last version is returned",
                     stream_id
             );

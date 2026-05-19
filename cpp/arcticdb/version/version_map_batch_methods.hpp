@@ -280,6 +280,7 @@ using VersionVectorType = std::vector<VersionId>;
 /**
  * Returns multiple versions for the same symbol
  * @return Does not guarantee the returned keys actually exist in storage.
+ * Only non-negative version per symbol is supported. Versions that do not exist in storage are silently skipped.
  */
 inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
@@ -306,8 +307,10 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                 auto sym_it = sym_versions.find(sym_version.first);
                 util::check(sym_it != sym_versions.end(), "Failed to find versions for symbol {}", sym_version.first);
                 const auto& versions = sym_it->second;
+
                 for (auto version : versions) {
                     auto index_key = find_index_key_for_version_id(version, entry, include_deleted);
+
                     if (index_key) {
                         std::lock_guard lock{*mutex};
                         (*output)[std::pair(sym_version.first, version)] = *index_key;

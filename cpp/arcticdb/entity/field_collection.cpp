@@ -42,6 +42,7 @@ void FieldCollection::regenerate_offsets() {
         ++shape_ptr;
         ++offset_ptr;
     }
+    offsets_.commit();
 }
 
 bool operator==(const FieldCollection& left, const FieldCollection& right) {

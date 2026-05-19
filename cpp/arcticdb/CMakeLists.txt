@@ -7,6 +7,7 @@ option(ARCTICDB_THIN_ARCHIVES "Use thin archives for intermediate static librari
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
 include(GoogleTest)
+include(${CMAKE_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 include(GenerateExportHeader)
 # System and third-party libraries with built-in find_package Config
@@ -103,11 +104,7 @@ add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
-# Libraries baked into the internal and external Linux images are found by searching various paths
-# On Windows, vcpkg will provide a "Config" which takes precedence
-if (WIN32)
-    find_package(Iconv)
-else ()
+if (NOT WIN32)
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
@@ -227,6 +224,7 @@ set(arcticdb_srcs
         column_store/segment_utils.hpp
         column_store/memory_segment_pretty_print.hpp
         entity/atom_key.hpp
+        entity/compact_data_info.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
@@ -470,6 +468,7 @@ set(arcticdb_srcs
         column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
+        entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
         entity/field_collection_proto.cpp
@@ -601,6 +600,7 @@ set(arcticdb_srcs
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
+set_pdb_name_per_translation_unit(${arcticdb_srcs})
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -809,11 +809,7 @@ else()
     endif()
 endif()
 
-if (WIN32)
-    list (APPEND arcticdb_core_libraries
-            Iconv::Iconv
-            )
-else ()
+if (NOT WIN32)
 
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list (APPEND arcticdb_core_libraries stdc++fs)
@@ -919,10 +915,13 @@ set(arcticdb_python_srcs
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
         util/python_bindings.cpp
-        python/reader.hpp
-        python/adapt_read_dataframe.hpp)
-
-add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
+)
+set(arcticdb_python_headers
+    python/reader.hpp
+    python/adapt_read_dataframe.hpp
+)
+set_pdb_name_per_translation_unit(${arcticdb_python_srcs})
+add_library(arcticdb_python STATIC ${arcticdb_python_srcs} ${arcticdb_python_headers})
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_python")
     target_precompile_headers(
@@ -960,12 +959,13 @@ endif ()
 
 ## arcticdb_ext python module
 # This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
-pybind11_add_module(arcticdb_ext MODULE
+set(arcticdb_pybind_module_src
         python/python_module.cpp
         python/arctic_version.cpp
-        python/arctic_version.hpp
-        )
-
+)
+set(arcticdb_pybind_module_headers python/arctic_version.hpp)
+pybind11_add_module(arcticdb_ext MODULE ${arcticdb_pybind_module_src} ${arcticdb_pybind_module_headers})
+set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
 
 if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -1138,7 +1138,8 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-)
+    )
+    set_pdb_name_per_translation_unit(${unit_test_srcs})
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1240,7 +1241,9 @@ if(${TEST})
             processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
             util/test/benchmark_bitset.cpp
-            version/test/benchmark_write.cpp)
+            version/test/benchmark_write.cpp
+    )
+    set_pdb_name_per_translation_unit(${benchmark_srcs})
 
     add_executable(benchmarks ${benchmark_srcs})
 
@@ -1275,7 +1278,7 @@ if(${TEST})
             util/test/rapidcheck_lru_cache.cpp
             version/test/rapidcheck_version_map.cpp
     )
-
+    set_pdb_name_per_translation_unit(${rapidcheck_srcs})
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME

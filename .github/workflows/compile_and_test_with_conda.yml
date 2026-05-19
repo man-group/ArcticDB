@@ -16,7 +16,6 @@ on:
       hypothesis_profile:        {required: false, type: string,  default: '',    description: Hypothesis profile e.g. ci_linux or ci_macos}
 
       persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type}
-      debug_enabled:             {required: false, type: boolean, default: false, description: Enable tmate debug session}
       run_enable_logging:        {required: false, type: boolean, default: false, description: Enable ArcticDB debug logging}
       run_commandline:           {required: false, type: string,  default: '',    description: Custom commandline to run before tests}
       run_custom_pytest_command: {required: false, type: string,  default: '',    description: Custom pytest command or additional arguments}
@@ -166,7 +165,7 @@ jobs:
       - name: Build C++ Tests
         run: |
           cd cpp
-          CMAKE_JOBS=${{contains(inputs.platform, 'aarch64') && '3' || steps.cpu-cores.outputs.count}}
+          CMAKE_JOBS=${{contains(inputs.platform, 'linux') && '3' || steps.cpu-cores.outputs.count}}
           cmake --build --preset ${{inputs.preset}} --target arcticdb_rapidcheck_tests -j $CMAKE_JOBS
           cmake --build --preset ${{inputs.preset}} --target test_unit_arcticdb -j $CMAKE_JOBS
         env:
@@ -294,12 +293,13 @@ jobs:
         if: inputs.run_enable_logging
         uses: ./.github/actions/enable_logging
 
-      - name: Setup tmate session
-        if: inputs.debug_enabled
-        uses: mxschmitt/action-tmate@v3
-
       - name: Install pytest-repeat
         run: python -m pip --retries 3 --timeout 180 install pytest-repeat
+
+      - name: Get Python impl name
+        id: pyver
+        run: |
+          echo "impl=cp$(python -c 'import sys; print(f"{sys.version_info.major}{sys.version_info.minor}")')" >> $GITHUB_OUTPUT
 
       - name: Test with pytest
         run: |
@@ -321,6 +321,7 @@ jobs:
             fi
             python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal \
               $BASETEMP_ARG \
+              --junitxml=$RUNNER_TEMP/pytest.xml \
               tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
             fi
         env:
@@ -333,3 +334,11 @@ jobs:
           NODE_OPTIONS: --openssl-legacy-provider
           ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
           ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
+
+      - name: Upload pytest results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda_pytest-${{inputs.platform}}-${{steps.pyver.outputs.impl}}-${{matrix.type}}
+          path: ${{ runner.temp }}/pytest.xml
+        continue-on-error: true

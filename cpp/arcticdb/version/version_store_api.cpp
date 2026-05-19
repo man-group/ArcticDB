@@ -851,7 +851,7 @@ ReadResult PythonVersionStore::read_column_stats_version(
 ) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::PANDAS);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::ARROW);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
@@ -1496,6 +1496,12 @@ VersionedItem PythonVersionStore::merge(
             strategy,
             std::move(on)
     );
+}
+
+CompactDataInfo PythonVersionStore::compact_data_explain_plan(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+) {
+    return compact_data_explain_plan_internal(stream_id, rows_per_segment);
 }
 
 VersionedItem PythonVersionStore::compact_data(

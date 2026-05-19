@@ -34,7 +34,7 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -559,7 +559,7 @@ class NativeVersionStore:
         dynamic_strings,
         coerce_columns,
         norm_failure_options_msg="",
-        index_column=None,
+        index_column=False,
         recursive_normalize_msgpack_no_pickle_fallback=None,
         **kwargs,
     ):
@@ -688,6 +688,11 @@ class NativeVersionStore:
 
     @staticmethod
     def _validate_kwargs(method, valid_kwargs, kwargs):
+        if "dynamic_schema" in kwargs and "dynamic_schema" in valid_kwargs:
+            log.warning(
+                f"{method}() received 'dynamic_schema' parameter which overrides the library setting. "
+                "Per-call dynamic_schema override is planned to be removed."
+            )
         invalid_args = []
         for arg in kwargs.keys():
             if arg not in valid_kwargs:
@@ -707,7 +712,7 @@ class NativeVersionStore:
         validate_index: bool = False,
         sort_on_index: bool = False,
         sort_columns: List[str] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ):
         self._validate_kwargs("stage", {"norm_failure_options_msg"}, kwargs)
@@ -748,7 +753,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         pickle_on_failure: Optional[bool] = None,
         validate_index: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         """
@@ -788,9 +793,9 @@ class NativeVersionStore:
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
             data to be sorted. Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         kwargs :
             passed through to the write handler
 
@@ -934,7 +939,7 @@ class NativeVersionStore:
         incomplete: bool = False,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -961,9 +966,9 @@ class NativeVersionStore:
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
             on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         kwargs :
             passed through to the write handler
 
@@ -1071,7 +1076,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
         prune_previous_version: Optional[bool] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -1102,9 +1107,9 @@ class NativeVersionStore:
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1189,7 +1194,7 @@ class NativeVersionStore:
         data: TimeSeriesType,
         date_range: Optional[DateRangeInput],
         update_query: _PythonVersionStoreUpdateQuery,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> TimeSeriesType:
         """
         Parameters
@@ -1219,7 +1224,7 @@ class NativeVersionStore:
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
         upsert: bool = False,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[bool]] = None,
     ):
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
@@ -1309,7 +1314,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
+    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> "pa.Table":
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -1322,12 +1327,12 @@ class NativeVersionStore:
 
         Returns
         -------
-        `pandas.DataFrame`
-            DataFrame representing the stored column statistics for each row-slice in a human-readable format.
+        `pyarrow.Table`
+            Table representing the stored column statistics for each row-slice in a human-readable format.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
-        return data
+        read_result = ReadResult(*self.version_store.read_column_stats_version(symbol, version_query))
+        return self._arrow_output_frame_to_table(read_result.frame_data)
 
     def get_column_stats_info(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
@@ -1768,7 +1773,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         pickle_on_failure=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1797,9 +1802,9 @@ class NativeVersionStore:
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
             Note that no checks are performed for Arrow input data.
-        index_column_vector: Optional[List[Optional[str]]], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column_vector: Optional[List[bool]], default=None
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
+            the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
@@ -1852,7 +1857,7 @@ class NativeVersionStore:
         pickle_on_failure: bool,
         norm_failure_msg: str,
         operation_supports_categoricals: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
@@ -1861,7 +1866,7 @@ class NativeVersionStore:
             metadata_vector = list(metadata_vector)
 
         if index_column_vector is None:
-            index_column_vector = len(symbols) * [None]
+            index_column_vector = len(symbols) * [False]
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(
@@ -1896,7 +1901,7 @@ class NativeVersionStore:
         pickle_on_failure=None,
         validate_index: bool = False,
         throw_on_error: bool = True,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1985,7 +1990,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -2012,9 +2017,9 @@ class NativeVersionStore:
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
             Note that no checks are performed for Arrow input data.
-        index_column_vector: Optional[List[Optional[str]]], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column_vector: Optional[List[bool]], default=None
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
+            the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
@@ -2882,16 +2887,19 @@ class NativeVersionStore:
 
         return index_columns
 
+    @staticmethod
+    def _arrow_output_frame_to_table(frame_data: ArrowOutputFrame) -> "pa.Table":
+        record_batches = [
+            pa.RecordBatch._import_from_c(rb.array(), rb.schema()) for rb in frame_data.extract_record_batches()
+        ]
+        if len(record_batches) == 0:
+            # We get an empty list of record batches when output has no columns
+            return pa.Table.from_arrays([])
+        return pa.Table.from_batches(record_batches)
+
     def _adapt_frame_data(self, frame_data, norm, output_format):
         if isinstance(frame_data, ArrowOutputFrame):
-            record_batches = []
-            for record_batch in frame_data.extract_record_batches():
-                record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            if len(record_batches) == 0:
-                # We get an empty list of record batches when output has no columns
-                table = pa.Table.from_arrays([])
-            else:
-                table = pa.Table.from_batches(record_batches)
+            table = self._arrow_output_frame_to_table(frame_data)
             data = self._normalizer.denormalize(table, norm)
             if norm.HasField("custom"):
                 raise ArcticDbNotYetImplemented(
@@ -2899,7 +2907,10 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if (
+                output_format.lower() == OutputFormat.POLARS.lower()
+                and not norm.WhichOneof("input_type") == "msg_pack_frame"
+            ):
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -3963,6 +3974,67 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
+    def compact_data_explain_plan_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+    ) -> CompactDataInfo:
+        """
+        Do a dry run of compact_data_experimental, demonstrating what the impact would be of calling
+        compact_data_experimental without actually modifying any data on disk.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the dry run on.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting.
+
+        Returns
+        -------
+        CompactDataInfo
+            Structure containing information about what the fragmentation of the symbol looks like currently, and what
+            it would look like after a call to compact_data_experimental.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+        >>> compact_data_info.row_slices_before
+        [0, 1000, 2000, ..., 99000, 100000]
+        >>> compact_data_info.row_slices_after
+        [0, 100000]
+        >>> compact_data_info.num_row_slices_before
+        100
+        >>> compact_data_info.num_row_slices_after
+        1
+        >>> compact_data_info.version_id_before
+        99
+        >>> compact_data_info.version_id_after
+        100
+        >>> compact_data_info.will_do_work
+        True
+        """
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        res = self.version_store._compact_data_explain_plan(symbol, rows_per_segment)
+        return res
+
     def compact_data_experimental(
         self,
         symbol: str,
@@ -3984,10 +4056,8 @@ class NativeVersionStore:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
-            compactions may fail. Additionally, resampling is not yet supported with sparse data.
-
-            Sparse data is not yet supported.
+            Note that compacting dynamic schema data can produce sparse data, even if the input data was dense, and
+            resampling does not yet support sparse data.
 
         Parameters
         ----------
@@ -4013,7 +4083,7 @@ class NativeVersionStore:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, or the data is sparse
+            If the existing data is recursively normalized
 
         Examples
         --------

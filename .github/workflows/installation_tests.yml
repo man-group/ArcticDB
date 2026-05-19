@@ -73,11 +73,6 @@ on:
         options:
           - "1"
           - "0"
-      debug_enabled:
-        type: boolean
-        description: 'Run the build with debugging enabled'
-        required: false
-        default: false                  
       run_enable_logging:
         description: 'Enabled debug logging'
         type: boolean
@@ -284,10 +279,6 @@ jobs:
     - name: Set ArcticDB Debug Logging
       if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
       uses: ./.github/actions/enable_logging
-
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
-      if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
       if: ${{ env.SKIP_JOB != 'true' }}

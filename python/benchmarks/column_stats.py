@@ -245,6 +245,13 @@ class ColumnStatsQueryPerformance:
         q = q[q["uint64_col"].isnotin(self.isin_values)]
         self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)
 
+    def time_filter_col_col(self, *args):
+        # uint64_col spans 0..n-1, float_col spans 0..1000, so min(uint64) > max(float) for
+        # every segment past the first. Therefore we prune ~99% of segments.
+        q = QueryBuilder()
+        q = q[q["uint64_col"] < q["float_col"]]
+        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)
+
 
 class ColumnStatsDynamicSchema:
     """Benchmark column stats filtering when the filter column exists in some segments but not others.
@@ -349,6 +356,13 @@ class ColumnStatsDynamicSchema:
     def time_filter_sometimes_missing_column(self, *args):
         q = QueryBuilder()
         q = q[q["sometimes_missing_col"] < self.sometimes_missing_low]
+        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + ["sometimes_missing_col"], query_builder=q)
+
+    def time_filter_col_col_sometimes_missing(self, *args):
+        # Prunes 50% of segments: even chunks prune via column_absent on sometimes_missing_col
+        # odd chunks have max(sometimes_missing) < min(uint64) so those segments are still read.
+        q = QueryBuilder()
+        q = q[q["sometimes_missing_col"] < q["uint64_col"]]
         self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS + ["sometimes_missing_col"], query_builder=q)
 
 

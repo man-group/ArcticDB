@@ -13,6 +13,7 @@ import random
 import re
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
+from arcticdb.exceptions import UserInputException, ArcticNativeException
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
@@ -406,6 +407,40 @@ def test_add_to_snapshot_multiple(basic_store_tombstone_and_pruning):
     assert lib.read("s2", as_of="snap").data == 2
     assert lib.read("s3", as_of="snap").data == 3
     assert lib.read("s4", as_of="snap").data == 4
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_duplicate_symbol_different_versions_raises(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s1", 2)
+    lib.write("s1", 3)
+    lib.snapshot("snap")
+
+    with pytest.raises(UserInputException, match="appears more than once"):
+        lib.add_to_snapshot("snap", ["s1", "s1"], as_ofs=[2, 3])
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_duplicate_symbol_same_version_raises(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s1", 2)
+    lib.snapshot("snap")
+
+    with pytest.raises(UserInputException, match="appears more than once"):
+        lib.add_to_snapshot("snap", ["s1", "s1"], as_ofs=[2, 2])
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_mismatched_symbols_and_versions_raises(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.snapshot("snap")
+    lib.write("s2", 2)
+
+    with pytest.raises(ArcticNativeException):
+        lib.add_to_snapshot("snap", ["s1"], as_ofs=[2, 3])
 
 
 @pytest.mark.storage

@@ -1,12 +1,12 @@
 # Normalization Module
 
-The normalization module (`python/arcticdb/version_store/_normalization.py`) handles conversion between pandas DataFrames and ArcticDB's internal format.
+The normalization module (`python/arcticdb/version_store/_normalization.py`) handles conversion between user-facing data formats (pandas, PyArrow, polars) and ArcticDB's internal format.
 
 ## Overview
 
 This module provides:
-- Conversion from pandas DataFrame to internal format
-- Conversion from internal format back to pandas
+- Conversion from pandas DataFrame, PyArrow Table, or polars DataFrame to internal format
+- Conversion from internal format back to the requested output format
 - Type handling and coercion
 - Custom normalizer support
 
@@ -17,13 +17,13 @@ This module provides:
 ## Why Normalization?
 
 ```
-pandas DataFrame                    ArcticDB Internal Format
-─────────────────                   ────────────────────────
+pandas DataFrame / pa.Table / pl.DataFrame    ArcticDB Internal Format
+──────────────────────────────────────────    ────────────────────────
 
-Complex types (objects)     →       Typed columns (int, float, string)
-Various index types         →       Standardized index handling
-Missing value representations →     Consistent null handling
-DatetimeIndex variations    →       Nanosecond timestamps
+Complex types (objects)     →                 Typed columns (int, float, string)
+Various index types         →                 Standardized index handling
+Missing value representations →               Consistent null handling
+DatetimeIndex variations    →                 Nanosecond timestamps
 ```
 
 ## NormalizedInput
@@ -35,10 +35,10 @@ DatetimeIndex variations    →       Nanosecond timestamps
 ### Conversion Flow
 
 ```
-pandas.DataFrame
+pandas.DataFrame / pa.Table / pl.DataFrame
         │
         ▼ normalize()
-NormalizedInput (data + NormalizationMetadata)
+NormalizedInput (NPDDataFrame or RecordBatches + NormalizationMetadata)
         │
         ▼ to C++
 InputFrame
@@ -48,17 +48,17 @@ InputFrame
         .
         │
         ▼ from C++
-Segment + NormalizationMetadata
+OutputFrame (pandas variant or arrow variant)
         │
         ▼ denormalize()
-pandas.DataFrame
+pandas.DataFrame / pa.Table / pl.DataFrame (based on OutputFormat)
 ```
 
 ## Normalization Process
 
 ### Input Normalization
 
-`normalize(data, string_max_len)` converts pandas DataFrame to NPDDataFrame, handling index extraction, column type inference, string encoding, datetime conversion, and missing values.
+`normalize(data, string_max_len)` converts input data to the internal format. For pandas DataFrames this produces an NPDDataFrame (numpy arrays). For PyArrow Tables and polars DataFrames this produces a vector of record batches.
 
 ### Type Conversion
 
@@ -104,7 +104,7 @@ df = pd.DataFrame(
 
 ## Denormalization Process
 
-`denormalize(frame, original_columns)` converts OutputTensorFrame back to pandas DataFrame, reconstructing the DataFrame structure, restoring index (RangeIndex or DatetimeIndex), and converting types.
+`denormalize(frame, original_columns)` converts the C++ output back to the target format. The C++ side returns an `OutputFrame` variant which is either a pandas-oriented frame or an arrow-oriented frame. The denormalization step reconstructs the final object (pandas DataFrame, PyArrow Table, or polars DataFrame depending on `OutputFormat`).
 
 ## Custom Normalizers
 
@@ -112,14 +112,40 @@ ArcticDB uses a type-based dispatch system. Normalizers inherit from `Normalizer
 
 ### Built-in Normalizers
 
-| Type | Normalizer |
-|------|-----------|
-| `pd.DataFrame` | `DataFrameNormalizer` |
-| `pd.Series` | `SeriesNormalizer` |
-| `np.ndarray` | `NdArrayNormalizer` |
-| `pa.Table` | `ArrowTableNormalizer` |
-| TimeFrame | `TimeFrameNormalizer` |
-| Arbitrary objects | `MsgPackNormalizer` (fallback) |
+| Type | Normalizer | Notes |
+|------|-----------|-------|
+| `pd.DataFrame` | `DataFrameNormalizer` | |
+| `pd.Series` | `SeriesNormalizer` | |
+| `np.ndarray` | `NdArrayNormalizer` | |
+| `pa.Table` | `ArrowTableNormalizer` | Uses `index_column=True` for timestamp index |
+| `pl.DataFrame` | `ArrowTableNormalizer` | Converted to `pa.Table` via `.to_arrow()` first |
+| TimeFrame | `TimeFrameNormalizer` | |
+| Arbitrary objects | `MsgPackNormalizer` (fallback) | |
+
+## Arrow and Polars Support
+
+### Write Path
+
+Both `pa.Table` and `pl.DataFrame` are handled by `ArrowTableNormalizer`. Polars DataFrames are converted to `pa.Table` via `.to_arrow()` before normalization. The normalizer converts the table into a vector of record batches for the C++ layer. The `index_column` parameter (boolean) tells the normalizer to treat the first column as a sorted timestamp index.
+
+### Read Path
+
+The `output_format` parameter on read methods controls the return type:
+- `OutputFormat.PANDAS` (default) — returns `pd.DataFrame`
+- `OutputFormat.PYARROW` — returns `pa.Table`
+- `OutputFormat.POLARS` — returns `pl.DataFrame` (converted from `pa.Table` via `pl.from_arrow()`)
+
+### Date-Range Filtering (`restrict_data_to_date_range_only`)
+
+Used by `update()` with a `date_range` parameter to restrict input data before writing. Handles pandas, PyArrow, and polars inputs:
+
+- **pandas**: Uses `data.loc[start:end]` with monotonicity check
+- **PyArrow**: Uses `_filter_pyarrow_table_to_date_range` — a Python binary search on the sorted index column followed by `pa.Table.slice` (zero-copy)
+- **polars**: Converts to `pa.Table` via `.to_arrow()` and reuses the PyArrow path. The resulting `pa.Table` (a zero-copy slice/view) is returned directly without converting back to polars, since the caller normalizes the result anyway. Note: `pl.from_arrow` on a sliced table is also zero-copy, but this conversion is unnecessary. Native polars filtering (`filter`/`is_between` with `set_sorted`) was benchmarked and found to be significantly slower because it materializes a boolean mask over the entire column rather than slicing
+
+### String Types
+
+Polars only supports `large_string` (64-bit offsets), not PyArrow's `string` (32-bit offsets). When reading with `OutputFormat.POLARS`, string format options that specify `pa.string()` are automatically promoted to `pa.large_string()`.
 
 ## String Handling
 

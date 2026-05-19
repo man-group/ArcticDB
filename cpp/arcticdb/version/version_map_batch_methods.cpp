@@ -52,24 +52,12 @@ std::optional<AtomKey> get_specific_version_from_entry(
         const std::shared_ptr<VersionMapEntry>& version_map_entry,
         const pipelines::SpecificVersionQuery& specific_version, bool include_deleted = false
 ) {
-    auto signed_version_id = specific_version.version_id_;
-    VersionId version_id;
-    if (signed_version_id >= 0) {
-        version_id = static_cast<VersionId>(signed_version_id);
-    } else {
-        auto opt_latest = version_map_entry->get_first_index(true).first;
-        if (opt_latest.has_value()) {
-            auto opt_version_id = get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
-            if (opt_version_id.has_value()) {
-                version_id = *opt_version_id;
-            } else {
-                return std::nullopt;
-            }
-        } else {
-            return std::nullopt;
-        }
-    }
-    return find_index_key_for_version_id(version_id, version_map_entry, include_deleted);
+    auto opt_version_id = resolve_version_id(specific_version.version_id_, *version_map_entry);
+
+    if (!opt_version_id.has_value())
+        return std::nullopt;
+
+    return find_index_key_for_version_id(*opt_version_id, version_map_entry, include_deleted);
 }
 
 std::optional<AtomKey> get_version_map_entry_by_timestamp(

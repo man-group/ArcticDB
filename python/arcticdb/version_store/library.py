@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa, polars as pl
+from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.exceptions import ArcticNativeException, ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
@@ -35,6 +35,7 @@ from arcticdb.version_store._store import (
 )
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import (
+    CompactDataInfo,
     DataError,
     StageResult,
     KeyNotFoundInStageResultInfo,
@@ -198,7 +199,7 @@ class WritePayload:
     """
 
     def __init__(
-        self, symbol: str, data: Union[Any, NormalizableType], metadata: Any = None, index_column: Optional[str] = None
+        self, symbol: str, data: Union[Any, NormalizableType], metadata: Any = None, index_column: bool = False
     ):
         """
         Constructor.
@@ -212,9 +213,9 @@ class WritePayload:
             Data to be written. If data is not of NormalizableType then it will be pickled.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         See Also
         --------
@@ -228,7 +229,7 @@ class WritePayload:
     def __repr__(self):
         res = f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
-        res += f", index_column={self.index_column}" if self.index_column is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column else ""
         res += ")"
         return res
 
@@ -237,7 +238,7 @@ class WritePayload:
         yield self.data
         if self.metadata is not None:
             yield self.metadata
-        if self.index_column is not None:
+        if self.index_column:
             yield self.index_column
 
 
@@ -402,7 +403,7 @@ class UpdatePayload:
         data: NormalizableType,
         metadata: Any = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ):
         """
         Constructor.
@@ -419,9 +420,9 @@ class UpdatePayload:
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
             Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
             side of the range open-ended.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         """
         self.symbol = symbol
         self.data = data
@@ -433,7 +434,7 @@ class UpdatePayload:
         res = f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
         res += f", date_range={self.date_range}" if self.date_range is not None else ""
-        res += f", index_column={self.index_column}" if self.index_column is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column else ""
         res += ")"
         return res
 
@@ -921,12 +922,14 @@ class Library:
         return self.has_symbol(symbol)
 
     def _allowed_input_type(self, data) -> bool:
-        if isinstance(data, NORMALIZABLE_TYPES) or (
-            _PYARROW_AVAILABLE and isinstance(data, pa.Table) and self._nvs._allow_arrow_input
-        ):
+        if isinstance(data, NORMALIZABLE_TYPES):
             return True
-        else:
-            return False
+        if self._nvs._allow_arrow_input:
+            if _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+                return True
+            if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+                return True
+        return False
 
     def options(self) -> LibraryOptions:
         """Library options set on this library. See also `enterprise_options`."""
@@ -953,7 +956,7 @@ class Library:
         validate_index=True,
         sort_on_index=False,
         sort_columns: List[str] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> StageResult:
         """
         Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
@@ -978,9 +981,9 @@ class Library:
             index will be used as the primary sort column, and the others as secondaries.
         sort_columns:
             Sort the data by specific columns prior to writing.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1015,7 +1018,7 @@ class Library:
         prune_previous_versions: bool = False,
         staged=False,
         validate_index=True,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
@@ -1062,9 +1065,9 @@ class Library:
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
             Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         recursive_normalizers: bool, default None
             Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
             If None, falls back to the corresponding setting in the library configuration. For libraries created with < v6.4.0,
@@ -1362,7 +1365,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = False,
         validate_index: bool = True,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> VersionedItem:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
@@ -1393,9 +1396,9 @@ class Library:
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
             Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1513,7 +1516,7 @@ class Library:
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
         prune_previous_versions: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index
@@ -1554,9 +1557,9 @@ class Library:
             modified, even if ``data`` covers a wider date range.
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -3185,6 +3188,62 @@ class Library:
         """
         return self._nvs.compact_symbol_list()
 
+    def compact_data_explain_plan_experimental(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+    ) -> CompactDataInfo:
+        """
+        Do a dry run of compact_data_experimental, demonstrating what the impact would be of calling
+        compact_data_experimental without actually modifying any data on disk.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the dry run on.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting.
+
+        Returns
+        -------
+        CompactDataInfo
+            Structure containing information about what the fragmentation of the symbol looks like currently, and what
+            it would look like after a call to compact_data_experimental.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+        >>> compact_data_info.row_slices_before
+        [0, 1000, 2000, ..., 99000, 100000]
+        >>> compact_data_info.row_slices_after
+        [0, 100000]
+        >>> compact_data_info.num_row_slices_before
+        100
+        >>> compact_data_info.num_row_slices_after
+        1
+        >>> compact_data_info.version_id_before
+        99
+        >>> compact_data_info.version_id_after
+        100
+        >>> compact_data_info.will_do_work
+        True
+        """
+        return self._nvs.compact_data_explain_plan_experimental(symbol, rows_per_segment)
+
     def compact_data_experimental(
         self,
         symbol: str,
@@ -3204,10 +3263,8 @@ class Library:
             This API is under development and is subject to change. The API is not subject to semver and can change in
             minor or patch releases.
 
-            Dynamic schema will work, but may then produce sparse data, which is not yet supported, and so subsequent
-            compactions may fail. Additionally, resampling is not yet supported with sparse data.
-
-            Sparse data is not yet supported.
+            Note that compacting dynamic schema data can produce sparse data, even if the input data was dense, and
+            resampling does not yet support sparse data.
 
         Parameters
         ----------
@@ -3234,7 +3291,7 @@ class Library:
         ArcticNativeException
             If invalid rows_per_segment is provided
         SchemaException
-            If the existing data is recursively normalized, or the data is sparse
+            If the existing data is recursively normalized
 
         Examples
         --------
