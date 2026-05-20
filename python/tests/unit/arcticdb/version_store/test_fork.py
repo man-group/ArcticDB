@@ -47,17 +47,24 @@ def test_map(lmdb_version_store):
 
 
 def _read_and_assert_symbol(args):
+    from arcticdb_ext.version_store import NoSuchVersionException
+
     lib, symbol, idx = args
     for attempt in range(1, 11):
         print("start {}_{} attempt {}".format(symbol, idx, attempt))
-        ss = lib.read(symbol)
+        try:
+            ss = lib.read(symbol)
+        except NoSuchVersionException:
+            print("attempt {} fail (symbol not found yet)".format(attempt))
+            time.sleep(0.5)
+            continue
         if df("test1").equals(ss.data):
             assert_frame_equal(ss.data, df("test1"))
             print("end {}".format(idx))
-            break
-        else:
-            print("attempt {} fail".format(attempt))
-            time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
+            return
+        print("attempt {} fail".format(attempt))
+        time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
+    raise AssertionError(f"Symbol {symbol!r} not readable after 10 attempts")
 
 
 def test_parallel_reads(local_object_version_store):
