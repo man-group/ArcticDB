@@ -55,19 +55,13 @@ class CompactDataBase:
         self.lib.write(self.SYM, dfs[0])
         for df in dfs[1:]:
             self.lib.append(self.SYM, df)
-        assert self.lib.compact_data_explain_plan_experimental(
-            self.SYM, rows_per_segment=target_rows_per_segment
-        ).will_do_work
+        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
 
     def _time_compact_data(self, target_rows_per_segment):
-        self.lib.compact_data_experimental(
-            self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False
-        )
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
     def _peakmem_compact_data(self, target_rows_per_segment):
-        self.lib.compact_data_experimental(
-            self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False
-        )
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
 
 class CompactDataNumericStaticSchema(CompactDataBase):

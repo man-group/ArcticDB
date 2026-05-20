@@ -2034,7 +2034,7 @@
                 "10000"
             ]
         ],
-        "setup_cache_key": "compact_data:173",
+        "setup_cache_key": "compact_data:167",
         "timeout": 500,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2061,7 +2061,7 @@
         ],
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:173",
+        "setup_cache_key": "compact_data:167",
         "timeout": 500,
         "type": "time",
         "unit": "seconds",
@@ -2091,7 +2091,7 @@
                 "True"
             ]
         ],
-        "setup_cache_key": "compact_data:94",
+        "setup_cache_key": "compact_data:88",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "0b3f9aa80a8786f71982698618966dfcb1eb8df37fd5a6052b8a5847204f13a5"
@@ -2123,7 +2123,7 @@
         ],
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:94",
+        "setup_cache_key": "compact_data:88",
         "type": "time",
         "unit": "seconds",
         "version": "89992f23a7560d8f12a5660476247d98315741a96b1c1dbb2a3108023c5102df",
@@ -2157,7 +2157,7 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "compact_data:134",
+        "setup_cache_key": "compact_data:128",
         "type": "peakmemory",
         "unit": "bytes",
         "version": "dbb3e1bd21b49f93004796dd5149dde0f3444ee6aa9ad16bf15cc730bedb98b0"
@@ -2194,7 +2194,7 @@
         ],
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:134",
+        "setup_cache_key": "compact_data:128",
         "type": "time",
         "unit": "seconds",
         "version": "21dc12f787c59d8b41d0826d8846484149d3978365bc25184d7ba0cea1574e17",
