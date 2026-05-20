@@ -128,6 +128,8 @@ if __name__ == "__main__":
     try:
         run_phase(row_scenarios())
         run_phase(col_scenarios())
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
     except Exception as e:
         print(f"Benchmark aborted unexpectedly: {e}", file=sys.stderr)
     finally:
