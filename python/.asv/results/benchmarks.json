@@ -1582,6 +1582,108 @@
         "version": "e0bd464c72351dcd285e0786572502d94664b47b402a8e95b9f340a32ab3e0c3",
         "warmup_time": 0.5
     },
+    "column_stats.ColumnStatsManySegmentsZeroMatch.peakmem_filter_10_columns_zero_match": {
+        "code": "class ColumnStatsManySegmentsZeroMatch:\n    def peakmem_filter_10_columns_zero_match(self, *args):\n        self.lib.read(self.symbol, columns=self.read_columns, query_builder=self.query)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"many_segments_zero_match\"\n        self.read_columns = [f\"float_{i}\" for i in range(self.NUM_COLS)]\n    \n        # Every float column has positive values, so < 0 prunes everything.\n        q = QueryBuilder()\n        expr = q[\"float_0\"] < 0.0\n        for i in range(1, self.NUM_FILTER_COLS):\n            expr = expr | (q[f\"float_{i}\"] < 0.0)\n        self.query = q[expr]\n    \n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=self.NUM_ROWS // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(rows_per_segment=self.ROWS_PER_SEGMENT))\n            lib_for_storage[storage] = lib\n    \n            sym = \"many_segments_zero_match\"\n            n = self.NUM_ROWS\n            timestamps = pd.date_range(end=\"1/1/2023\", periods=n, freq=\"s\")\n            data = {f\"float_{i}\": np.linspace(1.0 + i, 1000.0 + i, n) for i in range(self.NUM_COLS)}\n            df = pd.DataFrame(data)\n            df.index = timestamps\n            df.index.name = \"ts\"\n    \n            lib.write(sym, df)\n            stats = {f\"float_{i}\": {\"MINMAX\"} for i in range(self.NUM_COLS)}\n            lib._nvs.create_column_stats(sym, stats)\n            self.logger.info(f\"Wrote {sym} with {n} rows and created column stats\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "name": "column_stats.ColumnStatsManySegmentsZeroMatch.peakmem_filter_10_columns_zero_match",
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "column_stats:569",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "5405d27a051287dad962230360e06874df7b8d7f976104f22ec4e356fc6eb8ca"
+    },
+    "column_stats.ColumnStatsManySegmentsZeroMatch.peakmem_filter_10_columns_zero_match_with_date_range": {
+        "code": "class ColumnStatsManySegmentsZeroMatch:\n    def peakmem_filter_10_columns_zero_match_with_date_range(self, *args):\n        self.lib.read(\n            self.symbol,\n            columns=self.read_columns,\n            date_range=self.date_range_half,\n            query_builder=self.query,\n        )\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"many_segments_zero_match\"\n        self.read_columns = [f\"float_{i}\" for i in range(self.NUM_COLS)]\n    \n        # Every float column has positive values, so < 0 prunes everything.\n        q = QueryBuilder()\n        expr = q[\"float_0\"] < 0.0\n        for i in range(1, self.NUM_FILTER_COLS):\n            expr = expr | (q[f\"float_{i}\"] < 0.0)\n        self.query = q[expr]\n    \n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=self.NUM_ROWS // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(rows_per_segment=self.ROWS_PER_SEGMENT))\n            lib_for_storage[storage] = lib\n    \n            sym = \"many_segments_zero_match\"\n            n = self.NUM_ROWS\n            timestamps = pd.date_range(end=\"1/1/2023\", periods=n, freq=\"s\")\n            data = {f\"float_{i}\": np.linspace(1.0 + i, 1000.0 + i, n) for i in range(self.NUM_COLS)}\n            df = pd.DataFrame(data)\n            df.index = timestamps\n            df.index.name = \"ts\"\n    \n            lib.write(sym, df)\n            stats = {f\"float_{i}\": {\"MINMAX\"} for i in range(self.NUM_COLS)}\n            lib._nvs.create_column_stats(sym, stats)\n            self.logger.info(f\"Wrote {sym} with {n} rows and created column stats\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "name": "column_stats.ColumnStatsManySegmentsZeroMatch.peakmem_filter_10_columns_zero_match_with_date_range",
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "setup_cache_key": "column_stats:569",
+        "timeout": 600,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "cc3533349f581e8f8259121fb379b3063200ef3156ffd1187e3fd77e2bd3549e"
+    },
+    "column_stats.ColumnStatsManySegmentsZeroMatch.time_filter_10_columns_zero_match": {
+        "code": "class ColumnStatsManySegmentsZeroMatch:\n    def time_filter_10_columns_zero_match(self, *args):\n        self.lib.read(self.symbol, columns=self.read_columns, query_builder=self.query)\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"many_segments_zero_match\"\n        self.read_columns = [f\"float_{i}\" for i in range(self.NUM_COLS)]\n    \n        # Every float column has positive values, so < 0 prunes everything.\n        q = QueryBuilder()\n        expr = q[\"float_0\"] < 0.0\n        for i in range(1, self.NUM_FILTER_COLS):\n            expr = expr | (q[f\"float_{i}\"] < 0.0)\n        self.query = q[expr]\n    \n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=self.NUM_ROWS // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(rows_per_segment=self.ROWS_PER_SEGMENT))\n            lib_for_storage[storage] = lib\n    \n            sym = \"many_segments_zero_match\"\n            n = self.NUM_ROWS\n            timestamps = pd.date_range(end=\"1/1/2023\", periods=n, freq=\"s\")\n            data = {f\"float_{i}\": np.linspace(1.0 + i, 1000.0 + i, n) for i in range(self.NUM_COLS)}\n            df = pd.DataFrame(data)\n            df.index = timestamps\n            df.index.name = \"ts\"\n    \n            lib.write(sym, df)\n            stats = {f\"float_{i}\": {\"MINMAX\"} for i in range(self.NUM_COLS)}\n            lib._nvs.create_column_stats(sym, stats)\n            self.logger.info(f\"Wrote {sym} with {n} rows and created column stats\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsManySegmentsZeroMatch.time_filter_10_columns_zero_match",
+        "number": 0,
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:569",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "0dab43b360a0d2e6d8b8693587dd4feb8d2af516a069a1ca2dd62c10b76e8418",
+        "warmup_time": 0.5
+    },
+    "column_stats.ColumnStatsManySegmentsZeroMatch.time_filter_10_columns_zero_match_with_date_range": {
+        "code": "class ColumnStatsManySegmentsZeroMatch:\n    def time_filter_10_columns_zero_match_with_date_range(self, *args):\n        self.lib.read(\n            self.symbol,\n            columns=self.read_columns,\n            date_range=self.date_range_half,\n            query_builder=self.query,\n        )\n\n    def setup(self, lib_for_storage, column_stats_enabled, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = \"many_segments_zero_match\"\n        self.read_columns = [f\"float_{i}\" for i in range(self.NUM_COLS)]\n    \n        # Every float column has positive values, so < 0 prunes everything.\n        q = QueryBuilder()\n        expr = q[\"float_0\"] < 0.0\n        for i in range(1, self.NUM_FILTER_COLS):\n            expr = expr | (q[f\"float_{i}\"] < 0.0)\n        self.query = q[expr]\n    \n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=self.NUM_ROWS // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = {}\n        for storage in self.storages:\n            if not is_storage_enabled(storage):\n                lib_for_storage[storage] = None\n                continue\n            lib = create_library(storage, LibraryOptions(rows_per_segment=self.ROWS_PER_SEGMENT))\n            lib_for_storage[storage] = lib\n    \n            sym = \"many_segments_zero_match\"\n            n = self.NUM_ROWS\n            timestamps = pd.date_range(end=\"1/1/2023\", periods=n, freq=\"s\")\n            data = {f\"float_{i}\": np.linspace(1.0 + i, 1000.0 + i, n) for i in range(self.NUM_COLS)}\n            df = pd.DataFrame(data)\n            df.index = timestamps\n            df.index.name = \"ts\"\n    \n            lib.write(sym, df)\n            stats = {f\"float_{i}\": {\"MINMAX\"} for i in range(self.NUM_COLS)}\n            lib._nvs.create_column_stats(sym, stats)\n            self.logger.info(f\"Wrote {sym} with {n} rows and created column stats\")\n    \n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
+        "min_run_count": 2,
+        "name": "column_stats.ColumnStatsManySegmentsZeroMatch.time_filter_10_columns_zero_match_with_date_range",
+        "number": 0,
+        "param_names": [
+            "column_stats_enabled",
+            "storage"
+        ],
+        "params": [
+            [
+                "True",
+                "False"
+            ],
+            [
+                "<Storage.LMDB: 2>",
+                "<Storage.AMAZON: 1>"
+            ]
+        ],
+        "rounds": 1,
+        "sample_time": 0.5,
+        "setup_cache_key": "column_stats:569",
+        "timeout": 600,
+        "type": "time",
+        "unit": "seconds",
+        "version": "f96c974959264959b732eaccaac1322d391f2d3b0422ad7af0af2256fc8aa04c",
+        "warmup_time": 0.5
+    },
     "column_stats.ColumnStatsQueryPerformance.time_filter_bool": {
         "code": "class ColumnStatsQueryPerformance:\n    def time_filter_bool(self, *args):\n        q = QueryBuilder()\n        q = q[q[\"bool_col\"]]\n        self.lib.read(self.symbol, columns=BENCHMARK_COLUMNS, query_builder=q)\n\n    def setup(self, lib_for_storage, num_rows, column_stats_enabled, data_ordered, storage):\n        self.lib = lib_for_storage[storage]\n        if self.lib is None:\n            raise SkipNotImplemented\n        self.symbol = _symbol_name(num_rows, data_ordered)\n        self.data_ordered = data_ordered\n    \n        # Compute filter thresholds targeting ~10% of the value range\n        self.uint64_low = num_rows // 10\n        self.uint64_high = num_rows * 9 // 10\n        # ~100 values from the first 10% of the uint64 range\n        self.isin_values = list(range(0, num_rows // 10, max(1, num_rows // 1000)))\n        # Datetime threshold: last 10% of the datetime_col range\n        datetime_start = pd.Timestamp(\"2000-01-01\")\n        self.datetime_high = datetime_start + pd.Timedelta(seconds=num_rows * 9 // 10)\n        # Zero-match threshold: max uint64 value is num_rows - 1, so > num_rows matches nothing\n        self.zero_match_threshold = num_rows\n        # Date range covering the last 50% of the index, for combined date_range + filter benchmarks\n        index_end = pd.Timestamp(\"2023-01-01\")\n        self.date_range_half = (index_end - pd.Timedelta(seconds=num_rows // 2), index_end)\n    \n        if column_stats_enabled:\n            set_config_int(\"ColumnStats.UseForQueries\", 1)\n        else:\n            unset_config_int(\"ColumnStats.UseForQueries\")\n\n    def setup_cache(self):\n        start = time.time()\n        lib_for_storage = create_libraries_across_storages(self.storages)\n        dfs = {}\n        for storage in ColumnStatsQueryPerformance.storages:\n            if not is_storage_enabled(storage):\n                continue\n            lib = lib_for_storage[storage]\n            for rows in ColumnStatsQueryPerformance.num_rows:\n                for ordered in ColumnStatsQueryPerformance.data_ordered:\n                    key = (rows, ordered)\n                    if key not in dfs:\n                        dfs[key] = (\n                            _generate_column_stats_dataframe(rows) if ordered else _generate_random_dataframe(rows)\n                        )\n                    df = dfs[key]\n                    sym = _symbol_name(rows, ordered)\n                    self.logger.info(f\"Writing {sym} with {rows} rows\")\n                    lib.write(sym, df)\n                    lib._nvs.create_column_stats(sym, COLUMN_STATS)\n        self.logger.info(f\"setup_cache time: {time.time() - start}\")\n        return lib_for_storage",
         "min_run_count": 2,

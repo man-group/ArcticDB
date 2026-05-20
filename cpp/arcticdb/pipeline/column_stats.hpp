@@ -36,6 +36,8 @@ struct NameAndStatTypes {
 
 void validate_column_stats_header_version(const arcticc::pb2::column_stats_pb2::ColumnStatsHeader& header);
 
+std::string to_segment_column_name(const std::string& column, ColumnStatTypeInternal type);
+
 class ColumnStats {
   public:
     explicit ColumnStats(const std::unordered_map<std::string, std::unordered_set<std::string>>& column_stats);

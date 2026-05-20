@@ -1368,9 +1368,8 @@ static void read_indexed_keys_to_pipeline(
     );
 
     if (index_information.column_stats_.has_value()) {
-        auto column_stats_filter =
-                create_column_stats_filter(std::move(*index_information.column_stats_), tsd, read_query.clauses_);
-        queries.push_back(std::move(column_stats_filter));
+        auto& [data, query_metadata] = *index_information.column_stats_;
+        queries.push_back(create_column_stats_filter(std::move(data), tsd, std::move(query_metadata)));
     }
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
@@ -2800,17 +2799,19 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
 ) {
     auto index_future = store->read(versioned_item.key_);
 
-    using OptionalKeySeg = std::optional<SegmentInMemory>;
-    const bool need_column_stats = should_try_column_stats_read(read_query);
-    folly::Future<OptionalKeySeg> column_stats_future = folly::makeFuture<OptionalKeySeg>(std::nullopt);
-    if (need_column_stats) {
+    using OptionalColumnStatsSource = std::optional<ColumnStatsSource>;
+    ColumnStatsQueryMetadata query_metadata(read_query.clauses_);
+    folly::Future<OptionalColumnStatsSource> column_stats_future =
+            folly::makeFuture<OptionalColumnStatsSource>(std::nullopt);
+    if (query_metadata.should_try_column_stats_read()) {
         auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
         storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
         column_stats_future =
-                store->read(column_stats_key, stats_read_opts)
-                        .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalKeySeg {
-                            return std::move(key_seg.second);
-                        });
+                store->read_compressed(column_stats_key, stats_read_opts)
+                        .thenValueInline(
+                                [qm = std::move(query_metadata)](storage::KeySegmentPair&& key_seg
+                                ) -> OptionalColumnStatsSource { return ColumnStatsSource{key_seg.segment_ptr(), qm}; }
+                        );
     }
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
