@@ -456,10 +456,8 @@ void PythonVersionStore::add_to_snapshot(
     auto [snap_key, snap_segment] = std::move(*opt_snapshot);
     auto [snapshot_contents, user_meta] = get_versions_and_metadata_from_snapshot(store(), snap_key);
     auto [specific_versions_index_map, latest_versions_index_map] = get_stream_index_map(stream_ids, version_queries);
-    for (const auto& latest_version : *latest_versions_index_map) {
-        specific_versions_index_map->try_emplace(
-                std::make_pair(latest_version.first, latest_version.second.version_id()), latest_version.second
-        );
+    for (const auto& [stream_id, key] : *latest_versions_index_map) {
+        specific_versions_index_map->try_emplace(stream_id, key);
     }
 
     auto missing = filter_keys_on_existence(
@@ -469,17 +467,11 @@ void PythonVersionStore::add_to_snapshot(
 
     std::vector<AtomKey> deleted_keys;
     std::vector<AtomKey> retained_keys;
-    std::unordered_set<StreamId> affected_keys;
-    for (const auto& [id_version, key] : *specific_versions_index_map) {
-        auto [it, inserted] = affected_keys.insert(id_version.first);
-        util::check(inserted, "Multiple elements in add_to_snapshot with key {}", id_version.first);
-    }
 
     bool is_delete_keys_immediately =
             variant_key_type(snap_key) != KeyType::SNAPSHOT_REF || !cfg().write_options().delayed_deletes();
     for (auto&& key : snapshot_contents) {
-        auto new_version = affected_keys.find(key.id());
-        if (new_version == std::end(affected_keys)) {
+        if (!specific_versions_index_map->contains(key.id())) {
             retained_keys.emplace_back(std::move(key));
         } else {
             if (is_delete_keys_immediately) {
@@ -492,6 +484,7 @@ void PythonVersionStore::add_to_snapshot(
         retained_keys.emplace_back(std::move(key));
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
+    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
                 .get();
@@ -499,7 +492,6 @@ void PythonVersionStore::add_to_snapshot(
             log_delete_snapshot(store(), snap_name);
         }
     }
-    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
 }
 
 void PythonVersionStore::remove_from_snapshot(
@@ -539,6 +531,7 @@ void PythonVersionStore::remove_from_snapshot(
         }
     }
 
+    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
                 .get();
@@ -546,7 +539,6 @@ void PythonVersionStore::remove_from_snapshot(
             log_delete_snapshot(store(), snap_name);
         }
     }
-    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
 }
 
 void PythonVersionStore::verify_snapshot(const SnapshotId& snap_name) {
@@ -598,31 +590,32 @@ void PythonVersionStore::snapshot(
         auto sym_index_map = batch_get_latest_version(store(), version_map(), filtered_symbols, false);
         index_keys = utils::values(*sym_index_map);
     } else {
-        auto sym_index_map = batch_get_specific_version(
+        auto batch_result = batch_get_specific_version(
                 store(), version_map(), versions, BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
         );
         if (allow_partial_snapshot) {
             missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                    !sym_index_map->empty(),
+                    !batch_result.found.empty(),
                     "None of the symbol-version pairs specified in versions exist, skipping creation for snapshot: {}",
                     snap_name
             );
         } else {
-            if (sym_index_map->size() != versions.size()) {
+            if (batch_result.found.size() != versions.size()) {
                 std::string error_msg = fmt::format(
                         "Snapshot {} will not be created. Specified symbol-version pairs do not exist in the library: ",
                         snap_name
                 );
                 for (const auto& kv : versions) {
-                    if (!sym_index_map->count(kv.first)) {
+                    if (!batch_result.found.contains(kv.first)) {
                         error_msg += fmt::format("{}:{} ", kv.first, kv.second);
                     }
                 }
                 missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
             }
         }
-        index_keys = utils::values(*sym_index_map);
-        auto missing = filter_keys_on_existence(utils::copy_of_values_as<VariantKey>(*sym_index_map), store(), false);
+        index_keys = utils::values(batch_result.found);
+        auto missing =
+                filter_keys_on_existence(utils::copy_of_values_as<VariantKey>(batch_result.found), store(), false);
         util::check(missing.empty(), "Cannot snapshot version(s) that have been deleted: {}", missing);
     }
 
