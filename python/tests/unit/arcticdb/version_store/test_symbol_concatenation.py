@@ -708,8 +708,8 @@ def test_symbol_concat_multiindex_timezone_handling(
         if (tz_0_level_1 == tz_1_level_1 and tz_0_level_1 is not None)
         else "datetime64[ns]"
     )
-    assert str(received.index.dtypes[0]) == expected_level_0_tz
-    assert str(received.index.dtypes[1]) == expected_level_1_tz
+    assert str(received.index.dtypes.iloc[0]) == expected_level_0_tz
+    assert str(received.index.dtypes.iloc[1]) == expected_level_1_tz
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])

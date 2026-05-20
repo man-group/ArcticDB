@@ -25,7 +25,7 @@ import time
 import requests
 import uuid
 import multiprocessing
-from datetime import datetime
+from datetime import datetime, UTC
 from functools import partial
 from tempfile import mkdtemp
 
@@ -267,7 +267,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    hashed = hash(f"{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
+    hashed = hash(f"{pid}_{thread_id}_{datetime.now(UTC).strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
     return f"{name}.{hashed}"
 
 
