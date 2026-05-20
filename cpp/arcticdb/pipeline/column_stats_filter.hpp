@@ -153,7 +153,7 @@ FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
  * Precondition: query_metadata.should_try_column_stats_read() == true.
  */
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        storage::KeySegmentPair&& column_stats_compressed, const TimeseriesDescriptor& tsd,
+        std::shared_ptr<Segment> column_stats_compressed, const TimeseriesDescriptor& tsd,
         ColumnStatsQueryMetadata&& query_metadata
 );
 

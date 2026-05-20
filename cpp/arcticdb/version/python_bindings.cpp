@@ -191,10 +191,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::class_<storage::KeySegmentPair>(version, "KeySegmentPair").def(py::init<>());
 
     py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
-            .def(py::init<AtomKey, SegmentInMemory, std::optional<storage::KeySegmentPair>>(),
+            .def(py::init<AtomKey, SegmentInMemory, std::shared_ptr<Segment>>(),
                  py::arg("index_key"),
                  py::arg("index_seg"),
-                 py::arg("column_stats_seg") = std::nullopt);
+                 py::arg("column_stats_seg") = nullptr);
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())

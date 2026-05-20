@@ -520,16 +520,15 @@ FilterQuery<index::IndexSegmentReader> build_filter_from_column_stats_data(
 } // namespace
 
 FilterQuery<index::IndexSegmentReader> create_column_stats_filter(
-        storage::KeySegmentPair&& column_stats_compressed, const TimeseriesDescriptor& tsd,
+        std::shared_ptr<Segment> column_stats_compressed, const TimeseriesDescriptor& tsd,
         ColumnStatsQueryMetadata&& query_metadata
 ) {
     util::check(
             query_metadata.should_try_column_stats_read(),
             "Should not try to create column stats filter if !should_try_column_stats_read()"
     );
-    SegmentInMemory partial_segment = partial_decode_column_stats_segment(
-            *column_stats_compressed.segment_ptr(), tsd, query_metadata.columns_of_interest
-    );
+    SegmentInMemory partial_segment =
+            partial_decode_column_stats_segment(*column_stats_compressed, tsd, query_metadata.columns_of_interest);
     ColumnStatsData column_stats{std::move(partial_segment), tsd, query_metadata.date_range};
     return build_filter_from_column_stats_data(std::move(column_stats), std::move(query_metadata.filter_expressions));
 }

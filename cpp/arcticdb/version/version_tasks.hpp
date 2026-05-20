@@ -12,8 +12,8 @@
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/codec/segment.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/util/key_utils.hpp>
@@ -24,7 +24,7 @@ namespace arcticdb {
  * Column stats data read from storage, and metadata about the user's query.
  */
 struct ColumnStatsSource {
-    storage::KeySegmentPair data;
+    std::shared_ptr<Segment> data;
     ColumnStatsQueryMetadata query_metadata;
 };
 

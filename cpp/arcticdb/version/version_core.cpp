@@ -2810,7 +2810,7 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
                 store->read_compressed(column_stats_key, stats_read_opts)
                         .thenValueInline(
                                 [qm = std::move(query_metadata)](storage::KeySegmentPair&& key_seg
-                                ) -> OptionalColumnStatsSource { return ColumnStatsSource{std::move(key_seg), qm}; }
+                                ) -> OptionalColumnStatsSource { return ColumnStatsSource{key_seg.segment_ptr(), qm}; }
                         );
     }
 

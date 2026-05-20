@@ -440,13 +440,10 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                // Clone because Python holds the PreloadedIndexQuery across multiple collect() calls.
                 std::optional<ColumnStatsSource> column_stats;
                 if (preloaded_index_query->column_stats_seg_) {
-                    const auto& key_seg = *preloaded_index_query->column_stats_seg_;
                     column_stats.emplace(ColumnStatsSource{
-                            storage::KeySegmentPair{VariantKey{key_seg.variant_key()}, key_seg.segment().clone()},
-                            ColumnStatsQueryMetadata(read_query->clauses_)
+                            preloaded_index_query->column_stats_seg_, ColumnStatsQueryMetadata(read_query->clauses_)
                     });
                 }
                 return std::make_shared<IndexInformation>(
@@ -526,15 +523,15 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, 
     const auto key = std::move(k);
     auto index_future = store()->read(key);
 
-    auto column_stats_future = folly::makeFuture<std::optional<storage::KeySegmentPair>>(std::nullopt);
+    auto column_stats_future = folly::makeFuture<std::shared_ptr<Segment>>(std::shared_ptr<Segment>{});
     if (include_index_segment && is_column_stats_enabled()) {
         auto column_stats_key = index_key_to_column_stats_key(key);
         storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
-        column_stats_future = store()->read_compressed(column_stats_key, stats_read_opts)
-                                      .thenValueInline(
-                                              [](storage::KeySegmentPair&& key_seg
-                                              ) -> std::optional<storage::KeySegmentPair> { return std::move(key_seg); }
-                                      );
+        column_stats_future =
+                store()->read_compressed(column_stats_key, stats_read_opts)
+                        .thenValueInline([](storage::KeySegmentPair&& key_seg) -> std::shared_ptr<Segment> {
+                            return key_seg.segment_ptr();
+                        });
     }
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
