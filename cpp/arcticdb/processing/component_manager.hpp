@@ -39,6 +39,7 @@ class ComponentManager {
         std::unique_lock lock(mtx_);
         (
                 [&] {
+                    registry_.emplace<Args>(id, std::forward<decltype(args)>(args));
                     // Store the initial entity fetch count component as a "first-class" entity, accessible by
                     // registry_.get<EntityFetchCount>(id), as this is external facing (used by resample)
                     // The remaining entity fetch count below will be decremented each time an entity is fetched, but is
@@ -46,8 +47,6 @@ class ComponentManager {
                     // shared_mutex with a unique_lock.
                     if constexpr (std::same_as<std::decay_t<Args>, EntityFetchCount>) {
                         registry_.emplace<std::atomic<EntityFetchCount>>(id, std::forward<decltype(args)>(args));
-                    } else {
-                        registry_.emplace<Args>(id, std::forward<decltype(args)>(args));
                     }
                 }(),
                 ...
@@ -76,14 +75,13 @@ class ComponentManager {
                         );
                     }
                     using T = std::decay_t<typename Args::value_type>;
+                    registry_.insert<T>(ids.cbegin(), ids.cend(), std::make_move_iterator(args.begin()));
                     if constexpr (std::same_as<T, EntityFetchCount>) {
                         for (auto&& [idx, id] : folly::enumerate(ids)) {
                             registry_.emplace<std::atomic<EntityFetchCount>>(
                                     id, std::forward<EntityFetchCount>(args[idx])
                             );
                         }
-                    } else {
-                        registry_.insert<T>(ids.cbegin(), ids.cend(), std::make_move_iterator(args.begin()));
                     }
                 }(),
                 ...
@@ -96,10 +94,9 @@ class ComponentManager {
         ARCTICDB_SAMPLE_DEFAULT(ReplaceEntities)
         std::unique_lock lock(mtx_);
         for (auto id : ids) {
+            registry_.replace<T>(id, value);
             if constexpr (std::same_as<std::decay_t<T>, EntityFetchCount>) {
                 update_entity_fetch_count(id, value);
-            } else {
-                registry_.replace<T>(id, value);
             }
         }
     }
@@ -114,10 +111,9 @@ class ComponentManager {
         using T = std::ranges::range_value_t<R>;
         std::unique_lock lock(mtx_);
         for (auto [idx, id] : folly::enumerate(ids)) {
+            registry_.replace<T>(id, std::forward<R>(values)[idx]);
             if constexpr (std::same_as<T, EntityFetchCount>) {
                 update_entity_fetch_count(id, std::forward<R>(values)[idx]);
-            } else {
-                registry_.replace<T>(id, std::forward<R>(values)[idx]);
             }
         }
     }
