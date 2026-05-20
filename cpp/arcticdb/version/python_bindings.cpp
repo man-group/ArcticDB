@@ -437,10 +437,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
-        
+
         StageResult objects can be passed to finalization methods to specify which staged data to finalize.
         This enables selective finalization of staged data when multiple stage operations have been performed.
-        
+
         Attributes
         ----------
         staged_segments : List[AtomKey]
@@ -970,7 +970,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  "Check if a specific stream has been written to previously")
             .def("list_streams",
                  &PythonVersionStore::list_streams,
-                 py::call_guard<SingleThreadMutexHolder>(),
+                 py::call_guard<SingleThreadMutexHolder, py::gil_scoped_release>(),
                  "List all the stream ids that have been written")
             .def("compact_symbol_list",
                  &PythonVersionStore::compact_symbol_list,
