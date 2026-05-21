@@ -12,6 +12,7 @@
 
 #include <arcticdb/util/test/test_utils.hpp>
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/rapidcheck.hpp>
 
@@ -155,8 +156,8 @@ RC_GTEST_PROP(Column, SearchSorted, (const std::vector<int64_t>& input, int64_t 
     for (size_t idx = 0; idx < n; ++idx) {
         column.set_scalar<int64_t>(idx, sorted_input[idx]);
     }
-    auto left_idx = column.search_sorted<int64_t>(value_to_find, false);
-    auto right_idx = column.search_sorted<int64_t>(value_to_find, true);
+    auto left_idx = lower_bound_idx<int64_t>(column, value_to_find);
+    auto right_idx = upper_bound_idx<int64_t>(column, value_to_find);
     RC_ASSERT(left_idx <= n);
     RC_ASSERT(right_idx <= n);
     if (left_idx == 0) {

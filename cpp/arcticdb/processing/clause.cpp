@@ -10,6 +10,7 @@
 #include <variant>
 
 #include <arcticdb/processing/processing_unit.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/segment_reslicer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/stream/merge.hpp>
@@ -1066,10 +1067,10 @@ std::vector<EntityId> DateRangeClause::process(std::vector<EntityId>&& entity_id
         size_t start_row{0};
         size_t end_row{row_range->diff()};
         if (start_ > start_index && start_ <= end_index) {
-            start_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(start_);
+            start_row = lower_bound_idx<timestamp>(*proc.segments_->at(0)->column_ptr(0), start_);
         }
         if (end_ >= start_index && end_ <= end_index) {
-            end_row = proc.segments_->at(0)->column_ptr(0)->search_sorted<timestamp>(end_, true);
+            end_row = upper_bound_idx<timestamp>(*proc.segments_->at(0)->column_ptr(0), end_);
         }
         proc.truncate(start_row, end_row);
     } // else all rows in the processing unit are required, do nothing
