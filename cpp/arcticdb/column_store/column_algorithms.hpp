@@ -398,14 +398,17 @@ ColumnData::ColumnDataIterator<TDT, IT, ID, true> bound_search(
 
     const size_t block_pos = first_block;
     const RawType* block_ptr = block_data_at(block_pos);
+    const size_t block_row_count = block_row_count_at(block_pos);
     const size_t first = (block_pos == begin_block) ? begin_in_block_offset : 0;
-    const size_t last = (block_pos == end_block) ? end_in_block_offset : block_row_count_at(block_pos);
+    const size_t last = (block_pos == end_block) ? end_in_block_offset : block_row_count;
     const RawType* found = bisect(block_ptr + first, block_ptr + last, value);
     if (found == block_ptr + last) {
         // If bisect doesn't find the result in the block, there is no result in the given [begin, end)
         return end;
     }
-    return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(data, block_pos, static_cast<size_t>(found - block_ptr));
+    return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(
+            data, block_pos, static_cast<size_t>(found - block_ptr), block_ptr, block_row_count
+    );
 }
 
 // Gallop forward from `begin` in steps of 2**n until an element after value is reached.
@@ -456,7 +459,22 @@ gallop_bracket(
         if (block > end_block_idx || (block == end_block_idx && offset >= end_in_block_offset)) {
             return end;
         }
-        return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(data, block, offset);
+        return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(
+                data, block, offset, block_data_at(block), block_row_count_at(block)
+        );
+    };
+
+    // Optimized variants for the first block
+    auto record_probe_in_first_block = [&](size_t next_offset, RawType probe_value) {
+        prev_offset = cur_offset;
+        cur_offset = next_offset;
+        return is_before(probe_value, value);
+    };
+
+    auto make_iter_in_first_block = [&](size_t offset) -> ColumnData::ColumnDataIterator<TDT, IT, ID, true> {
+        return ColumnData::ColumnDataIterator<TDT, IT, ID, true>(
+                data, first_block_idx, offset, first_block_data, first_block_row_count
+        );
     };
 
     // Probe within the first block at first_offset + 2**n
@@ -466,19 +484,19 @@ gallop_bracket(
     size_t step = 1;
     for (; first_offset + step + 1 < up_to; step *= 2) {
         const size_t probe_offset = first_offset + step;
-        if (!record_probe(first_block_idx, probe_offset + 1, first_block_data[probe_offset])) {
-            return {make_iter(prev_block, prev_offset), make_iter(cur_block, cur_offset)};
+        if (!record_probe_in_first_block(probe_offset + 1, first_block_data[probe_offset])) {
+            return {make_iter_in_first_block(prev_offset), make_iter_in_first_block(cur_offset)};
         }
     }
 
     if (end_block_idx == first_block_idx) {
         // End lies in the first block; resulting range is [cur, end).
-        return {make_iter(cur_block, cur_offset), end};
+        return {make_iter_in_first_block(cur_offset), end};
     }
 
     // Probe the last element of the first block. Post-probe position is (first_block_idx + 1, 0).
     if (!record_probe(first_block_idx + 1, 0, first_block_data[first_block_row_count - 1])) {
-        return {make_iter(prev_block, prev_offset), make_iter(cur_block, cur_offset)};
+        return {make_iter_in_first_block(prev_offset), make_iter(cur_block, cur_offset)};
     }
 
     // Answer is after the first block — probe the last elements of blocks at first_idx + 2**n
@@ -609,7 +627,7 @@ size_t lower_bound_idx(
                        ? column_data.template citerator_at<TDT, IteratorType::ENUMERATED>(*to)
                        : column_data.template cend<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
     auto result = lower_bound<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, value);
-    if (!result.current_block().has_value()) {
+    if (result.current_block_data() == nullptr) {
         // Iterator to end doesn't have `->idx()`
         return column.row_count();
     }
@@ -637,7 +655,7 @@ size_t upper_bound_idx(
                        ? column_data.template citerator_at<TDT, IteratorType::ENUMERATED>(*to)
                        : column_data.template cend<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
     auto result = upper_bound<TDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, value);
-    if (!result.current_block().has_value()) {
+    if (result.current_block_data() == nullptr) {
         // Iterator to end doesn't have `->idx()`
         return column.row_count();
     }

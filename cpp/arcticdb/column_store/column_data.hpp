@@ -206,28 +206,36 @@ struct ColumnData {
             block_pos_(block_pos) {
             load_current_block();
             in_block_offset_ = in_block_offset;
-            if constexpr (iterator_type == IteratorType::ENUMERATED) {
-                if constexpr (iterator_density == IteratorDensity::SPARSE) {
-                    util::raise_rte("ColumnDataIterator at-position constructor not supported for SPARSE iteration");
-                } else {
-                    const size_t block_start_idx = parent_->buffer().block_byte_offset(block_pos) / sizeof(RawType);
-                    data_.idx_ = static_cast<ssize_t>(block_start_idx + in_block_offset);
-                }
-            }
+            recalculate_enumeration();
+        }
+
+        // Optimized constructor that can skip `load_current_block` if caller already has `block_data` and
+        // `block_row_count` Frequently used in search methods.
+        ColumnDataIterator(
+                const ColumnData* parent, size_t block_pos, size_t in_block_offset, const RawType* block_data,
+                size_t block_row_count
+        ) :
+            parent_(parent),
+            block_pos_(block_pos),
+            block_begin_(block_data),
+            in_block_offset_(in_block_offset),
+            block_size_(block_row_count) {
+            recalculate_enumeration();
         }
 
         template<bool OtherConst>
         explicit ColumnDataIterator(const ColumnDataIterator<TDT, iterator_type, iterator_density, OtherConst>& other) :
             parent_(other.parent_),
             block_pos_(other.block_pos_),
-            opt_block_(other.opt_block_),
+            block_begin_(other.block_begin_),
             in_block_offset_(other.in_block_offset_),
             block_size_(other.block_size_),
             data_(other.data_) {}
 
         // Minimal accessors used by the search algorithms in column_algorithms.hpp.
         [[nodiscard]] const ColumnData* parent() const { return parent_; }
-        [[nodiscard]] const std::optional<TypedBlockData<TDT>>& current_block() const { return opt_block_; }
+        // nullptr when the iterator is at end (no current block).
+        [[nodiscard]] const RawType* current_block_data() const { return block_begin_; }
         // Index of the block this iterator currently points into. For end iterators this is num_blocks.
         [[nodiscard]] size_t current_block_index() const { return block_pos_; }
         [[nodiscard]] size_t current_in_block_offset() const { return in_block_offset_; }
@@ -253,21 +261,38 @@ struct ColumnData {
         }
 
         void load_current_block() {
-            opt_block_ = parent_->template typed_block_at_position<TDT>(block_pos_);
-            block_size_ = opt_block_.has_value() ? opt_block_->row_count() : 0;
-            // It is possible for arrow sparse data to have blocks with zero set rows.
-            // We need to skip all blocks with zero rows to get to the next iterator position.
-            while (ARCTICDB_UNLIKELY(opt_block_.has_value() && block_size_ == 0)) {
-                ++block_pos_;
-                opt_block_ = parent_->template typed_block_at_position<TDT>(block_pos_);
-                block_size_ = opt_block_.has_value() ? opt_block_->row_count() : 0;
-            }
+            const size_t num_blocks = parent_->num_blocks();
+            const auto& blocks = parent_->buffer().blocks();
             in_block_offset_ = 0;
+            // It is possible for arrow sparse data to have blocks with zero set rows.
+            // Skip all such blocks to get to the next iterator position.
+            while (block_pos_ < num_blocks) {
+                IMemBlock* block = blocks[block_pos_];
+                block_begin_ = reinterpret_cast<const RawType*>(block->data());
+                block_size_ = block->logical_size() / sizeof(RawType);
+                if (ARCTICDB_LIKELY(block_size_ != 0)) {
+                    return;
+                }
+                ++block_pos_;
+            }
+            block_begin_ = nullptr;
+            block_size_ = 0;
         }
 
         void advance_block() {
             ++block_pos_;
             load_current_block();
+        }
+
+        void recalculate_enumeration() {
+            if constexpr (iterator_type == IteratorType::ENUMERATED) {
+                if constexpr (iterator_density == IteratorDensity::SPARSE) {
+                    util::raise_rte("ColumnDataIterator at-position constructor not supported for SPARSE iteration");
+                } else {
+                    const size_t block_start_idx = parent_->buffer().block_byte_offset(block_pos_) / sizeof(RawType);
+                    data_.idx_ = static_cast<ssize_t>(block_start_idx + in_block_offset_);
+                }
+            }
         }
 
         template<bool OtherConst>
@@ -285,14 +310,14 @@ struct ColumnData {
         {
             ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
-                    opt_block_.has_value(),
+                    block_begin_ != nullptr,
                     "Dereferencing end iterator in ColumnDataIterator"
             );
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
-                data_.ptr_ = const_cast<RawType*>(opt_block_->data() + in_block_offset_);
+                data_.ptr_ = const_cast<RawType*>(block_begin_ + in_block_offset_);
                 return data_;
             } else {
-                return *(opt_block_->data() + in_block_offset_);
+                return *(block_begin_ + in_block_offset_);
             }
         }
 
@@ -301,20 +326,21 @@ struct ColumnData {
         {
             ARCTICDB_DEBUG_CHECK(
                     ErrorCode::E_ASSERTION_FAILURE,
-                    opt_block_.has_value(),
+                    block_begin_ != nullptr,
                     "Dereferencing end iterator in ColumnDataIterator"
             );
             if constexpr (iterator_type == IteratorType::ENUMERATED) {
-                data_.ptr_ = const_cast<RawType*>(opt_block_->data() + in_block_offset_);
+                data_.ptr_ = const_cast<RawType*>(block_begin_ + in_block_offset_);
                 return *const_cast<typename base_type::value_type*>(&data_);
             } else {
-                return *const_cast<RawType*>(opt_block_->data() + in_block_offset_);
+                return *const_cast<RawType*>(block_begin_ + in_block_offset_);
             }
         }
 
         const ColumnData* parent_{nullptr};
         size_t block_pos_{0};
-        std::optional<TypedBlockData<TDT>> opt_block_{std::nullopt};
+        // Raw pointer to the start of the current block's data, nullptr at end.
+        const RawType* block_begin_{nullptr};
         size_t in_block_offset_{0};
         size_t block_size_{0};
         // Mutable is to allow assigning `ptr_` lazily on dereference for ENUMERATED

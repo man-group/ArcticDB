@@ -541,7 +541,7 @@ void check_search_on_column(
                                   : column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
     auto end = to.has_value() ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*to)
                               : column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
-    auto res_idx = [&](auto& it) { return it.current_block().has_value() ? it->idx() : total; };
+    auto res_idx = [&](auto& it) { return it.current_block_data() != nullptr ? it->idx() : total; };
     const auto std_begin = values.begin() + from.value_or(0);
     const auto std_end = values.begin() + to.value_or(values.size());
     for (auto v : probes) {
