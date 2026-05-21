@@ -462,6 +462,7 @@ std::optional<Column> compute_output_column(
         const std::vector<timestamp>& bucket_boundaries, ResampleBoundary label_boundary
 ) {
     const std::vector<std::shared_ptr<Column>> idx_cols(input_index_columns.begin(), input_index_columns.end());
+    // Using `min()+1` to avoid underflow when calculating exclusive min timestamp in resample code.
     const TimestampRange full_range{std::numeric_limits<timestamp>::min() + 1, std::numeric_limits<timestamp>::max()};
     auto [_, mapping] =
             generate_output_index_column<closed_boundary>(idx_cols, bucket_boundaries, full_range, label_boundary);

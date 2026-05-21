@@ -87,15 +87,20 @@ std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column
     using IndexTDT = ScalarTagType<DataTypeTag<data_type>>;
 
     // The output row count is bounded by both the number of buckets and the number of input rows
-    size_t total_input_rows{0};
-    for (const auto& col : input_index_columns) {
-        total_input_rows += col->row_count();
-    }
+    const size_t total_input_rows = std::accumulate(
+            input_index_columns.begin(),
+            input_index_columns.end(),
+            size_t{0},
+            [](size_t acc, const auto& col) { return acc + col->row_count(); }
+    );
     const auto max_output_rows = std::min(bucket_boundaries.size() - 1, total_input_rows);
     // Below this rows/bucket threshold, element-by-element iteration benchmarked to beat galloping search.
+    // The threshold assumes rows are distributed uniformly across buckets; the less uniform the distribution, the more
+    // galloping search wins, so this is a conservative threshold.
     constexpr size_t linear_scan_threshold = 32;
-    const size_t num_buckets = bucket_boundaries.size() > 1 ? bucket_boundaries.size() - 1 : 1;
-    const bool use_linear_scan = (total_input_rows / num_buckets) < linear_scan_threshold;
+    const size_t num_buckets = bucket_boundaries.size() - 1;
+    // Equivalent to `total_input_rows / num_buckets < linear_scan_threshold` and avoids potential division by zero.
+    const bool use_linear_scan = total_input_rows < linear_scan_threshold * num_buckets;
     const auto max_index_column_bytes = max_output_rows * get_type_size(data_type);
     auto output_index_column = std::make_shared<Column>(
             TypeDescriptor(data_type, Dimension::Dim0),
