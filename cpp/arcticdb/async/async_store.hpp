@@ -430,6 +430,8 @@ class AsyncStore : public Store {
         ARCTICDB_RUNTIME_DEBUG(log::version(), "Reading {} keys", ranges_and_keys.size());
         // Window the reads by default (but with a kill switch) for reasons detailed in the PR description:
         // https://github.com/man-group/ArcticDB/pull/3086
+        // x2 IO threadpool size is a balance to keep the IO workers busy, without reading data in faster than we can
+        // process it
         // TODO 11961775873: remove this kill switch
         if (window_processing_pipeline_reads_) {
             return folly::window(
