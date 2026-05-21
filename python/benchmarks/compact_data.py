@@ -6,6 +6,8 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
+import shutil
 import time
 
 import numpy as np
@@ -19,61 +21,30 @@ from arcticdb.util.test import random_strings_of_length
 rng = np.random.default_rng()
 
 
-class CompactDataBase:
+class CompactDataNumericStaticSchema:
     def __init__(self):
         self.logger = get_logger()
         self.SYM = "sym"
-        # This is important, because compaction is a destructive process, we must call setup before each measurement
+        # Do not interleave benchmarks as they are using the same LMDB directory for actually running the benchmarks
+        self.rounds = 1
+        # Takes around 2 minutes total locally on an SSD
+        self.repeat = 15
+        # These two parameters are important, because compaction is a destructive process, we must call setup before
+        # each measurement
         self.number = 1
         self.warmup_time = 0
-
-        self.base_param_names = [
+        # Directory that will contain libraries that are actually compacted
+        self.LMDB_DIR = "compact_data_numeric_static_schema"
+        # Base LMDB instance that will be populated by setup_cache. Relevant libraries will then be copied from here
+        # to another directory for actual compaction
+        self.LMDB_BASE_DIR = f"{self.LMDB_DIR}_base"
+        self.CONNECTION_STRING_BASE = f"lmdb://{self.LMDB_BASE_DIR}"
+        self.CONNECTION_STRING = f"lmdb://{self.LMDB_DIR}"
+        self.param_names = [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
             "num_columns",
             "column_slicing",
         ]
-
-    def _setup_cache(self):
-        ac = Arctic(self.CONNECTION_STRING)
-        ac.delete_library(self.LIB_NAME)
-        ac.create_library(self.LIB_NAME, LibraryOptions(dynamic_schema=self.DYNAMIC_SCHEMA))
-
-    def teardown(self, *args):
-        self.lib.delete(self.SYM)
-        self.ac.modify_library_option(self.lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 100_000)
-        self.ac.modify_library_option(self.lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 127)
-        del self.lib
-        del self.ac
-
-    def _setup(self, row_params, num_columns, column_slicing, dfs):
-        _, initial_rows_per_segment, target_rows_per_segment = row_params
-        self.ac = Arctic(self.CONNECTION_STRING)
-        self.lib = self.ac[self.LIB_NAME]
-        self.ac.modify_library_option(self.lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, initial_rows_per_segment)
-        if column_slicing:
-            self.ac.modify_library_option(self.lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, num_columns // 2)
-        self.lib.write(self.SYM, dfs[0])
-        for df in dfs[1:]:
-            self.lib.append(self.SYM, df)
-        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
-
-    def _time_compact_data(self, target_rows_per_segment):
-        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
-
-    def _peakmem_compact_data(self, target_rows_per_segment):
-        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
-
-
-class CompactDataNumericStaticSchema(CompactDataBase):
-    def __init__(self):
-        super().__init__()
-        # 50 iterations takes around 10s
-        self.repeat = (50, 100, 30)
-        self.LIB_NAME = "compact_data_numeric_static_schema"
-        self.CONNECTION_STRING = "lmdb://compact_data_numeric_static_schema"
-        self.DYNAMIC_SCHEMA = False
-        self.param_names = self.base_param_names
-        # Note that ColumnDataBase._setup will need modifying if num_columns>127 added for the non-column-sliced case
         self.params = [
             [
                 (1_000_000, 10_000, 100_000),
@@ -82,36 +53,92 @@ class CompactDataNumericStaticSchema(CompactDataBase):
             [2, 10, 100],  # num_columns
             [False, True],  # column_slicing
         ]
+        self.ac = None
+        self.lib = None
 
-    # ASV's setup_cache discovery logic will only run the method once if it is in the base class, even if that base
-    # class has multiple classes inheriting from it
     def setup_cache(self):
         start = time.time()
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
+    def _setup_cache(self):
+        # Populate the base libraries only once
+        ac = Arctic(self.CONNECTION_STRING_BASE)
+        for row_params in self.params[0]:
+            num_rows, initial_rows_per_segment, target_rows_per_segment = row_params
+            for num_columns in self.params[1]:
+                for column_slicing in self.params[2]:
+                    lib_name = self.lib_name(row_params, num_columns, column_slicing)
+                    ac.delete_library(lib_name)
+                    # Create one library per combination of benchmark parameters, as they don't all use the same slicing
+                    lib = ac.create_library(
+                        lib_name,
+                        LibraryOptions(
+                            rows_per_segment=initial_rows_per_segment,
+                            columns_per_segment=num_columns // 2 if column_slicing else num_columns * 2,
+                        ),
+                    )
+                    df = pd.DataFrame(
+                        {f"col_{i}": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)}
+                    )
+                    lib.write(self.SYM, df)
+
+    def lib_name(self, row_params, num_columns, column_slicing):
+        return f"{row_params}_{num_columns}_{column_slicing}"
+
     def setup(self, row_params, num_columns, column_slicing):
-        num_rows = row_params[0]
-        df = pd.DataFrame({f"col_{i}": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)})
-        self._setup(row_params, num_columns, column_slicing, [df])
+        os.mkdir(self.LMDB_DIR)
+        # Copy the config database and the relevant library database for these benchmark parameters to the actual
+        # LMDB directory where compaction will happen
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
+        lib_name = self.lib_name(row_params, num_columns, column_slicing)
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
+        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
+        # and the deletion and recreation won't be noticed by Arctic
+        del self.ac
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac.get_library(lib_name)
+        # Check the compaction will actually do something!
+        target_rows_per_segment = row_params[2]
+        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
+
+    def teardown(self, row_params, num_columns, column_slicing):
+        shutil.rmtree(self.LMDB_DIR)
 
     def time_compact_data(self, row_params, num_columns, column_slicing):
-        self._time_compact_data(row_params[2])
+        target_rows_per_segment = row_params[2]
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
     def peakmem_compact_data(self, row_params, num_columns, column_slicing):
-        self._peakmem_compact_data(row_params[2])
+        target_rows_per_segment = row_params[2]
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
 
-class CompactDataStringsStaticSchema(CompactDataBase):
+class CompactDataStringsStaticSchema:
     def __init__(self):
-        super().__init__()
-        # 5 iterations takes around 10s
-        self.repeat = (5, 10, 30)
-        self.LIB_NAME = "compact_data_strings_static_schema"
-        self.CONNECTION_STRING = "lmdb://compact_data_strings_static_schema"
-        self.DYNAMIC_SCHEMA = False
-        self.param_names = self.base_param_names + ["num_unique_strings"]
-        # Note that ColumnDataBase._setup will need modifying if num_columns>127 added for the non-column-sliced case
+        self.logger = get_logger()
+        self.SYM = "sym"
+        # Do not interleave benchmarks as they are using the same LMDB directory for actually running the benchmarks
+        self.rounds = 1
+        # Takes around 2 minutes total locally on an SSD
+        self.repeat = 15
+        # These two parameters are important, because compaction is a destructive process, we must call setup before
+        # each measurement
+        self.number = 1
+        self.warmup_time = 0
+        # Directory that will contain libraries that are actually compacted
+        self.LMDB_DIR = "compact_data_strings_static_schema"
+        # Base LMDB instance that will be populated by setup_cache. Relevant libraries will then be copied from here
+        # to another directory for actual compaction
+        self.LMDB_BASE_DIR = f"{self.LMDB_DIR}_base"
+        self.CONNECTION_STRING_BASE = f"lmdb://{self.LMDB_BASE_DIR}"
+        self.CONNECTION_STRING = f"lmdb://{self.LMDB_DIR}"
+        self.param_names = [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns",
+            "column_slicing",
+            "num_unique_strings",
+        ]
         self.params = [
             [
                 (1_000_000, 10_000, 100_000),
@@ -122,65 +149,155 @@ class CompactDataStringsStaticSchema(CompactDataBase):
             [2, 10, 100_000],  # num_unique_strings
         ]
         self.unique_strings = random_strings_of_length(max(self.params[3]), length=10, unique=True, kind="ascii")
+        self.ac = None
+        self.lib = None
 
-    # ASV's setup_cache discovery logic will only run the method once if it is in the base class, even if that base
-    # class has multiple classes inheriting from it
     def setup_cache(self):
         start = time.time()
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
+    def _setup_cache(self):
+        # Populate the base libraries only once
+        ac = Arctic(self.CONNECTION_STRING_BASE)
+        for row_params in self.params[0]:
+            num_rows, initial_rows_per_segment, target_rows_per_segment = row_params
+            for num_columns in self.params[1]:
+                for column_slicing in self.params[2]:
+                    for num_unique_strings in self.params[3]:
+                        lib_name = self.lib_name(row_params, num_columns, column_slicing, num_unique_strings)
+                        ac.delete_library(lib_name)
+                        # Create one library per combination of benchmark parameters, as they don't all use the same
+                        # slicing
+                        lib = ac.create_library(
+                            lib_name,
+                            LibraryOptions(
+                                rows_per_segment=initial_rows_per_segment,
+                                columns_per_segment=num_columns // 2 if column_slicing else num_columns * 2,
+                            ),
+                        )
+                        df = pd.DataFrame(
+                            {f"col_{i}": rng.choice(num_unique_strings, num_rows) for i in range(num_columns)}
+                        )
+                        lib.write(self.SYM, df)
+
+    def lib_name(self, row_params, num_columns, column_slicing, num_unique_strings):
+        return f"{row_params}_{num_columns}_{column_slicing}_{num_unique_strings}"
+
     def setup(self, row_params, num_columns, column_slicing, num_unique_strings):
-        num_rows = row_params[0]
-        unique_strings = self.unique_strings[:num_unique_strings]
-        df = pd.DataFrame({f"col_{i}": rng.choice(unique_strings, num_rows) for i in range(num_columns)})
-        self._setup(row_params, num_columns, column_slicing, [df])
+        os.mkdir(self.LMDB_DIR)
+        # Copy the config database and the relevant library database for these benchmark parameters to the actual
+        # LMDB directory where compaction will happen
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
+        lib_name = self.lib_name(row_params, num_columns, column_slicing, num_unique_strings)
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
+        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
+        # and the deletion and recreation won't be noticed by Arctic
+        del self.ac
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac.get_library(lib_name)
+        # Check the compaction will actually do something!
+        target_rows_per_segment = row_params[2]
+        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
+
+    def teardown(self, row_params, num_columns, column_slicing, num_unique_strings):
+        shutil.rmtree(self.LMDB_DIR)
 
     def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):
-        self._time_compact_data(row_params[2])
+        target_rows_per_segment = row_params[2]
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
     def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):
-        self._peakmem_compact_data(row_params[2])
+        target_rows_per_segment = row_params[2]
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
 
-class CompactDataNumericDynamicSchema(CompactDataBase):
+class CompactDataNumericDynamicSchema:
     def __init__(self):
-        super().__init__()
-        # 5 iterations takes around 340s
-        self.repeat = (5, 10, 500)
-        self.LIB_NAME = "compact_data_numeric_dynamic_schema"
-        self.CONNECTION_STRING = "lmdb://compact_data_numeric_dynamic_schema"
-        self.DYNAMIC_SCHEMA = True
-        self.param_names = self.base_param_names[:2]
+        self.logger = get_logger()
+        self.SYM = "sym"
+        # Do not interleave benchmarks as they are using the same LMDB directory for actually running the benchmarks
+        self.rounds = 1
+        # Takes around 75 seconds total locally on an SSD
+        self.repeat = 15
+        # These two parameters are important, because compaction is a destructive process, we must call setup before
+        # each measurement
+        self.number = 1
+        self.warmup_time = 0
+        # Directory that will contain libraries that are actually compacted
+        self.LMDB_DIR = "compact_data_numeric_dynamic_schema"
+        # Base LMDB instance that will be populated by setup_cache. Relevant libraries will then be copied from here
+        # to another directory for actual compaction
+        self.LMDB_BASE_DIR = f"{self.LMDB_DIR}_base"
+        self.CONNECTION_STRING_BASE = f"lmdb://{self.LMDB_BASE_DIR}"
+        self.CONNECTION_STRING = f"lmdb://{self.LMDB_DIR}"
+        self.param_names = [
+            "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
+            "num_columns",
+        ]
         self.params = [
             [
                 (1_000, 10, 1_000),
             ],  # (num_rows, initial_rows_per_segment, target_rows_per_segment)
             [100, 1_000, 10_000],  # num_columns
         ]
-        # The setup for this is much slower than static schema as we must call append repeatedly to produce row-slices
-        # with missing columns
-        self.timeout = 500
+        self.ac = None
+        self.lib = None
 
-    # ASV's setup_cache discovery logic will only run the method once if it is in the base class, even if that base
-    # class has multiple classes inheriting from it
     def setup_cache(self):
         start = time.time()
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
+    def _setup_cache(self):
+        # Populate the base libraries only once
+        ac = Arctic(self.CONNECTION_STRING_BASE)
+        for row_params in self.params[0]:
+            num_rows, initial_rows_per_segment, target_rows_per_segment = row_params
+            for num_columns in self.params[1]:
+                lib_name = self.lib_name(row_params, num_columns)
+                ac.delete_library(lib_name)
+                # Create one library per combination of benchmark parameters, as they don't all use the same slicing
+                lib = ac.create_library(
+                    lib_name,
+                    LibraryOptions(
+                        dynamic_schema=True,
+                        rows_per_segment=initial_rows_per_segment,
+                    ),
+                )
+                num_row_slices = num_rows // initial_rows_per_segment
+                column_names = [f"col_{idx}" for idx in range(num_columns)]
+                for _ in range(num_row_slices):
+                    columns = rng.choice(column_names, num_columns // 2, replace=False)
+                    df = pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns})
+                    lib.append(self.SYM, df)
+
+    def lib_name(self, row_params, num_columns):
+        return f"{row_params}_{num_columns}"
+
     def setup(self, row_params, num_columns):
-        num_rows, initial_rows_per_segment, _ = row_params
-        num_row_slices = num_rows // initial_rows_per_segment
-        column_names = [f"col_{idx}" for idx in range(num_columns)]
-        dfs = []
-        for _ in range(num_row_slices):
-            columns = rng.choice(column_names, num_columns // 2, replace=False)
-            dfs.append(pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns}))
-        self._setup(row_params, num_columns, False, dfs)
+        os.mkdir(self.LMDB_DIR)
+        # Copy the config database and the relevant library database for these benchmark parameters to the actual
+        # LMDB directory where compaction will happen
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, "_arctic_cfg"), os.path.join(self.LMDB_DIR, "_arctic_cfg"))
+        lib_name = self.lib_name(row_params, num_columns)
+        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))
+        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files
+        # and the deletion and recreation won't be noticed by Arctic
+        del self.ac
+        self.ac = Arctic(self.CONNECTION_STRING)
+        self.lib = self.ac.get_library(lib_name)
+        # Check the compaction will actually do something!
+        target_rows_per_segment = row_params[2]
+        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work
+
+    def teardown(self, row_params, num_columns):
+        shutil.rmtree(self.LMDB_DIR)
 
     def time_compact_data(self, row_params, num_columns):
-        self._time_compact_data(row_params[2])
+        target_rows_per_segment = row_params[2]
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)
 
     def peakmem_compact_data(self, row_params, num_columns):
-        self._peakmem_compact_data(row_params[2])
+        target_rows_per_segment = row_params[2]
+        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)

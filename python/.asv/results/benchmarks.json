@@ -2018,7 +2018,7 @@
         "warmup_time": 0.5
     },
     "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data": {
-        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        self._peakmem_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        num_rows, initial_rows_per_segment, _ = row_params\n        num_row_slices = num_rows // initial_rows_per_segment\n        column_names = [f\"col_{idx}\" for idx in range(num_columns)]\n        dfs = []\n        for _ in range(num_row_slices):\n            columns = rng.choice(column_names, num_columns // 2, replace=False)\n            dfs.append(pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns}))\n        self._setup(row_params, num_columns, False, dfs)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericDynamicSchema:\n    def peakmem_compact_data(self, row_params, num_columns):\n        target_rows_per_segment = row_params[2]\n        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)\n\n    def setup(self, row_params, num_columns):\n        os.mkdir(self.LMDB_DIR)\n        # Copy the config database and the relevant library database for these benchmark parameters to the actual\n        # LMDB directory where compaction will happen\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, \"_arctic_cfg\"), os.path.join(self.LMDB_DIR, \"_arctic_cfg\"))\n        lib_name = self.lib_name(row_params, num_columns)\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))\n        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files\n        # and the deletion and recreation won't be noticed by Arctic\n        del self.ac\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(lib_name)\n        # Check the compaction will actually do something!\n        target_rows_per_segment = row_params[2]\n        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericDynamicSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2034,14 +2034,13 @@
                 "10000"
             ]
         ],
-        "setup_cache_key": "compact_data:167",
-        "timeout": 500,
+        "setup_cache_key": "compact_data:247",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "17d9a468424d67308cbe95ddc4ae57bb3b2d23932fde6ed5a3b203641e94123f"
+        "version": "2f0e6a99ea864be659ea159835db93b6888803b5c5c93013150defaa90e85029"
     },
     "compact_data.CompactDataNumericDynamicSchema.time_compact_data": {
-        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        self._time_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns):\n        num_rows, initial_rows_per_segment, _ = row_params\n        num_row_slices = num_rows // initial_rows_per_segment\n        column_names = [f\"col_{idx}\" for idx in range(num_columns)]\n        dfs = []\n        for _ in range(num_row_slices):\n            columns = rng.choice(column_names, num_columns // 2, replace=False)\n            dfs.append(pd.DataFrame({column: np.arange(initial_rows_per_segment) for column in columns}))\n        self._setup(row_params, num_columns, False, dfs)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericDynamicSchema:\n    def time_compact_data(self, row_params, num_columns):\n        target_rows_per_segment = row_params[2]\n        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)\n\n    def setup(self, row_params, num_columns):\n        os.mkdir(self.LMDB_DIR)\n        # Copy the config database and the relevant library database for these benchmark parameters to the actual\n        # LMDB directory where compaction will happen\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, \"_arctic_cfg\"), os.path.join(self.LMDB_DIR, \"_arctic_cfg\"))\n        lib_name = self.lib_name(row_params, num_columns)\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))\n        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files\n        # and the deletion and recreation won't be noticed by Arctic\n        del self.ac\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(lib_name)\n        # Check the compaction will actually do something!\n        target_rows_per_segment = row_params[2]\n        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataNumericDynamicSchema.time_compact_data",
         "number": 1,
@@ -2059,17 +2058,17 @@
                 "10000"
             ]
         ],
-        "rounds": 2,
+        "repeat": 15,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:167",
-        "timeout": 500,
+        "setup_cache_key": "compact_data:247",
         "type": "time",
         "unit": "seconds",
-        "version": "4e5cc59317a5c56ee922d7c15bb586afa8d3513ecab46e12f6c7d84de7351e9c",
+        "version": "43cfb84a95f2df24e21c965e35493742592909a5b617021cbd18339e00ae1853",
         "warmup_time": 0
     },
     "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data": {
-        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        self._peakmem_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        num_rows = row_params[0]\n        df = pd.DataFrame({f\"col_{i}\": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing):\n        target_rows_per_segment = row_params[2]\n        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)\n\n    def setup(self, row_params, num_columns, column_slicing):\n        os.mkdir(self.LMDB_DIR)\n        # Copy the config database and the relevant library database for these benchmark parameters to the actual\n        # LMDB directory where compaction will happen\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, \"_arctic_cfg\"), os.path.join(self.LMDB_DIR, \"_arctic_cfg\"))\n        lib_name = self.lib_name(row_params, num_columns, column_slicing)\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))\n        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files\n        # and the deletion and recreation won't be noticed by Arctic\n        del self.ac\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(lib_name)\n        # Check the compaction will actually do something!\n        target_rows_per_segment = row_params[2]\n        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataNumericStaticSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2091,13 +2090,13 @@
                 "True"
             ]
         ],
-        "setup_cache_key": "compact_data:88",
+        "setup_cache_key": "compact_data:59",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "0b3f9aa80a8786f71982698618966dfcb1eb8df37fd5a6052b8a5847204f13a5"
+        "version": "8a492e2e9000d9c9a7654666d2b64255c88b653cc46cbb2727d273236d87d2ea"
     },
     "compact_data.CompactDataNumericStaticSchema.time_compact_data": {
-        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        self._time_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing):\n        num_rows = row_params[0]\n        df = pd.DataFrame({f\"col_{i}\": np.arange(i * num_rows, (i + 1) * num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataNumericStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing):\n        target_rows_per_segment = row_params[2]\n        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)\n\n    def setup(self, row_params, num_columns, column_slicing):\n        os.mkdir(self.LMDB_DIR)\n        # Copy the config database and the relevant library database for these benchmark parameters to the actual\n        # LMDB directory where compaction will happen\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, \"_arctic_cfg\"), os.path.join(self.LMDB_DIR, \"_arctic_cfg\"))\n        lib_name = self.lib_name(row_params, num_columns, column_slicing)\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))\n        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files\n        # and the deletion and recreation won't be noticed by Arctic\n        del self.ac\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(lib_name)\n        # Check the compaction will actually do something!\n        target_rows_per_segment = row_params[2]\n        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataNumericStaticSchema.time_compact_data",
         "number": 1,
@@ -2121,16 +2120,17 @@
                 "True"
             ]
         ],
-        "rounds": 2,
+        "repeat": 15,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:88",
+        "setup_cache_key": "compact_data:59",
         "type": "time",
         "unit": "seconds",
-        "version": "89992f23a7560d8f12a5660476247d98315741a96b1c1dbb2a3108023c5102df",
+        "version": "edc504fc31ef6d2dd09aefd0b2c84b452e7ade2c0c1487078fd886cabbb04164",
         "warmup_time": 0
     },
     "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data": {
-        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._peakmem_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        num_rows = row_params[0]\n        unique_strings = self.unique_strings[:num_unique_strings]\n        df = pd.DataFrame({f\"col_{i}\": rng.choice(unique_strings, num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataStringsStaticSchema:\n    def peakmem_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        target_rows_per_segment = row_params[2]\n        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        os.mkdir(self.LMDB_DIR)\n        # Copy the config database and the relevant library database for these benchmark parameters to the actual\n        # LMDB directory where compaction will happen\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, \"_arctic_cfg\"), os.path.join(self.LMDB_DIR, \"_arctic_cfg\"))\n        lib_name = self.lib_name(row_params, num_columns, column_slicing, num_unique_strings)\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))\n        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files\n        # and the deletion and recreation won't be noticed by Arctic\n        del self.ac\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(lib_name)\n        # Check the compaction will actually do something!\n        target_rows_per_segment = row_params[2]\n        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "compact_data.CompactDataStringsStaticSchema.peakmem_compact_data",
         "param_names": [
             "(num_rows, initial_rows_per_segment, target_rows_per_segment)",
@@ -2157,13 +2157,13 @@
                 "100000"
             ]
         ],
-        "setup_cache_key": "compact_data:128",
+        "setup_cache_key": "compact_data:155",
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "dbb3e1bd21b49f93004796dd5149dde0f3444ee6aa9ad16bf15cc730bedb98b0"
+        "version": "f9be789f997dd56a15e8b58c385043f4a180da9b12df160b93b2097c1cf663ed"
     },
     "compact_data.CompactDataStringsStaticSchema.time_compact_data": {
-        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        self._time_compact_data(row_params[2])\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        num_rows = row_params[0]\n        unique_strings = self.unique_strings[:num_unique_strings]\n        df = pd.DataFrame({f\"col_{i}\": rng.choice(unique_strings, num_rows) for i in range(num_columns)})\n        self._setup(row_params, num_columns, column_slicing, [df])\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class CompactDataStringsStaticSchema:\n    def time_compact_data(self, row_params, num_columns, column_slicing, num_unique_strings):\n        target_rows_per_segment = row_params[2]\n        self.lib.compact_data(self.SYM, rows_per_segment=target_rows_per_segment, prune_previous_versions=False)\n\n    def setup(self, row_params, num_columns, column_slicing, num_unique_strings):\n        os.mkdir(self.LMDB_DIR)\n        # Copy the config database and the relevant library database for these benchmark parameters to the actual\n        # LMDB directory where compaction will happen\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, \"_arctic_cfg\"), os.path.join(self.LMDB_DIR, \"_arctic_cfg\"))\n        lib_name = self.lib_name(row_params, num_columns, column_slicing, num_unique_strings)\n        shutil.copytree(os.path.join(self.LMDB_BASE_DIR, lib_name), os.path.join(self.LMDB_DIR, lib_name))\n        # Create a new Arctic instance, otherwise we will be holding a reference to the previous iteration's .mdb files\n        # and the deletion and recreation won't be noticed by Arctic\n        del self.ac\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac.get_library(lib_name)\n        # Check the compaction will actually do something!\n        target_rows_per_segment = row_params[2]\n        assert self.lib.compact_data_explain_plan(self.SYM, rows_per_segment=target_rows_per_segment).will_do_work\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "compact_data.CompactDataStringsStaticSchema.time_compact_data",
         "number": 1,
@@ -2192,12 +2192,13 @@
                 "100000"
             ]
         ],
-        "rounds": 2,
+        "repeat": 15,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "compact_data:128",
+        "setup_cache_key": "compact_data:155",
         "type": "time",
         "unit": "seconds",
-        "version": "21dc12f787c59d8b41d0826d8846484149d3978365bc25184d7ba0cea1574e17",
+        "version": "08d648cc72a459e82e0ef298338d91b3a4bac4773198be8c6600d9c6e09e4b31",
         "warmup_time": 0
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
