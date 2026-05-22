@@ -379,7 +379,6 @@ Column merge(
         internal::raise<ErrorCode::E_NOT_IMPLEMENTED>("Insertion is not implemented for string columns yet");
     }
 }
-
 } // namespace
 
 namespace arcticdb {
@@ -434,50 +433,43 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
         return {};
     }
 
-    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
-            strategy_.not_matched_by_target == MergeAction::DO_NOTHING ||
-                    !(source_ends_before_first_row_slice || source_starts_after_the_last_row_slice),
-            "Insertion is not implemented for cases when the value to be inserted does not lie within the "
-            "boundaries of a segment"
-    );
-
     std::span index(index_tensor.data(), source_->num_rows);
-    // TODO: Needed only to track if there are source rows not contained in any segment.
-    std::pair<size_t, size_t> spanned_source_row_range{0, 0};
     for (size_t row_slice_idx = 0; row_slice_idx < offsets.size(); ++row_slice_idx) {
-        // TODO: Add logic for insertion when the source index value is not contained in any segment
         const TimestampRange& time_range = ranges_and_keys[offsets[row_slice_idx].front()].key_.time_range();
         if (source_start_end_for_row_range_.contains(time_range)) {
             row_slices_to_keep.push_back(row_slice_idx);
             continue;
         }
-        const auto source_range_start = ranges::lower_bound(index, time_range.first);
+        const auto source_range_start = [&] {
+            if (strategy_.insert() && row_slice_idx == 0) {
+                // In case of inserting all data before the first segment gets prepended to it
+                return index.begin();
+            }
+            return ranges::lower_bound(index, time_range.first);
+        }();
         if (source_range_start == index.end()) {
             // All remaining row ranges start after the last index value of the source, thus not match is possible.
             break;
         }
-        if (*source_range_start < time_range.second) {
-            auto source_range_end = std::upper_bound(source_range_start, index.end(), time_range.second - 1);
-            const std::pair<size_t, size_t> source_row_range = {
-                    source_range_start - index.begin(), source_range_end - index.begin()
-            };
-            internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
-                    strategy_.not_matched_by_target == MergeAction::DO_NOTHING ||
-                            spanned_source_row_range.first <= source_row_range.second,
-                    "Insertion is not implemented for cases when the value to be inserted does not lie within the "
-                    "boundaries of any segment segment"
-            );
-            spanned_source_row_range.second = std::max(spanned_source_row_range.second, source_row_range.second);
-            source_start_end_for_row_range_.insert({time_range, source_row_range});
-            row_slices_to_keep.push_back(row_slice_idx);
-        }
+
+        const size_t source_end = [&]() -> size_t {
+            timestamp segment_end = time_range.second;
+            if (strategy_.insert()) {
+                if (row_slice_idx == offsets.size() - 1) {
+                    // All source data past the last index value in the target gets appended to the last rowslice
+                    return index.size();
+                }
+                // All source data past the current row slice but before the next segment gets appended to the current
+                // rows slice
+                segment_end = ranges_and_keys[offsets[row_slice_idx + 1].front()].key_.time_range().first;
+            }
+            return index.begin() - std::upper_bound(source_range_start, index.end(), segment_end - 1);
+        }();
+
+        const std::pair<size_t, size_t> source_row_range = {source_range_start - index.begin(), source_end};
+        source_start_end_for_row_range_.insert({time_range, source_row_range});
+        row_slices_to_keep.push_back(row_slice_idx);
     }
-    internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
-            strategy_.not_matched_by_target == MergeAction::DO_NOTHING ||
-                    spanned_source_row_range == std::pair{0, source_->num_rows},
-            "Insertion is not implemented for cases when the value to be inserted does not lie within the "
-            "boundaries of a segment"
-    );
     filter_selected_ranges_and_keys_and_reindex_entities(row_slices_to_keep, offsets, ranges_and_keys);
     return offsets;
 }

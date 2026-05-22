@@ -931,7 +931,6 @@ struct MergeUpdateClause {
     /// interval is closed in the start and open in the end: [start, end)
     ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
             source_start_end_for_row_range_;
-
     std::pair<size_t, size_t> get_source_start_end(const ProcessingUnit& proc) const;
 };
 
