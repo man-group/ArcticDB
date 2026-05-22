@@ -12,8 +12,8 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 project(arcticdb VERSION 0.0.1)
 
-include(${CMAKE_SOURCE_DIR}/CMake/compiler_cache.cmake)
-include(${CMAKE_SOURCE_DIR}/CMake/pdb_generation.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/compiler_cache.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 enable_testing()
 
