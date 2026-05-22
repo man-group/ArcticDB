@@ -9,7 +9,6 @@
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 
 #include <arcticdb/util/configs_map.hpp>
-#include <folly/gen/Base.h>
 
 #include <arcticdb/storage/mongo/mongo_client.hpp>
 #include <arcticdb/storage/mock/mongo_mock_client.hpp>
@@ -146,35 +145,31 @@ bool MongoStorage::do_fast_delete() {
 }
 
 void MongoStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
-    namespace fg = folly::gen;
-    auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)
     std::vector<VariantKey> keys_not_found;
 
-    (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach ([&](auto&& group) {
-        for (auto& k : group.values()) {
-            auto collection = collection_name(variant_key_type(k));
-            try {
-                auto result = client_->remove_keyvalue(db_, collection, k);
-                storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(
-                        result.delete_count.has_value(), "Mongo did not acknowledge deletion for key {}", k
-                );
-                util::warn(
-                        result.delete_count.value() == 1,
-                        "Expected to delete a single document with key {} deleted {} documents",
-                        k,
-                        result.delete_count.value()
-                );
-                if (result.delete_count.value() == 0 && !opts.ignores_missing_key_) {
-                    keys_not_found.push_back(k);
-                }
-            } catch (const mongocxx::operation_exception& ex) {
-                // mongo delete does not throw exception if key not found, it returns 0 as delete count
-                std::string object_name = std::string(variant_key_view(k));
-                raise_mongo_exception(ex, object_name);
+    for (auto& k : variant_keys) {
+        auto collection = collection_name(variant_key_type(k));
+        try {
+            auto result = client_->remove_keyvalue(db_, collection, k);
+            storage::check<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>(
+                    result.delete_count.has_value(), "Mongo did not acknowledge deletion for key {}", k
+            );
+            util::warn(
+                    result.delete_count.value() == 1,
+                    "Expected to delete a single document with key {} deleted {} documents",
+                    k,
+                    result.delete_count.value()
+            );
+            if (result.delete_count.value() == 0 && !opts.ignores_missing_key_) {
+                keys_not_found.push_back(k);
             }
+        } catch (const mongocxx::operation_exception& ex) {
+            // mongo delete does not throw exception if key not found, it returns 0 as delete count
+            std::string object_name = std::string(variant_key_view(k));
+            raise_mongo_exception(ex, object_name);
         }
-    });
+    }
     if (!keys_not_found.empty()) {
         throw KeyNotFoundException(std::move(keys_not_found));
     }

@@ -10,7 +10,9 @@
 
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/ref_key.hpp>
+#include <array>
 #include <variant>
+#include <vector>
 #include <ranges>
 
 namespace arcticdb::entity {
@@ -46,6 +48,22 @@ inline std::string_view variant_key_view(const VariantKey& vk) {
 
 inline KeyType variant_key_type(const VariantKey& vk) {
     return std::visit([](const auto& key) { return key.type(); }, vk);
+}
+
+template<std::ranges::range R>
+requires std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, VariantKey>
+std::vector<KeyType> key_types(R&& keys) {
+    std::array<bool, static_cast<size_t>(KeyType::UNDEFINED)> present{};
+    for (const auto& k : keys) {
+        present.at(static_cast<size_t>(variant_key_type(k))) = true;
+    }
+    std::vector<KeyType> result;
+    for (size_t i = 0; i < present.size(); ++i) {
+        if (present.at(i)) {
+            result.push_back(static_cast<KeyType>(i));
+        }
+    }
+    return result;
 }
 
 inline const StreamId& variant_key_id(const VariantKey& vk) {

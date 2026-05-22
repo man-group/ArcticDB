@@ -21,8 +21,6 @@
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
-#include <folly/gen/Base.h>
-
 #undef GetMessage
 
 namespace arcticdb::storage {
@@ -202,15 +200,12 @@ KeySegmentPair do_read_impl(
     return KeySegmentPair{};
 }
 
-namespace fg = folly::gen;
-
 template<class KeyBucketizer>
 void do_remove_impl(
         std::span<VariantKey> variant_keys, const std::string& root_folder, AzureClientWrapper& azure_client,
         KeyBucketizer&& bucketizer, unsigned int request_timeout
 ) {
     ARCTICDB_SUBSAMPLE(AzureStorageDeleteBatch, 0)
-    auto fmt_db = [](auto&& k) { return variant_key_type(k); };
 
     util::check(
             variant_keys.size() <= BATCH_SUBREQUEST_LIMIT,
@@ -220,21 +215,18 @@ void do_remove_impl(
             BATCH_SUBREQUEST_LIMIT
     );
 
-    (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db))
-            .foreach ([&root_folder, &azure_client, &request_timeout, b = std::move(bucketizer)](auto&& group) {
-                auto key_type_dir = key_type_folder(root_folder, group.key());
-                std::vector<std::string> to_delete;
-                to_delete.reserve(group.size());
-                for (auto k : folly::enumerate(group.values())) {
-                    to_delete.emplace_back(object_path(b.bucketize(key_type_dir, *k), *k));
-                }
-                try {
-                    azure_client.delete_blobs(to_delete, request_timeout);
-                } catch (const Azure::Core::RequestFailedException& e) {
-                    std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-                    raise_azure_exception(e, failed_objects);
-                }
-            });
+    std::vector<std::string> to_delete;
+    to_delete.reserve(variant_keys.size());
+    for (const auto& k : variant_keys) {
+        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        to_delete.emplace_back(object_path(bucketizer.bucketize(key_type_dir, k), k));
+    }
+    try {
+        azure_client.delete_blobs(to_delete, request_timeout);
+    } catch (const Azure::Core::RequestFailedException& e) {
+        std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+        raise_azure_exception(e, failed_objects);
+    }
 }
 
 std::string prefix_handler(

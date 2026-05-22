@@ -32,6 +32,8 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
+#include <optional>
+
 #undef GetMessage
 
 namespace arcticdb::storage {
@@ -40,7 +42,6 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-namespace fg = folly::gen;
 namespace detail {
 
 static const size_t DELETE_OBJECTS_LIMIT = 1000;
@@ -267,12 +268,12 @@ void do_read_impl(
 }
 
 struct FailedDelete {
-    VariantKey failed_key;
+    std::string failed_key_name;
     std::string error_message;
 
-    FailedDelete(VariantKey&& failed_key, std::string&& error_message) :
-        failed_key(failed_key),
-        error_message(error_message) {}
+    FailedDelete(std::string failed_key_name, std::string error_message) :
+        failed_key_name(std::move(failed_key_name)),
+        error_message(std::move(error_message)) {}
 };
 
 inline void raise_if_failed_deletes(const boost::container::small_vector<FailedDelete, 1>& failed_deletes) {
@@ -281,7 +282,7 @@ inline void raise_if_failed_deletes(const boost::container::small_vector<FailedD
         for (auto i = 0u; i < failed_deletes.size(); ++i) {
             auto& failed = failed_deletes[i];
             failed_deletes_message << fmt::format(
-                    "'{}' failed with '{}'", to_serialized_key(failed.failed_key), failed.error_message
+                    "'{}' failed with '{}'", failed.failed_key_name, failed.error_message
             );
             if (i != failed_deletes.size()) {
                 failed_deletes_message << ", ";
@@ -298,7 +299,6 @@ void do_remove_impl(
         S3ClientInterface& s3_client, KeyBucketizer&& bucketizer
 ) {
     ARCTICDB_SUBSAMPLE(S3StorageDeleteBatch, 0)
-    auto fmt_db = [](auto&& k) { return variant_key_type(k); };
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
 
     util::check(
@@ -309,42 +309,33 @@ void do_remove_impl(
             DELETE_OBJECTS_LIMIT
     );
 
-    (fg::from(ks) | fg::move | fg::groupBy(fmt_db))
-            .foreach ([&s3_client,
-                       &root_folder,
-                       &bucket_name,
-                       b = std::forward<KeyBucketizer>(bucketizer),
-                       &failed_deletes](auto&& group) {
-                auto key_type_dir = key_type_folder(root_folder, group.key());
-                std::vector<std::string> to_delete;
-                to_delete.reserve(group.size());
-                for (auto k : folly::enumerate(group.values())) {
-                    to_delete.emplace_back(object_path(b.bucketize(key_type_dir, *k), *k));
-                }
-                auto query_stat_operation_time =
-                        query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, group.key());
-                auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
-                if (delete_object_result.is_success()) {
-                    ARCTICDB_RUNTIME_DEBUG(
-                            log::storage(), "Deleted {} objects of type {}", to_delete.size(), group.key()
-                    );
-                    for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
-                        auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(), std::string::npos);
-                        failed_deletes.emplace_back(
-                                variant_key_from_bytes(
-                                        reinterpret_cast<const uint8_t*>(bad_key_name.data()),
-                                        bad_key_name.size(),
-                                        group.key()
-                                ),
-                                std::move(bad_key.error_message)
-                        );
-                    }
-                } else {
-                    auto& error = delete_object_result.get_error();
-                    std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-                    raise_s3_exception(error, failed_objects);
-                }
-            });
+    std::vector<std::string> to_delete;
+    to_delete.reserve(ks.size());
+    for (const auto& k : ks) {
+        auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
+        to_delete.emplace_back(object_path(bucketizer.bucketize(key_type_dir, k), k));
+    }
+
+    std::vector<std::optional<query_stats::RAIIAddTime>> stat_timers;
+    if (query_stats::QueryStats::instance()->is_enabled()) {
+        auto distinct_key_types = key_types(ks);
+        stat_timers.reserve(distinct_key_types.size());
+        for (auto kt : distinct_key_types) {
+            stat_timers.emplace_back(query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, kt));
+        }
+    }
+
+    auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
+    if (delete_object_result.is_success()) {
+        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects", to_delete.size());
+        for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
+            failed_deletes.emplace_back(std::move(bad_key.s3_object_name), std::move(bad_key.error_message));
+        }
+    } else {
+        auto& error = delete_object_result.get_error();
+        std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+        raise_s3_exception(error, failed_objects);
+    }
 
     raise_if_failed_deletes(failed_deletes);
 }
@@ -385,16 +376,7 @@ void do_remove_no_batching_impl(
         } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
             auto key_type_dir = key_type_folder(root_folder, variant_key_type(k));
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
-            auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
-            auto error_message = error.GetMessage();
-            failed_deletes.push_back(FailedDelete{
-                    variant_key_from_bytes(
-                            reinterpret_cast<const uint8_t*>(bad_key_name.data()),
-                            bad_key_name.size(),
-                            variant_key_type(k)
-                    ),
-                    std::move(error_message)
-            });
+            failed_deletes.emplace_back(std::move(s3_object_name), error.GetMessage());
         } else {
             ARCTICDB_RUNTIME_DEBUG(
                     log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k)
