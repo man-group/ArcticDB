@@ -17,6 +17,7 @@
 #include <pipeline/frame_slice.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <folly/futures/FutureSplitter.h>
+#include <folly/executors/InlineExecutor.h>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -768,26 +769,50 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
 ) {
     // TODO 11961775873: remove this kill switch
     static const bool process_on_cpu_executor = ConfigsMap::instance()->get_int("Storage.ProcessOnCpuExecutor", 1) == 1;
+    log::version().info(
+            "Storage.ProcessOnCpuExecutor={}: scheduling first iteration on {} executor",
+            process_on_cpu_executor ? 1 : 0,
+            process_on_cpu_executor ? "CPU" : "IO");
     auto* processing_executor = process_on_cpu_executor ? dynamic_cast<folly::Executor*>(&async::cpu_executor())
-                                                        : dynamic_cast<folly::Executor*>(&async::io_executor());
+                                                        : dynamic_cast<folly::Executor*>(&folly::InlineExecutor::instance());
     // Used to make sure each entity is only added into the component manager once
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
 
+    // ===== DEBUG: count how many read futures are already fulfilled at entry =====
+    {
+        size_t ready_at_entry = 0;
+        for (const auto& fos : segment_and_slice_future_splitters) {
+            if (std::holds_alternative<folly::Future<pipelines::SegmentAndSlice>>(fos)) {
+                if (std::get<folly::Future<pipelines::SegmentAndSlice>>(fos).isReady()) ready_at_entry++;
+            }
+        }
+        log::version().info(
+                "schedule_first_iteration ENTRY: {}/{} read futures already fulfilled",
+                ready_at_entry,
+                segment_and_slice_future_splitters.size());
+    }
+    auto lambda_run_count = std::make_shared<std::atomic<size_t>>(0);
+    const size_t total_work_units = entities_by_work_unit.size();
+
+    size_t work_unit_idx = 0;
     for (auto& entity_ids : entities_by_work_unit) {
         std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
         local_futs.reserve(entity_ids.size());
+        bool all_ready = true;
         for (auto id : entity_ids) {
             const auto pos = id_to_pos->at(id);
             auto& future_or_splitter = segment_and_slice_future_splitters[pos];
             // Some of the entities for this unit of work may be shared with other units of work
             util::variant_match(
                     future_or_splitter,
-                    [&local_futs](folly::Future<pipelines::SegmentAndSlice>& fut) {
+                    [&local_futs, &all_ready](folly::Future<pipelines::SegmentAndSlice>& fut) {
+                        if (!fut.isReady()) all_ready = false;
                         local_futs.emplace_back(std::move(fut));
                     },
-                    [&local_futs](folly::FutureSplitter<pipelines::SegmentAndSlice>& splitter) {
+                    [&local_futs, &all_ready](folly::FutureSplitter<pipelines::SegmentAndSlice>& splitter) {
+                        all_ready = false;
                         local_futs.emplace_back(splitter.getFuture());
                     }
             );
@@ -803,9 +828,17 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                                         slice_added_mtx,
                                                         slice_added,
                                                         clauses,
+                                                        lambda_run_count,
+                                                        work_unit_idx,
                                                         entity_ids = std::move(entity_ids
                                                         )](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices
                                                        ) mutable {
+                                          auto n = lambda_run_count->fetch_add(1) + 1;
+                                          log::version().info(
+                                                  "schedule_first_iteration LAMBDA unit={} run_count={} tid={}",
+                                                  work_unit_idx,
+                                                  n,
+                                                  static_cast<unsigned long>(pthread_self()));
                                           for (auto&& [idx, segment_and_slice] : folly::enumerate(segment_and_slices)) {
                                               auto entity_id = entity_ids[idx];
                                               auto pos = id_to_pos->at(entity_id);
@@ -823,7 +856,17 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
                                           }
                                           return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
                                       }));
+        log::version().info(
+                "schedule_first_iteration ATTACH unit={} all_ready_before_attach={} lambdas_run_so_far={}",
+                work_unit_idx,
+                all_ready,
+                lambda_run_count->load());
+        work_unit_idx++;
     }
+    log::version().info(
+            "schedule_first_iteration EXIT: {}/{} lambdas fired during attach loop",
+            lambda_run_count->load(),
+            total_work_units);
     return futures;
 }
 

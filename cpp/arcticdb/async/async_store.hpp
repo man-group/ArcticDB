@@ -15,6 +15,8 @@
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
+#include <arcticdb/log/log.hpp>
+#include <pthread.h>
 
 namespace arcticdb::toolbox::apy {
 class LibraryTool;
@@ -439,11 +441,17 @@ class AsyncStore : public Store {
                     [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {
                         const auto key = ranges_and_key.key_;
                         return read_and_continue(
-                                key,
-                                library_,
-                                storage::ReadKeyOpts{},
-                                DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
-                        );
+                                       key,
+                                       library_,
+                                       storage::ReadKeyOpts{},
+                                       DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
+                        )
+                                .thenValueInline([](pipelines::SegmentAndSlice&& s) {
+                                    log::version().info(
+                                            "READ_DONE tid={}", static_cast<unsigned long>(pthread_self())
+                                    );
+                                    return std::move(s);
+                                });
                     },
                     2 * async::TaskScheduler::instance()->io_thread_count()
             );
