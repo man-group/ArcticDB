@@ -126,6 +126,9 @@ class ExpressionNode:
     def __truediv__(self, right):
         return self._apply(right, _OperationType.DIV)
 
+    def __pow__(self, right):
+        return self._apply(right, _OperationType.POW)
+
     def __eq__(self, right):
         if is_supported_sequence(right):
             return self.isin(right)
@@ -185,6 +188,9 @@ class ExpressionNode:
 
     def __rtruediv__(self, left):
         return self._rapply(left, _OperationType.DIV)
+
+    def __rpow__(self, left):
+        return self._rapply(left, _OperationType.POW)
 
     def __rand__(self, left):
         if left is True:
@@ -437,6 +443,15 @@ class QueryBuilder:
 
     * Binary arithmetic: +, -, *, /
     * Unary arithmetic: -, abs
+    * Power: ** (base may be integer or float; exponent must be an integer type, not float)
+
+      Result type of ** depends on operand types:
+
+      - unsigned integer ^ unsigned integer -> uint64
+      - signed integer ^ unsigned integer   -> int64
+      - any integer ^ signed integer        -> float64 (negative exponents may produce fractional results)
+      - float ^ integer                     -> float64
+      - any data type ^ float               -> not supported!
 
     Supported filtering operations:
 
@@ -496,6 +511,7 @@ class QueryBuilder:
     Query involves comparing strings using <, <=, >, or >= operators
     Query involves comparing a string to one or more numeric values, or vice versa
     Query involves arithmetic with a column containing strings
+    Exponent in ** is a floating point value
     """
 
     def __init__(self):
@@ -1230,7 +1246,14 @@ def create_value(value):
     if isinstance(value, np.floating):
         f = CONSTRUCTOR_MAP.get(value.dtype.kind).get(value.dtype.itemsize)
     elif isinstance(value, np.integer):
-        min_scalar_type = np.min_scalar_type(value)
+        if np.issubdtype(value.dtype, np.signedinteger) and value > 0:
+            min_scalar_type = np.min_scalar_type(-value)
+            if np.iinfo(min_scalar_type).max < value:
+                # -value fits in min_scalar_type but +value exceeds its upper bound
+                # (e.g. int16(128): min_scalar_type(-128)=int8 but int8.max=127 < 128)
+                min_scalar_type = np.dtype(f"i{min_scalar_type.itemsize * 2}")
+        else:
+            min_scalar_type = np.min_scalar_type(value)
         f = CONSTRUCTOR_MAP.get(min_scalar_type.kind).get(min_scalar_type.itemsize)
     elif isinstance(value, supported_time_types):
         value = nanoseconds_from_utc(value)

@@ -172,6 +172,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
         case OperationType::SUB:
         case OperationType::MUL:
         case OperationType::DIV:
+        case OperationType::POW:
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     std::holds_alternative<DataType>(left_type),
                     "Unexpected bitset input as left operand to {}",
@@ -226,6 +227,22 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                             res = data_type_from_raw_type<TargetType>();
                             break;
                         }
+                        case OperationType::POW: {
+                            if constexpr (!is_integer_type(right_type_info::data_type)) {
+                                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                        "POW operator does not support floating point exponents, got {}",
+                                        right_type_info::data_type
+                                );
+                            }
+
+                            using TargetType = typename binary_operation_promoted_type<
+                                    typename left_type_info::RawType,
+                                    typename right_type_info::RawType,
+                                    std::remove_reference_t<PowOperator>>::type;
+                            res = data_type_from_raw_type<TargetType>();
+                            break;
+                        }
+
                         default:
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected binary operator");
                         }

@@ -31,6 +31,8 @@ class column_strategy:
     name: str
     dtype_strategy: Any = None
     restrict_range: bool = False
+    min_value: Any = None
+    max_value: Any = None
 
 
 def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
@@ -107,6 +109,18 @@ def supported_numeric_dtypes(draw):
 
 
 @st.composite
+def signed_only_integer_dtypes(draw):
+    return draw(integer_dtypes(endianness=ENDIANNESS))
+
+
+@st.composite
+def small_nonneg_integer_type_strategies(draw):
+    """Generates numpy signed integer scalars in [0, 49]. Safe as pow exponents (output is always double)."""
+    dtype = draw(integer_dtypes(endianness=ENDIANNESS))
+    return draw(from_dtype(dtype, allow_nan=False, allow_infinity=False, min_value=0, max_value=49))
+
+
+@st.composite
 def supported_string_dtypes(draw):
     return draw(st.just("object"))
 
@@ -124,7 +138,11 @@ def dataframe_strategy(draw, column_strategies, min_size=0):
         if dtype == "object":
             elements = string_strategy
         else:
-            min_value, max_value = restricted_numeric_range(dtype) if column_strat.restrict_range else (None, None)
+            computed_min, computed_max = (
+                restricted_numeric_range(dtype) if column_strat.restrict_range else (None, None)
+            )
+            min_value = column_strat.min_value if column_strat.min_value is not None else computed_min
+            max_value = column_strat.max_value if column_strat.max_value is not None else computed_max
             elements = from_dtype(
                 dtype,
                 allow_nan=False,
