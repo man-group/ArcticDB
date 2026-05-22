@@ -16,8 +16,12 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/version/snapshot.hpp>
+#include <arcticdb/version/version_core.hpp>
+#include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/util/key_utils.hpp>
 
 #include <chrono>
 #include <thread>
@@ -1144,4 +1148,163 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     }
     auto staged_keys_final = get_staged_keys();
     ASSERT_EQ(staged_keys_final.size(), 0);
+}
+
+namespace {
+struct DeleteTreesStatsFixture {
+    arcticdb::version_store::PythonVersionStore pvs;
+    std::shared_ptr<arcticdb::Store> store;
+    std::shared_ptr<arcticdb::VersionMap> version_map;
+    arcticdb::StreamId sym;
+    arcticdb::entity::AtomKey k0;
+    arcticdb::entity::AtomKey k1;
+    arcticdb::entity::AtomKey k2;
+};
+
+DeleteTreesStatsFixture make_three_version_fixture(const std::string& library_name) {
+    auto pvs = arcticdb::get_test_engine<arcticdb::version_store::PythonVersionStore>({}, library_name);
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+    arcticdb::StreamId sym{library_name + "_sym"};
+    auto k0 = write_version_frame(sym, 0, pvs, 5);
+    auto k1 = write_version_frame(sym, 1, pvs, 5);
+    auto k2 = write_version_frame(sym, 2, pvs, 5);
+    return {std::move(pvs),
+            std::move(store),
+            std::move(version_map),
+            std::move(sym),
+            std::move(k0),
+            std::move(k1),
+            std::move(k2)};
+}
+} // namespace
+
+TEST(DeleteTreesResponsiblyStats, CountsConsideredAndDeleted) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_basic");
+
+    version_store::PreDeleteChecks checks{false, false, false, false, {}};
+    MasterSnapshotMap empty_snap_map;
+    auto stats =
+            version_store::delete_trees_responsibly(
+                    f.store, f.version_map, {f.k0, f.k1, f.k2}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+            )
+                    .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 3u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 3u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_considered, 3u);
+}
+
+TEST(DeleteTreesResponsiblyStats, CountsKeysProtectedBySnapshots) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_snap");
+
+    MasterSnapshotMap snap_map;
+    snap_map[f.sym][f.k1].insert(SnapshotId{"snap1"});
+
+    version_store::PreDeleteChecks checks{true, false, false, false, {}};
+    auto stats = version_store::delete_trees_responsibly(
+                         f.store, f.version_map, {f.k0, f.k1, f.k2}, snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 3u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 1u);
+    EXPECT_EQ(stats.index_keys_deleted, 2u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 2u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 2u);
+}
+
+TEST(DeleteTreesResponsiblyStats, DryRunReportsCountsButDoesNotDelete) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_dry");
+
+    version_store::PreDeleteChecks checks{false, false, false, false, {}};
+    MasterSnapshotMap empty_snap_map;
+    auto stats =
+            version_store::delete_trees_responsibly(
+                    f.store, f.version_map, {f.k0, f.k1, f.k2}, empty_snap_map, std::nullopt, checks, /*dry_run=*/true
+            )
+                    .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 3u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 3u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_considered, 3u);
+    EXPECT_EQ(stats.data_keys_deleted, 3u);
+
+    EXPECT_TRUE(f.store->key_exists(f.k0).get());
+    EXPECT_TRUE(f.store->key_exists(f.k1).get());
+    EXPECT_TRUE(f.store->key_exists(f.k2).get());
+}
+
+TEST(DeleteTreesResponsiblyStats, IndexKeyWithMultipleDataKeys) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto pvs = get_test_engine<version_store::PythonVersionStore>({}, "dtr_stats_multi_data");
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+
+    StreamId sym{"dtr_multi_data_sym"};
+    auto wrapper = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    SlicingPolicy slicing = FixedSlicer{/*col_per_slice=*/127, /*row_per_slice=*/2};
+    auto index_key =
+            write_frame(IndexPartialKey{sym, 0}, wrapper.frame_, slicing, store, std::make_shared<DeDupMap>()).get();
+
+    version_store::PreDeleteChecks checks{false, false, false, false, {}};
+    MasterSnapshotMap empty_snap_map;
+    auto stats = version_store::delete_trees_responsibly(
+                         store, version_map, {index_key}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 1u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 1u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 2u);
+}
+
+TEST(DeleteTreesResponsiblyStats, DataKeysConsideredCountsBeforeExclusion) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto pvs = get_test_engine<version_store::PythonVersionStore>({}, "store");
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+
+    StreamId sym{"sym"};
+    SlicingPolicy slicing = FixedSlicer{/*col_per_slice=*/127, /*row_per_slice=*/2};
+
+    auto wrapper0 = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    auto k0 = write_frame(IndexPartialKey{sym, 0}, wrapper0.frame_, slicing, store, std::make_shared<DeDupMap>()).get();
+
+    auto de_dup_map = std::make_shared<DeDupMap>();
+    for (const auto& data_key : get_data_keys(store, k0, storage::ReadKeyOpts{})) {
+        de_dup_map->insert_key(data_key);
+    }
+    auto wrapper1 = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    auto k1 = write_frame(IndexPartialKey{sym, 1}, wrapper1.frame_, slicing, store, de_dup_map).get();
+
+    version_store::PreDeleteChecks checks{
+            /*snapshots=*/false, /*version_visible=*/false, /*prev_version=*/false, /*next_version=*/false, {k1}
+    };
+    MasterSnapshotMap empty_snap_map;
+    auto stats = version_store::delete_trees_responsibly(
+                         store, version_map, {k0}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 1u);
+    EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 0u);
 }

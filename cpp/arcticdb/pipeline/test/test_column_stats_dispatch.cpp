@@ -547,234 +547,75 @@ INSTANTIATE_TEST_SUITE_P(
         )
 );
 
-// NaT is not treated specially by column stats - it compares as its raw int64 value (int64_min).
-class StatsComparatorNaTTest
-    : public ::testing::TestWithParam<std::tuple<Value, Value, OperationType, StatsComparison>> {};
+enum class ComparisonValueType { NA, REAL };
 
-TEST_P(StatsComparatorNaTTest, NaTTreatedAsNormalValue) {
-    auto [max_val, query_val, op, expected] = GetParam();
+const Value nat_value = Value(NaT, DataType::NANOSECONDS_UTC64);
 
-    Value min_val = Value(NaT, DataType::NANOSECONDS_UTC64);
-    std::vector<ColumnStatsValues> stats{{min_val, max_val}};
-    auto query = std::make_shared<Value>(query_val);
-    auto result = std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, query, op));
+class StatsComparatorBothNaTTest : public ::testing::TestWithParam<std::tuple<OperationType, ComparisonValueType>> {};
+
+TEST_P(StatsComparatorBothNaTTest, BothNaT) {
+    auto [op, value_type] = GetParam();
+    std::vector<ColumnStatsValues> stats{{nat_value, nat_value}};
+
+    Value query;
+    if (value_type == ComparisonValueType::NA) {
+        query = nat_value;
+    } else {
+        query = Value(timestamp{5}, DataType::NANOSECONDS_UTC64);
+    }
+    auto result =
+            std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, std::make_shared<Value>(query), op));
     ASSERT_EQ(result.size(), 1);
+
+    StatsComparison expected;
+    if (op == OperationType::NE) {
+        expected = StatsComparison::ALL_MATCH;
+    } else {
+        expected = StatsComparison::NONE_MATCH;
+    }
     ASSERT_EQ(result.at(0), expected);
 }
 
-// range=[NaT, NaT], i.e. [int64_min, int64_min] - a single-value range
 INSTANTIATE_TEST_SUITE_P(
-        NaTRange, StatsComparatorNaTTest,
-        ::testing::Values(
-                // query=NaT: all values equal query
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::LT, StatsComparison::NONE_MATCH
+        AllComparisonOps, StatsComparatorBothNaTTest,
+        ::testing::Combine(
+                ::testing::Values(
+                        OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                        OperationType::NE
                 ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::LE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::GT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::GE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::EQ, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::NE, StatsComparison::NONE_MATCH
-                ),
-                // query>NaT: all values in range are less than query
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
-                        OperationType::LT, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
-                        OperationType::LE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
-                        OperationType::GT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
-                        OperationType::GE, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
-                        OperationType::EQ, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{0}, DataType::NANOSECONDS_UTC64),
-                        OperationType::NE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        OperationType::LT, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        OperationType::LE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        OperationType::GT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        OperationType::GE, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        OperationType::EQ, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        OperationType::NE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{2}, DataType::NANOSECONDS_UTC64),
-                        OperationType::LT, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{2}, DataType::NANOSECONDS_UTC64),
-                        OperationType::LE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{2}, DataType::NANOSECONDS_UTC64),
-                        OperationType::GT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{2}, DataType::NANOSECONDS_UTC64),
-                        OperationType::GE, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{2}, DataType::NANOSECONDS_UTC64),
-                        OperationType::EQ, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(NaT, DataType::NANOSECONDS_UTC64), Value(timestamp{2}, DataType::NANOSECONDS_UTC64),
-                        OperationType::NE, StatsComparison::ALL_MATCH
-                )
+                ::testing::Values(ComparisonValueType::NA, ComparisonValueType::REAL)
         )
 );
 
-// range=[NaT, 1], i.e. [int64_min, 1]
+class StatsComparatorNaTValueTest : public ::testing::TestWithParam<std::tuple<OperationType>> {};
+
+TEST_P(StatsComparatorNaTValueTest, NaTInQuery) {
+    auto [op] = GetParam();
+    Value min_val = Value(timestamp{1}, DataType::NANOSECONDS_UTC64);
+    Value max_val = Value(timestamp{5}, DataType::NANOSECONDS_UTC64);
+    std::vector<ColumnStatsValues> stats{{std::move(min_val), std::move(max_val)}};
+
+    auto result =
+            std::get<std::vector<StatsComparison>>(dispatch_binary_stats(stats, std::make_shared<Value>(nat_value), op)
+            );
+    ASSERT_EQ(result.size(), 1);
+
+    StatsComparison expected;
+    if (op == OperationType::NE) {
+        expected = StatsComparison::ALL_MATCH;
+    } else {
+        expected = StatsComparison::NONE_MATCH;
+    }
+    ASSERT_EQ(result.at(0), expected);
+}
+
 INSTANTIATE_TEST_SUITE_P(
-        NaTMinNormalMax, StatsComparatorNaTTest,
+        AllComparisonOps, StatsComparatorNaTValueTest,
         ::testing::Values(
-                // query=NaT (int64_min): inside range at lower bound
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::LT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::LE, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::GT, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::GE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::EQ, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), Value(NaT, DataType::NANOSECONDS_UTC64),
-                        OperationType::NE, StatsComparison::UNKNOWN
-                ),
-                // query=0: inside range
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{0}, DataType::NANOSECONDS_UTC64), OperationType::LT, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{0}, DataType::NANOSECONDS_UTC64), OperationType::LE, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{0}, DataType::NANOSECONDS_UTC64), OperationType::GT, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{0}, DataType::NANOSECONDS_UTC64), OperationType::GE, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{0}, DataType::NANOSECONDS_UTC64), OperationType::EQ, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{0}, DataType::NANOSECONDS_UTC64), OperationType::NE, StatsComparison::UNKNOWN
-                ),
-                // query=1: at upper bound
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), OperationType::LT, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), OperationType::LE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), OperationType::GT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), OperationType::GE, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), OperationType::EQ, StatsComparison::UNKNOWN
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64), OperationType::NE, StatsComparison::UNKNOWN
-                ),
-                // query=2: above range
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64), OperationType::LT, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64), OperationType::LE, StatsComparison::ALL_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64), OperationType::GT, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64), OperationType::GE, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64), OperationType::EQ, StatsComparison::NONE_MATCH
-                ),
-                std::make_tuple(
-                        Value(timestamp{1}, DataType::NANOSECONDS_UTC64),
-                        Value(timestamp{2}, DataType::NANOSECONDS_UTC64), OperationType::NE, StatsComparison::ALL_MATCH
-                )
+                OperationType::LT, OperationType::LE, OperationType::GT, OperationType::GE, OperationType::EQ,
+                OperationType::NE
         )
 );
-
-enum class ComparisonValueType { NA, REAL };
 
 class StatsComparatorBothNaNTest : public ::testing::TestWithParam<std::tuple<OperationType, ComparisonValueType>> {};
 

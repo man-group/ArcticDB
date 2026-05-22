@@ -659,7 +659,15 @@ def test_sum_aggregation_type(
 
 
 @pytest.mark.parametrize("extremum", ["min", "max"])
-@pytest.mark.parametrize("dtype, default_value", [(np.int32, 0), (np.float32, np.nan), (bool, False)])
+@pytest.mark.parametrize(
+    "dtype, default_value",
+    [
+        (np.int32, 0),
+        (np.float32, np.nan),
+        (bool, False),
+        ("datetime64[ns]", np.datetime64("NaT")),
+    ],
+)
 def test_extremum_aggregation_with_missing_aggregation_column(
     lmdb_version_store_dynamic_schema_v1, extremum, dtype, default_value, any_output_format
 ):
@@ -686,7 +694,7 @@ def test_extremum_aggregation_with_missing_aggregation_column(
     assert_frame_equal(data, expected)
 
 
-def test_mean_timestamp_aggregation_with_missing_aggregation_column(
+def test_timestamp_aggregations_with_missing_aggregation_column(
     lmdb_version_store_dynamic_schema_v1, any_output_format
 ):
     lib = lmdb_version_store_dynamic_schema_v1
@@ -697,11 +705,19 @@ def test_mean_timestamp_aggregation_with_missing_aggregation_column(
     df3 = pd.DataFrame({"agg": [pd.Timestamp(2), pd.Timestamp(5)], "grouping": [0, 1]})
     for df in [df1, df2, df3]:
         lib.append(sym, df)
-    q = QueryBuilder()
-    q = q.groupby("grouping").agg({"agg": "mean"})
-    data = lib.read("sym", query_builder=q).data
-    data.sort_index(inplace=True)
-    expected = pd.DataFrame({"agg": [pd.Timestamp(1), pd.Timestamp(5), pd.NaT]}, index=[0, 1, 2])
-    expected.index.name = "grouping"
-    expected.sort_index(inplace=True)
-    assert_frame_equal(data, expected)
+
+    agg_dict = {
+        "agg_mean": ("agg", "mean"),
+        "agg_min": ("agg", "min"),
+        "agg_max": ("agg", "max"),
+        "agg_count": ("agg", "count"),
+    }
+    q = QueryBuilder().groupby("grouping").agg(agg_dict)
+    received = lib.read(sym, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns)).sort_index()
+
+    full_df = lib.read(sym).data
+    expected = full_df.groupby("grouping").agg(**{k: pd.NamedAgg(*v) for k, v in agg_dict.items()})
+    expected = expected.reindex(columns=sorted(expected.columns)).sort_index()
+
+    assert_frame_equal(received, expected, check_dtype=False)

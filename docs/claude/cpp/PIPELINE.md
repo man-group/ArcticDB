@@ -151,6 +151,8 @@ The filter expression AST is walked by `compute_stats()` / `evaluate_ast_node_ag
 
 If all filter clauses AND together to `NONE_MATCH` for a row-slice, that slice is excluded from the read via `create_column_stats_filter()`, which returns a `FilterQuery` lambda passed to `filter_index()`.
 
+Time-column stats follow Pandas NaT semantics. The MinMax aggregator skips NaT values and only writes `(NaT, NaT)` for a slice when every row is NaT, so a stats min of NaT in a time column is read as "this slice is entirely NaT". `stats_comparator` (both the `(stats, value)` and `(stats, stats)` overloads) and `stats_membership_comparator` short-circuit on that signal: `ALL_MATCH` for `!=` and `NONE_MATCH` for every other operator. See [PROCESSING.md - Column-to-Column Comparisons](PROCESSING.md#column-to-column-comparisons) for details.
+
 ### Integration with Read Path
 
 In `version_core.cpp`, `fetch_index_and_column_stats()` issues parallel async reads for the index key and the column stats key. The result is bundled into `IndexInformation` (index segment + optional stats segment). `read_indexed_keys_to_pipeline()` then calls `create_column_stats_filter()` if stats are present, adding the filter to the index query list before `filter_index()`.

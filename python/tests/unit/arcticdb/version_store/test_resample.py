@@ -968,7 +968,7 @@ class TestResampleDynamicSchema:
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
-    @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
+    @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16, "datetime64[ns]"])
     def test_aggregation_column_not_in_segment(
         self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype, any_output_format
     ):
@@ -976,6 +976,7 @@ class TestResampleDynamicSchema:
         lib = lmdb_version_store_dynamic_schema_v1
         lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "sym"
+        is_datetime = np.issubdtype(np.dtype(dtype), np.datetime64)
         df1 = pd.DataFrame(
             {"aggregated": np.array([1, 2, 3], dtype), "_empty_bucket_tracker_": [0] * 3},
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(30)]),
@@ -991,16 +992,19 @@ class TestResampleDynamicSchema:
         df_list = [df1, df2, df3]
         for df in df_list:
             lib.append(sym, df)
-        agg = {f"{name}_{op}": (name, op) for name in ["aggregated"] for op in ALL_AGGREGATIONS}
+        # sum is not a valid aggregation for datetime columns
+        ops = [op for op in ALL_AGGREGATIONS if not (is_datetime and op == "sum")]
+        agg = {f"aggregated_{op}": ("aggregated", op) for op in ops}
         expected_types = {
             "aggregated_min": dtype,
             "aggregated_max": dtype,
-            "aggregated_sum": largest_numeric_type(dtype),
-            "aggregated_mean": np.float64,
+            "aggregated_mean": dtype if is_datetime else np.float64,
             "aggregated_first": dtype,
             "aggregated_last": dtype,
             "aggregated_count": np.uint64,
         }
+        if not is_datetime:
+            expected_types["aggregated_sum"] = largest_numeric_type(dtype)
         generic_resample_test(
             lib,
             sym,

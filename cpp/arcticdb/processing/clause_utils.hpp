@@ -26,7 +26,14 @@ namespace arcticdb {
 using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
 
-enum class ProcessingStructure { ROW_SLICE, TIME_BUCKETED, HASH_BUCKETED, ALL, MULTI_SYMBOL };
+enum class ProcessingStructure {
+    ROW_SLICE,
+    TIME_BUCKETED,
+    HASH_BUCKETED,
+    ALL,
+    MULTI_SYMBOL,
+    ONE_COL_SLICE_MULTIPLE_ROW_SLICES
+};
 
 struct KeepCurrentIndex {};
 struct KeepCurrentTopLevelIndex {};

@@ -10,6 +10,7 @@
 
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -445,10 +446,8 @@ ColumnTruncation get_truncate_range_from_rows(
 ColumnTruncation get_truncate_range_from_index(
         const Column& column, const RowRange& slice_range, const TimestampRange& timestamp_range
 ) {
-    auto start_row =
-            column.search_sorted<timestamp>(timestamp_range.first, false, slice_range.start(), slice_range.end());
-    auto end_row =
-            column.search_sorted<timestamp>(timestamp_range.second, true, slice_range.start(), slice_range.end());
+    auto start_row = lower_bound_idx<timestamp>(column, timestamp_range.first, slice_range.start(), slice_range.end());
+    auto end_row = upper_bound_idx<timestamp>(column, timestamp_range.second, slice_range.start(), slice_range.end());
     util::check(
             start_row < slice_range.end() && end_row > slice_range.start(),
             "date range filter unexpectedly got a slice with no intersection with requested date range. "

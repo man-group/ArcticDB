@@ -528,6 +528,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_binary_operator_pow.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
@@ -600,6 +601,8 @@ set(arcticdb_srcs
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
+strip_fd_from_compile_object()
+set_pdb_name_per_translation_unit(${arcticdb_srcs})
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -914,10 +917,13 @@ set(arcticdb_python_srcs
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
         util/python_bindings.cpp
-        python/reader.hpp
-        python/adapt_read_dataframe.hpp)
-
-add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
+)
+set(arcticdb_python_headers
+    python/reader.hpp
+    python/adapt_read_dataframe.hpp
+)
+set_pdb_name_per_translation_unit(${arcticdb_python_srcs})
+add_library(arcticdb_python STATIC ${arcticdb_python_srcs} ${arcticdb_python_headers})
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_python")
     target_precompile_headers(
@@ -955,12 +961,13 @@ endif ()
 
 ## arcticdb_ext python module
 # This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
-pybind11_add_module(arcticdb_ext MODULE
+set(arcticdb_pybind_module_src
         python/python_module.cpp
         python/arctic_version.cpp
-        python/arctic_version.hpp
-        )
-
+)
+set(arcticdb_pybind_module_headers python/arctic_version.hpp)
+pybind11_add_module(arcticdb_ext MODULE ${arcticdb_pybind_module_src} ${arcticdb_pybind_module_headers})
+set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
 
 if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -1133,7 +1140,8 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-)
+    )
+    set_pdb_name_per_translation_unit(${unit_test_srcs})
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1229,13 +1237,16 @@ if(${TEST})
             arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
+            column_store/test/benchmark_column_reslicer.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
             processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
             util/test/benchmark_bitset.cpp
-            version/test/benchmark_write.cpp)
+            version/test/benchmark_write.cpp
+    )
+    set_pdb_name_per_translation_unit(${benchmark_srcs})
 
     add_executable(benchmarks ${benchmark_srcs})
 
@@ -1270,7 +1281,7 @@ if(${TEST})
             util/test/rapidcheck_lru_cache.cpp
             version/test/rapidcheck_version_map.cpp
     )
-
+    set_pdb_name_per_translation_unit(${rapidcheck_srcs})
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME

@@ -135,7 +135,7 @@ Append and Update are efficient because they always add new chunks of data rathe
 
 This means that lots of small appends or updates can result in lots of small data chunks, which makes reads slower.
 
-You can defragment a symbol manually using the [defragment_symbol_data](../api/library.md) library function. Altnernatively the [Enterprise Features](#enterprise-features) offer background processes that will take care of defragmentation for you.
+You can defragment a symbol manually using the [compact_data](../api/library.md) library method.
 
 
 ## Examples Based on Market Data

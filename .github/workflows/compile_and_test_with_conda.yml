@@ -16,7 +16,6 @@ on:
       hypothesis_profile:        {required: false, type: string,  default: '',    description: Hypothesis profile e.g. ci_linux or ci_macos}
 
       persistent_storage:        {required: false, type: string,  default: 'no',  description: Persistent storage type}
-      debug_enabled:             {required: false, type: boolean, default: false, description: Enable tmate debug session}
       run_enable_logging:        {required: false, type: boolean, default: false, description: Enable ArcticDB debug logging}
       run_commandline:           {required: false, type: string,  default: '',    description: Custom commandline to run before tests}
       run_custom_pytest_command: {required: false, type: string,  default: '',    description: Custom pytest command or additional arguments}
@@ -59,6 +58,7 @@ jobs:
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
 
       - name: Setup MSVC
         if: runner.os == 'Windows'
@@ -151,6 +151,7 @@ jobs:
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
 
       - name: Configure C++ Tests
         run: |
@@ -238,6 +239,7 @@ jobs:
           cache-environment: true
           cache-environment-key: conda-env-${{inputs.platform}}
           post-cleanup: 'none'
+          micromamba-version: '2.1.0-0'
 
       - name: Install ArcticDB from artifacts
         run: |
@@ -293,10 +295,6 @@ jobs:
       - name: Set ArcticDB Debug Logging
         if: inputs.run_enable_logging
         uses: ./.github/actions/enable_logging
-
-      - name: Setup tmate session
-        if: inputs.debug_enabled
-        uses: mxschmitt/action-tmate@v3
 
       - name: Install pytest-repeat
         run: python -m pip --retries 3 --timeout 180 install pytest-repeat

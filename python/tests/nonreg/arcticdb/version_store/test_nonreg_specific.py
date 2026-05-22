@@ -324,7 +324,7 @@ def test_date_range_multi_index(lmdb_version_store):
         "append",
         "update",
         "write_metadata",
-        "compact_data_experimental",
+        "compact_data",
         "batch_write",
         "batch_append",
         "batch_write_metadata",
@@ -351,7 +351,7 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
     arg_0 = [sym] if method.startswith("batch") else sym
     if method.startswith("batch"):
         arg_1 = [df_1]
-    elif method == "compact_data_experimental":
+    elif method == "compact_data":
         # Prune previous on this call so that we start with 1 index key for the method under test
         lib.append(sym, df_1, prune_previous_version=True)
         arg_1 = 100_000  # rows_per_segment

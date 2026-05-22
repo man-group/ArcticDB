@@ -320,6 +320,28 @@ class ChunkedBufferImpl {
             block_index_(block_index) {}
     };
 
+    // Returns the byte offset where block `block_idx` starts. O(1).
+    // Inverse of `block_and_offset`'s block-index half.
+    [[nodiscard]] size_t block_byte_offset(size_t block_idx) const {
+        util::check(
+                block_idx < blocks_.size(),
+                "block_byte_offset: block {} out of range, only have {} blocks",
+                block_idx,
+                blocks_.size()
+        );
+        if (allocation_type_ == entity::AllocationType::DETACHABLE) {
+            return block_offsets_[block_idx];
+        }
+        if (blocks_.size() == 1u) {
+            return 0;
+        }
+        const size_t first_irregular_block = regular_sized_until_ / DefaultBlockSize;
+        if (is_regular_sized() || block_idx < first_irregular_block) {
+            return block_idx * DefaultBlockSize;
+        }
+        return block_offsets_[block_idx - first_irregular_block];
+    }
+
     [[nodiscard]] BlockAndOffset block_and_offset(size_t pos_bytes) const {
         if (allocation_type_ == entity::AllocationType::DETACHABLE) {
             // Some constructions of a PRESIZED ChunkedBuffer can produce a single block with only a beginning offset,

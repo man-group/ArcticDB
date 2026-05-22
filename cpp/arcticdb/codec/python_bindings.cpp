@@ -166,7 +166,7 @@ void register_codec(py::module& m) {
                 };
             });
 
-    py::class_<Segment>(m, "Segment")
+    py::class_<Segment, std::shared_ptr<Segment>>(m, "Segment")
             .def(py::init<>())
             .def("fields_size", &Segment::fields_size)
             .def("fields", &Segment::fields_vector)
