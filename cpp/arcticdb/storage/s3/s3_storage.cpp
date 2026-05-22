@@ -108,7 +108,7 @@ void S3Storage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
 std::optional<size_t> S3Storage::max_delete_batch_size() const {
     return std::min(
             detail::DELETE_OBJECTS_LIMIT,
-            static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", 1000))
+            static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", detail::DELETE_OBJECTS_LIMIT))
     );
 }
 
