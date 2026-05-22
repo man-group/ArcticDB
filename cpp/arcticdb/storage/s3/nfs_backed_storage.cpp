@@ -221,7 +221,9 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
 std::optional<size_t> NfsBackedStorage::max_delete_batch_size() const {
     return std::min(
             s3::detail::DELETE_OBJECTS_LIMIT,
-            static_cast<size_t>(ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", s3::detail::DELETE_OBJECTS_LIMIT))
+            static_cast<size_t>(
+                    ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", s3::detail::DELETE_OBJECTS_LIMIT)
+            )
     );
 }
 
