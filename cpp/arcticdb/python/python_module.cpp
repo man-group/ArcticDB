@@ -37,101 +37,6 @@
 
 namespace py = pybind11;
 
-enum class LoggerId { ROOT, STORAGE, IN_MEM, CODEC, VERSION, MEMORY, TIMINGS, LOCK, SCHEDULE, SYMBOL, SNAPSHOT };
-
-void register_log(py::module&& log) {
-    log.def(
-            "configure",
-            [](const py::object& py_log_conf, bool force = false) {
-                arcticdb::proto::logger::LoggersConfig config;
-                arcticdb::python_util::pb_from_python(py_log_conf, config);
-                return arcticdb::log::Loggers::instance().configure(config, force);
-            },
-            py::arg("py_log_conf"),
-            py::arg("force") = false
-    );
-
-    py::enum_<spdlog::level::level_enum>(log, "LogLevel")
-            .value("DEBUG", spdlog::level::level_enum::debug)
-            .value("INFO", spdlog::level::level_enum::info)
-            .value("WARN", spdlog::level::level_enum::warn)
-            .value("ERROR", spdlog::level::level_enum::err)
-            .export_values();
-    py::enum_<LoggerId>(log, "LoggerId")
-            .value("ROOT", LoggerId::ROOT)
-            .value("STORAGE", LoggerId::STORAGE)
-            .value("IN_MEM", LoggerId::IN_MEM)
-            .value("CODEC", LoggerId::CODEC)
-            .value("VERSION", LoggerId::VERSION)
-            .value("MEMORY", LoggerId::MEMORY)
-            .value("TIMINGS", LoggerId::TIMINGS)
-            .value("LOCK", LoggerId::LOCK)
-            .value("SCHEDULE", LoggerId::SCHEDULE)
-            .value("SYMBOL", LoggerId::SYMBOL)
-            .value("SNAPSHOT", LoggerId::SNAPSHOT)
-            .export_values();
-    auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */ {
-        switch (log_id) {
-        case LoggerId::STORAGE:
-            return arcticdb::log::storage();
-        case LoggerId::IN_MEM:
-            return arcticdb::log::inmem();
-        case LoggerId::CODEC:
-            return arcticdb::log::codec();
-        case LoggerId::MEMORY:
-            return arcticdb::log::memory();
-        case LoggerId::VERSION:
-            return arcticdb::log::version();
-        case LoggerId::ROOT:
-            return arcticdb::log::root();
-        case LoggerId::TIMINGS:
-            return arcticdb::log::timings();
-        case LoggerId::LOCK:
-            return arcticdb::log::lock();
-        case LoggerId::SCHEDULE:
-            return arcticdb::log::schedule();
-        case LoggerId::SYMBOL:
-            return arcticdb::log::symbol();
-        case LoggerId::SNAPSHOT:
-            return arcticdb::log::snapshot();
-        default:
-            arcticdb::util::raise_rte("Unsupported logger id");
-        }
-    };
-
-    log.def("log", [&](LoggerId log_id, spdlog::level::level_enum level, const std::string& msg) {
-        // assuming formatting done in python
-        py::gil_scoped_release gil_release;
-        auto& logger = choose_logger(log_id);
-        switch (level) {
-        case spdlog::level::level_enum::debug:
-            logger.debug(msg);
-            break;
-        case spdlog::level::level_enum::info:
-            logger.info(msg);
-            break;
-        case spdlog::level::level_enum::warn:
-            logger.warn(msg);
-            break;
-        case spdlog::level::level_enum::err:
-            logger.error(msg);
-            break;
-        default:
-            arcticdb::util::raise_rte("Unsupported log level", spdlog::level::to_string_view(level));
-        }
-    });
-
-    log.def("is_active", [&](LoggerId log_id, spdlog::level::level_enum level) {
-        auto& logger = choose_logger(log_id);
-        return logger.should_log(level);
-    });
-
-    log.def("flush_all", []() {
-        py::gil_scoped_release gil_release;
-        arcticdb::log::Loggers::instance().flush_all();
-    });
-}
-
 void register_configs_map_api(py::module& m) {
     using namespace arcticdb;
 #define EXPOSE_TYPE(LABEL, TYPE)                                                                                       \
@@ -351,7 +256,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     );
 
     register_configs_map_api(m);
-    register_log(m.def_submodule("log"));
+    register_log(m.def_submodule("log"), BindingScope::GLOBAL);
     register_instrumentation(m.def_submodule("instrumentation"));
     register_metrics(m.def_submodule("metrics"), BindingScope::GLOBAL);
     register_type_handlers();

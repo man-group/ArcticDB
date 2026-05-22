@@ -18,9 +18,12 @@ class tuple;
 namespace arcticdb {
 enum class BindingScope : uint32_t { LOCAL = 0, GLOBAL = 1 };
 
+enum class LoggerId { ROOT, STORAGE, IN_MEM, CODEC, VERSION, MEMORY, TIMINGS, LOCK, SCHEDULE, SYMBOL, SNAPSHOT };
+
 pybind11::tuple to_tuple(const MetricsConfig& config);
 MetricsConfig metrics_config_from_tuple(const pybind11::tuple& t);
 
 } // namespace arcticdb
 
 void register_metrics(pybind11::module&& m, arcticdb::BindingScope scope);
+void register_log(pybind11::module&& log, arcticdb::BindingScope scope);
