@@ -18,7 +18,7 @@ IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, c
     return IndexDescriptor::Type::UNKNOWN;
 }
 
-/// Checks if the two multiindex are compatible for append/update. For that to be true the filed name, count and order
+/// Checks if the two multiindex are compatible for append/update. For that to be true, the field name, count, and order
 /// must match even for dynamic schema. Does not check types.
 template<typename CommonNormalization>
 requires util::any_of<
@@ -29,7 +29,7 @@ void check_multiindex_matches(
         const CommonNormalization& new_common, const StreamDescriptor& new_stream_descriptor
 ) {
     normalization::check<ErrorCode::E_INCOMPATIBLE_INDEX>(
-            !(existing_common.has_multi_index() ^ new_common.has_multi_index()),
+            existing_common.has_multi_index() == new_common.has_multi_index(),
             "Cannot append/update multi-indexed data to non-multi-indexed data and vice versa"
     );
     if (existing_common.has_multi_index()) {
