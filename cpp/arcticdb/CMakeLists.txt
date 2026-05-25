@@ -276,6 +276,7 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/normalization_utils.hpp
         python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
@@ -502,7 +503,7 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/python_bindings_common.cpp
-        python/normalization_checks.cpp
+        python/normalization_utils.cpp
         python/python_strings.cpp
         python/python_utils.cpp
         python/numpy_buffer_holder.cpp
