@@ -1502,6 +1502,92 @@ class TestMergeTimeseriesInsert:
         expected = pd.concat([seg0, seg1, source]).sort_index()
         assert_frame_equal(lib.read("sym").data, expected)
 
+    @pytest.mark.parametrize(
+        "target",
+        [
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            ],
+        ],
+    )
+    def test_insert_before_first_segment_start(self, lmdb_library, target):
+        lib = lmdb_library
+        for tgt in target:
+            lib.append("sym", tgt)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)])
+        )
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            ],
+        ],
+    )
+    def test_insert_after_last_segment_end(self, lmdb_library, target):
+        lib = lmdb_library
+        for tgt in target:
+            lib.append("sym", tgt)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(15), pd.Timestamp(16)])
+        )
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            [pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)]))],
+            [
+                pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(5)])),
+                pd.DataFrame({"a": [10]}, index=pd.DatetimeIndex([pd.Timestamp(10)])),
+            ],
+        ],
+    )
+    def test_insert_before_first_segment_start_and_after_last_segment_end(self, lmdb_library, target):
+        lib = lmdb_library
+        for tgt in target:
+            lib.append("sym", tgt)
+        source = pd.DataFrame(
+            {"a": [100, 200, 300, 400, 500, 600]},
+            index=pd.DatetimeIndex(
+                [
+                    pd.Timestamp(0),
+                    pd.Timestamp(0),
+                    pd.Timestamp(1),
+                    pd.Timestamp(15),
+                    pd.Timestamp(15),
+                    pd.Timestamp(16),
+                ]
+            ),
+        )
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
+
+    def test_insert_between_two_segments_appends_to_first(self, lmdb_library):
+        lib = lmdb_library
+        seg0 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
+        lib.write("sym", seg0)
+        seg1 = pd.DataFrame({"a": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(15)]))
+        lib.append("sym", seg1)
+        source = pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(7)]))
+        lib.merge_experimental("sym", source, self.strategy)
+        assert_frame_equal(lib.read("sym").data, pd.concat([seg0, seg1, source]).sort_index())
+        lt = lib._dev_tools.library_tool()
+        segments = [lt.read_to_dataframe(key) for key in lt.dataframe_to_keys(lt.read_index("sym"), "sym")]
+        segments[0].index.name = None
+        segments[1].index.name = None
+        assert_frame_equal(segments[0], pd.concat([seg0, source]).sort_index())
+        assert_frame_equal(segments[1], seg1)
+
 
 class TestMergeTimeseriesUpdateAndInsert:
 
@@ -1948,6 +2034,48 @@ class TestMergeTimeseriesUpdateAndInsert:
         target = pd.DataFrame({"a": range(len(index)), "b": np.linspace(0, len(index) - 1, len(index))}, index=index)
         lib.write("sym", target)
         lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_before_first_segment_start_and_update_first_value(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
+        lib.merge_experimental("sym", source, self.strategy)
+        expected = pd.DataFrame(
+            {"a": [10, 20, 2]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(5)])
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_before_first_segment_start_and_update_first_value_on(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0)]))
+        lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        expected = pd.DataFrame(
+            {"a": [10, 1, 20, 2]},
+            index=pd.DatetimeIndex([pd.Timestamp(-5), pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(5)]),
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_after_last_and_match_last(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
+        lib.merge_experimental("sym", source, self.strategy)
+        expected = pd.DataFrame(
+            {"a": [1, 10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(10)])
+        )
+        assert_frame_equal(lib.read("sym").data, expected)
+
+    def test_insert_after_last_and_match_last_on(self, lmdb_library):
+        lib = lmdb_library
+        lib.write("sym", pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)])))
+        source = pd.DataFrame({"a": [10, 20]}, index=pd.DatetimeIndex([pd.Timestamp(5), pd.Timestamp(10)]))
+        lib.merge_experimental("sym", source, self.strategy, on=["a"])
+        expected = pd.DataFrame(
+            {"a": [1, 2, 10, 20]},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5), pd.Timestamp(5), pd.Timestamp(10)]),
+        )
         assert_frame_equal(lib.read("sym").data, expected)
 
 

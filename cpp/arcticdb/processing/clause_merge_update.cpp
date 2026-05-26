@@ -297,6 +297,10 @@ Column merge(
                 ++target_index_it;
             }
 
+            if (target_index_it == target_index_end) {
+                break;
+            }
+
             // Target index values are equal to the source index values. Since the index is matching, it's possible to
             // perform both an update and an insert. First, copy all target values to the output buffer and then append
             // the new values. In case rows_to_update[source_row_idx] is not empty, then an update must happen. The
@@ -440,6 +444,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
             row_slices_to_keep.push_back(row_slice_idx);
             continue;
         }
+
         const auto source_range_start = [&] {
             if (strategy_.insert() && row_slice_idx == 0) {
                 // In case of inserting all data before the first segment gets prepended to it
@@ -447,6 +452,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
             }
             return ranges::lower_bound(index, time_range.first);
         }();
+
         if (source_range_start == index.end()) {
             // All remaining row ranges start after the last index value of the source, thus not match is possible.
             break;
@@ -456,14 +462,14 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
             timestamp segment_end = time_range.second;
             if (strategy_.insert()) {
                 if (row_slice_idx == offsets.size() - 1) {
-                    // All source data past the last index value in the target gets appended to the last rowslice
+                    // All source data past the last index value in the target gets appended to the last row slice
                     return index.size();
                 }
                 // All source data past the current row slice but before the next segment gets appended to the current
                 // rows slice
                 segment_end = ranges_and_keys[offsets[row_slice_idx + 1].front()].key_.time_range().first;
             }
-            return index.begin() - std::upper_bound(source_range_start, index.end(), segment_end - 1);
+            return std::upper_bound(source_range_start, index.end(), segment_end - 1) - index.begin();
         }();
 
         const std::pair<size_t, size_t> source_row_range = {source_range_start - index.begin(), source_end};
@@ -928,7 +934,6 @@ std::pair<std::vector<std::vector<size_t>>, size_t> MergeUpdateClause::filter_on
             const ColumnWithStrings target_column = std::get<ColumnWithStrings>(
                     proc.get(ColumnName{target_descriptor.field(target_field_position).name()})
             );
-            ColumnData target_data = target_column.column_->data();
             details::visit_type(
                     target_column.column_->type().data_type(),
                     [&]<typename TargetDataTypeTag>(TargetDataTypeTag) {
@@ -936,35 +941,37 @@ std::pair<std::vector<std::vector<size_t>>, size_t> MergeUpdateClause::filter_on
                         using TargetRawType = TargetDataTypeTag::raw_type;
                         // TODO: Relax for dynamic schema
                         if constexpr (std::same_as<std::decay_t<SourceDataTypeTag>, std::decay_t<TargetDataTypeTag>>) {
+                            ColumnData target_data = target_column.column_->data();
                             auto target_accessor = random_accessor<TargetTDT>(&target_data);
                             for (size_t source_row_idx = 0; source_row_idx < matched_rows.size(); ++source_row_idx) {
-                                if (!matched_rows.empty()) {
-                                    std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row_idx) {
-                                        const TargetRawType target_value = target_accessor.at(target_row_idx);
-                                        const auto& source_value = source_data[source_row_idx];
-                                        auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
-                                                source_value, target_value, *target_column.string_pool_, scoped_gil_lock
-                                        );
-                                        if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {
-                                            return util::variant_match(
-                                                    are_values_equal,
-                                                    [](const bool equal) { return !equal; },
-                                                    [&](convert::StringEncodingError& err) -> bool {
-                                                        err.row_index_in_slice_ = source_row_idx;
-                                                        err.raise(column_name, source_row_start);
-                                                    }
-                                            );
-                                        } else {
-                                            return !std::get<bool>(are_values_equal);
-                                        }
-                                    });
-                                    ARCTICDB_DEBUG_CHECK(
-                                            ErrorCode::E_ASSERTION_FAILURE,
-                                            num_matched_rows > 0 || !matched_rows[source_row_idx].empty(),
-                                            ""
+                                const size_t initial_target_rows_to_update_count = matched_rows[source_row_idx].size();
+                                std::erase_if(matched_rows[source_row_idx], [&](const size_t target_row_idx) {
+                                    const TargetRawType target_value = target_accessor[target_row_idx];
+                                    const auto& source_value = source_data[source_row_idx];
+                                    auto are_values_equal = are_merge_values_matching<SourceTDT, TargetTDT>(
+                                            source_value, target_value, *target_column.string_pool_, scoped_gil_lock
                                     );
-                                    num_matched_rows -= matched_rows[source_row_idx].empty();
-                                }
+                                    if constexpr (is_sequence_type(TargetDataTypeTag::data_type)) {
+                                        return util::variant_match(
+                                                are_values_equal,
+                                                [](const bool equal) { return !equal; },
+                                                [&](convert::StringEncodingError& err) -> bool {
+                                                    err.row_index_in_slice_ = source_row_idx;
+                                                    err.raise(column_name, source_row_start);
+                                                }
+                                        );
+                                    } else {
+                                        return !std::get<bool>(are_values_equal);
+                                    }
+                                });
+                                const bool source_row_stopped_matching_target_rows =
+                                        matched_rows[source_row_idx].empty() && initial_target_rows_to_update_count;
+                                ARCTICDB_DEBUG_CHECK(
+                                        ErrorCode::E_ASSERTION_FAILURE,
+                                        num_matched_rows != 0 || !source_row_stopped_matching_target_rows,
+                                        ""
+                                );
+                                num_matched_rows -= source_row_stopped_matching_target_rows;
                             }
                         } else {
                             internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
