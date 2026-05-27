@@ -105,7 +105,8 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses,
+        bool process_on_cpu_executor = false
 );
 
 FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const VersionedItem& version);

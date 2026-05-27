@@ -764,12 +764,12 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
         std::shared_ptr<std::vector<EntityFetchCount>>&& segment_fetch_counts,
         std::vector<FutureOrSplitter>&& segment_and_slice_future_splitters,
         std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>&& id_to_pos,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses,
+        bool process_on_cpu_executor = false
 ) {
-    // TODO 11961775873: remove this kill switch
-    static const bool process_on_cpu_executor = ConfigsMap::instance()->get_int("Storage.ProcessOnCpuExecutor", 1) == 1;
     auto* processing_executor = process_on_cpu_executor ? dynamic_cast<folly::Executor*>(&async::cpu_executor())
                                                         : dynamic_cast<folly::Executor*>(&async::io_executor());
+
     // Used to make sure each entity is only added into the component manager once
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
@@ -874,7 +874,8 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::shared_ptr<ComponentManager> component_manager,
         std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
-        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses,
+        bool process_on_cpu_executor
 ) {
     // All the shared pointers as arguments to this function and created within it are to ensure that resources are
     // correctly kept alive after this function returns its future
@@ -902,7 +903,8 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
             std::move(segment_fetch_counts),
             std::move(segment_and_slice_future_splitters),
             std::move(entity_id_to_segment_pos),
-            clauses
+            clauses,
+            process_on_cpu_executor
     );
 
     return folly::collect(*futures).via(&async::io_executor()).thenValueInline([clauses](auto&& entity_ids_vec) {
@@ -1172,7 +1174,8 @@ static void generate_output_schema_and_save_to_pipeline(
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        std::shared_ptr<ComponentManager> component_manager
+        std::shared_ptr<ComponentManager> component_manager,
+        bool process_on_cpu_executor = false
 ) {
     const ProcessingConfig processing_config{
             opt_false(read_options.dynamic_schema()),
@@ -1205,7 +1208,8 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
                    component_manager,
                    std::move(segment_and_slice_futures),
                    std::move(processing_unit_indexes),
-                   std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_)
+                   std::make_shared<std::vector<std::shared_ptr<Clause>>>(read_query->clauses_),
+                   process_on_cpu_executor
     )
             .via(&async::cpu_executor());
 }
@@ -1222,10 +1226,13 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
  */
 folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        bool process_on_cpu_executor = false
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+    return read_and_schedule_processing(
+            store, pipeline_context, read_query, read_options, component_manager, process_on_cpu_executor
+    )
             .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
                 generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
                 auto proc = gather_entities<
@@ -2033,7 +2040,13 @@ void create_column_stats_impl(
     auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
-    auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
+    const bool process_on_cpu_executor =
+            ConfigsMap::instance()->get_int("VersionStore.UseIOExecutorForColstats", 0) == 0;
+
+    auto segs = read_process_and_collect(
+                        store, pipeline_context, read_query, read_options, process_on_cpu_executor
+    )
+                        .get();
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
             !segs.empty(), "Cannot create column stats for nonexistent columns"
     );
