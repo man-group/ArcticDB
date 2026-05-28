@@ -21,8 +21,6 @@ struct SymbolListEntry;
 struct SymbolEntryData;
 
 using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
-using Compaction = std::vector<AtomKey>::const_iterator;
-using MaybeCompaction = std::optional<Compaction>;
 using CollectionType = std::vector<SymbolListEntry>;
 
 enum class WillAttemptCompaction : uint8_t {
@@ -31,13 +29,18 @@ enum class WillAttemptCompaction : uint8_t {
     NO_DISABLED                  // compaction explicitly disabled by caller
 };
 
-struct LoadResult {
-    std::vector<AtomKey> symbol_list_keys_;
-    MaybeCompaction maybe_previous_compaction;
-    CollectionType symbols_;
-    timestamp timestamp_ = 0L;
+struct JournalResult {
+    std::optional<AtomKey> compaction_key;
+    MapType update_map;
+    size_t total_key_count = 0;
+    std::vector<VariantKey> all_keys; // only populated when collect_keys=true
+};
 
-    std::vector<AtomKey>&& detach_symbol_list_keys() { return std::move(symbol_list_keys_); }
+struct LoadResult {
+    std::optional<AtomKey> compaction_key_;
+    CollectionType symbols_;
+    size_t total_key_count_ = 0;
+    std::vector<VariantKey> symbol_list_keys_;
 };
 
 struct SymbolListData {
@@ -160,6 +163,13 @@ class SymbolList {
                 }
         );
 
+        // Build output before compaction — compact_internal moves symbols_ into write_symbols
+        R output;
+        for (const auto& entry : load_result.symbols_) {
+            if (entry.action_ == ActionType::ADD)
+                output.insert(entry.stream_id_);
+        }
+
         if (will_attempt_compaction == WillAttemptCompaction::YES && needs_compaction(load_result)) {
             ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Compaction necessary. Obtaining lock...");
             try {
@@ -178,12 +188,6 @@ class SymbolList {
             } catch (const std::exception& ex) {
                 log::symbol().warn("Ignoring error while trying to compact the symbol list: {}", ex.what());
             }
-        }
-
-        R output;
-        for (const auto& entry : load_result.symbols_) {
-            if (entry.action_ == ActionType::ADD)
-                output.insert(entry.stream_id_);
         }
 
         return output;
