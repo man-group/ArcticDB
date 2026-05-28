@@ -274,6 +274,70 @@ def test_column_stats_only_nat_values(lmdb_version_store, any_output_format):
     assert raw_stats["v1_MAX(col_1)"].values.view("int64")[0] == nat_sentinel
 
 
+def test_column_stats_nan_and_nat_counts(lmdb_version_store, any_output_format):
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_and_nat_counts"
+
+    # Each write/append produces a separate segment, so we get one row per dataframe in the stats.
+    # float_col counts toward v1_NAN_COUNT, ts_col counts toward v1_NAT_COUNT.
+    df0 = pd.DataFrame(
+        {"float_col": [1.0, 2.0], "ts_col": [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-06-01")]},
+        index=pd.date_range("2000-01-01", periods=2),
+    )
+    df1 = pd.DataFrame(
+        {"float_col": [np.nan, 5.0], "ts_col": [pd.NaT, pd.Timestamp("2021-01-01")]},
+        index=pd.date_range("2000-01-03", periods=2),
+    )
+    df2 = pd.DataFrame(
+        {"float_col": [np.nan, np.nan], "ts_col": [pd.NaT, pd.NaT]},
+        index=pd.date_range("2000-01-05", periods=2),
+    )
+    df3 = pd.DataFrame(
+        {"float_col": [1.0, np.nan, 2.0], "ts_col": [pd.Timestamp("2022-01-01"), pd.NaT, pd.Timestamp("2022-06-01")]},
+        index=pd.date_range("2000-01-07", periods=3),
+    )
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    lib.append(sym, df2)
+    lib.append(sym, df3)
+
+    column_stats_dict = {"float_col": {"MINMAX"}, "ts_col": {"MINMAX"}}
+    lib.create_column_stats(sym, column_stats_dict)
+
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(float_col)", [1.0, 5.0, np.nan, 1.0]),
+        pl.Series("v1_MAX(float_col)", [2.0, 5.0, np.nan, 2.0]),
+        pl.Series("v1_NAN_COUNT(float_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+        pl.Series("v1_NAT_COUNT(float_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+        pl.Series(
+            "v1_MIN(ts_col)",
+            [
+                pd.Timestamp("2020-01-01").value,
+                pd.Timestamp("2021-01-01").value,
+                None,
+                pd.Timestamp("2022-01-01").value,
+            ],
+            dtype=pl.Int64,
+        ).cast(pl.Datetime("ns")),
+        pl.Series(
+            "v1_MAX(ts_col)",
+            [
+                pd.Timestamp("2020-06-01").value,
+                pd.Timestamp("2021-01-01").value,
+                None,
+                pd.Timestamp("2022-06-01").value,
+            ],
+            dtype=pl.Int64,
+        ).cast(pl.Datetime("ns")),
+        pl.Series("v1_NAN_COUNT(ts_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+        pl.Series("v1_NAT_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+    )
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+
 def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):
     lib = version_store_factory(
         column_group_size=2,
