@@ -223,6 +223,7 @@ void slice_data_into_segments_helper(
 }
 
 template<pipelines::ValidIndex index, std::ranges::sized_range... Data>
+requires(sizeof...(Data) > 0)
 std::tuple<std::vector<SegmentInMemory>, std::vector<pipelines::ColRange>, std::vector<pipelines::RowRange>>
 slice_data_into_segments(
         const StreamDescriptor& descriptor, const size_t rows_per_segment, const size_t cols_per_segment, Data&&... data
@@ -231,6 +232,14 @@ slice_data_into_segments(
     std::vector<SegmentInMemory> segments;
     std::vector<pipelines::ColRange> col_ranges;
     std::vector<pipelines::RowRange> row_ranges;
+
+    util::check(
+            []<typename T1, typename... Ts>(const T1& head, const Ts&... tail) {
+                const size_t sz = head.size();
+                return ((tail.size() == sz) && ...);
+            }(data...),
+            "All input data must be of the same size"
+    );
 
     auto [index_columns, data_columns] = split_pack<index::field_count()>(std::forward<Data>(data)...);
     static_assert(
@@ -262,4 +271,5 @@ slice_data_into_segments(
     );
     return std::make_tuple(std::move(segments), std::move(col_ranges), std::move(row_ranges));
 }
+
 } // namespace arcticdb

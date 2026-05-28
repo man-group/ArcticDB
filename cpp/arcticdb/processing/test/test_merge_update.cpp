@@ -15,10 +15,8 @@
 using namespace arcticdb;
 using namespace std::ranges;
 
-constexpr static MergeStrategy update_only_strategy{
-        .matched = MergeAction::UPDATE,
-        .not_matched_by_target = MergeAction::DO_NOTHING
-};
+namespace {
+constexpr static MergeStrategy update_only_strategy{.matched = MergeAction::UPDATE};
 
 constexpr static std::array non_string_fields = {
         FieldRef(TypeDescriptor(DataType::INT8, Dimension::Dim0), "int8"),
@@ -137,6 +135,15 @@ std::vector<EntityId> push_selected_entities(
             std::vector<EntityFetchCount>(ranges_and_keys.size(), 0)
     );
 }
+
+std::vector<SegmentInMemory> clone_segments(std::span<const SegmentInMemory> segments) {
+    std::vector<SegmentInMemory> result;
+    result.reserve(segments.size());
+    std::ranges::transform(segments, std::back_inserter(result), [](const auto& segment) { return segment.clone(); });
+    return result;
+}
+
+} // namespace
 
 struct MergeUpdateClauseUpdateStrategyTestBase {
     MergeUpdateClauseUpdateStrategyTestBase(
@@ -1607,3 +1614,529 @@ TEST(MergeClauseDateRange, SourceMatchesAllIndexRangesButDoesNotMatchAnyRow) {
         ASSERT_TRUE(result.empty());
     }
 }
+
+struct MergeUpdateClauseInsertAndUpdate : testing::TestWithParam<MergeStrategy> {};
+
+TEST_P(MergeUpdateClauseInsertAndUpdate, InsertBeforeFirstRow) {
+    constexpr static int num_rows = 15;
+    constexpr static int num_cols = non_string_fields.size();
+    constexpr static int rows_per_segment = 5;
+    constexpr static int cols_per_segment = 3;
+    constexpr static int col_slice_count = (num_cols + cols_per_segment - 1) / cols_per_segment;
+
+    MergeStrategy strategy = GetParam();
+    const StreamDescriptor& descriptor = non_string_fields_ts_index_descriptor();
+
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            non_string_fields_ts_index_descriptor(),
+            rows_per_segment,
+            cols_per_segment,
+            iota_view(timestamp{0}, timestamp{num_rows}),
+            iota_view(static_cast<int8_t>(0), static_cast<int8_t>(num_rows)),
+            iota_view(static_cast<unsigned>(0), static_cast<unsigned>(num_rows)),
+            iota_view(0, num_rows) | views::transform([](auto x) -> bool { return x % 2 == 1; }),
+            iota_view(0, num_rows) | views::transform([](auto x) { return static_cast<float>(x); }),
+            iota_view(timestamp{0}, timestamp{num_rows})
+    );
+
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(descriptor, segments, col_ranges, row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    auto [input_frame, input_frame_data_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            descriptor,
+            std::array<timestamp, 3>{-10, -5, -4},
+            std::array<int8_t, 3>{100, 101, 102},
+            std::array<unsigned, 3>{1000, 2000, 3000},
+            std::array<bool, 3>{true, false, true},
+            std::array<float, 3>{500.f, 600.f, 700.f},
+            std::array<timestamp, 3>{111, 222, 333}
+    );
+    MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    // Inserting in the beginning of the DataFrame picks the first row slice
+    ASSERT_EQ(structure_indices.size(), 1);
+    ASSERT_EQ(structure_indices[0].size(), col_slice_count);
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager, ranges_and_keys, clone_segments(segments), std::move(col_ranges), std::move(row_ranges)
+    );
+    ASSERT_EQ(entities.size(), col_slice_count);
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 1);
+    ASSERT_EQ(structured_entities[0].size(), col_slice_count);
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager, clause.process(std::move(structured_entities[0]))
+    );
+
+    auto [expected_segments, cols, rows] = slice_data_into_segments<TimeseriesIndex>(
+            non_string_fields_ts_index_descriptor(),
+            100000,
+            cols_per_segment,
+            std::array<timestamp, 8>{-10, -5, -4, 0, 1, 2, 3, 4},
+            std::array<int8_t, 8>{100, 101, 102, 0, 1, 2, 3, 4},
+            std::array<unsigned, 8>{1000, 2000, 3000, 0, 1, 2, 3, 4},
+            std::array<bool, 8>{true, false, true, false, true, false, true, false},
+            std::array<float, 8>{500.f, 600.f, 700.f, 0.0f, 1.f, 2.f, 3.f, 4.f},
+            std::array<timestamp, 8>{111, 222, 333, 0, 1, 2, 3, 4}
+    );
+    for (size_t i = 0; i < expected_segments.size(); ++i) {
+        ASSERT_EQ(*proc.segments_->at(i), expected_segments[i]);
+    }
+}
+
+TEST_P(MergeUpdateClauseInsertAndUpdate, InsertAfterLastRow) {
+    constexpr static int num_rows = 15;
+    constexpr static int num_cols = non_string_fields.size();
+    constexpr static int rows_per_segment = 5;
+    constexpr static int cols_per_segment = 3;
+    constexpr static int col_slice_count = (num_cols + cols_per_segment - 1) / cols_per_segment;
+    constexpr static int row_slice_count = (num_rows + rows_per_segment - 1) / rows_per_segment;
+
+    const StreamDescriptor& descriptor = non_string_fields_ts_index_descriptor();
+
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            non_string_fields_ts_index_descriptor(),
+            rows_per_segment,
+            cols_per_segment,
+            iota_view(timestamp{10}, timestamp{10 + num_rows}),
+            iota_view(static_cast<int8_t>(0), static_cast<int8_t>(num_rows)),
+            iota_view(static_cast<unsigned>(0), static_cast<unsigned>(num_rows)),
+            iota_view(0, num_rows) | views::transform([](auto x) -> bool { return x % 2 == 1; }),
+            iota_view(0, num_rows) | views::transform([](auto x) { return static_cast<float>(x); }),
+            iota_view(timestamp{0}, timestamp{num_rows})
+    );
+
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(descriptor, segments, col_ranges, row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    auto [input_frame, input_frame_data_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            descriptor,
+            std::array<timestamp, 3>{100, 101, 102},
+            std::array<int8_t, 3>{100, 101, 102},
+            std::array<unsigned, 3>{1000, 2000, 3000},
+            std::array<bool, 3>{true, false, true},
+            std::array<float, 3>{500.f, 600.f, 700.f},
+            std::array<timestamp, 3>{111, 222, 333}
+    );
+    MergeUpdateClause clause = create_clause(GetParam(), component_manager, std::move(input_frame));
+
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    // Inserting in the beginning of the DataFrame picks the first row slice
+    ASSERT_EQ(structure_indices.size(), 1);
+    ASSERT_EQ(structure_indices[0].size(), col_slice_count);
+
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges}
+    );
+    ASSERT_EQ(entities.size(), col_slice_count);
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 1);
+    ASSERT_EQ(structured_entities[0].size(), col_slice_count);
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager, clause.process(std::move(structured_entities[0]))
+    );
+
+    auto [new_data_segments, cols, rows] = slice_data_into_segments<TimeseriesIndex>(
+            non_string_fields_ts_index_descriptor(),
+            100000,
+            cols_per_segment,
+            std::array<timestamp, 3>{100, 101, 102},
+            std::array<int8_t, 3>{100, 101, 102},
+            std::array<unsigned, 3>{1000, 2000, 3000},
+            std::array<bool, 3>{true, false, true},
+            std::array<float, 3>{500.f, 600.f, 700.f},
+            std::array<timestamp, 3>{111, 222, 333}
+    );
+    sort_by_rowslice(row_ranges, col_ranges, segments);
+    std::span last_row_slice{segments.begin() + (row_slice_count - 1) * col_slice_count, segments.end()};
+    ASSERT_EQ(last_row_slice.size(), new_data_segments.size());
+    for (size_t i = 0; i < new_data_segments.size(); ++i) {
+        last_row_slice[i].append(new_data_segments[i]);
+        ASSERT_EQ(last_row_slice[i], *(*proc.segments_)[i]);
+    }
+}
+
+TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataEndsBeforeLastSegment) {
+    constexpr static std::array fields{FieldRef({DataType::UINT64, Dimension::Dim0}, "a")};
+    constexpr static size_t rows_per_segment = 5;
+    constexpr static size_t cols_per_segment = 127;
+    constexpr static size_t num_rows = 27;
+    constexpr static size_t num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
+    ASSERT_EQ(num_row_slices, 6);
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            iota_view{timestamp{0}, timestamp{num_rows}} | views::transform([](const timestamp x) { return x * 2; }),
+            iota_view{size_t{0}, num_rows}
+    );
+    // Will insert in segments 0, 2, 3
+    // Segments 1, 4, 5 are not processed
+    auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array<timestamp, 3>{1, 21, 33}, std::array<size_t, 3>{100, 200, 300}
+    );
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+    MergeUpdateClause clause = create_clause(GetParam(), component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    ASSERT_EQ(structure_indices.size(), 3);
+    ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 1; }));
+
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges}
+    );
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 3);
+    ASSERT_TRUE(std::ranges::all_of(structured_entities, [](const auto& entts) { return entts.size() == 1; }));
+    constexpr static std::array expected_row_ranges = {RowRange{0, 5}, RowRange{10, 15}, RowRange{15, 20}};
+    constexpr static std::array expected_col_ranges = {ColRange{1, 2}, ColRange{1, 2}, ColRange{1, 2}};
+    const std::array expected_segments = {
+            create_dense_segment(
+                    desc, std::array<timestamp, 6>{0, 1, 2, 4, 6, 8}, std::array<size_t, 6>{0, 100, 1, 2, 3, 4}
+            ),
+            create_dense_segment(
+                    desc,
+                    std::array<timestamp, 6>{20, 21, 22, 24, 26, 28},
+                    std::array<size_t, 6>{10, 200, 11, 12, 13, 14}
+            ),
+            create_dense_segment(
+                    desc,
+                    std::array<timestamp, 6>{30, 32, 33, 34, 36, 38},
+                    std::array<size_t, 6>{15, 16, 300, 17, 18, 19}
+            ),
+    };
+    std::array<ProcessingUnit, 3> processing_units;
+    for (size_t i = 0; i < structured_entities.size(); ++i) {
+        processing_units[i] =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[i]))
+                );
+        ASSERT_EQ(processing_units[i].segments_->size(), 1);
+        ASSERT_EQ(processing_units[i].row_ranges_->size(), 1);
+        ASSERT_EQ(processing_units[i].col_ranges_->size(), 1);
+        ASSERT_EQ(*(processing_units[i].row_ranges_->front()), expected_row_ranges[i]);
+        ASSERT_EQ(*(processing_units[i].col_ranges_->front()), expected_col_ranges[i]);
+        ASSERT_EQ(*(processing_units[i].segments_->front()), expected_segments[i]);
+    }
+}
+
+TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataStartsAfterTheFirstSegment) {
+    constexpr static std::array fields{FieldRef({DataType::UINT64, Dimension::Dim0}, "a")};
+    constexpr static size_t rows_per_segment = 5;
+    constexpr static size_t cols_per_segment = 127;
+    constexpr static size_t num_rows = 27;
+    constexpr static size_t num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
+    ASSERT_EQ(num_row_slices, 6);
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            iota_view{timestamp{0}, timestamp{num_rows}} | views::transform([](const timestamp x) { return x * 2; }),
+            iota_view{size_t{0}, num_rows}
+    );
+    // Will insert in segments 2, 3
+    // Segments 0, 1, 4, 5 are not processed
+    constexpr static size_t input_frame_rows = 2;
+    auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array<timestamp, input_frame_rows>{21, 33}, std::array<size_t, input_frame_rows>{100, 200}
+    );
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+    MergeUpdateClause clause = create_clause(GetParam(), component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    constexpr static size_t expected_segments_to_process = 2;
+    ASSERT_EQ(structure_indices.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 1; }));
+
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges}
+    );
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structured_entities, [](const auto& entts) { return entts.size() == 1; }));
+    constexpr static std::array expected_row_ranges = {RowRange{10, 15}, RowRange{15, 20}};
+    constexpr static std::array expected_col_ranges = {ColRange{1, 2}, ColRange{1, 2}};
+    const std::array expected_segments = {
+            create_dense_segment(
+                    desc,
+                    std::array<timestamp, 6>{20, 21, 22, 24, 26, 28},
+                    std::array<size_t, 6>{10, 100, 11, 12, 13, 14}
+            ),
+            create_dense_segment(
+                    desc,
+                    std::array<timestamp, 6>{30, 32, 33, 34, 36, 38},
+                    std::array<size_t, 6>{15, 16, 200, 17, 18, 19}
+            ),
+    };
+    std::array<ProcessingUnit, expected_segments_to_process> processing_units;
+    for (size_t i = 0; i < structured_entities.size(); ++i) {
+        processing_units[i] =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[i]))
+                );
+        ASSERT_EQ(processing_units[i].segments_->size(), 1);
+        ASSERT_EQ(processing_units[i].row_ranges_->size(), 1);
+        ASSERT_EQ(processing_units[i].col_ranges_->size(), 1);
+        ASSERT_EQ(*(processing_units[i].row_ranges_->front()), expected_row_ranges[i]);
+        ASSERT_EQ(*(processing_units[i].col_ranges_->front()), expected_col_ranges[i]);
+        ASSERT_EQ(*(processing_units[i].segments_->front()), expected_segments[i]);
+    }
+}
+
+TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertAtEnd) {
+    constexpr static std::array fields{FieldRef({DataType::UINT64, Dimension::Dim0}, "a")};
+    constexpr static size_t rows_per_segment = 5;
+    constexpr static size_t cols_per_segment = 127;
+    constexpr static size_t num_rows = 27;
+    constexpr static size_t num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
+    ASSERT_EQ(num_row_slices, 6);
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            std::array<timestamp, num_rows>{0,  1,  2,  3,  4,  10, 11, 12, 13, 14, 20, 21, 22, 23,
+                                            24, 30, 31, 32, 33, 34, 40, 41, 42, 43, 44, 50, 51},
+            iota_view{size_t{0}, num_rows}
+    );
+    constexpr static size_t input_frame_rows = 3;
+    auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array<timestamp, input_frame_rows>{35, 47}, std::array<size_t, input_frame_rows>{100, 200}
+    );
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    auto component_manager = std::make_shared<ComponentManager>();
+    MergeUpdateClause clause = create_clause(GetParam(), component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    constexpr static size_t expected_segments_to_process = 2;
+    ASSERT_EQ(structure_indices.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 1; }));
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges}
+    );
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structured_entities, [](const auto& entts) { return entts.size() == 1; }));
+    constexpr static std::array expected_row_ranges = {RowRange{15, 20}, RowRange{20, 25}};
+    constexpr static std::array expected_col_ranges = {ColRange{1, 2}, ColRange{1, 2}};
+    const std::array expected_segments = {
+            create_dense_segment(
+                    desc,
+                    std::array<timestamp, 6>{30, 31, 32, 33, 34, 35},
+                    std::array<size_t, 6>{15, 16, 17, 18, 19, 100}
+            ),
+            create_dense_segment(
+                    desc,
+                    std::array<timestamp, 7>{40, 41, 42, 43, 44, 47},
+                    std::array<size_t, 7>{20, 21, 22, 23, 24, 200}
+            ),
+    };
+    for (size_t i = 0; i < structured_entities.size(); ++i) {
+        const ProcessingUnit& processing_unit =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, clause.process(std::move(structured_entities[i]))
+                );
+        ASSERT_EQ(processing_unit.segments_->size(), 1);
+        ASSERT_EQ(processing_unit.row_ranges_->size(), 1);
+        ASSERT_EQ(processing_unit.col_ranges_->size(), 1);
+        ASSERT_EQ(*(processing_unit.row_ranges_->front()), expected_row_ranges[i]);
+        ASSERT_EQ(*(processing_unit.col_ranges_->front()), expected_col_ranges[i]);
+        ASSERT_EQ(*(processing_unit.segments_->front()), expected_segments[i]);
+    }
+}
+
+TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertInMiddle) {
+    constexpr static std::array fields{FieldRef({DataType::UINT64, Dimension::Dim0}, "a")};
+    constexpr static size_t rows_per_segment = 5;
+    constexpr static size_t cols_per_segment = 127;
+    constexpr static size_t num_rows = 27;
+    constexpr static size_t num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
+    ASSERT_EQ(num_row_slices, 6);
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            iota_view{timestamp{0}, timestamp{num_rows}} | views::transform([](const timestamp x) { return x * 5; }),
+            iota_view{size_t{0}, num_rows}
+    );
+    constexpr static size_t input_frame_rows = 1;
+    auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array<timestamp, input_frame_rows>{87}, std::array<size_t, input_frame_rows>{100}
+    );
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    ASSERT_EQ(ranges_and_keys.size(), num_row_slices);
+    auto component_manager = std::make_shared<ComponentManager>();
+    MergeUpdateClause clause = create_clause(GetParam(), component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    constexpr static size_t expected_segments_to_process = 1;
+    ASSERT_EQ(structure_indices.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 1; }));
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges}
+    );
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structured_entities, [](const auto& entts) { return entts.size() == 1; }));
+    constexpr static RowRange expected_row_range{15, 20};
+    constexpr static ColRange expected_col_range{1, 2};
+    const SegmentInMemory expected_segment = create_dense_segment(
+            desc, std::array<timestamp, 6>{75, 80, 85, 87, 90, 95}, std::array<size_t, 6>{15, 16, 17, 100, 18, 19}
+    );
+    const ProcessingUnit& processing_unit =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager, clause.process(std::move(structured_entities[0]))
+            );
+    ASSERT_EQ(processing_unit.segments_->size(), 1);
+    ASSERT_EQ(processing_unit.row_ranges_->size(), 1);
+    ASSERT_EQ(processing_unit.col_ranges_->size(), 1);
+    ASSERT_EQ(*(processing_unit.row_ranges_->front()), expected_row_range);
+    ASSERT_EQ(*(processing_unit.col_ranges_->front()), expected_col_range);
+    ASSERT_EQ(*(processing_unit.segments_->front()), expected_segment);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        MergeUpdateClauseInsertAndUpdate, MergeUpdateClauseInsertAndUpdate,
+        testing::Values(
+                MergeStrategy{.not_matched_by_target = MergeAction::INSERT},
+                MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::INSERT}
+        )
+);
+
+struct MergeUpdateClauseUpdateOffByOne : testing::TestWithParam<std::tuple<MergeStrategy, unsigned, int>> {
+    enum { UPDATE_SECOND_TO_LAST = -2, UPDATE_LAST = -1, UPDATE_FIRST = 0, UPDATE_SECOND = 1 };
+    static MergeStrategy strategy() { return std::get<0>(GetParam()); }
+    static unsigned segment_to_update() { return std::get<1>(GetParam()); }
+    static int row_in_segment_to_update() { return std::get<2>(GetParam()); }
+};
+
+/// Tests updating at the edges of row slices with all strategies allowing updates.
+/// Input data consists of 6 segments. For each row slice test updating the first, second, second to last, and last row.
+TEST_P(MergeUpdateClauseUpdateOffByOne, UpdateOffByOne) {
+    constexpr static std::array fields{
+            FieldRef{{DataType::INT64, Dimension::Dim0}, "a"}, FieldRef{{DataType::INT32, Dimension::Dim0}, "b"}
+    };
+    constexpr static int index_step = 5;
+    constexpr static int rows_per_segment = 5;
+    constexpr static int cols_per_segment = 1;
+    constexpr static int num_rows = 27;
+    constexpr static int num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
+    ASSERT_EQ(num_row_slices, 6);
+    const int row_within_segment = (rows_per_segment + row_in_segment_to_update()) % rows_per_segment;
+    const int row_to_update =
+            segment_to_update() * rows_per_segment + (rows_per_segment + row_in_segment_to_update()) % rows_per_segment;
+    if (row_to_update >= num_rows) {
+        GTEST_SKIP();
+    }
+    const timestamp index_value_to_update{row_to_update * index_step};
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            iota_view{timestamp{0}, timestamp{num_rows}} |
+                    views::transform([](const timestamp x) { return timestamp{x * index_step}; }),
+            iota_view{int64_t{0}, int64_t{num_rows}},
+            iota_view{0, int{num_rows}}
+    );
+    ASSERT_EQ(segments.size(), 12);
+    auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array{index_value_to_update}, std::array{int64_t{100}}, std::array{200}
+    );
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    ASSERT_EQ(ranges_and_keys.size(), 12);
+    auto component_manager = std::make_shared<ComponentManager>();
+    MergeUpdateClause clause = create_clause(strategy(), component_manager, std::move(input_frame));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    constexpr static size_t expected_segments_to_process = 1;
+    ASSERT_EQ(structure_indices.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 2; }));
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            ranges_and_keys,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges}
+    );
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
+    ASSERT_TRUE(std::ranges::all_of(structured_entities, [](const auto& entts) { return entts.size() == 2; }));
+    const RowRange row_range{
+            segment_to_update() * rows_per_segment,
+            std::min(segment_to_update() * rows_per_segment + rows_per_segment, unsigned{num_rows})
+    };
+    const std::array expected_row_ranges{row_range, row_range};
+    constexpr static std::array expected_col_ranges{ColRange{1, 2}, ColRange{2, 3}};
+    const ProcessingUnit& processing_unit =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager, clause.process(std::move(structured_entities[0]))
+            );
+    ASSERT_EQ(processing_unit.segments_->size(), 2);
+    ASSERT_TRUE(std::ranges::equal(
+            *processing_unit.row_ranges_,
+            expected_row_ranges,
+            [](const std::shared_ptr<RowRange>& left, const RowRange& right) { return *left == right; }
+    ));
+    ASSERT_TRUE(std::ranges::equal(
+            *processing_unit.col_ranges_,
+            expected_col_ranges,
+            [](const std::shared_ptr<ColRange>& left, const ColRange& right) { return *left == right; }
+    ));
+    std::vector<int64_t> expected_values_a(row_range.diff());
+    std::iota(expected_values_a.begin(), expected_values_a.end(), row_range.start());
+    expected_values_a[row_within_segment] = 100;
+
+    std::vector<int32_t> expected_values_b(row_range.diff());
+    std::iota(expected_values_b.begin(), expected_values_b.end(), row_range.start());
+    expected_values_b[row_within_segment] = 200;
+
+    auto [expected_segments, _cols, _rows] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            iota_view{row_range.start(), row_range.end()} |
+                    views::transform([](const timestamp x) -> timestamp { return x * index_step; }),
+            std::move(expected_values_a),
+            std::move(expected_values_b)
+    );
+    ASSERT_EQ(expected_segments.size(), 2);
+    for (size_t i = 0; i < expected_segments.size(); ++i) {
+        ASSERT_EQ(*(processing_unit.segments_->at(i)), expected_segments[i]);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        MergeUpdateClauseUpdateOffByOne, MergeUpdateClauseUpdateOffByOne,
+        testing::Combine(
+                testing::Values(
+                        MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING},
+                        MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::INSERT}
+                ),
+                testing::Range(0u, 6u),
+                testing::Values(
+                        MergeUpdateClauseUpdateOffByOne::UPDATE_SECOND_TO_LAST,
+                        MergeUpdateClauseUpdateOffByOne::UPDATE_LAST, MergeUpdateClauseUpdateOffByOne::UPDATE_FIRST,
+                        MergeUpdateClauseUpdateOffByOne::UPDATE_SECOND
+                )
+        )
+);

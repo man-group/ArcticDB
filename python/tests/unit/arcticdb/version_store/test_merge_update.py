@@ -8,16 +8,14 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import pytest
 import pandas as pd
-from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge
+from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data, merge, query_stats_operation_count
 import arcticdb
 from arcticdb.version_store import VersionedItem
 from arcticdb_ext.exceptions import SchemaException
 from arcticdb_ext.storage import KeyType
 import numpy as np
 from arcticdb.exceptions import (
-    StreamDescriptorMismatch,
     UserInputException,
-    SortingException,
     UnsortedDataException,
     StorageException,
     ArcticException,
@@ -25,6 +23,7 @@ from arcticdb.exceptions import (
 from arcticdb.version_store.library import MergeAction, MergeStrategy
 from arcticdb.version_store._store import normalize_merge_action
 from typing import Union, List, Optional
+import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.merge_update
 
@@ -1512,14 +1511,24 @@ class TestMergeTimeseriesInsert:
             ],
         ],
     )
-    def test_insert_before_first_segment_start(self, lmdb_library, target):
-        lib = lmdb_library
+    def test_insert_before_first_segment_start(self, in_memory_store_factory, target):
+        lib = in_memory_store_factory()
         for tgt in target:
             lib.append("sym", tgt)
         source = pd.DataFrame(
             {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(0), pd.Timestamp(1)])
         )
-        lib.merge_experimental("sym", source, self.strategy)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        index_key = lib.read_index("sym")
+        assert index_key.index[0] == source.index[0]
+        assert index_key["end_index"][0] == pd.Timestamp(6)
         assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
 
     @pytest.mark.parametrize(
@@ -1532,14 +1541,24 @@ class TestMergeTimeseriesInsert:
             ],
         ],
     )
-    def test_insert_after_last_segment_end(self, lmdb_library, target):
-        lib = lmdb_library
+    def test_insert_after_last_segment_end(self, in_memory_store_factory, target):
+        lib = in_memory_store_factory()
         for tgt in target:
             lib.append("sym", tgt)
         source = pd.DataFrame(
             {"a": [100, 200, 300]}, index=pd.DatetimeIndex([pd.Timestamp(15), pd.Timestamp(15), pd.Timestamp(16)])
         )
-        lib.merge_experimental("sym", source, self.strategy)
+        qs.reset_stats()
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy)
+        stats = qs.get_query_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
+        index_key = lib.read_index("sym")
+        assert index_key.index[-1] == target[-1].index[0]
+        assert index_key["end_index"][-1] == pd.Timestamp(17)
         assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
 
     @pytest.mark.parametrize(
@@ -1572,14 +1591,21 @@ class TestMergeTimeseriesInsert:
         lib.merge_experimental("sym", source, self.strategy)
         assert_frame_equal(lib.read("sym").data, pd.concat(target + [source]).sort_index())
 
-    def test_insert_between_two_segments_appends_to_first(self, lmdb_library):
-        lib = lmdb_library
+    def test_insert_between_two_segments_appends_to_first(self, in_memory_store_factory):
+        lib = in_memory_store_factory()
         seg0 = pd.DataFrame({"a": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(5)]))
         lib.write("sym", seg0)
         seg1 = pd.DataFrame({"a": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(10), pd.Timestamp(15)]))
         lib.append("sym", seg1)
         source = pd.DataFrame({"a": [100, 200]}, index=pd.DatetimeIndex([pd.Timestamp(6), pd.Timestamp(7)]))
-        lib.merge_experimental("sym", source, self.strategy)
+        with qs.query_stats():
+            lib.merge_experimental("sym", source, self.strategy)
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_DATA") == 1
+        assert query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX") == 1
+        assert query_stats_operation_count(stats, "Memory_PutObject", "TABLE_INDEX") == 1
         assert_frame_equal(lib.read("sym").data, pd.concat([seg0, seg1, source]).sort_index())
         lt = lib._dev_tools.library_tool()
         segments = [lt.read_to_dataframe(key) for key in lt.dataframe_to_keys(lt.read_index("sym"), "sym")]
