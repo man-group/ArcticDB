@@ -66,7 +66,9 @@ def _read_and_assert_symbol(args):
         "s3_store_factory",
         pytest.param(
             "azure_store_factory",
-            marks=pytest.mark.skip(reason="Azure SDK's CurlConnectionPool is global and is not fork-safe. Monday ref 12128961896"),
+            marks=pytest.mark.skip(
+                reason="Azure SDK's CurlConnectionPool is global and is not fork-safe. Monday ref 12128961896"
+            ),
         ),
     ],
 )
