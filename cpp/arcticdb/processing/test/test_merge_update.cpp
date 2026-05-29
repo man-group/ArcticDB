@@ -16,9 +16,9 @@ using namespace arcticdb;
 using namespace std::ranges;
 
 namespace {
-constexpr static MergeStrategy update_only_strategy{.matched = MergeAction::UPDATE};
+constexpr MergeStrategy update_only_strategy{.matched = MergeAction::UPDATE};
 
-constexpr static std::array non_string_fields = {
+constexpr std::array non_string_fields = {
         FieldRef(TypeDescriptor(DataType::INT8, Dimension::Dim0), "int8"),
         FieldRef(TypeDescriptor(DataType::UINT32, Dimension::Dim0), "uint32"),
         FieldRef(TypeDescriptor(DataType::BOOL8, Dimension::Dim0), "bool8"),
@@ -108,31 +108,40 @@ MergeUpdateClause create_clause(
 }
 
 std::vector<EntityId> push_selected_entities(
-        ComponentManager& component_manager, const std::span<const RangesAndKey> ranges_and_keys,
+        ComponentManager& component_manager, const std::span<const std::vector<size_t>> structure_indices,
         std::vector<SegmentInMemory>&& segments_in, std::vector<ColRange>&& col_ranges_in,
-        std::vector<RowRange>&& row_ranges_in
+        std::vector<RowRange>&& row_ranges_in, std::vector<RangesAndKey>&& ranges_and_keys
 ) {
-    size_t idx = 0;
     std::vector<std::shared_ptr<SegmentInMemory>> segments;
     std::vector<std::shared_ptr<ColRange>> col_ranges;
     std::vector<std::shared_ptr<RowRange>> row_ranges;
     std::vector<std::shared_ptr<AtomKey>> atom_keys;
-    for (const RangesAndKey& range : ranges_and_keys) {
-        while ((idx < segments_in.size()) &&
-               (range.row_range() != row_ranges_in[idx] || range.col_range() != col_ranges_in[idx])) {
-            ++idx;
+
+    for (const size_t i : structure_indices | std::views::join) {
+        RangesAndKey& range_and_key = ranges_and_keys[i];
+        size_t segment_to_add = 0;
+        while (segment_to_add < segments_in.size() && (col_ranges_in[segment_to_add] != range_and_key.col_range() ||
+                                                       row_ranges_in[segment_to_add] != range_and_key.row_range())) {
+            ++segment_to_add;
         }
-        segments.emplace_back(std::make_shared<SegmentInMemory>(std::move(segments_in[idx])));
-        col_ranges.emplace_back(std::make_shared<ColRange>(std::move(col_ranges_in[idx])));
-        row_ranges.emplace_back(std::make_shared<RowRange>(std::move(row_ranges_in[idx])));
-        atom_keys.emplace_back(std::make_shared<AtomKey>(range.key_));
+        util::check(
+                segment_to_add < segments_in.size(),
+                "Could not find segment for row range {} and col range {}",
+                range_and_key.row_range(),
+                range_and_key.col_range()
+        );
+        segments.push_back(std::make_shared<SegmentInMemory>(std::move(segments_in[segment_to_add])));
+        col_ranges.push_back(std::make_shared<ColRange>(range_and_key.col_range()));
+        row_ranges.push_back(std::make_shared<RowRange>(range_and_key.row_range()));
+        atom_keys.push_back(std::make_shared<AtomKey>(std::move(range_and_key.key_)));
     }
+    const size_t num_entities = segments.size();
     return component_manager.add_entities(
             std::move(segments),
             std::move(col_ranges),
             std::move(row_ranges),
             std::move(atom_keys),
-            std::vector<EntityFetchCount>(ranges_and_keys.size(), 0)
+            std::vector<EntityFetchCount>(num_entities, 0)
     );
 }
 
@@ -164,13 +173,14 @@ struct MergeUpdateClauseUpdateStrategyTestBase {
         return ::create_clause(strategy_, component_manager_, std::move(input_frame), std::move(on));
     }
 
-    std::vector<EntityId> push_entities() {
+    std::vector<EntityId> push_entities(const std::span<const std::vector<size_t>> structure_indices) {
         return push_selected_entities(
                 *component_manager_,
-                ranges_and_keys_,
+                structure_indices,
                 std::move(segments_),
                 std::move(col_ranges_),
-                std::move(row_ranges_)
+                std::move(row_ranges_),
+                std::move(ranges_and_keys_)
         );
     }
 
@@ -304,15 +314,17 @@ TEST_P(MergeUpdateClauseUpdateStrategyMatchAllSegTest, SourceIndexMatchesAllSegm
             descriptor_,
             rows_per_segment(),
             cols_per_segment(),
-            iota_view(timestamp{0}, timestamp{3 * rows_per_segment()}),
+            iota_view<timestamp, timestamp>(0, 15),
             std::array<int8_t, 15>{10, 1, 2, 3, 4, 5, 6, 20, 8, 9, 10, 11, 12, 13, 30},
             std::array<unsigned, 15>{100, 1, 2, 3, 4, 5, 6, 200, 8, 9, 10, 11, 12, 13, 300},
-            std::array<bool, 15>{1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1},
+            std::array{true, true, false, true, false, true, false, false, false, true, false, true, false, true, true},
             std::array<float, 15>{11.1f, 1, 2, 3, 4, 5, 6, 22.2f, 8, 9, 10, 11, 12, 13, 33.3f},
             std::array<timestamp, 15>{1000, 1, 2, 3, 4, 5, 6, 2000, 8, 9, 10, 11, 12, 13, 3000}
     );
     sort_by_rowslice(expected_row_ranges, expected_col_ranges, expected_segments);
-    assert_process_results_match_expected(clause, expected_segments, structure_indices, push_entities());
+    assert_process_results_match_expected(
+            clause, expected_segments, structure_indices, push_entities(structure_indices)
+    );
 }
 
 TEST_P(MergeUpdateClauseUpdateStrategyMatchAllSegTest, SourceHasValuesOutsideOfTheDataFrame) {
@@ -334,15 +346,17 @@ TEST_P(MergeUpdateClauseUpdateStrategyMatchAllSegTest, SourceHasValuesOutsideOfT
             descriptor_,
             rows_per_segment(),
             cols_per_segment(),
-            iota_view(timestamp{0}, timestamp{3 * rows_per_segment()}),
+            iota_view<timestamp, timestamp>(0, 15),
             std::array<int8_t, 15>{10, 1, 2, 3, 4, 5, 6, 20, 8, 9, 10, 11, 12, 13, 30},
             std::array<unsigned, 15>{100, 1, 2, 3, 4, 5, 6, 200, 8, 9, 10, 11, 12, 13, 300},
-            std::array<bool, 15>{1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1},
+            std::array{true, true, false, true, false, true, false, false, false, true, false, true, false, true, true},
             std::array<float, 15>{11.1f, 1, 2, 3, 4, 5, 6, 22.2f, 8, 9, 10, 11, 12, 13, 33.3f},
             std::array<timestamp, 15>{1000, 1, 2, 3, 4, 5, 6, 2000, 8, 9, 10, 11, 12, 13, 3000}
     );
     sort_by_rowslice(expected_row_ranges, expected_col_ranges, expected_segments);
-    assert_process_results_match_expected(clause, expected_segments, structure_indices, push_entities());
+    assert_process_results_match_expected(
+            clause, expected_segments, structure_indices, push_entities(structure_indices)
+    );
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -425,7 +439,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].row_range(), RowRange(0, 5));
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].col_range(), ColRange(4, 6));
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[0]));
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
@@ -435,10 +449,10 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
             descriptor_,
             rows_per_segment_,
             cols_per_segment_,
-            iota_view<timestamp, timestamp>(0, 10),
+            iota_view<timestamp, timestamp>(0, 5),
             std::array<int8_t, 5>{0, 1, 2, -2, 4},
             std::array<unsigned, 5>{0, 1, 2, 20, 4},
-            std::array<bool, 5>{0, 1, 0, 0, 0},
+            std::array<bool, 5>{false, true, false, false, false},
             std::array<float, 5>{0.f, 1, 2, -11.f, 4},
             std::array<timestamp, 5>{0, 1, 2, -12, 4}
     );
@@ -469,9 +483,13 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].row_range(), RowRange(5, 10));
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].col_range(), ColRange(4, 6));
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
+    ASSERT_EQ(entities.size(), 2);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 1);
+    ASSERT_EQ(structured_entities[0].size(), 2);
     const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[0]));
+    ASSERT_EQ(result_entities.size(), 2);
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result_entities
     );
@@ -482,10 +500,13 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecond) {
             iota_view<timestamp, timestamp>(5, 10),
             std::array<int8_t, 5>{5, -2, 7, 8, 9},
             std::array<unsigned, 5>{5, 20, 7, 8, 9},
-            std::array<bool, 5>{1, 1, 1, 0, 1},
+            std::array<bool, 5>{true, true, true, false, true},
             std::array<float, 5>{5, -11.f, 7, 8, 9},
             std::array<timestamp, 5>{5, -12, 7, 8, 9}
     );
+    ASSERT_EQ(proc.segments_->size(), 2);
+    ASSERT_EQ(proc.row_ranges_->size(), 2);
+    ASSERT_EQ(proc.col_ranges_->size(), 2);
     ASSERT_EQ(*(*proc.segments_)[0], expected_segments[0]);
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(5, 10));
@@ -514,9 +535,13 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].col_range(), ColRange(4, 6));
 
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
+    ASSERT_EQ(entities.size(), 2);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 1);
+    ASSERT_EQ(structured_entities.front().size(), 2);
     const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[0]));
+    ASSERT_EQ(result_entities.size(), 2);
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result_entities
     );
@@ -527,9 +552,9 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchThird) {
             iota_view<timestamp, timestamp>(10, 14),
             std::array<int8_t, 4>{-2, 11, 12, 13},
             std::array<unsigned, 4>{20, 11, 12, 13},
-            std::array<bool, 4>{1, 1, 0, 1},
+            std::array<bool, 4>{true, true, false, true},
             std::array<float, 4>{-11.f, 11, 12, 13},
-            std::array<timestamp, 5>{-12, 11, 12, 13}
+            std::array<timestamp, 4>{-12, 11, 12, 13}
     );
     ASSERT_EQ(*(*proc.segments_)[0], expected_segments[0]);
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
@@ -563,7 +588,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndThird) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].row_range(), RowRange(10, 14));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].col_range(), ColRange(4, 6));
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     const std::vector<EntityId> result_entities_0 = clause.process(std::move(structured_entities[0]));
     auto proc_0 =
@@ -638,7 +663,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirstAndSecond) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].row_range(), RowRange(5, 10));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].col_range(), ColRange(4, 6));
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     const std::vector<EntityId> result_entities_0 = clause.process(std::move(structured_entities[0]));
     auto proc_0 =
@@ -713,7 +738,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchSecondAndThird) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].row_range(), RowRange(10, 14));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].col_range(), ColRange(4, 6));
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     const std::vector<EntityId> result_entities_0 = clause.process(std::move(structured_entities[0]));
     auto proc_0 =
@@ -824,7 +849,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_IndexMatchesButColumnDiffer
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].col_range(), ColRange(4, 6));
 
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     auto structured = structure_entities(structure_indices, entities);
     const std::vector<EntityId> result = clause.process(std::move(structured[0]));
     ASSERT_TRUE(result.empty());
@@ -851,7 +876,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_BothIndexAndColumnMatch) {
     const size_t segments_to_process = row_slices_to_process * column_slices_per_row_slice();
     ASSERT_EQ(ranges_and_keys_.size(), segments_to_process);
 
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     auto structured = structure_entities(structure_indices, entities);
     const auto result = clause.process(std::move(structured[0]));
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
@@ -900,7 +925,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, TwoOnColumns_BothMatch) {
     const size_t segments_to_process = row_slices_to_process * column_slices_per_row_slice();
     ASSERT_EQ(segments_to_process, 2);
 
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     const auto result = clause.process(std::move(structured[0]));
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
@@ -957,7 +982,7 @@ TEST_F(MergeUpdateClauseOnParameterTest, OneOnColumn_SourceSpansBothRowSegments)
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][0]].col_range(), ColRange(1, 4));
     ASSERT_EQ(ranges_and_keys_[structure_indices[1][1]].col_range(), ColRange(4, 6));
 
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
 
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<TimeseriesIndex>(
@@ -1066,7 +1091,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, RequireNonEmptyOn) {
     ASSERT_EQ(row_slices_to_process, 3);
     const size_t segments_to_process = row_slices_to_process * column_slices_per_row_slice();
     ASSERT_EQ(segments_to_process, 6);
-    std::vector<EntityId> entities = push_entities();
+    std::vector<EntityId> entities = push_entities(structure_indices);
     auto structured = structure_entities(structure_indices, entities);
     ASSERT_THROW((void)clause.process(std::move(structured[0])), UserInputException);
 }
@@ -1087,7 +1112,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, NonExistingOnThrows) {
     const size_t segments_to_process = row_slices_to_process * column_slices_per_row_slice();
     ASSERT_EQ(segments_to_process, 6);
     assert_structure_for_processing_result(structure_indices);
-    const std::vector<EntityId> entities = push_entities();
+    const std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     ASSERT_THROW((void)clause.process(std::move(structured[0])), UserInputException);
 }
@@ -1109,7 +1134,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1) {
     ASSERT_EQ(segments_to_process, 6);
     assert_structure_for_processing_result(structure_indices);
 
-    const std::vector<EntityId> entities = push_entities();
+    const std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
@@ -1180,7 +1205,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_ValueInSourceMatc
     ASSERT_EQ(segments_to_process, 6);
     assert_structure_for_processing_result(structure_indices);
 
-    const std::vector<EntityId> entities = push_entities();
+    const std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
@@ -1271,7 +1296,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1_Segment3
     ASSERT_EQ(segments_to_process, 6);
     assert_structure_for_processing_result(structure_indices);
 
-    const std::vector<EntityId> entities = push_entities();
+    const std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
@@ -1339,7 +1364,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchNaN) {
     ASSERT_EQ(segments_to_process, 6);
     assert_structure_for_processing_result(structure_indices);
 
-    const std::vector<EntityId> entities = push_entities();
+    const std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
@@ -1395,7 +1420,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MergeOnTwoColumns_Segment1_Segme
     ASSERT_EQ(segments_to_process, 6);
     assert_structure_for_processing_result(structure_indices);
 
-    const std::vector<EntityId> entities = push_entities();
+    const std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
@@ -1473,10 +1498,11 @@ TEST(IndexValueSpansMultipleSegments, SegmetStartsWithTheSameValueAsAnotherEnds)
     ASSERT_EQ(structure_indices.size(), 2);
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             std::move(target_segments),
             std::move(target_column_ranges),
-            std::move(target_row_ranges)
+            std::move(target_row_ranges),
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     auto [expected_segments, expected_col_slices, expected_row_slices] = slice_data_into_segments<TimeseriesIndex>(
@@ -1531,10 +1557,11 @@ TEST(IndexValueSpansMultipleSegments, MultipleSegmentsConsistedOfTheSameValue) {
             ASSERT_EQ(structure_indices.size(), 3);
             std::vector<EntityId> entities = push_selected_entities(
                     *component_manager,
-                    ranges_and_keys,
+                    structure_indices,
                     std::move(target_segments),
                     std::move(target_column_ranges),
-                    std::move(target_row_ranges)
+                    std::move(target_row_ranges),
+                    std::move(ranges_and_keys)
             );
             std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
             ASSERT_EQ(structured_entities.size(), 3);
@@ -1605,7 +1632,12 @@ TEST(MergeClauseDateRange, SourceMatchesAllIndexRangesButDoesNotMatchAnyRow) {
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(structure_indices.size(), 3);
     std::vector<EntityId> entities = push_selected_entities(
-            *component_manager, ranges_and_keys, std::move(segments), std::move(cols), std::move(rows)
+            *component_manager,
+            structure_indices,
+            std::move(segments),
+            std::move(cols),
+            std::move(rows),
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), 3);
@@ -1657,7 +1689,12 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, InsertBeforeFirstRow) {
     ASSERT_EQ(structure_indices.size(), 1);
     ASSERT_EQ(structure_indices[0].size(), col_slice_count);
     std::vector<EntityId> entities = push_selected_entities(
-            *component_manager, ranges_and_keys, clone_segments(segments), std::move(col_ranges), std::move(row_ranges)
+            *component_manager,
+            structure_indices,
+            clone_segments(segments),
+            std::move(col_ranges),
+            std::move(row_ranges),
+            std::move(ranges_and_keys)
     );
     ASSERT_EQ(entities.size(), col_slice_count);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
@@ -1726,10 +1763,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, InsertAfterLastRow) {
 
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             clone_segments(segments),
             std::vector{col_ranges},
-            std::vector{row_ranges}
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
     );
     ASSERT_EQ(entities.size(), col_slice_count);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
@@ -1788,10 +1826,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataEndsBeforeLastSegment) {
 
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             clone_segments(segments),
             std::vector{col_ranges},
-            std::vector{row_ranges}
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), 3);
@@ -1859,10 +1898,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SourceDataStartsAfterTheFirstSegment) {
 
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             clone_segments(segments),
             std::vector{col_ranges},
-            std::vector{row_ranges}
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
@@ -1925,10 +1965,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertAtEnd) {
     ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 1; }));
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             clone_segments(segments),
             std::vector{col_ranges},
-            std::vector{row_ranges}
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
@@ -1990,10 +2031,11 @@ TEST_P(MergeUpdateClauseInsertAndUpdate, SkipExpandedSegmentsInsertInMiddle) {
     ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 1; }));
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             clone_segments(segments),
             std::vector{col_ranges},
-            std::vector{row_ranges}
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
@@ -2073,10 +2115,11 @@ TEST_P(MergeUpdateClauseUpdateOffByOne, UpdateOffByOne) {
     ASSERT_TRUE(std::ranges::all_of(structure_indices, [](const auto& indices) { return indices.size() == 2; }));
     std::vector<EntityId> entities = push_selected_entities(
             *component_manager,
-            ranges_and_keys,
+            structure_indices,
             clone_segments(segments),
             std::vector{col_ranges},
-            std::vector{row_ranges}
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
     );
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), expected_segments_to_process);
@@ -2140,3 +2183,70 @@ INSTANTIATE_TEST_SUITE_P(
                 )
         )
 );
+
+TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmentFirst) {
+    GTEST_SKIP();
+    constexpr static std::array fields{
+            FieldRef{{DataType::INT64, Dimension::Dim0}, "a"}, FieldRef{{DataType::INT32, Dimension::Dim0}, "b"}
+    };
+    constexpr static int rows_per_segment = 5;
+    constexpr static int cols_per_segment = 1;
+    constexpr static int num_rows = 27;
+    constexpr static int num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
+    ASSERT_EQ(num_row_slices, 6);
+    const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
+    // Assuming indexing starts from 0, segment 1 ends with 9 and segment 2 starts with 9
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            rows_per_segment,
+            cols_per_segment,
+            std::array<timestamp, num_rows>{1,  2,  3,  4,  5,  6,  7,  8,  9,  9,  9,  9,  10, 11,
+                                            12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24},
+            iota_view{int64_t{0}, int64_t{num_rows}},
+            iota_view{0, int{num_rows}}
+    );
+    ASSERT_EQ(segments.size(), 12);
+    auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
+            desc, std::array{timestamp{9}}, std::array{int64_t{12}}, std::array{200}
+    );
+    std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
+    ASSERT_EQ(ranges_and_keys.size(), 12);
+    auto component_manager = std::make_shared<ComponentManager>();
+    constexpr static MergeStrategy strategy{
+            .matched = MergeAction::DO_NOTHING, .not_matched_by_target = MergeAction::INSERT
+    };
+    std::vector<std::string> on{"a"};
+    MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame), std::move(on));
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
+    ASSERT_EQ(structure_indices.size(), 1);
+    ASSERT_EQ(structure_indices[0].size(), 4);
+    constexpr static std::array expected_row_ranges{
+            RowRange{5, 10}, RowRange{5, 10}, RowRange{10, 15}, RowRange{10, 15}
+    };
+    constexpr static std::array expected_col_ranges{ColRange{1, 2}, ColRange{2, 3}, ColRange{1, 2}, ColRange{2, 3}};
+    constexpr static std::array expected_time_ranges{
+            TimestampRange{6, 10}, TimestampRange{6, 10}, TimestampRange{9, 13}, TimestampRange{9, 13}
+    };
+    for (size_t i = 0; i < structure_indices[0].size(); ++i) {
+        const RangesAndKey& selected_range = ranges_and_keys[structure_indices[0][i]];
+        ASSERT_EQ(selected_range.row_range(), expected_row_ranges[i]);
+        ASSERT_EQ(selected_range.col_range(), expected_col_ranges[i]);
+        ASSERT_EQ(selected_range.key_.time_range(), expected_time_ranges[i]);
+    }
+    std::vector<EntityId> entities = push_selected_entities(
+            *component_manager,
+            structure_indices,
+            clone_segments(segments),
+            std::vector{col_ranges},
+            std::vector{row_ranges},
+            std::move(ranges_and_keys)
+    );
+    ASSERT_EQ(entities.size(), 4);
+    std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 1);
+    ASSERT_EQ(structured_entities[0].size(), 4);
+    [[maybe_unused]] const ProcessingUnit& processing_unit =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager, clause.process(std::move(structured_entities[0]))
+            );
+}

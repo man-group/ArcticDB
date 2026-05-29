@@ -458,7 +458,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
             break;
         }
 
-        timestamp segment_end = time_range.second;
+        auto source_range_end = source_index.end();
         if (*source_range_start >= time_range.second) {
             // The current segment does not contain any source value because all source values larger than the segment
             // start are also larger than the segment end.
@@ -468,33 +468,23 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
                 continue;
             }
             // In case insertion is enabled, source values in between two row slices will be appended to the former
-            if (row_slice_idx == offsets.size() - 1) {
-                ARCTICDB_DEBUG_CHECK(
-                        ErrorCode::E_ASSERTION_FAILURE,
-                        source_range_start < source_index.end(),
-                        "There must be at least one source row to insert in the last row slice"
-                );
-                // All source data past the last index value in the target gets appended to the last row slice
-                source_start_end_for_row_range_.insert(
-                        {time_range, {source_range_start - source_index.begin(), source_index.size()}}
-                );
-                row_slices_to_keep.push_back(row_slice_idx);
-                break;
+            if (row_slice_idx != offsets.size() - 1) {
+                // Source data in between two row slices is appended to the former. Extend the segment so that its index
+                // reaches the next segment start.
+                const timestamp next_row_slice_start =
+                        ranges_and_keys[offsets[row_slice_idx + 1].front()].key_.time_range().first;
+                if (*source_range_start >= next_row_slice_start) {
+                    // The extended segment does not contain any source values. All source values are after the extended
+                    // segment end. Continue checking next row slices.
+                    continue;
+                }
+                source_range_end = std::upper_bound(source_range_start, source_index.end(), next_row_slice_start - 1);
             }
-            // Source data in between two row slices is appended to the former. Extend the segment so that its index
-            // reaches the next segment start.
-            const timestamp next_row_slice_start =
-                    ranges_and_keys[offsets[row_slice_idx + 1].front()].key_.time_range().first;
-            if (*source_range_start >= next_row_slice_start) {
-                // The extended segment does not contain any source values. All source values are after the extended
-                // segment end. Continue checking next row slices.
-                continue;
-            }
-            segment_end = next_row_slice_start;
+        } else {
+            source_range_end = ranges::upper_bound(source_range_start, source_index.end(), time_range.second - 1);
         }
-        auto source_end_it = std::upper_bound(source_range_start, source_index.end(), segment_end - 1);
         const std::pair<size_t, size_t> source_row_range = {
-                source_range_start - source_index.begin(), source_end_it - source_index.begin()
+                source_range_start - source_index.begin(), source_range_end - source_index.begin()
         };
         source_start_end_for_row_range_.insert({time_range, source_row_range});
         row_slices_to_keep.push_back(row_slice_idx);
