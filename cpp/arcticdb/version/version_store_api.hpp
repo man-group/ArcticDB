@@ -72,7 +72,8 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem append(
             const StreamId& stream_id, const convert::InputItem& item, const py::object& norm,
-            const py::object& user_meta, bool upsert, bool prune_previous_versions, bool validate_index
+            const py::object& user_meta, bool upsert, bool prune_previous_versions, bool validate_index,
+            bool compact_data_inline
     );
 
     VersionedItem update(

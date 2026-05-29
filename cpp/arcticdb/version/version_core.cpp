@@ -135,7 +135,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 
-void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader) {
+void sorted_data_check_append(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
     if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling append with validate_index enabled, input data must be sorted"
@@ -148,6 +148,90 @@ void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader
     );
 }
 
+void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
+    if (std::holds_alternative<TimeseriesIndex>(index))
+        util::check(
+                desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
+                "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
+        );
+    else
+        util::check(
+                desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
+                "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
+        );
+}
+
+void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
+    bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            is_time_series, "When calling update, the input data must be a time series."
+    );
+    bool input_data_is_sorted =
+            frame.desc().sorted() == SortedValue::ASCENDING || frame.desc().sorted() == SortedValue::UNKNOWN;
+    // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only
+    // should also be updated
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            input_data_is_sorted, "When calling update, the input data must be sorted."
+    );
+    bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
+                                   index_segment_reader.sorted() == SortedValue::UNKNOWN;
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            existing_data_is_sorted, "When calling update, the existing data must be sorted."
+    );
+}
+
+static void check_can_append(
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
+        const WriteOptions& write_options, bool validate_index, bool empty_types
+) {
+    util::check(
+            update_info.previous_index_key_.has_value(),
+            "Cannot append as there is no previous index key to append into"
+    );
+    util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
+    fix_descriptor_mismatch_or_throw(APPEND, write_options.dynamic_schema, index_segment_reader, frame, empty_types);
+    if (validate_index) {
+        sorted_data_check_append(frame, index_segment_reader);
+    }
+    util::variant_match(
+            frame.index,
+            [&index_segment_reader, &frame, &write_options](const TimeseriesIndex&) {
+                util::check(frame.has_index(), "Cannot append timeseries without index");
+                if (index_segment_reader.tsd().total_rows() != 0 && frame.num_rows != 0) {
+                    auto first_index = NumericIndex{frame.index_value_at(0)};
+                    auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
+                    util::check(
+                            write_options.ignore_sort_order || prev - 1 <= first_index,
+                            "Can't append dataframe with start index {} to existing sequence "
+                            "ending at {}",
+                            util::format_timestamp(first_index),
+                            util::format_timestamp(prev)
+                    );
+                }
+            },
+            [](const auto&) {
+                // Do whatever, but you can't range search it
+            }
+    );
+}
+
+static void check_can_update(
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
+        bool dynamic_schema, bool empty_types
+) {
+    util::check(
+            update_info.previous_index_key_.has_value(),
+            "Cannot update as there is no previous index key to update into"
+    );
+    util::check_rte(!index_segment_reader.is_pickled(), "Cannot update to pickled data");
+    check_index_match(frame.index, index_segment_reader.tsd().index());
+    const auto index_desc = index_segment_reader.tsd().index();
+    util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
+    check_update_data_is_sorted(frame, index_segment_reader);
+    (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
+    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
+}
+
 folly::Future<AtomKey> async_append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, bool validate_index, bool empty_types
@@ -158,16 +242,12 @@ folly::Future<AtomKey> async_append_impl(
     );
     const StreamId stream_id = frame->desc().id();
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
+    // This is reading the index key synchronously in an async function. Should use async_get_index_reader instead
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto row_offset = index_segment_reader.tsd().total_rows();
-    util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
+    check_can_append(*frame, index_segment_reader, update_info, options, validate_index, empty_types);
     frame->set_offset(static_cast<ssize_t>(row_offset));
-    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, empty_types);
-    if (validate_index) {
-        sorted_data_check_append(*frame, index_segment_reader);
-    }
-
     frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
     return append_frame(
@@ -176,8 +256,7 @@ folly::Future<AtomKey> async_append_impl(
             slicing_arg,
             index_segment_reader,
             store,
-            options.dynamic_schema,
-            options.ignore_sort_order
+            options.dynamic_schema
     );
 }
 
@@ -202,19 +281,6 @@ namespace {
 bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.start_; }
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
-
-void check_index_match(const Index& index, const IndexDescriptorImpl& desc) {
-    if (std::holds_alternative<TimeseriesIndex>(index))
-        util::check(
-                desc.type() == IndexDescriptor::Type::TIMESTAMP || desc.type() == IndexDescriptor::Type::EMPTY,
-                "Index mismatch, cannot update a non-timeseries-indexed frame with a timeseries"
-        );
-    else
-        util::check(
-                desc.type() == IndexDescriptorImpl::Type::ROWCOUNT,
-                "Index mismatch, cannot update a timeseries with a non-timeseries-indexed frame"
-        );
-}
 
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
 /// First member is a vector of all segments intersecting with the first row-slice of the update range
@@ -418,25 +484,6 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
-    bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            is_time_series, "When calling update, the input data must be a time series."
-    );
-    bool input_data_is_sorted =
-            frame.desc().sorted() == SortedValue::ASCENDING || frame.desc().sorted() == SortedValue::UNKNOWN;
-    // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only
-    // should also be updated
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            input_data_is_sorted, "When calling update, the input data must be sorted."
-    );
-    bool existing_data_is_sorted = index_segment_reader.sorted() == SortedValue::ASCENDING ||
-                                   index_segment_reader.sorted() == SortedValue::UNKNOWN;
-    sorting::check<ErrorCode::E_UNSORTED_DATA>(
-            existing_data_is_sorted, "When calling update, the existing data must be sorted."
-    );
-}
-
 struct UpdateRanges {
     IndexRange front;
     IndexRange back;
@@ -469,23 +516,6 @@ static UpdateRanges compute_update_ranges(
                 return {};
             }
     );
-}
-
-static void check_can_update(
-        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
-        bool dynamic_schema, bool empty_types
-) {
-    util::check(
-            update_info.previous_index_key_.has_value(),
-            "Cannot update as there is no previous index key to update into"
-    );
-    util::check_rte(!index_segment_reader.is_pickled(), "Cannot update pickled data");
-    check_index_match(frame.index, index_segment_reader.tsd().index());
-    const auto index_desc = index_segment_reader.tsd().index();
-    util::check(index::is_timeseries_index(index_desc), "Update not supported for non-timeseries indexes");
-    check_update_data_is_sorted(frame, index_segment_reader);
-    (void)check_and_mark_slices(index_segment_reader, false, std::nullopt);
-    fix_descriptor_mismatch_or_throw(UPDATE, dynamic_schema, index_segment_reader, frame, empty_types);
 }
 
 static std::shared_ptr<std::vector<SliceAndKey>> get_keys_affected_by_update(
@@ -557,6 +587,10 @@ folly::Future<AtomKey> async_update_impl(
                         update_info.previous_index_key_->version_id()
                 );
                 frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
+                // This also checks that types are compatible, so create with a dummy row-count here, and then modify
+                // the row count later once it is known. This avoids orphaning data keys if this function throws
+                // because of incompatible schemas
+                auto tsd = index::get_merged_tsd(1, dynamic_schema, index_segment_reader.tsd(), frame);
                 return slice_and_write(
                                frame,
                                get_slicing_policy(options, *frame),
@@ -569,8 +603,8 @@ folly::Future<AtomKey> async_update_impl(
                                     query,
                                     frame,
                                     dynamic_schema,
-                                    index_segment_reader = std::move(index_segment_reader
-                                    )](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
+                                    index_segment_reader = std::move(index_segment_reader),
+                                    tsd = std::move(tsd)](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
                             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
                             auto affected_keys =
                                     get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
@@ -602,7 +636,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 affected_keys = std::move(affected_keys),
                                                 index_segment_reader = std::move(index_segment_reader),
                                                 frame,
-                                                dynamic_schema,
+                                                tsd = std::move(tsd),
                                                 update_info,
                                                 store](IntersectingSegments&& intersecting_segments) mutable {
                                         auto [flattened_slice_and_keys, row_count] = get_slice_and_keys_for_update(
@@ -612,9 +646,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 std::move(intersecting_segments),
                                                 std::move(*new_slice_and_keys_ptr)
                                         );
-                                        auto tsd = index::get_merged_tsd(
-                                                row_count, dynamic_schema, index_segment_reader.tsd(), frame
-                                        );
+                                        tsd.set_total_rows(row_count);
                                         return index::write_index(
                                                 index_type_from_descriptor(tsd.as_stream_descriptor()),
                                                 std::move(tsd),
@@ -1325,17 +1357,21 @@ void check_can_perform_processing(
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     const bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    // We do not support processing over numpy arrays in general, but compact_data (either directly, or via the
+    // compact_data_inline argument to append[_batch]) must work with numpy arrays as well as Series/DataFrames
+    const bool is_compaction =
+            !read_query.clauses_.empty() && folly::poly_type(*read_query.clauses_.front()) == typeid(CompactDataClause);
     if (!is_query_empty) {
-        // Exception for filterig pickled data is skipped for now for backward compatibility
+        // Exception for filtering pickled data is skipped for now for backward compatibility
         if (pipeline_context->multi_key_) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
                     "etc.. on recursively normalized data"
             );
-        } else if (is_numpy_array) {
+        } else if (is_numpy_array && !is_compaction) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
                     "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
-                    "etc.. on recursively numpy array"
+                    "etc.. on numpy array"
             );
         }
     }
@@ -1345,18 +1381,18 @@ static void read_indexed_keys_to_pipeline(
         const std::shared_ptr<PipelineContext>& pipeline_context, ReadQuery& read_query,
         const ReadOptions& read_options, IndexInformation& index_information
 ) {
-    auto maybe_reader = get_index_segment_reader(pipeline_context, std::move(index_information.index_));
-    if (!maybe_reader)
+    pipeline_context->index_segment_reader_ =
+            get_index_segment_reader(pipeline_context, std::move(index_information.index_));
+    if (!pipeline_context->index_segment_reader_)
         return;
 
-    auto index_segment_reader = std::move(*maybe_reader);
-    ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
-    check_can_read_index_only_if_required(index_segment_reader, read_query);
-    add_index_columns_to_query(read_query, index_segment_reader.tsd());
+    ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", pipeline_context->index_segment_reader_->size());
+    check_can_read_index_only_if_required(*pipeline_context->index_segment_reader_, read_query);
+    add_index_columns_to_query(read_query, pipeline_context->index_segment_reader_->tsd());
 
-    const auto& tsd = index_segment_reader.tsd();
+    const auto& tsd = pipeline_context->index_segment_reader_->tsd();
     read_query.convert_to_positive_row_filter(static_cast<int64_t>(tsd.total_rows()));
-    const bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+    const bool bucketize_dynamic = pipeline_context->index_segment_reader_->bucketize_dynamic();
     pipeline_context->desc_ = tsd.as_stream_descriptor();
 
     const bool dynamic_schema = opt_false(read_options.dynamic_schema());
@@ -1369,14 +1405,12 @@ static void read_indexed_keys_to_pipeline(
         queries.push_back(create_column_stats_filter(std::move(data), tsd, std::move(query_metadata)));
     }
 
-    pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
+    pipeline_context->slice_and_keys_ =
+            filter_index(*pipeline_context->index_segment_reader_, combine_filter_functions(queries));
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
-    pipeline_context->rows_ = index_segment_reader.tsd().total_rows();
+    pipeline_context->rows_ = pipeline_context->index_segment_reader_->tsd().total_rows();
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(
-            std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization())
-    );
-    pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(
-            std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta())
+            pipeline_context->index_segment_reader_->tsd().proto().normalization()
     );
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
     check_can_perform_processing(pipeline_context, read_query);
@@ -3137,7 +3171,7 @@ folly::Future<VersionedItem> merge_update_impl(
                         row_count,
                         pipeline_context->descriptor(),
                         std::move(*pipeline_context->norm_meta_),
-                        pipeline_context->user_meta_ ? std::make_optional(std::move(source->user_meta)) : std::nullopt,
+                        std::make_optional(std::move(source->user_meta)),
                         std::nullopt,
                         std::nullopt,
                         write_options.bucketize_dynamic
@@ -3218,97 +3252,215 @@ folly::Future<CompactDataInfo> compact_data_explain_plan_impl(
     });
 }
 
+static folly::Future<std::vector<SliceAndKey>> slice_and_write_frame_remainder(
+        const std::shared_ptr<Store>& store, std::shared_ptr<InputFrame> frame, size_t start_row,
+        uint64_t max_rows_per_segment, const WriteOptions& write_options, IndexPartialKey target_partial_index_key
+) {
+    auto remaining_rows_to_write = (frame->offset + frame->num_rows) - start_row;
+    ReslicingInfo reslicing_info{remaining_rows_to_write, max_rows_per_segment};
+    std::vector<RowRange> row_ranges;
+    for (uint64_t idx = 0; idx < reslicing_info.num_segments; ++idx) {
+        row_ranges.emplace_back(start_row, start_row + reslicing_info.rows_in_slice(idx));
+        start_row += reslicing_info.rows_in_slice(idx);
+    }
+    std::vector<ColRange> col_ranges;
+    if (write_options.dynamic_schema) {
+        col_ranges.emplace_back(frame->desc().index().field_count(), frame->desc().field_count());
+    } else {
+        ColRange col_range{
+                frame->desc().index().field_count(),
+                frame->desc().index().field_count() + write_options.column_group_size
+        };
+        col_ranges.emplace_back(col_range);
+        while (col_range.second < frame->desc().field_count()) {
+            col_range.first += write_options.column_group_size;
+            col_range.second += write_options.column_group_size;
+            col_ranges.emplace_back(col_range);
+        }
+    }
+    const SpecificSlicer slicer{std::move(row_ranges), std::move(col_ranges)};
+    auto res = folly::via(
+            &async::io_executor(),
+            [store, frame, slicer = std::move(slicer), key = std::move(target_partial_index_key)]() mutable {
+                // These rows are being appended, so dedup isn't possible
+                auto de_dup_map = std::make_shared<DeDupMap>();
+                return slice_and_write(frame, slicer, std::move(key), store, de_dup_map, false);
+            }
+    );
+    return res.via(&async::io_executor());
+}
+
 folly::Future<std::optional<VersionedItem>> compact_data_impl(
-        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, uint64_t rows_per_segment
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const WriteOptions& write_options,
+        uint64_t rows_per_segment, std::optional<CompactDataFrame> compact_data_frame
 ) {
     auto read_query = std::make_shared<ReadQuery>();
-    read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
-    VersionIdentifier resolved =
-            std::make_shared<IndexInformation>(read_index_key_without_column_stats(store, versioned_item.key_));
-    std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store, std::move(resolved), *read_query, {});
-    return read_modify_write_data_keys(store, read_query, ReadOptions{}, target_partial_index_key, pipeline_context)
-            .thenValue(
-                    [pipeline_context = std::move(pipeline_context),
-                     store,
-                     write_options,
-                     target_partial_index_key,
-                     read_query](std::vector<SliceAndKey>&& slices_and_keys
-                    ) -> folly::Future<std::optional<VersionedItem>> {
-                        if (slices_and_keys.empty()) {
-                            return folly::makeFuture(std::optional<VersionedItem>());
-                        }
-                        // Use an ordered set so we can binary search afterwards
-                        std::set<RowRange> new_row_ranges_set;
-                        for (const auto& slice_and_key : slices_and_keys) {
-                            new_row_ranges_set.insert(slice_and_key.slice().row_range);
-                        }
-                        std::vector<RowRange> new_row_ranges(
-                                std::make_move_iterator(new_row_ranges_set.begin()),
-                                std::make_move_iterator(new_row_ranges_set.end())
-                        );
-                        // When there is column slicing, this means we only binary search for the first_row once per
-                        // row slice in the original data
-                        std::unordered_set<size_t> first_rows_to_keep;
-                        std::unordered_set<size_t> first_rows_to_discard;
-                        for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
-                            auto first_row = slice_and_key.slice().row_range.first;
-                            if (first_rows_to_keep.contains(first_row)) {
-                                slices_and_keys.emplace_back(std::move(slice_and_key));
-                            } else if (!first_rows_to_discard.contains(first_row)) {
-                                auto begin = new_row_ranges.cbegin();
-                                auto end = new_row_ranges.cend();
-                                auto mid = begin + std::distance(begin, end) / 2;
-                                while (begin != end) {
-                                    if (mid->contains(first_row)) {
-                                        break;
-                                    } else if (first_row < mid->first) {
-                                        end = mid;
-                                        mid = begin + std::distance(begin, end) / 2;
-                                    } else { // first_row >= mid->second
-                                        begin = std::next(mid);
-                                        mid = begin + std::distance(begin, end) / 2;
+    if (compact_data_frame.has_value()) {
+        read_query->clauses_.push_back(
+                std::make_shared<Clause>(CompactDataClause(rows_per_segment, compact_data_frame->frame_))
+        );
+    } else {
+        read_query->clauses_.push_back(std::make_shared<Clause>(CompactDataClause(rows_per_segment)));
+    }
+
+    VersionIdentifier resolved = std::make_shared<IndexInformation>(
+            read_index_key_without_column_stats(store, *update_info.previous_index_key_)
+    );
+    return async::submit_io_task(SetupPipelineContextTask{store, std::move(resolved), read_query, {}})
+            .via(&async::cpu_executor())
+            .thenValue([store,
+                        update_info = std::move(update_info),
+                        write_options = std::move(write_options),
+                        compact_data_frame = std::move(compact_data_frame),
+                        read_query](std::shared_ptr<PipelineContext>&& pipeline_context) {
+                const auto& stream_id = update_info.previous_index_key_->id();
+                const auto dynamic_schema = write_options.dynamic_schema;
+                std::shared_ptr<TimeseriesDescriptor> merged_tsd;
+                auto frame =
+                        compact_data_frame.has_value() ? compact_data_frame->frame_ : std::shared_ptr<InputFrame>();
+                if (frame) {
+                    check_can_append(
+                            *frame,
+                            *pipeline_context->index_segment_reader_,
+                            update_info,
+                            write_options,
+                            compact_data_frame->validate_index_,
+                            compact_data_frame->empty_types_
+                    );
+                    frame->set_offset(pipeline_context->index_segment_reader_->tsd().total_rows());
+                    merged_tsd = std::make_shared<TimeseriesDescriptor>(index::get_merged_tsd(
+                            frame->offset + frame->num_rows,
+                            dynamic_schema,
+                            pipeline_context->index_segment_reader_->tsd(),
+                            frame
+                    ));
+                }
+                IndexPartialKey target_partial_index_key{stream_id, update_info.next_version_id_};
+                ReadOptions read_options;
+                read_options.set_dynamic_schema(dynamic_schema);
+                return read_modify_write_data_keys(
+                               store, read_query, read_options, target_partial_index_key, pipeline_context
+                )
+                        .thenValue(
+                                [pipeline_context = std::move(pipeline_context),
+                                 store,
+                                 write_options,
+                                 target_partial_index_key,
+                                 read_query,
+                                 merged_tsd,
+                                 frame](std::vector<SliceAndKey>&& slices_and_keys
+                                ) -> folly::Future<std::optional<VersionedItem>> {
+                                    if (slices_and_keys.empty() && !frame) {
+                                        return folly::makeFuture(std::optional<VersionedItem>());
                                     }
+                                    // Use an ordered set so we can binary search afterwards
+                                    std::set<RowRange> new_row_ranges_set;
+                                    for (const auto& slice_and_key : slices_and_keys) {
+                                        new_row_ranges_set.insert(slice_and_key.slice().row_range);
+                                    }
+                                    std::vector<RowRange> new_row_ranges(
+                                            std::make_move_iterator(new_row_ranges_set.begin()),
+                                            std::make_move_iterator(new_row_ranges_set.end())
+                                    );
+                                    size_t last_row_on_disk = new_row_ranges.empty() ? 0 : new_row_ranges.back().second;
+                                    // When there is column slicing, this means we only binary search for the
+                                    // first_row once per row slice in the original data
+                                    std::unordered_set<size_t> first_rows_to_keep;
+                                    std::unordered_set<size_t> first_rows_to_discard;
+                                    for (SliceAndKey& slice_and_key : pipeline_context->slice_and_keys_) {
+                                        auto first_row = slice_and_key.slice().row_range.first;
+                                        if (first_rows_to_keep.contains(first_row)) {
+                                            last_row_on_disk =
+                                                    std::max(last_row_on_disk, slice_and_key.slice().rows().second);
+                                            slices_and_keys.emplace_back(std::move(slice_and_key));
+                                        } else if (!first_rows_to_discard.contains(first_row)) {
+                                            auto begin = new_row_ranges.cbegin();
+                                            auto end = new_row_ranges.cend();
+                                            auto mid = begin + std::distance(begin, end) / 2;
+                                            while (begin != end) {
+                                                if (mid->contains(first_row)) {
+                                                    break;
+                                                } else if (first_row < mid->first) {
+                                                    end = mid;
+                                                    mid = begin + std::distance(begin, end) / 2;
+                                                } else { // first_row >= mid->second
+                                                    begin = std::next(mid);
+                                                    mid = begin + std::distance(begin, end) / 2;
+                                                }
+                                            }
+                                            if (begin == end) {
+                                                last_row_on_disk =
+                                                        std::max(last_row_on_disk, slice_and_key.slice().rows().second);
+                                                slices_and_keys.emplace_back(std::move(slice_and_key));
+                                                first_rows_to_keep.emplace(first_row);
+                                            } else {
+                                                first_rows_to_discard.emplace(first_row);
+                                            }
+                                        }
+                                    }
+                                    // This implies there are more rows in frame that have not yet been written to disk
+                                    auto remaining_slice_and_keys_fut =
+                                            frame && last_row_on_disk < frame->offset + frame->num_rows
+                                                    ? slice_and_write_frame_remainder(
+                                                              store,
+                                                              frame,
+                                                              last_row_on_disk,
+                                                              folly::poly_cast<CompactDataClause>(
+                                                                      *read_query->clauses_.front()
+                                                              )
+                                                                      .max_rows_per_segment_,
+                                                              write_options,
+                                                              target_partial_index_key
+                                                      )
+                                                    : folly::makeFuture(std::vector<SliceAndKey>{});
+                                    return (std::move(remaining_slice_and_keys_fut))
+                                            .thenValue([store,
+                                                        slices_and_keys = std::move(slices_and_keys),
+                                                        pipeline_context,
+                                                        merged_tsd,
+                                                        write_options,
+                                                        target_partial_index_key](
+                                                               std::vector<SliceAndKey>&& remaining_slice_and_keys
+                                                       ) mutable {
+                                                slices_and_keys.insert(
+                                                        slices_and_keys.end(),
+                                                        std::make_move_iterator(remaining_slice_and_keys.begin()),
+                                                        std::make_move_iterator(remaining_slice_and_keys.end())
+                                                );
+                                                ranges::sort(slices_and_keys);
+                                                pipeline_context->slice_and_keys_.clear();
+                                                const size_t row_count =
+                                                        slices_and_keys.back().slice().row_range.second -
+                                                        slices_and_keys.front().slice().row_range.first;
+                                                TimeseriesDescriptor tsd =
+                                                        merged_tsd ? std::move(*merged_tsd)
+                                                                   : make_timeseries_descriptor(
+                                                                             row_count,
+                                                                             std::move(*pipeline_context->desc_),
+                                                                             std::move(*pipeline_context->norm_meta_),
+                                                                             pipeline_context
+                                                                                     ->release_user_defined_metadata(),
+                                                                             std::nullopt,
+                                                                             std::nullopt,
+                                                                             write_options.bucketize_dynamic
+                                                                     );
+                                                // String columns always compacted to dynamic UTF-8
+                                                for (auto& field : tsd.mutable_fields()) {
+                                                    if (is_sequence_type(field.type().data_type())) {
+                                                        field.type_.data_type_ = DataType::UTF_DYNAMIC64;
+                                                    }
+                                                }
+                                                return index::write_index(
+                                                        index_type_from_descriptor(pipeline_context->descriptor()),
+                                                        tsd,
+                                                        std::move(slices_and_keys),
+                                                        target_partial_index_key,
+                                                        store
+                                                );
+                                            });
                                 }
-                                if (begin == end) {
-                                    slices_and_keys.emplace_back(std::move(slice_and_key));
-                                    first_rows_to_keep.emplace(first_row);
-                                } else {
-                                    first_rows_to_discard.emplace(first_row);
-                                }
-                            }
-                        }
-                        ranges::sort(slices_and_keys);
-                        pipeline_context->slice_and_keys_.clear();
-                        const size_t row_count = slices_and_keys.back().slice().row_range.second -
-                                                 slices_and_keys.front().slice().row_range.first;
-                        TimeseriesDescriptor tsd = make_timeseries_descriptor(
-                                row_count,
-                                std::move(*pipeline_context->desc_),
-                                std::move(*pipeline_context->norm_meta_),
-                                pipeline_context->user_meta_
-                                        ? std::make_optional(std::move(*pipeline_context->user_meta_))
-                                        : std::nullopt,
-                                std::nullopt,
-                                std::nullopt,
-                                write_options.bucketize_dynamic
                         );
-                        // String columns always compacted to dynamic UTF-8
-                        for (auto& field : tsd.mutable_fields()) {
-                            if (is_sequence_type(field.type().data_type())) {
-                                field.type_.data_type_ = DataType::UTF_DYNAMIC64;
-                            }
-                        }
-                        return index::write_index(
-                                index_type_from_descriptor(pipeline_context->descriptor()),
-                                tsd,
-                                std::move(slices_and_keys),
-                                target_partial_index_key,
-                                store
-                        );
-                    }
-            );
+            });
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(
@@ -3344,10 +3496,10 @@ folly::Future<SymbolProcessingResult> read_and_process(
                               output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
                 // Pipeline context user metadata is not populated in the case that only incomplete segments exist
                 // for a symbol, no indexed versions
+                auto opt_user_metadata = pipeline_context->release_user_defined_metadata();
                 return SymbolProcessingResult{
                         std::move(res_versioned_item),
-                        pipeline_context->user_meta_ ? std::move(*pipeline_context->user_meta_)
-                                                     : proto::descriptors::UserDefinedMetadata{},
+                        opt_user_metadata.value_or(proto::descriptors::UserDefinedMetadata{}),
                         std::move(output_schema),
                         std::move(entity_ids)
                 };

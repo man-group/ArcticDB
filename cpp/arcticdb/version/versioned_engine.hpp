@@ -52,7 +52,7 @@ class VersionedEngine {
 
     virtual VersionedItem append_internal(
             const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
-            bool prune_previous_versions, bool validate_index
+            bool prune_previous_versions, bool validate_index, bool compact_data_inline
     ) = 0;
 
     virtual VersionedItem delete_range_internal(
@@ -137,6 +137,11 @@ class VersionedEngine {
 
     virtual CompactDataInfo compact_data_explain_plan_internal(
             const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+    ) = 0;
+
+    virtual VersionedItem maybe_compact_data_and_write_version(
+            const UpdateInfo& update_info, uint64_t rows_per_segment, bool prune_previous_versions,
+            std::optional<CompactDataFrame> compact_data_frame
     ) = 0;
 
     virtual VersionedItem compact_data_internal(

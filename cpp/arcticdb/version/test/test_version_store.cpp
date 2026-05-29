@@ -641,12 +641,12 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
 
     // Append v0
     auto test_frame_0 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.append_internal(symbol, std::move(test_frame_0.frame_), true, false, false);
+    version_store.append_internal(symbol, std::move(test_frame_0.frame_), true, false, false, false);
 
     // Append v1
     start_val += num_rows;
     auto test_frame_1 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.append_internal(symbol, std::move(test_frame_1.frame_), false, false, false);
+    version_store.append_internal(symbol, std::move(test_frame_1.frame_), false, false, false, false);
 
     // Snapshot and delete
     std::cout << "Snap" << std::endl;
@@ -659,7 +659,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     // Append v2
     start_val += num_rows;
     auto test_frame_2 = get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.append_internal(symbol, std::move(test_frame_2.frame_), false, false, false);
+    version_store.append_internal(symbol, std::move(test_frame_2.frame_), false, false, false, false);
 
     uint64_t version_id = 1;
     // Test that v1 is visible when deleted versions are included

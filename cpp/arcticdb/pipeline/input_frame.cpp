@@ -63,7 +63,7 @@ bool InputFrame::has_index() const { return desc().index().field_count() != 0ULL
 
 bool InputFrame::empty() const { return num_rows == 0; }
 
-timestamp InputFrame::index_value_at(size_t row) {
+timestamp InputFrame::index_value_at(size_t row) const {
     util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
     return util::variant_match(
             input_data,

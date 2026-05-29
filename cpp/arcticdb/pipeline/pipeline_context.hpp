@@ -10,6 +10,7 @@
 
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <memory>
 
@@ -111,8 +112,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     VersionId version_id_ = 0;
     size_t total_rows_ = 0;
     size_t rows_ = 0;
+    std::optional<index::IndexSegmentReader> index_segment_reader_;
     std::shared_ptr<arcticdb::proto::descriptors::NormalizationMetadata> norm_meta_;
-    std::unique_ptr<arcticdb::proto::descriptors::UserDefinedMetadata> user_meta_;
     std::vector<SliceAndKey> slice_and_keys_;
     util::BitSet fetch_index_;
     std::vector<std::shared_ptr<StringPool>> string_pools_;
@@ -182,7 +183,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
         swap(left.stream_id_, right.stream_id_);
         swap(left.version_id_, right.version_id_);
         swap(left.total_rows_, right.total_rows_);
-        swap(left.norm_meta_, right.norm_meta_);
+        swap(left.index_segment_reader_, right.index_segment_reader_);
         swap(left.fetch_index_, right.fetch_index_);
         swap(left.string_pools_, right.string_pools_);
         swap(left.selected_columns_, right.selected_columns_);
@@ -231,6 +232,8 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     }
 
     bool only_index_columns_selected() const;
+
+    std::optional<proto::descriptors::UserDefinedMetadata> release_user_defined_metadata();
 };
 
 } // namespace arcticdb::pipelines

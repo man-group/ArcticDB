@@ -45,6 +45,14 @@ bool PipelineContext::only_index_columns_selected() const {
     return overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0];
 }
 
+std::optional<proto::descriptors::UserDefinedMetadata> PipelineContext::release_user_defined_metadata() {
+    if (index_segment_reader_.has_value()) {
+        return std::move(*index_segment_reader_->mutable_tsd().mutable_proto().mutable_user_meta());
+    } else {
+        return std::nullopt;
+    }
+}
+
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
     return parent_->selected_columns_;
 }

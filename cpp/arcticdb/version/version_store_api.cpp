@@ -772,14 +772,15 @@ VersionedItem PythonVersionStore::test_write_versioned_segment(
 
 VersionedItem PythonVersionStore::append(
         const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
-        bool upsert, bool prune_previous_versions, bool validate_index
+        bool upsert, bool prune_previous_versions, bool validate_index, bool compact_data_inline
 ) {
     return append_internal(
             stream_id,
             convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()),
             upsert,
             prune_previous_versions,
-            validate_index
+            validate_index,
+            compact_data_inline
     );
 }
 
