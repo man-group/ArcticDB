@@ -25,6 +25,15 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
+            // Sparse-map gaps are real nulls (e.g. from Arrow validity bitmaps) that the dense
+            // for_each below never visits. Count them from metadata so they reach null_count_.
+            if (input_column.column_->is_sparse()) {
+                const auto sparse_gap_count =
+                        input_column.column_->last_row() + 1 - input_column.column_->row_count();
+                if (sparse_gap_count > 0) {
+                    null_count_ += static_cast<uint64_t>(sparse_gap_count);
+                }
+            }
             auto is_nat_or_nan = []([[maybe_unused]] RawType v) {
                 if constexpr (is_floating_point_type(type_info::data_type)) {
                     return std::isnan(v);
@@ -54,7 +63,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                     }
                 } else if constexpr (is_time_type(type_info::data_type)) {
                     if (is_nat_or_nan(curr)) {
-                        ++nat_count_;
+                        ++null_count_;
                         any_nan = true;
                         return;
                     }
@@ -102,8 +111,8 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto nan_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
             nan_count_col->push_back<uint64_t>(nan_count_);
 
-            auto nat_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
-            nat_count_col->push_back<uint64_t>(nat_count_);
+            auto null_count_col = std::make_shared<Column>(make_scalar_type(DataType::UINT64), Sparsity::PERMITTED);
+            null_count_col->push_back<uint64_t>(null_count_);
 
             auto& entry_list = (*header.mutable_stats_by_column())[data_col_offset_];
             auto* min_entry = entry_list.add_entries();
@@ -115,14 +124,14 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             auto* nan_entry = entry_list.add_entries();
             nan_entry->set_stats_seg_offset(2);
             nan_entry->set_type(arcticc::pb2::column_stats_pb2::NAN_COUNT_V1);
-            auto* nat_entry = entry_list.add_entries();
-            nat_entry->set_stats_seg_offset(3);
-            nat_entry->set_type(arcticc::pb2::column_stats_pb2::NAT_COUNT_V1);
+            auto* null_entry = entry_list.add_entries();
+            null_entry->set_stats_seg_offset(3);
+            null_entry->set_type(arcticc::pb2::column_stats_pb2::NULL_COUNT_V1);
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
             seg.add_column(scalar_field(DataType::UINT64, output_column_names[2].value), nan_count_col);
-            seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), nat_count_col);
+            seg.add_column(scalar_field(DataType::UINT64, output_column_names[3].value), null_count_col);
         });
     }
 

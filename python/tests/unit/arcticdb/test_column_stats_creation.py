@@ -55,6 +55,12 @@ def assert_stats_equal(received, expected):
     assert isinstance(received, pa.Table)
     assert isinstance(expected, pl.DataFrame)
     received_pl = pl.from_arrow(received)
+    # The C++ aggregator always emits v1_NAN_COUNT and v1_NULL_COUNT columns alongside MIN/MAX.
+    # Tests that aren't exercising the count behaviour omit those columns from `expected`;
+    # subselect `received` down to the expected columns so the comparison stays focused.
+    missing = set(expected.columns) - set(received_pl.columns)
+    assert not missing, f"Expected columns missing from received: {missing}"
+    received_pl = received_pl.select(expected.columns)
     pl_assert_frame_equal(received_pl, expected, check_column_order=False, check_dtypes=False)
 
 
@@ -274,13 +280,13 @@ def test_column_stats_only_nat_values(lmdb_version_store, any_output_format):
     assert raw_stats["v1_MAX(col_1)"].values.view("int64")[0] == nat_sentinel
 
 
-def test_column_stats_nan_and_nat_counts(lmdb_version_store, any_output_format):
+def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format):
     lib = lmdb_version_store
     lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_column_stats_nan_and_nat_counts"
+    sym = "test_column_stats_nan_and_null_counts"
 
     # Each write/append produces a separate segment, so we get one row per dataframe in the stats.
-    # float_col counts toward v1_NAN_COUNT, ts_col counts toward v1_NAT_COUNT.
+    # float_col counts toward v1_NAN_COUNT, ts_col counts toward v1_NULL_COUNT.
     df0 = pd.DataFrame(
         {"float_col": [1.0, 2.0], "ts_col": [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-06-01")]},
         index=pd.date_range("2000-01-01", periods=2),
@@ -309,7 +315,7 @@ def test_column_stats_nan_and_nat_counts(lmdb_version_store, any_output_format):
         pl.Series("v1_MIN(float_col)", [1.0, 5.0, np.nan, 1.0]),
         pl.Series("v1_MAX(float_col)", [2.0, 5.0, np.nan, 2.0]),
         pl.Series("v1_NAN_COUNT(float_col)", [0, 1, 2, 1], dtype=pl.UInt64),
-        pl.Series("v1_NAT_COUNT(float_col)", [0, 0, 0, 0], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(float_col)", [0, 0, 0, 0], dtype=pl.UInt64),
         pl.Series(
             "v1_MIN(ts_col)",
             [
@@ -331,7 +337,7 @@ def test_column_stats_nan_and_nat_counts(lmdb_version_store, any_output_format):
             dtype=pl.Int64,
         ).cast(pl.Datetime("ns")),
         pl.Series("v1_NAN_COUNT(ts_col)", [0, 0, 0, 0], dtype=pl.UInt64),
-        pl.Series("v1_NAT_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
     )
 
     column_stats = lib.read_column_stats(sym)
@@ -984,18 +990,29 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     sym = "test_column_stats_header_metadata"
     generate_symbol(lib, sym)
 
+    # MINMAX always emits 4 stat entries: MIN, MAX, NAN_COUNT, NULL_COUNT.
+    minmax_types = {
+        ColumnStatsType.MIN_V1,
+        ColumnStatsType.MAX_V1,
+        ColumnStatsType.NAN_COUNT_V1,
+        ColumnStatsType.NULL_COUNT_V1,
+    }
+    field_name_by_type = {
+        ColumnStatsType.MIN_V1: "v1_MIN",
+        ColumnStatsType.MAX_V1: "v1_MAX",
+        ColumnStatsType.NAN_COUNT_V1: "v1_NAN_COUNT",
+        ColumnStatsType.NULL_COUNT_V1: "v1_NULL_COUNT",
+    }
+
     # Create stats for col_1
     lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
     header = read_column_stats_header(lib, sym)
 
     assert header.version == 1
-    assert header_stat_count(header) == 2
-    assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.MIN_V1),
-        (2, ColumnStatsType.MAX_V1),
-    }
+    assert header_stat_count(header) == 4
+    assert header_stat_pairs(header) == {(2, t) for t in minmax_types}
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
-    assert len(set(offsets)) == 2
+    assert len(set(offsets)) == 4
 
     # Verify descriptor field names match the offsets
     lib_tool = lib.library_tool()
@@ -1003,25 +1020,17 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     fields = lib_tool.read_descriptor(keys[0]).fields()
     for _, entry in header_all_entries(header):
         field_name = fields[entry.stats_seg_offset].name
-        if entry.type == ColumnStatsType.MIN_V1:
-            assert field_name == "v1_MIN(col_1)"
-        else:
-            assert field_name == "v1_MAX(col_1)"
+        assert field_name == f"{field_name_by_type[entry.type]}(col_1)"
 
     # Create stats for col_2 over existing col_1 stats
     lib.create_column_stats(sym, {"col_2": {"MINMAX"}})
     header = read_column_stats_header(lib, sym)
 
     assert header.version == 1
-    assert header_stat_count(header) == 4
-    assert header_stat_pairs(header) == {
-        (2, ColumnStatsType.MIN_V1),
-        (2, ColumnStatsType.MAX_V1),
-        (3, ColumnStatsType.MIN_V1),
-        (3, ColumnStatsType.MAX_V1),
-    }
+    assert header_stat_count(header) == 8
+    assert header_stat_pairs(header) == {(2, t) for t in minmax_types} | {(3, t) for t in minmax_types}
     offsets = [entry.stats_seg_offset for _, entry in header_all_entries(header)]
-    assert len(set(offsets)) == 4
+    assert len(set(offsets)) == 8
 
     # Drop col_1 stats
     lib.drop_column_stats(sym, {"col_1": {"MINMAX"}})
@@ -1030,20 +1039,14 @@ def test_column_stats_header_metadata(version_store_factory, lib_name, encoding_
     assert header.version == 1
     # if you change the structure, consider whether you need to change header.version too
     assert len(header.ListFields()) == 2
-    assert header_stat_count(header) == 2
-    assert header_stat_pairs(header) == {
-        (3, ColumnStatsType.MIN_V1),
-        (3, ColumnStatsType.MAX_V1),
-    }
+    assert header_stat_count(header) == 4
+    assert header_stat_pairs(header) == {(3, t) for t in minmax_types}
 
     keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
     fields = lib_tool.read_descriptor(keys[0]).fields()
     for _, entry in header_all_entries(header):
         field_name = fields[entry.stats_seg_offset].name
-        if entry.type == ColumnStatsType.MIN_V1:
-            assert field_name == "v1_MIN(col_2)"
-        else:
-            assert field_name == "v1_MAX(col_2)"
+        assert field_name == f"{field_name_by_type[entry.type]}(col_2)"
 
 
 def test_column_stats_duplicated_column_names(version_store_factory, lib_name, encoding_version, any_output_format):
