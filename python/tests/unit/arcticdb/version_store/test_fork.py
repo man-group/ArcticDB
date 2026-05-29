@@ -67,12 +67,25 @@ def _read_and_assert_symbol(args):
     raise AssertionError(f"Symbol {symbol!r} not readable after 10 attempts")
 
 
-def test_parallel_reads(local_object_version_store):
+@pytest.mark.parametrize(
+    "store_factory",
+    [
+        "s3_store_factory",
+        pytest.param(
+            "azure_store_factory",
+            marks=pytest.mark.skip(
+                reason="Azure SDK's CurlConnectionPool is global and is not fork-safe. Monday ref 12128961896"
+            ),
+        ),
+    ],
+)
+def test_parallel_reads(store_factory, request):
+    lib = request.getfixturevalue(store_factory)()
     symbols = ["XXX"] * 20
-    p = Pool(10)
-    local_object_version_store.write(symbols[0], df("test1"))
+    lib.write(symbols[0], df("test1"))
     time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
-    p.map(_read_and_assert_symbol, [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)])
+    p = Pool(10)
+    p.map(_read_and_assert_symbol, [(lib, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()
 
@@ -84,7 +97,7 @@ def test_parallel_reads_arctic(storage_name, request, lib_name):
     ac = Arctic(storage.arctic_uri)
     try:
         lib = ac.create_library(lib_name)
-        symbols = [f"{i}" for i in range(1)]
+        symbols = [f"{i}" for i in range(10)]
         for s in symbols:
             lib.write(s, df("test1"))
         p = Pool(10)
