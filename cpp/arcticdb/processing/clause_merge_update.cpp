@@ -95,7 +95,7 @@ void rebuild_sequence_column_in_new_pool(
 
 template<util::type_descriptor_tag TDT>
 bool merge_update_string_column(
-        Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field,
+        Column& target_column, const std::span<const std::vector<size_t>> rows_to_update, std::string_view column_name,
         const RowRange& row_range, const StringPool& target_string_pool,
         const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
 ) {
@@ -117,7 +117,7 @@ bool merge_update_string_column(
             for (size_t target_row : rows_to_update[source_row]) {
                 const auto py_string_object = source_column_view[source_row];
                 target_column_accessor[target_row] = write_py_string_to_pool_or_throw<TDT>(
-                        py_string_object, target_row, row_range, gil_lock, new_string_pool, target_field.name()
+                        py_string_object, target_row, row_range, gil_lock, new_string_pool, column_name
                 );
                 is_column_changed = true;
                 target_rows_not_matched_by_source.set(target_row);
@@ -141,9 +141,9 @@ struct MergeUpdateStringColumnFlags {
 template<util::type_descriptor_tag TDT>
 bool merge_update_string_column(
         Column& target_column, const MergeUpdateStringColumnFlags& flags,
-        const std::span<const std::vector<size_t>> rows_to_update, const Field& target_field, const RowRange& row_range,
-        const StringPool& target_string_pool, const std::span<PyObject* const> source_column_view,
-        StringPool& new_string_pool
+        const std::span<const std::vector<size_t>> rows_to_update, std::string_view column_name,
+        const RowRange& row_range, const StringPool& target_string_pool,
+        const std::span<PyObject* const> source_column_view, StringPool& new_string_pool
 ) {
     if (flags.data_not_changed) {
         rebuild_sequence_column_in_new_pool<TDT>(target_column, target_string_pool, new_string_pool);
@@ -153,7 +153,7 @@ bool merge_update_string_column(
     return merge_update_string_column<TDT>(
             target_column,
             rows_to_update,
-            target_field,
+            column_name,
             row_range,
             target_string_pool,
             source_column_view,
@@ -383,6 +383,81 @@ Column merge(
         internal::raise<ErrorCode::E_NOT_IMPLEMENTED>("Insertion is not implemented for string columns yet");
     }
 }
+
+template<util::type_descriptor_tag ScalarType, typename SourceT>
+bool update_column(
+        const InputFrame& source, const MergeStrategy& strategy, const StringPool& old_string_pool,
+        const std::span<const SourceT> source_data, const std::span<const std::vector<size_t>> rows_to_update,
+        const RowRange& row_range, const bool is_matching_column, std::string_view column_name, Column& target_column,
+        StringPool& new_string_pool
+) {
+    bool row_slice_changed = false;
+    const bool is_timeseries = source.desc().index().type() == IndexDescriptor::Type::TIMESTAMP;
+    if constexpr (is_sequence_type(ScalarType::data_type())) {
+        const MergeUpdateStringColumnFlags column_update_flags{
+                .is_timeseries = is_timeseries, .data_not_changed = is_matching_column && strategy.update_only()
+        };
+        row_slice_changed = merge_update_string_column<ScalarType>(
+                target_column,
+                column_update_flags,
+                rows_to_update,
+                column_name,
+                row_range,
+                old_string_pool,
+                source_data,
+                new_string_pool
+        );
+    } else {
+        if (is_matching_column) {
+            return false;
+        }
+        ColumnData target_column_data = target_column.data();
+        auto target = random_accessor<ScalarType>(&target_column_data);
+        for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
+            row_slice_changed |= !rows_to_update[source_row_idx].empty();
+            for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
+                target[target_row_idx] = source_data[source_row_idx];
+            }
+        }
+    }
+    return row_slice_changed;
+}
+
+/// Places all ranges and keys that could contain the same index value in a single logical unit to be processed by
+/// MergeUpdateClause::process.
+std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey> ranges) {
+    std::ranges::sort(ranges, [](const RangesAndKey& left, const RangesAndKey& right) {
+        return std::tie(left.row_range().first, left.col_range().first) <
+               std::tie(right.row_range().first, right.col_range().first);
+    });
+    std::vector<std::vector<size_t>> res;
+    TimestampRange previous_time_range{std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::min()};
+    for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
+        const TimestampRange current_time_range = ranges_and_key.key_.time_range();
+        if (previous_time_range.second <= current_time_range.first) {
+            res.emplace_back();
+        }
+        res.back().emplace_back(idx);
+        previous_time_range = current_time_range;
+    }
+    return res;
+}
+
+std::vector<std::vector<size_t>> split_by_row_slice(
+        const std::span<const RangesAndKey> ranges, std::span<const size_t> indexes
+) {
+    std::vector<std::vector<size_t>> res = {{indexes.front()}};
+    RowRange prev_row_range = ranges[indexes.front()].row_range();
+    for (size_t idx : indexes.subspan(1)) {
+        const RowRange current_row_range = ranges[idx].row_range();
+        if (current_row_range != prev_row_range) {
+            res.emplace_back();
+        }
+        res.back().emplace_back(idx);
+        prev_row_range = current_row_range;
+    }
+    return res;
+}
 } // namespace
 
 namespace arcticdb {
@@ -416,7 +491,8 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
 ) {
 
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    std::vector<std::vector<size_t>> offsets = structure_by_row_slice(ranges_and_keys);
+    std::vector<std::vector<size_t>> offsets = must_structure_by_time_slice() ? structure_by_time_slice(ranges_and_keys)
+                                                                              : structure_by_row_slice(ranges_and_keys);
     std::vector<size_t> row_slices_to_keep;
     // TODO: Arrow is not supported yet.
     const TypedTensor<IndexType::DataTypeTag::raw_type> index_tensor(source_->opt_index_tensor().value());
@@ -439,55 +515,65 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing_log
 
     std::span source_index(index_tensor.data(), source_->num_rows);
     for (size_t row_slice_idx = 0; row_slice_idx < offsets.size(); ++row_slice_idx) {
-        const TimestampRange& time_range = ranges_and_keys[offsets[row_slice_idx].front()].key_.time_range();
-        if (source_start_end_for_row_range_.contains(time_range)) {
-            row_slices_to_keep.push_back(row_slice_idx);
-            continue;
-        }
-
-        const auto source_range_start = [&] {
-            if (strategy_.insert() && row_slice_idx == 0 && source_index.front() < time_range.first) {
-                // In case of inserting all data before the first segment gets prepended to it
-                return source_index.begin();
-            }
-            return ranges::lower_bound(source_index, time_range.first);
-        }();
-
-        if (source_range_start == source_index.end()) {
-            // All remaining row ranges start after the last index value of the source, thus not match is possible.
-            break;
-        }
-
-        auto source_range_end = source_index.end();
-        if (*source_range_start >= time_range.second) {
-            // The current segment does not contain any source value because all source values larger than the segment
-            // start are also larger than the segment end.
-            if (!strategy_.insert()) {
-                // If insertion is not allowed, continue checking next row slices until segment's start is larger than
-                // the source index end.
+        const std::vector<std::vector<size_t>> row_slice_offsets =
+                must_structure_by_time_slice() ? ::split_by_row_slice(ranges_and_keys, offsets[row_slice_idx])
+                                               : std::vector<std::vector<size_t>>{offsets[row_slice_idx]};
+        bool keep_slice = false;
+        for (const std::vector<size_t>& row_slice_offset : row_slice_offsets) {
+            const TimestampRange& time_range = ranges_and_keys[row_slice_offset.front()].key_.time_range();
+            if (source_start_end_for_row_range_.contains(time_range)) {
+                row_slices_to_keep.push_back(row_slice_idx);
+                keep_slice = true;
                 continue;
             }
-            // In case insertion is enabled, source values in between two row slices will be appended to the former
-            if (row_slice_idx != offsets.size() - 1) {
-                // Source data in between two row slices is appended to the former. Extend the segment so that its index
-                // reaches the next segment start.
-                const timestamp next_row_slice_start =
-                        ranges_and_keys[offsets[row_slice_idx + 1].front()].key_.time_range().first;
-                if (*source_range_start >= next_row_slice_start) {
-                    // The extended segment does not contain any source values. All source values are after the extended
-                    // segment end. Continue checking next row slices.
+
+            const auto source_range_start = [&] {
+                if (strategy_.insert() && row_slice_idx == 0 && source_index.front() < time_range.first) {
+                    // In case of inserting all data before the first segment gets prepended to it
+                    return source_index.begin();
+                }
+                return ranges::lower_bound(source_index, time_range.first);
+            }();
+
+            if (source_range_start == source_index.end()) {
+                // All remaining row ranges start after the last index value of the source, thus not match is possible.
+                break;
+            }
+
+            auto source_range_end = source_index.end();
+            if (*source_range_start >= time_range.second) {
+                // The current segment does not contain any source value because all source values larger than the
+                // segment start are also larger than the segment end.
+                if (!strategy_.insert()) {
+                    // If insertion is not allowed, continue checking next row slices until segment's start is larger
+                    // than the source index end.
                     continue;
                 }
-                source_range_end = std::upper_bound(source_range_start, source_index.end(), next_row_slice_start - 1);
+                if (row_slice_idx != offsets.size() - 1) {
+                    // In case insertion is enabled, source values in between two row slices will be appended to the
+                    // former
+                    const timestamp next_row_slice_start =
+                            ranges_and_keys[offsets[row_slice_idx + 1].front()].key_.time_range().first;
+                    if (*source_range_start >= next_row_slice_start) {
+                        // The extended segment does not contain any source values. All source values are after the
+                        // extended segment end. Continue checking next row slices.
+                        continue;
+                    }
+                    source_range_end =
+                            std::upper_bound(source_range_start, source_index.end(), next_row_slice_start - 1);
+                }
+            } else {
+                source_range_end = ranges::upper_bound(source_range_start, source_index.end(), time_range.second - 1);
             }
-        } else {
-            source_range_end = ranges::upper_bound(source_range_start, source_index.end(), time_range.second - 1);
+            const std::pair<size_t, size_t> source_row_range = {
+                    source_range_start - source_index.begin(), source_range_end - source_index.begin()
+            };
+            source_start_end_for_row_range_.insert({time_range, source_row_range});
+            keep_slice = true;
         }
-        const std::pair<size_t, size_t> source_row_range = {
-                source_range_start - source_index.begin(), source_range_end - source_index.begin()
-        };
-        source_start_end_for_row_range_.insert({time_range, source_row_range});
-        row_slices_to_keep.push_back(row_slice_idx);
+        if (keep_slice) {
+            row_slices_to_keep.push_back(row_slice_idx);
+        }
     }
     filter_selected_ranges_and_keys_and_reindex_entities(row_slices_to_keep, offsets, ranges_and_keys);
     return offsets;
@@ -667,7 +753,7 @@ bool MergeUpdateClause::update_and_insert(
         return false;
     }
 
-    if (strategy_.matched == MergeAction::UPDATE && num_matched_rows > 0) {
+    if (strategy_.update() && num_matched_rows > 0) {
         // TODO: This can be inlined in the loop iterating over all columns to avoid iterating the source one more
         // time. The loop structure makes it not intuitive. The performance cost must be evaluated. Monday: 10655963947
         util::BitSet matched_target_rows(row_ranges.front()->diff());
@@ -753,41 +839,24 @@ bool MergeUpdateClause::update_and_insert(
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         !rows_to_update.empty(), "There must be at least one source row inside the target row slice."
                 );
-
+                // String columns are always recreated from scratch regardless if an update or insert is happening. This
+                // is because the string pool must be updated. With data read from disk, the map_ member of the pool is
+                // not populated. Which means that the mapping between a string and offset in the pool is missing. To
+                // get it, we need to rebuild the pool anyway.
+                segment_contains_string_column = is_sequence_type(DataTypeTag::data_type);
                 if (strategy_.update_only() || rows_to_insert == 0) {
-                    if constexpr (is_sequence_type(DataTypeTag::data_type)) {
-                        // String columns are always recreated from scratch regardless if an update or insert is
-                        // happening. This is done because the string pool must be updated. With data read from disk,
-                        // the map_ member of the pool is not populated. Which means that the mapping between a string
-                        // and offset in the pool is missing. To get it, we need to rebuild the pool anyway.
-                        segment_contains_string_column = true;
-                        const MergeUpdateStringColumnFlags column_update_flags{
-                                .is_timeseries = is_timeseries,
-                                .data_not_changed = on_set_.contains(target_field.name()) && strategy_.update_only()
-                        };
-                        row_slice_changed |= merge_update_string_column<ScalarType>(
-                                target_column,
-                                column_update_flags,
-                                rows_to_update,
-                                target_field,
-                                *row_ranges[segment_idx],
-                                target_segment.string_pool(),
-                                source_data,
-                                new_string_pool
-                        );
-                    } else {
-                        if (on_set_.contains(target_field.name())) {
-                            return;
-                        }
-                        ColumnData target_column_data = target_column.data();
-                        auto target = random_accessor<ScalarType>(&target_column_data);
-                        for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
-                            row_slice_changed |= !rows_to_update[source_row_idx].empty();
-                            for (const size_t target_row_idx : rows_to_update[source_row_idx]) {
-                                target[target_row_idx] = source_data[source_row_idx];
-                            }
-                        }
-                    }
+                    row_slice_changed |= update_column<ScalarType>(
+                            *source_,
+                            strategy_,
+                            target_segment.string_pool(),
+                            source_data,
+                            rows_to_update,
+                            *row_ranges[segment_idx],
+                            on_set_.contains(target_field.name()),
+                            target_field.name(),
+                            target_column,
+                            new_string_pool
+                    );
                 } else {
                     internal::check<ErrorCode::E_NOT_IMPLEMENTED>(
                             is_timeseries, "Merge update with insertion is implemented only for timeseries"
@@ -1068,6 +1137,10 @@ size_t MergeUpdateClause::field_index_for_matching_on_column(std::string_view na
             descriptor
     );
     return std::distance(descriptor.fields().begin(), field_it);
+}
+
+bool MergeUpdateClause::must_structure_by_time_slice() const {
+    return source_->has_index() && !on_.empty() && strategy_.insert();
 }
 
 } // namespace arcticdb

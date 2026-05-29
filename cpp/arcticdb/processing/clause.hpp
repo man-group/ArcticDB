@@ -932,6 +932,8 @@ struct MergeUpdateClause {
     ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
             source_start_end_for_row_range_;
     std::pair<size_t, size_t> get_source_start_end(const ProcessingUnit& proc) const;
+
+    [[nodiscard]] bool must_structure_by_time_slice() const;
 };
 
 struct CompactDataClause {
