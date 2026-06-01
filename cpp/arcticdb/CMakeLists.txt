@@ -510,6 +510,7 @@ set(arcticdb_srcs
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
+        processing/clause_compact_data.cpp
         processing/clause_merge_update.cpp
         processing/clause_resample.cpp
         processing/clause_utils.cpp
