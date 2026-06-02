@@ -103,6 +103,7 @@ def test_special_chars(object_version_store):
             object_version_store.write(sym, df)
             vitem = object_version_store.read(sym)
             assert_equal(vitem.data, df)
+            object_version_store.version_store.clear()
         except AssertionError as e:
             errors.append(f"Failed for character {special_char}: {str(e)}")
     assert not errors, "errors occurred:\n" + "\n".join(errors)

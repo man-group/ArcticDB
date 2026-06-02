@@ -92,7 +92,7 @@ struct ArrowInputContiguousSlice {
 
 std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Column& col, size_t from, size_t to) {
     auto slices = std::vector<ArrowInputContiguousSlice>();
-    const auto& buffer = col.data().buffer();
+    const auto& buffer = col.buffer();
     const auto type_size = get_type_size(col.type().data_type());
     const auto from_byte = from * type_size;
     const auto to_byte = to * type_size;

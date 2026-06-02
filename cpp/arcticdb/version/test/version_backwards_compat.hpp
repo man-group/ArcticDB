@@ -32,7 +32,7 @@ std::deque<AtomKey> backwards_compat_delete_all_versions(
     auto entry = version_map->check_reload(
             store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
     );
-    auto indexes = entry->get_indexes(false);
+    auto indexes = entry->template get_indexes<AtomKey>(false);
     output.assign(std::begin(indexes), std::end(indexes));
 
     if (auto ref_key = get_symbol_ref_key(store, stream_id); ref_key) {
@@ -46,22 +46,21 @@ std::deque<AtomKey> backwards_compat_delete_all_versions(
 std::vector<AtomKey> backwards_compat_write_and_prune_previous(
         std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map, const AtomKey& key
 ) {
+    const auto& sym = key.id();
     log::version().debug("Version map pruning previous versions for stream {}", key.id());
-
-    std::vector<AtomKey> output;
     auto entry = version_map->check_reload(
-            store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+            store, sym, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
     );
 
     auto old_entry = *entry;
     entry->clear();
     version_map->do_write(store, key, entry);
     write_symbol_ref(store, key, std::nullopt, entry->head_.value());
-    version_map->remove_entry_version_keys(store, old_entry, key.id());
-    output = old_entry.get_indexes(false);
+    version_map->remove_entry_version_keys(store, old_entry, sym);
+    auto output = old_entry.template get_indexes<AtomKey>(false);
 
     if (version_map->log_changes())
-        log_write(store, key.id(), key.version_id());
+        log_write(store, sym, key.version_id());
 
     return output;
 }

@@ -1399,7 +1399,7 @@ ReadResult PythonVersionStore::read_index(
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
-    return get_index_and_tombstone_keys(store(), version_map(), stream_id);
+    return get_index_and_tombstone_keys<AtomKey>(store(), version_map(), stream_id);
 }
 
 void PythonVersionStore::_compact_version_map(const StreamId& id) { version_map()->compact(store(), id); }

@@ -130,25 +130,25 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     auto k2 = write_version_frame(stream_id, 1, version_store, 1000000, true, 1, k1);
     write_version_frame(stream_id, 2, version_store, 1000000, true, 2, k2);
 
-    auto iter_entry = std::make_shared<VersionMapEntry>();
-    auto ref_entry = std::make_shared<VersionMapEntry>();
+    auto iter_entry = std::make_shared<VersionMapEntry>(stream_id);
+    auto ref_entry = std::make_shared<VersionMapEntry>(stream_id);
 
     version_map->load_via_iteration(mock_store, stream_id, iter_entry);
     version_map->load_via_ref_key(
             mock_store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, ref_entry
     );
 
-    EXPECT_EQ(std::string(iter_entry->head_.value().view()), std::string(ref_entry->head_.value().view()));
+    EXPECT_EQ(iter_entry->head_.value(), ref_entry->head_.value());
     ASSERT_EQ(iter_entry->keys_.size(), ref_entry->keys_.size());
     for (size_t idx = 0; idx != iter_entry->keys_.size(); idx++) {
-        EXPECT_EQ(std::string(iter_entry->keys_[idx].view()), std::string(ref_entry->keys_[idx].view()));
+        EXPECT_EQ(iter_entry->keys_[idx], ref_entry->keys_[idx]);
     }
 
     // Testing the method after compaction
     version_map->compact(mock_store, stream_id);
 
-    auto iter_entry_compact = std::make_shared<VersionMapEntry>();
-    auto ref_entry_compact = std::make_shared<VersionMapEntry>();
+    auto iter_entry_compact = std::make_shared<VersionMapEntry>(stream_id);
+    auto ref_entry_compact = std::make_shared<VersionMapEntry>(stream_id);
 
     version_map->load_via_iteration(mock_store, stream_id, iter_entry_compact);
     version_map->load_via_ref_key(
@@ -158,14 +158,10 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
             ref_entry_compact
     );
 
-    EXPECT_EQ(
-            std::string(iter_entry_compact->head_.value().view()), std::string(ref_entry_compact->head_.value().view())
-    );
+    EXPECT_EQ(iter_entry_compact->head_.value(), ref_entry_compact->head_.value());
     ASSERT_EQ(iter_entry_compact->keys_.size(), ref_entry_compact->keys_.size());
     for (size_t idx = 0; idx != iter_entry_compact->keys_.size(); idx++) {
-        EXPECT_EQ(
-                std::string(iter_entry_compact->keys_[idx].view()), std::string(ref_entry_compact->keys_[idx].view())
-        );
+        EXPECT_EQ(iter_entry_compact->keys_[idx], ref_entry_compact->keys_[idx]);
     }
 }
 
@@ -667,7 +663,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
 
     uint64_t version_id = 1;
     // Test that v1 is visible when deleted versions are included
-    auto entry_deleted = std::make_shared<VersionMapEntry>();
+    auto entry_deleted = std::make_shared<VersionMapEntry>(symbol);
     version_map->load_via_ref_key(
             store,
             symbol,
@@ -682,7 +678,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     ASSERT_TRUE(it != std::end(all_index_keys));
 
     // Test that v1 is not visible when only undeleted versions are queried
-    auto entry_undeleted = std::make_shared<VersionMapEntry>();
+    auto entry_undeleted = std::make_shared<VersionMapEntry>(symbol);
     version_map->load_via_ref_key(
             store,
             symbol,
