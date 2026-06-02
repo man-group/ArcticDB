@@ -766,10 +766,6 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
         std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>&& id_to_pos,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses
 ) {
-    // TODO 11961775873: remove this kill switch
-    static const bool process_on_cpu_executor = ConfigsMap::instance()->get_int("Storage.ProcessOnCpuExecutor", 1) == 1;
-    auto* processing_executor = process_on_cpu_executor ? dynamic_cast<folly::Executor*>(&async::cpu_executor())
-                                                        : dynamic_cast<folly::Executor*>(&async::io_executor());
     // Used to make sure each entity is only added into the component manager once
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
@@ -793,10 +789,10 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
             );
         }
 
-        // Switch to the CPU executor by default (but with a kill switch) for reasons detailed in the PR description:
+        // Switch to the CPU executor for reasons detailed in the PR description
         // https://github.com/man-group/ArcticDB/pull/3086
         futures->emplace_back(folly::collect(local_futs)
-                                      .via(processing_executor)
+                                      .via(&async::cpu_executor())
                                       .thenValueInline([component_manager,
                                                         segment_fetch_counts,
                                                         id_to_pos,
