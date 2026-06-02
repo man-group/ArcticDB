@@ -216,6 +216,25 @@ class VersionMapImpl {
         map_.clear();
     }
 
+    // Returns true if the VERSION_REF head for stream_id differs from the cached head, and
+    // invalidates the cache entry so the next check_reload fetches the current version.
+    // Returns false if the ref is unchanged (missing data is genuine, not a write race).
+    bool invalidate_if_version_ref_changed(std::shared_ptr<Store> store, const StreamId& stream_id) {
+        VersionMapEntry ref_entry(stream_id);
+        read_symbol_ref(store, stream_id, ref_entry);
+
+        std::lock_guard lock(map_mutex_);
+        auto it = map_.find(stream_id);
+        const std::optional<AtomKey> cached_head = (it != map_.end()) ? it->second->head_ : std::nullopt;
+
+        if (cached_head == ref_entry.head_)
+            return false;
+
+        if (it != map_.end())
+            map_.erase(it);
+        return true;
+    }
+
     void load_via_iteration(
             std::shared_ptr<Store> store, const StreamId& stream_id, std::shared_ptr<VersionMapEntry>& entry,
             bool use_index_keys_for_iteration = false

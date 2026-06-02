@@ -197,6 +197,37 @@ TEST(VersionMap, PingPong) {
     ASSERT_EQ(right_result, expected);
 }
 
+TEST(VersionMap, InvalidateIfVersionRefChangedReturnsTrueWhenChangedFalseWhenUnchanged) {
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test_reload_if_changed"};
+    auto reader = std::make_shared<VersionMap>();
+    reader->set_validate(true);
+    auto writer = std::make_shared<VersionMap>();
+    writer->set_validate(true);
+
+    ScopedConfig sc("VersionMap.ReloadInterval", 2'000'000'000'000);
+
+    auto key1 = atom_key_builder().version_id(1).creation_ts(2).content_hash(3).start_index(4).end_index(5).build(
+            id, KeyType::TABLE_INDEX
+    );
+    writer->write_version(store, key1, std::nullopt);
+    ASSERT_EQ(get_latest_undeleted_version(store, reader, id).value(), key1);
+
+    // Writer advances the chain to v2; the reader's sticky cache cannot see it.
+    auto key2 = atom_key_builder().version_id(2).creation_ts(3).content_hash(4).start_index(5).end_index(6).build(
+            id, KeyType::TABLE_INDEX
+    );
+    writer->write_version(store, key2, key1);
+    ASSERT_EQ(get_latest_undeleted_version(store, reader, id).value(), key1); // still stale
+
+    // Ref has changed: method returns true and reader now sees v2.
+    ASSERT_TRUE(reader->invalidate_if_version_ref_changed(store, id));
+    ASSERT_EQ(get_latest_undeleted_version(store, reader, id).value(), key2);
+
+    // Ref is now current: calling again returns false (no change, no spurious retry).
+    ASSERT_FALSE(reader->invalidate_if_version_ref_changed(store, id));
+}
+
 TEST(VersionMap, TestLoadsRefAndIteration) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test1"};

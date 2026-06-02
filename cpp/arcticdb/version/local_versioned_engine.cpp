@@ -437,46 +437,78 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
-    const auto identifier = util::variant_match(
-            version_query.content_,
-            [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                std::optional<ColumnStatsSource> column_stats;
-                if (preloaded_index_query->column_stats_seg_) {
-                    column_stats.emplace(ColumnStatsSource{
-                            preloaded_index_query->column_stats_seg_, ColumnStatsQueryMetadata(read_query->clauses_)
-                    });
-                }
-                return std::make_shared<IndexInformation>(
-                        std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
-                        std::move(column_stats)
-                );
-            },
-            [&](const auto&) -> VersionIdentifier {
-                auto version = get_version_to_read(stream_id, version_query);
-                return get_version_identifier(stream_id, version_query, read_options, version);
-            }
-    );
 
-    auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
-    auto& keys = root_result.frame_and_descriptor_.keys_;
-    if (keys.empty()) {
-        return {std::move(root_result), {}};
-    } else {
-        std::vector<folly::Future<ReadVersionOutput>> node_futures;
-        node_futures.reserve(keys.size());
-        for (const auto& key : keys) {
-            node_futures.emplace_back(read_frame_for_version(store(), key, read_query, read_options, handler_data));
+    // A concurrent writer using prune_previous_version without background deletion physically deletes
+    // a superseded version's keys. A reader can resolve a version just before it is pruned and then
+    // fail to fetch its (now deleted) index/data keys. Rather than surface that race, drop the cached
+    // version chains so we re-resolve to the current version, and retry. A genuinely missing version
+    // raises E_NO_SUCH_VERSION (not caught here) and still fails fast. Preloaded-index reads carry
+    // their own index segment, so re-resolution cannot help them.
+    const bool is_preloaded = std::holds_alternative<std::shared_ptr<PreloadedIndexQuery>>(version_query.content_);
+    const int64_t max_attempts = is_preloaded ? 1 : ConfigsMap::instance()->get_int("VersionStore.ReadRetries", 3) + 1;
+
+    for (int64_t attempt = 1;; ++attempt) {
+        try {
+            const auto identifier = util::variant_match(
+                    version_query.content_,
+                    [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
+                        std::optional<ColumnStatsSource> column_stats;
+                        if (preloaded_index_query->column_stats_seg_) {
+                            column_stats.emplace(ColumnStatsSource{
+                                    preloaded_index_query->column_stats_seg_,
+                                    ColumnStatsQueryMetadata(read_query->clauses_)
+                            });
+                        }
+                        return std::make_shared<IndexInformation>(
+                                std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
+                                std::move(column_stats)
+                        );
+                    },
+                    [&](const auto&) -> VersionIdentifier {
+                        auto version = get_version_to_read(stream_id, version_query);
+                        return get_version_identifier(stream_id, version_query, read_options, version);
+                    }
+            );
+
+            auto root_result =
+                    read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+            auto& keys = root_result.frame_and_descriptor_.keys_;
+            if (keys.empty()) {
+                return {std::move(root_result), {}};
+            } else {
+                std::vector<folly::Future<ReadVersionOutput>> node_futures;
+                node_futures.reserve(keys.size());
+                for (const auto& key : keys) {
+                    node_futures.emplace_back(
+                            read_frame_for_version(store(), key, read_query, read_options, handler_data)
+                    );
+                }
+                auto node_trys = folly::collectAll(node_futures).get();
+                std::vector<ReadVersionOutput> node_results;
+                node_results.reserve(node_trys.size());
+                std::transform(
+                        std::make_move_iterator(node_trys.begin()),
+                        std::make_move_iterator(node_trys.end()),
+                        std::back_inserter(node_results),
+                        [](auto&& try_result) { return std::move(try_result).value(); }
+                );
+                return {std::move(root_result), std::move(node_results)};
+            }
+        } catch (const storage::NoDataFoundException&) {
+            if (attempt >= max_attempts || !version_map()->invalidate_if_version_ref_changed(store(), stream_id))
+                throw;
+        } catch (const storage::KeyNotFoundException&) {
+            if (attempt >= max_attempts || !version_map()->invalidate_if_version_ref_changed(store(), stream_id))
+                throw;
         }
-        auto node_trys = folly::collectAll(node_futures).get();
-        std::vector<ReadVersionOutput> node_results;
-        node_results.reserve(node_trys.size());
-        std::transform(
-                std::make_move_iterator(node_trys.begin()),
-                std::make_move_iterator(node_trys.end()),
-                std::back_inserter(node_results),
-                [](auto&& try_result) { return std::move(try_result).value(); }
+        ARCTICDB_DEBUG(
+                log::version(),
+                "Read of symbol '{}' raced with a concurrent prune; version ref changed, retrying "
+                "(attempt {} of {})",
+                stream_id,
+                attempt,
+                max_attempts
         );
-        return {std::move(root_result), std::move(node_results)};
     }
 }
 
