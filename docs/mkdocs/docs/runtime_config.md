@@ -155,7 +155,8 @@ There are two ways to configure log levels:
 
 If both environment variables are set, and `set_log_level` is called, then the latter takes priority.
 
-S3 logging can also be enabled by setting the environment variable `ARCTICDB_AWS_LogLevel_int=6`, which will output all S3 logs to a file in the present working directory. 
+S3 logging can also be enabled by setting the environment variable `ARCTICDB_AWS_LogLevel_int=6`, which by default outputs all S3 logs to `stderr` (alongside ArcticDB's own logging). 
+To write these S3 logs to a file in the present working directory instead, additionally set `ARCTICDB_AWS_LogToFile_int=1`. 
 See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/logging.html) for more details.
 
 ### Logging destinations

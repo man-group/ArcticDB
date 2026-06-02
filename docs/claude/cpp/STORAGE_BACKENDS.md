@@ -93,6 +93,7 @@ ac = Arctic("s3://localhost:9000:my-bucket?access=minioadmin&secret=minioadmin")
 - **Batch operations**: Multiple keys read/written in parallel
 - **Retry logic**: Automatic retry on transient failures
 - **Path prefix**: Organize data under a prefix within the bucket
+- **AWS SDK logging**: `AWS.LogLevel` config enables AWS SDK logs (`s3_api.cpp:S3ApiInstance`). Default sink is stderr via `s3_api.cpp:StdErrLogSystem`; set `AWS.LogToFile` to write to a file in the cwd via `DefaultLogSystem` instead.
 
 ## Azure Blob Storage
 

@@ -9,14 +9,26 @@
 #pragma once
 
 #include <aws/core/Aws.h>
+#include <aws/core/utils/logging/FormattedLogSystem.h>
 #include <memory>
 #include <mutex>
 
 namespace arcticdb::storage::s3 {
 
+class StdErrLogSystem : public Aws::Utils::Logging::FormattedLogSystem {
+  public:
+    explicit StdErrLogSystem(Aws::Utils::Logging::LogLevel log_level) : FormattedLogSystem(log_level) {}
+    void Flush() override;
+
+  protected:
+    void ProcessFormattedStatement(Aws::String&& statement) override;
+};
+
 class S3ApiInstance {
   public:
-    S3ApiInstance(Aws::Utils::Logging::LogLevel log_level = Aws::Utils::Logging::LogLevel::Off);
+    S3ApiInstance(
+            Aws::Utils::Logging::LogLevel log_level = Aws::Utils::Logging::LogLevel::Off, bool log_to_file = false
+    );
     ~S3ApiInstance();
 
     static std::shared_ptr<S3ApiInstance> instance_;
