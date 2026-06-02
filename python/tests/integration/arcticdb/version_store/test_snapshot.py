@@ -23,6 +23,7 @@ from arcticdb.util.test import (
     create_df_index_rownum,
     create_df_index_datetime,
 )
+from arcticdb_ext.version_store import ManualClockVersionStore
 from tests.util.storage_test import get_s3_storage_config
 from arcticdb_ext.storage import KeyType
 
@@ -280,7 +281,6 @@ def test_read_symbol_with_ts_in_snapshot(store, request, sym):
     with distinct_timestamps(lib) as second_write_timestamps:
         lib.write(sym, 1)
     lib.snapshot("snap")
-    # After this write only version 1 exists via the snapshot
     with distinct_timestamps(lib) as third_write_timestamps:
         lib.write(sym, 2, prune_previous_version=True)
 
@@ -1042,3 +1042,53 @@ def test_read_as_of_tombstoned_version_alive_in_snapshot(lmdb_version_store_v1):
             else:
                 with pytest.raises(NoSuchVersionException):
                     lib.read(sym, version_idx)
+
+
+def test_read_as_of_time_finds_snapshotted_deleted_version_newer_than_live(lmdb_version_store_v1):
+    """Timestamp as_of read must resolve to a deleted-but-snapshotted version that is more recent
+    than the surviving live version at that time.
+
+    This exercises the get_version_at_time path (NativeVersionStore defaults
+    iterate_snapshots_if_tombstoned=True). V1 is written, snapshotted, then deleted, so V0 becomes
+    the live head while V1 survives only via the snapshot. An as_of read at a time >= V1's write
+    time should return V1 (the version that was live then), not the older live V0.
+
+    Note: the gate that triggers the snapshot lookup relies on V1's tombstone still being present in
+    the version-map chain (so it is seen as "more recent than the live V0"). That holds today
+    because deleted index keys are not purged from the chain. If that ever changed, this lookup
+    would need to consult snapshots whenever the live version is older than the requested time.
+    """
+    lib = lmdb_version_store_v1
+    lib.version_store = ManualClockVersionStore(lib._library)
+    sym = "sym_snap_deleted_as_of"
+
+    ManualClockVersionStore.time = pd.Timestamp(1000).value
+    lib.write(sym, "v0")  # V0 @ t=1000
+    ManualClockVersionStore.time = pd.Timestamp(2000).value
+    lib.write(sym, "v1")  # V1 @ t=2000
+    lib.snapshot("snap", versions={sym: 1})  # snapshot keeps V1 alive after deletion
+    lib.delete_version(sym, 1)  # V1 tombstoned; V0 is now the live head, V1 kept by snapshot
+
+    # As of a time at/after V1's write: V0 is the live version, but V1 (deleted, snapshot-protected)
+    # was the live version then and is more recent, so it must be returned.
+    item = lib.read(sym, as_of=pd.Timestamp(2500))
+    assert item.version == 1
+    assert item.data == "v1"
+
+    # Control: as of a time before V1 existed, the answer is V0 (no snapshot lookup needed).
+    item = lib.read(sym, as_of=pd.Timestamp(1500))
+    assert item.version == 0
+    assert item.data == "v0"
+
+    # Contrast: a more-recent deleted version that is NOT in any snapshot must fall back to the live
+    # version (its data is not recoverable), rather than the deleted version.
+    sym2 = "sym_deleted_not_snapshotted"
+    ManualClockVersionStore.time = pd.Timestamp(1000).value
+    lib.write(sym2, "a0")  # V0 @ t=1000
+    ManualClockVersionStore.time = pd.Timestamp(2000).value
+    lib.write(sym2, "a1")  # V1 @ t=2000, never snapshotted
+    lib.delete_version(sym2, 1)  # V1 deleted and unrecoverable; V0 is the live head
+
+    item = lib.read(sym2, as_of=pd.Timestamp(2500))
+    assert item.version == 0
+    assert item.data == "a0"

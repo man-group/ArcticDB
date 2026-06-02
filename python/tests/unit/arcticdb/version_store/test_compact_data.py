@@ -624,7 +624,10 @@ def test_compact_data_dynamic_schema_changing_types_three_slices(in_memory_store
     lib.append(sym, df2)
     generic_compact_data_test(lib, sym)
     lib_tool = lib.library_tool()
-    data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+    # The pre-compaction version is retained as the prune anchor and append-inherits the original
+    # (mixed-type) segments, so filter to the compacted version's own data segments.
+    compacted_version = lib.read(sym).version
+    data_keys = [k for k in lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym) if k.version_id == compacted_version]
     assert len(data_keys) == 2
     # These aren't in any particular order
     types_0 = [field.type for field in lib_tool.read_descriptor(data_keys[0]).fields()]

@@ -927,15 +927,15 @@ def test_prune_previous_versions_with_write(arctic_library):
     v1 = lib.read("sym", as_of=1).data
     assert not v1.empty
 
-    # We do not prune by default
+    # Single prune write tombstones all pre-existing versions; only the latest is visible.
     lib.write("sym", pd.DataFrame(), prune_previous_versions=True)
     with pytest.raises(NoDataFoundException):
         lib.read("sym", as_of=0)
     with pytest.raises(NoDataFoundException):
         lib.read("sym", as_of=1)
 
-    v3 = lib.read("sym", as_of=2).data
-    assert v3.empty
+    v2 = lib.read("sym", as_of=2).data
+    assert v2.empty
 
 
 @pytest.mark.storage
@@ -1011,6 +1011,7 @@ def test_update_prune_previous_versions(arctic_library):
     result = lib.read("symbol").data
     expected = pd.DataFrame({"column": [400, 40, 4]}, index=pd.to_datetime(["1/1/2018", "1/3/2018", "1/4/2018"]))
     assert_frame_equal(result, expected)
+    # Check that old versions were pruned
     symbols = lib.list_versions("symbol")
     assert len(symbols) == 1
     assert ("symbol", 1) in symbols

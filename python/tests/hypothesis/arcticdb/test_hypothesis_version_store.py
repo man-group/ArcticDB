@@ -101,11 +101,24 @@ class VersionStoreComparison(RuleBasedStateMachine):
 
     # ================================ Basic version ops ================================
 
-    def _prune_previous_versions(self, sym):
+    def _tombstone_all_versions(self, sym):
+        """Model for lib.delete(sym): tombstones every NORMAL version."""
         vers = self._versions[sym]
         for value in vers:
             if value.state == State.NORMAL:
                 value.state = State.TOMBSTONED  # Delayed deletes
+
+    def _prune_previous_versions(self, sym):
+        """Model for write(..., prune_previous_version=True).
+
+        Under the current policy, prune unconditionally tombstones every pre-existing NORMAL
+        version (the newest pre-existing is retained in storage as the anchor for concurrent
+        writers, but it is not visible). The newly-written version is appended after this call.
+        """
+        vers = self._versions[sym]
+        for v in vers:
+            if v.state == State.NORMAL:
+                v.state = State.TOMBSTONED
 
     def _get_latest_undeleted_version(self, sym) -> Tuple[Optional[int], Optional[Version]]:
         vers = self._versions[sym]
@@ -156,7 +169,7 @@ class VersionStoreComparison(RuleBasedStateMachine):
     def delete_symbol(self, sym):
         assume(sym in self._visible_symbols)  # Older hypothesis don't have `consume()`
         self._lib.delete(sym)
-        self._prune_previous_versions(sym)
+        self._tombstone_all_versions(sym)
         self._visible_symbols.remove(sym)
 
     @invariant()
@@ -300,11 +313,9 @@ def test_single(lmdb_version_store_delayed_deletes_v1):
     VersionStoreComparison._lib = lmdb_version_store_delayed_deletes_v1
     state = VersionStoreComparison()
     # Copy and paste the reproduction script hypothesis generated below:
-    # print("Press enter to continue"); import sys; sys.stdin.readline()
     state.write_new_symbol(sym="0", write_mode=WriteMode.DATA)
     state.write_new_version_to_symbol(prune=True, sym="0", write_mode=WriteMode.META)
     state.snapshot(name="0", with_meta=False)
     state.delete_snapshot(name="0")
     state.write_new_version_to_symbol(prune=True, sym="0", write_mode=WriteMode.DATA)
-
     state.test_list_versions_all_and_read()

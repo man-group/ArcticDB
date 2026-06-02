@@ -342,12 +342,11 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
     if arg is not None:
         should_be_pruned = arg
 
-    lt = lib.library_tool()
     sym = f"test_prune_previous_general"
     df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
     lib.write(sym, df_0)
 
-    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
     arg_0 = [sym] if method.startswith("batch") else sym
     if method.startswith("batch"):
         arg_1 = [df_1]
@@ -359,7 +358,32 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
         arg_1 = df_1
     getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == (1 if should_be_pruned else 2)
+    live = [v for v in lib.list_versions(sym) if not v["deleted"]]
+    assert len(live) == (1 if should_be_pruned else 2)
+
+
+@pytest.mark.parametrize("lib_config", (True, False))
+@pytest.mark.parametrize("env_var", (True, False))
+@pytest.mark.parametrize("arg", (True, False, None))
+def test_prune_previous_compact_data(version_store_factory, monkeypatch, lib_config, env_var, arg):
+    # Use segment_row_size=2 so that writing 10 rows creates multiple TABLE_DATA segments,
+    # ensuring compact_data actually creates a new version rather than being a no-op.
+    lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True, segment_row_size=2)
+    should_be_pruned = lib_config
+    if env_var:
+        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+        should_be_pruned = True
+    if arg is not None:
+        should_be_pruned = arg
+
+    sym = f"test_prune_previous_compact_data"
+    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+    lib.write(sym, df_0)  # V0: 5 TABLE_DATA segments (2 rows each)
+
+    lib.compact_data(sym, rows_per_segment=10, prune_previous_version=arg)
+
+    live = [v for v in lib.list_versions(sym) if not v["deleted"]]
+    assert len(live) == (1 if should_be_pruned else 2)
 
 
 @pytest.mark.parametrize("append", (True, False))
@@ -375,7 +399,6 @@ def test_prune_previous_compact_incomplete(version_store_factory, monkeypatch, a
     if arg is not None:
         should_be_pruned = arg
 
-    lt = lib.library_tool()
     sym = f"test_prune_previous_compact_incomplete"
     df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(sym, df_0)
@@ -385,7 +408,8 @@ def test_prune_previous_compact_incomplete(version_store_factory, monkeypatch, a
 
     lib.compact_incomplete(sym, append, False, prune_previous_version=arg)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    live = [v for v in lib.list_versions(sym) if not v["deleted"]]
+    assert len(live) == (1 if should_be_pruned else 2)
 
 
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -400,14 +424,14 @@ def test_prune_previous_delete_date_range(version_store_factory, monkeypatch, li
     if arg is not None:
         should_be_pruned = arg
 
-    lt = lib.library_tool()
     sym = f"test_prune_previous_delete_date_range"
     df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(sym, df_0)
 
     lib.delete(sym, (pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-07")), prune_previous_version=arg)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    live = [v for v in lib.list_versions(sym) if not v["deleted"]]
+    assert len(live) == (1 if should_be_pruned else 2)
 
 
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -422,19 +446,20 @@ def test_prune_previous_defragment_symbol_data(version_store_factory, monkeypatc
     if arg is not None:
         should_be_pruned = arg
 
-    lt = lib.library_tool()
     sym = f"test_prune_previous_defragment_symbol_data"
     df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
     lib.append(sym, df_1, prune_previous_version=arg)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    live = [v for v in lib.list_versions(sym) if not v["deleted"]]
+    assert len(live) == (1 if should_be_pruned else 2)
 
     set_config_int("SymbolDataCompact.SegmentCount", 1)
     lib.defragment_symbol_data(sym, prune_previous_version=arg)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 3
+    live = [v for v in lib.list_versions(sym) if not v["deleted"]]
+    assert len(live) == (1 if should_be_pruned else 3)
 
 
 @pytest.mark.parametrize("index_start", range(9))

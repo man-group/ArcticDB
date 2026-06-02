@@ -895,13 +895,16 @@ def test_data_layout(lmdb_version_store_v1, all_recursive_metastructure_versions
     with pytest.raises(NoSuchVersionException):
         lib.read("sym__k")
 
-    # Check that keys are cleaned up when we prune
+    # Check that keys are cleaned up when we prune.
+    # v1 is the anchor of this prune (newest pre-existing) so its keys stay in storage;
+    # v0 is tombstoned and its keys are physically deleted.
     lib.write("sym", data, recursive_normalizers=True, prune_previous_version=True)
     assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    # v0 write, v1 write, and the v2 prune-write: the prune folds mark+sweep into one journal entry.
     assert len(lt.find_keys(KeyType.VERSION)) == 3
-    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
-    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 3
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 2  # v1 (anchor) + v2
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 6  # 3 each for v1 (anchor) and v2
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 6  # 3 each for v1 (anchor) and v2
 
     # Check that keys are cleaned up when we delete
     lib.delete("sym")

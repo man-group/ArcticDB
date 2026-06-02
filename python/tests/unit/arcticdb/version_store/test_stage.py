@@ -457,8 +457,7 @@ def test_finalize_with_tokens_and_prune_previous(
         with pytest.raises(NoSuchVersionException):
             lib.read(sym, as_of=0)
     else:
-        res = lib.read(sym, as_of=0)
-        assert_frame_equal(res.data, df_1)
+        assert_frame_equal(lib.read(sym, as_of=0).data, df_1)
 
 
 @pytest.mark.parametrize("validate_index", (True, False))

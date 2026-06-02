@@ -176,7 +176,9 @@ def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, s
     lib.write(sym, 3)
     lib_tool = lib.library_tool()
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
-    assert len(data_keys) == 1
+    # V0 is the anchor of V1's prune so its data stays in storage; V2's prune then displaces V0
+    # (aging sweep) and makes V1 the new anchor — so V1 + V2 data keys remain.
+    assert len(data_keys) == 2
 
     lib.delete(sym)
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)

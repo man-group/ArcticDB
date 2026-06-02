@@ -770,7 +770,7 @@ def test_with_snapshot_pruning_tombstones(basic_store_tombstone_and_pruning, map
         vit = lib.read(symbol)
         assert_frame_equal(vit.data, df3)
 
-        # pruning enabled
+        # pruning enabled: after 3 writes only the latest is visible (V0, V1 tombstoned by their successors)
         assert len([ver for ver in lib.list_versions() if not ver["deleted"]]) == 1
 
         assert_frame_equal(lib.read(symbol, "delete_version_snap_2").data, df2)
@@ -914,6 +914,7 @@ def test_delete_date_range_with_prune_previous(lmdb_version_store, prune_previou
 
     versions = [version["version"] for version in lib.list_versions(symbol)]
     if prune_previous_versions:
+        # V0 tombstoned by V1's prune; only V1 visible.
         assert len(versions) == 1 and versions[0] == 1
     else:
         assert len(versions) == 2

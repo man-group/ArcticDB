@@ -828,7 +828,9 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             create_stats()
             assert_column_stats_key_count()
             getattr(lib, operation)(sym, df1, prune_previous_version=True)
-            expected_count = 0
+            # v0 is the anchor of this prune (newest pre-existing) so its index key stays
+            # in storage; its column stats key therefore survives.
+            expected_count = 1
             assert_column_stats_key_count()
             clear()
 
@@ -839,7 +841,9 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
             create_stats()
             assert_column_stats_key_count()
             getattr(lib, operation)([sym], [df1], prune_previous_version=True)
-            expected_count = 0
+            # v0 is the anchor of this prune (newest pre-existing) so its index key stays
+            # in storage; its column stats key therefore survives.
+            expected_count = 1
             assert_column_stats_key_count()
             clear()
 
@@ -852,6 +856,8 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store, any_outp
         create_stats()
         assert_column_stats_key_count()
         lib.prune_previous_versions(sym)
+        # The admin prune_previous_versions API prunes aggressively (no anchor/window retention):
+        # only the latest version survives, so v0's index key — and its column stats key — is deleted.
         expected_count = 1
         assert_column_stats_key_count()
 
