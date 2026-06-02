@@ -376,7 +376,6 @@ def test_with_prune(object_and_mem_and_lmdb_version_store, symbol):
     version_store.write(symbol, final_df, prune_previous_version=True)
     version_store.snapshot("my_snap2")
 
-    # previous versions should have been deleted by now.
     assert len([ver for ver in version_store.list_versions() if not ver["deleted"]]) == 1
     # previous versions should be accessible through snapshot
     assert_equal(version_store.read(symbol, as_of="my_snap").data, modified_df)
@@ -469,13 +468,21 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
 def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key, latest_version_id=2):
     assert ver_key.type == KeyType.VERSION
     keys_in_tombstone_ver = lib_tool.read_to_keys(ver_key)
-    assert len(keys_in_tombstone_ver) == 3
+    # The prune is folded into a single journal entry whose head is the new TABLE_INDEX (so the ref's
+    # first key is an index key and the LATEST read fast-path is preserved). The just-superseded head
+    # (the anchor) is retained as an individual TOMBSTONE above the line; everything below is buried by
+    # one TOMBSTONE_ALL placed at anchor-1. The trailing VERSION points at the previous journal entry.
+    assert len(keys_in_tombstone_ver) == 4
     assert keys_in_tombstone_ver[0].type == KeyType.TABLE_INDEX
-    assert keys_in_tombstone_ver[1].type == KeyType.TOMBSTONE_ALL
-    assert keys_in_tombstone_ver[2].type == KeyType.VERSION
+    assert keys_in_tombstone_ver[1].type == KeyType.TOMBSTONE
+    assert keys_in_tombstone_ver[2].type == KeyType.TOMBSTONE_ALL
+    assert keys_in_tombstone_ver[3].type == KeyType.VERSION
     assert keys_in_tombstone_ver[0].version_id == latest_version_id
+    # The anchor (the newest pre-existing index) is retained individually above the line.
     assert keys_in_tombstone_ver[1].version_id == latest_version_id - 1
-    assert keys_in_tombstone_ver[2].version_id == latest_version_id - 1
+    # TOMBSTONE_ALL buries everything below the anchor.
+    assert keys_in_tombstone_ver[2].version_id == latest_version_id - 2
+    assert keys_in_tombstone_ver[3].version_id == latest_version_id - 1
 
 
 def check_append_ref_key_structure(keys_in_ref, latest_version_id=1):
@@ -498,9 +505,8 @@ def check_append_ref_key_structure(keys_in_ref, latest_version_id=1):
 
 def check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=1):
     """
-    The ref key for after a regular write with prune should have the following structure:
-    - TABLE_INDEX: latest index
-    - VERSION: latest version
+    The ref key after a prune write has only the latest index + VERSION, because the previous
+    versions are all tombstoned and there is no second undeleted index to include as previous.
     """
     assert len(keys_in_ref) == 2
     assert keys_in_ref[0].type == KeyType.TABLE_INDEX
@@ -529,10 +535,12 @@ def test_prune_previous_versions_write(basic_store, sym):
 
     lib.write(sym, df2, prune_previous_version=True)
 
-    # Then - only latest version and keys should survive
-    assert len(lib.list_versions(sym)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 1
+    # Visible versions: only V2 (V0 and V1 tombstoned by prune).
+    assert len([v for v in lib.list_versions(sym) if not v["deleted"]]) == 1
+    # Anchor keeps V1's INDEX/DATA in storage (newest pre-existing); V0 was already in storage
+    # (tombstoned but anchor of the prior prune) and is now cleaned up by the aging sweep.
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
 
     ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
     keys_in_ref = lib_tool.read_to_keys(ref_key)
@@ -614,12 +622,13 @@ def test_prune_previous_versions_write_batch(basic_store):
     for sym in syms:
         ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
         keys_in_ref = lib_tool.read_to_keys(ref_key)
-        assert len(lib.list_versions(sym)) == 1
+        assert len([v for v in lib.list_versions(sym) if not v["deleted"]]) == 1
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-        # Then - only latest version and keys should survive
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
+        # V1 (anchor) and V2 (latest) both have their index/data keys in storage;
+        # V0 was the anchor of the prior prune and is now cleaned up by the aging sweep.
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 2
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 2
 
         # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
         keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
@@ -658,11 +667,12 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
     for sym in syms:
         ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
         keys_in_ref = lib_tool.read_to_keys(ref_key)
-        assert len(lib.list_versions(sym)) == 1
+        assert len([v for v in lib.list_versions(sym) if not v["deleted"]]) == 1
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-        # Then - only latest version and keys should survive
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        # V1 (anchor) and V2 (latest) both have their INDEX keys in storage.
+        # V2 is a metadata-only write and reuses V1's TABLE_DATA, so only V1's data segment survives.
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 2
         assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
 
         # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
@@ -705,12 +715,13 @@ def test_prune_previous_versions_append_batch(basic_store):
     for sym in syms:
         ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
         keys_in_ref = lib_tool.read_to_keys(ref_key)
-        assert len(lib.list_versions(sym)) == 1
+        assert len([v for v in lib.list_versions(sym) if not v["deleted"]]) == 1
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-        # Then - only latest version and index keys should survive. Data keys remain the same
-        assert len(lib.list_versions(sym)) == 1
-        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        # V1 (anchor) and V2 (latest) both have their INDEX keys in storage.
+        # Data keys: all 3 segments are retained because V2 (the new version) references all of
+        # them via append inheritance, so delete_unreferenced_pruned_indexes spares them.
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 2
         assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 3
 
         # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
@@ -2025,10 +2036,18 @@ def test_find_version(lmdb_version_store_v1):
     assert lib._find_version(sym, as_of="snap_1").version == 1
     with pytest.raises(NoDataFoundException):
         lib._find_version(sym, as_of="snap_1000")
-    # By timestamp
+    # By timestamp.
+    # As-of-time reads now resolve to the most recent version that was live at that time and is
+    # still recoverable, consulting snapshots for tombstoned versions (the iterate_snapshots_if_tombstoned
+    # behaviour that defaults on for the v1 store). So a timestamp at/after a deleted-but-snapshotted
+    # version returns that version rather than skipping back to an older still-live one:
     assert lib._find_version(sym, as_of=v0_time.after).version == 0
-    assert lib._find_version(sym, as_of=v1_time.after).version == 0
-    assert lib._find_version(sym, as_of=v2_time.after).version == 0
+    # V1 was live just after v1_time and survives in snap_1, so it is returned (was 0 before the
+    # get_version_at_time snapshot fix).
+    assert lib._find_version(sym, as_of=v1_time.after).version == 1
+    # V2 was live just after v2_time but is fully deleted, so the most recent recoverable version
+    # at/before that time is V1 (snapshot-protected). Was 0 before the fix.
+    assert lib._find_version(sym, as_of=v2_time.after).version == 1
     assert lib._find_version(sym, as_of=v3_time.after).version == 3
 
 
@@ -2095,7 +2114,7 @@ def test_list_versions_with_deleted_symbols(basic_store_tombstone_and_pruning):
     lib.snapshot("snap")
     lib.write("a", 2)
     versions = lib.list_versions()
-    # At this point version 0 of 'a' is pruned but is still in the snapshot.
+    # V0 is pruned but still in the snapshot (tombstoned but visible as deleted).
     assert len(versions) == 2
     deleted = [v for v in versions if v["deleted"]]
     not_deleted = [v for v in versions if not v["deleted"]]
@@ -2135,10 +2154,10 @@ def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, s
     lib.snapshot("snap")
     lib.write(sym, 3, prune_previous_version=True)
     tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    # v0 and v1
+    # v0 and v1 (V1 was the anchor of this prune so its key stays in storage; V0 was not in snap so its key is gone)
     assert len(tombstoned_version_map) == 2
-    assert tombstoned_version_map[0] is False
-    assert tombstoned_version_map[1] is True
+    assert tombstoned_version_map[0] is False  # not in snapshot, physically deleted
+    assert tombstoned_version_map[1] is True  # anchor, key still exists in storage
 
     lib.write(sym, 3)
     lib.delete_version(sym, 2)

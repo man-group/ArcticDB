@@ -147,6 +147,58 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
 }
 
 folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
+        const std::shared_ptr<VersionMapEntry>& entry
+) {
+    try {
+        // Phase 2 of prune (sweep). write_and_prune_previous has already persisted the prune in a
+        // single journal entry: the most recent previous versions are retained as individual
+        // TOMBSTONEs above the TOMBSTONE_ALL high-water mark, and everything at or below that line is
+        // buried. It handed us the loaded+mutated entry (no extra storage round-trip needed). Here we:
+        //   1. Split the tombstoned indexes by the line: the buried block (<= line) is to_delete, the
+        //      retained block (> line) is protected so its shared data (append-inheritance / dedup)
+        //      survives.
+        //   2. Physically delete to_delete, except snapshotted keys.
+        // No further version-map write is needed — the line is already on disk, so the chain stays
+        // bounded. Under delayed_deletes the physical delete is skipped (the background tool reclaims
+        // via its own reference check).
+        if (!entry->tombstone_all_)
+            return folly::Unit();
+        const StreamId stream_id = entry->head_->id();
+        const VersionId line = entry->tombstone_all_->version_id();
+
+        std::vector<AtomKey> to_delete;
+        std::vector<AtomKey> retained;
+        for (auto& k : entry->get_tombstoned_indexes()) {
+            if (k.version_id() <= line)
+                to_delete.emplace_back(std::move(k));
+            else
+                retained.emplace_back(std::move(k));
+        }
+        if (to_delete.empty() || cfg().write_options().delayed_deletes())
+            return folly::Unit();
+
+        // TODO: the following function will load all snapshots, which will be horrifyingly inefficient when called
+        // multiple times from batch_*
+        auto [not_in_snaps, in_snaps] =
+                get_index_keys_partitioned_by_inclusion_in_snapshots(store(), stream_id, std::move(to_delete));
+        for (auto& k : retained)
+            in_snaps.insert(std::move(k));
+        PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
+        // Return the chain rather than blocking with .get(): this runs inside a threadpool task, and
+        // waiting on threadpool work from within it can deadlock.
+        return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
+                .thenValue([](auto&&) { return folly::Unit{}; })
+                .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
+                    log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
+                });
+    } catch (const std::exception& ex) {
+        // Best-effort so deliberately swallow
+        log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
+    }
+    return folly::Unit();
+}
+
+folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_indexes(
         std::vector<AtomKey>&& pruned_indexes, const AtomKey& key_to_keep
 ) {
     try {
@@ -159,7 +211,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
             return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
-                    .thenValueInline([](auto&&) { return folly::Unit{}; }) // drop the DeleteTreesStats
+                    .thenValue([](auto&&) { return folly::Unit{}; })
                     .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
                         log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
                     });
@@ -341,15 +393,27 @@ std::optional<VersionedItem> LocalVersionedEngine::get_specific_version(
 std::optional<VersionedItem> LocalVersionedEngine::get_version_at_time(
         const StreamId& stream_id, timestamp as_of, const VersionQuery& version_query
 ) {
+    LoadStrategy load_strategy{LoadType::FROM_TIME, LoadObjective::UNDELETED_ONLY, as_of};
+    auto entry = version_map()->check_reload(store(), stream_id, load_strategy, __FUNCTION__);
 
-    auto index_key = load_index_key_from_time(store(), version_map(), stream_id, as_of);
-    if (!index_key && std::get<TimestampVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned) {
-        auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
-        auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
-        std::sort(std::begin(vector_index_keys), std::end(vector_index_keys), [](auto& k1, auto& k2) {
-            return k1.creation_ts() > k2.creation_ts();
-        });
-        index_key = get_index_key_from_time(as_of, vector_index_keys);
+    auto live_key = get_index_key_from_time(as_of, entry->get_indexes(false));
+    auto index_key = live_key;
+
+    if (std::get<TimestampVersionQuery>(version_query.content_).iterate_snapshots_if_tombstoned &&
+        (!entry->tombstones_.empty() || entry->tombstone_all_.has_value())) {
+        // A deleted version may be more recent than the live one at this timestamp.
+        // get_indexes(true) reuses the already-loaded entry — no extra I/O.
+        auto best_key = get_index_key_from_time(as_of, entry->get_indexes(true));
+        if (!live_key || (best_key && best_key->version_id() > live_key->version_id())) {
+            auto index_keys = get_index_keys_in_snapshots(store(), stream_id);
+            auto vector_index_keys = std::vector<AtomKey>(index_keys.begin(), index_keys.end());
+            std::sort(std::begin(vector_index_keys), std::end(vector_index_keys), [](auto& k1, auto& k2) {
+                return k1.creation_ts() > k2.creation_ts();
+            });
+            auto snap_key = get_index_key_from_time(as_of, vector_index_keys);
+            if (snap_key && (!live_key || snap_key->version_id() > live_key->version_id()))
+                index_key = snap_key;
+        }
     }
 
     if (!index_key) {
@@ -1654,8 +1718,8 @@ void LocalVersionedEngine::write_version_and_prune_previous(
         bool prune_previous_versions, const AtomKey& new_version, const std::optional<IndexTypeKey>& previous_key
 ) {
     if (prune_previous_versions) {
-        auto pruned_indexes = version_map()->write_and_prune_previous(store(), new_version, previous_key);
-        delete_unreferenced_pruned_indexes(std::move(pruned_indexes), new_version).get();
+        auto entry = version_map()->write_and_prune_previous(store(), new_version);
+        delete_unreferenced_pruned_indexes(entry).get();
     } else {
         version_map()->write_version(store(), new_version, previous_key);
     }
@@ -1669,16 +1733,11 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     folly::Future<folly::Unit> write_version_fut;
 
     if (prune_previous_versions) {
-        write_version_fut =
-                async::submit_io_task(
-                        WriteAndPrunePreviousTask{
-                                store(), version_map, index_key, std::move(stream_update_info.previous_index_key_)
-                        }
-                )
-                        .via(&async::cpu_executor())
-                        .thenValue([this, index_key](auto&& atom_key_vec) {
-                            return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
-                        });
+        write_version_fut = async::submit_io_task(WriteAndPrunePreviousTask{store(), version_map, index_key})
+                                    .via(&async::cpu_executor())
+                                    .thenValue([this](std::shared_ptr<VersionMapEntry>&& entry) {
+                                        return delete_unreferenced_pruned_indexes(entry);
+                                    });
     } else {
         write_version_fut = async::submit_io_task(
                 WriteVersionTask{store(), version_map, index_key, stream_update_info.previous_index_key_}

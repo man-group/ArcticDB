@@ -104,6 +104,33 @@ Values:
 * 0: Disable
 * 1: Enable (Default)
 
+### VersionStore.PrunePreviousProtectionSecs
+
+Number of seconds for which pre-existing data is retained in storage after the **per-write**
+prune flag (`prune_previous_version=True` on a write/append/update) tombstones it. Protects
+concurrent writers whose appends reference the just-tombstoned data.
+
+The per-write flag always tombstones pre-existing non-snapshotted versions immediately so they
+are no longer visible. Physical removal of their data is gated by this window: data is kept in
+storage until it has aged past `PrunePreviousProtectionSecs`. In addition, the newest pre-existing
+version's data is always retained as an *anchor* regardless of age, as a belt-and-braces protection
+for writers that have been sitting on a long-stable head. The retained data is reclaimed on
+subsequent prune calls once it has aged past the window and been displaced as the anchor.
+
+This window applies only to the per-write flag. The explicit `prune_previous_versions(symbol)`
+admin method is **unconditional**: it deletes every non-snapshotted version except the latest
+immediately and ignores this config — use it only when no concurrent writers are mid-append.
+
+Set this value to `0` to disable the time-based window (the anchor still applies). Increase the
+value if your environment has write operations that can remain in-flight for longer than the
+default window (e.g., very slow networks or large staged writes).
+
+When the library is configured with **background deletion**
+(`EnterpriseLibraryOptions(background_deletion=True)`), this window is not applied — the
+background deletion tool performs its own reference-check before removing any data.
+
+Default: `600` (10 minutes)
+
 ### VersionStore.RecursiveNormalizerMetastructure
 
 Controls whether the recursive normalizer will use meta structure V2

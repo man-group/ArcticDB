@@ -84,7 +84,10 @@ def test_de_dup_same_value_written(basic_store_factory):
     assert len(get_data_keys(lib, symbol)) == num_keys
 
     lib.write(symbol, df1, prune_previous_version=True)
-    assert len(lib.list_versions(symbol)) == 1
+    # Only V2 is visible (V0 and V1 tombstoned). All data keys are retained: V1's data segments
+    # stay in storage as the anchor of this prune, and V2 de-dupes against them (so V0's keys are
+    # also kept by the de-dup protection).
+    assert len([v for v in lib.list_versions(symbol) if not v["deleted"]]) == 1
     assert len(get_data_keys(lib, symbol)) == num_keys
 
 
@@ -142,7 +145,9 @@ def test_de_dup_with_delete(basic_store_factory):
 
     lib.write(symbol, final_df, prune_previous_version=True)
     assert_frame_equal(lib.read(symbol).data, final_df)
-    assert len(get_data_keys(lib, symbol)) == num_elements
+    # V0 is the anchor of this prune so its data keys remain in storage; V3's data keys are
+    # also in storage (final_df = df2+df3 has no overlap with df1).
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
 @pytest.mark.storage
@@ -191,7 +196,9 @@ def test_de_dup_with_delete_multiple(basic_store_factory):
 
     lib.write(symbol, final_df, prune_previous_version=True)
     assert_frame_equal(lib.read(symbol).data, final_df)
-    assert len(get_data_keys(lib, symbol)) == num_elements
+    # V0 is the anchor of this prune so its data keys remain in storage; V3's data keys are
+    # also in storage (final_df = df2+df3 has no overlap with df1).
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
 
 
 @pytest.mark.storage

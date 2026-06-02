@@ -906,6 +906,9 @@ TEST(VersionMap, FollowingVersionChainEndEarlyOnTombstoneAll) {
 }
 
 TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
+    // Disable the protection window so retention is driven solely by the anchor: only the anchor v2
+    // is retained, v0/v1 are buried by the folded TOMBSTONE_ALL.
+    ScopedConfig protection("VersionStore.PrunePreviousProtectionSecs", 0);
     auto store = std::make_shared<InMemoryStore>();
     auto version_map = std::make_shared<VersionMap>();
     StreamId id{"test"};
@@ -918,9 +921,11 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
     version_map->do_write(store, key, entry);
     write_symbol_ref(store, key, std::nullopt, entry->head_.value());
 
-    // write a new version and prune the previous versions
+    // Phase 1 (mark) folds the whole prune into one journal entry: head stays v3 (TABLE_INDEX), the
+    // anchor v2 (the latest undeleted previous) is retained as an individual TOMBSTONE, and a single
+    // TOMBSTONE_ALL is placed at v1 (anchor-1), burying v0 and v1.
     auto key2 = atom_key_with_version(id, 3, 3);
-    version_map->write_and_prune_previous(store, key2, key);
+    version_map->write_and_prune_previous(store, key2);
 
     auto ref_entry = VersionMapEntry{};
     read_symbol_ref(store, id, ref_entry);
@@ -942,9 +947,10 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
          }) {
         follow_result->clear();
         version_map->follow_version_chain(store, ref_entry, follow_result, load_strategy);
-        // When loading with any of the specified load strategies with include_deleted=false we should end following the
-        // version chain early at version 2 because that's when we encounter the TOMBSTONE_ALL.
-        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{2});
+        // With include_deleted=false the load stops at the TOMBSTONE_ALL high-water mark. The anchor
+        // v2 is individually tombstoned above the line at v1, so the load traverses v3, v2, then
+        // stops at v1 (the line).
+        ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{1});
     }
 
     for (auto load_strategy :
@@ -957,6 +963,46 @@ TEST(VersionMap, FollowingVersionChainWithWriteAndPrunePrevious) {
         // beginning at version 0 even though it was deleted.
         ASSERT_EQ(follow_result->load_progress_.oldest_loaded_index_version_, VersionId{0});
     }
+}
+
+TEST(VersionMap, PrunePreviousTombstonesAllPreExisting) {
+    // Phase 1 of prune (mark): write_and_prune_previous individually tombstones every pre-existing
+    // version (so readers see only the latest) but does NOT physically delete or write a
+    // TOMBSTONE_ALL — that is the engine's sweep phase. This verifies the version-map guarantee:
+    // V0 is tombstoned (no longer visible) yet still present and reachable via INCLUDE_DELETED.
+    PilotedClock::reset();
+    auto store = std::make_shared<InMemoryStore>();
+    auto version_map = std::make_shared<VersionMap>();
+    StreamId id{"test_concurrent_prune"};
+
+    auto v0_key = atom_key_with_version(id, 0, PilotedClock::nanos_since_epoch());
+    auto entry = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    version_map->do_write(store, v0_key, entry);
+    write_symbol_ref(store, v0_key, std::nullopt, entry->head_.value());
+
+    auto v1_key = atom_key_with_version(id, 1, PilotedClock::nanos_since_epoch());
+    // Anchor is the latest undeleted previous (v0); it is the sole previous version, so it is retained
+    // as an individual TOMBSTONE and no TOMBSTONE_ALL is written.
+    version_map->write_and_prune_previous(store, v1_key);
+
+    // V0 is no longer visible as a live version...
+    auto live = get_all_versions(store, version_map, id);
+    auto v0_alive = std::any_of(live.begin(), live.end(), [](const AtomKey& k) { return k.version_id() == 0; });
+    EXPECT_FALSE(v0_alive) << "V0 should be tombstoned in the chain after write_and_prune_previous";
+
+    // ...but it is still present (individually tombstoned, not buried under a TOMBSTONE_ALL), so an
+    // INCLUDE_DELETED load still reaches it and the engine sweep can later reclaim it.
+    auto reloaded = version_map->check_reload(
+            store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
+    EXPECT_TRUE(reloaded->is_tombstoned(VersionId{0})) << "V0 must be individually tombstoned by the mark phase";
+    EXPECT_FALSE(reloaded->tombstone_all_.has_value()) << "the mark phase must not write a TOMBSTONE_ALL";
+    auto tombstoned = reloaded->get_tombstoned_indexes();
+    auto v0_present =
+            std::any_of(tombstoned.begin(), tombstoned.end(), [](const AtomKey& k) { return k.version_id() == 0; });
+    EXPECT_TRUE(v0_present) << "V0 must still be present for the engine sweep to find and delete";
 }
 
 TEST(VersionMap, HasCachedEntry) {

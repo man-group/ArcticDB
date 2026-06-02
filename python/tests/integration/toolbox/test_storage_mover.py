@@ -317,7 +317,12 @@ def test_correct_versions_in_destination(
     lt = check.library_tool()
 
     assert {vi["version"] for vi in check.list_versions("x")} == {2, 4, 6}
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+    # Writing v4 with prune_previous_version keeps v3 as the anchor: its index key stays in storage
+    # (tombstoned, so not listed above). "check assumptions" inspects the source and "go" copies the
+    # whole tree, so both see v2, v3 (anchor), v4, v6 = 4 index keys. "no force" copies only the
+    # explicitly requested versions [s2, 4, 6], so the anchor is not carried over and there are 3.
+    expected_index_key_count = 3 if mode == "no force" else 4
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == expected_index_key_count
     assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
 
 

@@ -438,10 +438,20 @@ class LocalVersionedEngine : public VersionedEngine {
     ) override;
 
     /**
-     * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion
-     * for indexes that are safe to delete (eg indexes contained in a snapshot are skipped).
+     * Phase 2 of prune (sweep), write path. write_and_prune_previous has already persisted the prune:
+     * the most recent previous versions are retained as individual TOMBSTONEs above the TOMBSTONE_ALL
+     * line, and everything at or below the line is buried. This physically deletes the buried block
+     * (unless delayed_deletes or snapshotted), protecting the retained keys' shared data. No further
+     * version-map write is needed — the line is already on disk. Best-effort; failures are logged.
      *
-     * @param pruned_indexes Must all share the same id() and should be tombstoned.
+     * @param entry The loaded+mutated version-map entry from the mark phase, reused here to avoid a
+     *              second chain read.
+     */
+    folly::Future<folly::Unit> delete_unreferenced_pruned_indexes(const std::shared_ptr<VersionMapEntry>& entry);
+
+    /**
+     * Phase 2 of prune (sweep), admin path. Physically deletes the supplied pruned index keys (unless
+     * delayed_deletes or snapshotted), protecting key_to_keep's shared data. Best-effort.
      */
     folly::Future<folly::Unit> delete_unreferenced_pruned_indexes(
             std::vector<AtomKey>&& pruned_indexes, const AtomKey& key_to_keep

@@ -1056,7 +1056,9 @@ class Library:
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
         staged: bool, default=False
             Deprecated. Use stage() instead.
             Whether to write to a staging area rather than immediately to the library.
@@ -1472,7 +1474,9 @@ class Library:
         append_payloads : `List[WritePayload]`
             Symbols and their corresponding data. There must not be any duplicate symbols in `append_payloads`.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
@@ -1901,7 +1905,9 @@ class Library:
             Also accepts strings "write" or "append" (case-insensitive).
 
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
 
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
@@ -2544,8 +2550,9 @@ class Library:
         metadata
             Metadata to persist along with the symbol
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
-            data it is referring to, and so this operation removes old versions of data as well as metadata.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible. Metadata is
+            versioned alongside its data, so old metadata is tombstoned too. Physical deletion is deferred
+            for concurrent-writer safety; see ``VersionStore.PrunePreviousProtectionSecs`` for details.
 
         Returns
         -------
@@ -2573,8 +2580,9 @@ class Library:
         write_metadata_payloads : `List[WriteMetadataPayload]`
             Symbols and their corresponding metadata. There must not be any duplicate symbols in `payload`.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database. Note that metadata is versioned alongside the
-            data it is referring to, and so this operation removes old versions of data as well as metadata.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible. Metadata is
+            versioned alongside its data, so old metadata is tombstoned too. Physical deletion is deferred
+            for concurrent-writer safety; see ``VersionStore.PrunePreviousProtectionSecs`` for details.
 
         Returns
         -------
@@ -2727,7 +2735,14 @@ class Library:
         return self._nvs.version_store.batch_delete(symbols, versions)
 
     def prune_previous_versions(self, symbol) -> None:
-        """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
+        """Removes all (non-snapshotted) versions for the given symbol except the latest.
+
+        This is unconditional: the tombstoned versions' data is physically deleted immediately (only the
+        latest version and any snapshotted versions are retained). Unlike the per-write
+        ``prune_previous_versions=True`` flag, this method does **not** apply the
+        ``VersionStore.PrunePreviousProtectionSecs`` protection window, so it is not safe to run while
+        other writers may be mid-append on a soon-to-be-pruned version. Use the per-write flag if you
+        need concurrent-writer safety.
 
         Parameters
         ----------
@@ -2754,7 +2769,9 @@ class Library:
             The date range in which to delete data. Leaving any part of the tuple as None leaves that part of the range
             open ended.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
 
         Examples
         --------
@@ -3272,7 +3289,9 @@ class Library:
             setting. Note that subsequent calls to write, append, and update will continue to use the library
             configuration setting.
         prune_previous_versions : bool, default=False
-            If True, removes previous versions from the version list.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
 
         Returns
         -------
@@ -3363,7 +3382,9 @@ class Library:
             Note that no. of rows per segment, after compaction, may exceed the target.
             It is for achieving smallest no. of segment after compaction. Please refer to below example for further explanation.
         prune_previous_versions : bool, default=False
-            Removes previous (non-snapshotted) versions from the database.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
 
         Returns
         -------
@@ -3461,7 +3482,9 @@ class Library:
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
-            If True, removes previous versions from the version list.
+            Tombstones pre-existing non-snapshotted versions so they are no longer visible.
+            Physical deletion is deferred for concurrent-writer safety; see
+            ``VersionStore.PrunePreviousProtectionSecs`` for details.
         upsert : bool, default False
             !!! warning
                 Not yet implemented

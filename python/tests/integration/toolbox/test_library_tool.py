@@ -248,7 +248,10 @@ def test_iterate_version_chain_with_lib_tool(in_memory_version_store):
     assert len(keys_by_key_type[KeyType.VERSION_REF]) == 1
     assert len(keys_by_key_type[KeyType.VERSION]) == num_versions
     assert len(keys_by_key_type[KeyType.TABLE_INDEX]) == num_versions
-    assert len(keys_by_key_type[KeyType.TABLE_DATA]) == (num_versions - 1) % 3 + 1
+    # The versions written since the last prune are live, plus one extra: prune keeps the newest
+    # pre-existing version as an anchor (its index/data stay in storage even though it is
+    # tombstoned), so its TABLE_DATA is still reachable when iterating the chain.
+    assert len(keys_by_key_type[KeyType.TABLE_DATA]) == (num_versions - 1) % 3 + 1 + 1
     assert len(keys_by_key_type[KeyType.TOMBSTONE_ALL]) == num_versions // 3
 
 

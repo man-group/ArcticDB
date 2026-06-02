@@ -283,35 +283,116 @@ class VersionMapImpl {
         return entry->dump();
     }
 
-    std::vector<AtomKey> write_and_prune_previous(
-            std::shared_ptr<Store> store, const AtomKey& key, const std::optional<AtomKey>& previous_key
-    ) {
+    // Phase 1 of prune (mark): write `key` as the new head in a single journal entry that also folds
+    // in the prune of every currently-live previous version. The most recent previous versions are
+    // *retained* — the anchor plus anything inside the protection window — written as individual
+    // TOMBSTONEs, leaving them present-but-invisible *above* the high-water mark so their data stays
+    // in storage and findable. The anchor is the latest *undeleted* previous version: the base a
+    // concurrent appender builds on (an appender always extends the latest live version, never a
+    // tombstoned one), so retaining it is what prevents the data-loss race. Everything below the
+    // retained floor is buried by a single TOMBSTONE_ALL at floor-1. Because the head of the entry
+    // remains the new TABLE_INDEX, the symbol ref's first key is an index key and the LATEST read
+    // fast-path is preserved (no extra VERSION GET). Only one TABLE_INDEX is written, so the do_write
+    // invariant holds.
+    //
+    // Phase 2 (delete_unreferenced_pruned_indexes in the engine) physically deletes the buried block;
+    // it needs no further version-map write because the line is already persisted here.
+    //
+    // Returns the loaded+mutated entry so the sweep can reuse it without re-reading the chain.
+    std::shared_ptr<VersionMapEntry> write_and_prune_previous(std::shared_ptr<Store> store, const AtomKey& key) {
         ARCTICDB_DEBUG(log::version(), "Version map pruning previous versions for stream {}", key.id());
         auto entry =
                 check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}, __FUNCTION__);
-        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
-        std::vector<AtomKey> keys_to_write;
-        std::optional<AtomKey> tombstone_all_key;
-        keys_to_write.push_back(key);
-        if (!result.empty()) {
-            auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
-            tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
-            entry->try_set_tombstone_all(tombstone_all_key.value());
-            keys_to_write.push_back(tombstone_all_key.value());
+        const auto now = store->current_timestamp();
+        const auto protection_secs = ConfigsMap::instance()->get_int("VersionStore.PrunePreviousProtectionSecs", 600);
+        const timestamp cutoff = now - static_cast<timestamp>(protection_secs) * 1'000'000'000LL;
+
+        // The anchor is the latest undeleted previous version (an appender's base is always the latest
+        // live version). keys_ is in descending version order, so the first undeleted previous index
+        // is it.
+        std::optional<VersionId> anchor;
+        for (const auto& k : entry->keys_) {
+            if (is_index_key_type(k.type()) && k.version_id() != key.version_id() && !entry->is_tombstoned(k)) {
+                anchor = k.version_id();
+                break;
+            }
         }
 
-        auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
-        write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
+        // Partition every previous index key that is still present above the existing high-water mark
+        // (the UNDELETED_ONLY load stops at the old TOMBSTONE_ALL, so keys_ holds exactly these). We
+        // include already-individually-tombstoned versions: a prior prune kept them present-but-
+        // invisible inside the protection window, and once they age out this prune is what finally
+        // buries and reclaims them.
+        std::vector<AtomKey> retained;
+        std::vector<AtomKey> others;
+        for (const auto& k : entry->keys_) {
+            if (is_index_key_type(k.type()) && k.version_id() != key.version_id()) {
+                if ((anchor && k.version_id() == *anchor) || (protection_secs > 0 && k.creation_ts() >= cutoff))
+                    retained.push_back(k);
+                else
+                    others.push_back(k);
+            }
+        }
 
+        std::vector<AtomKey> keys_to_write{key};
+        std::vector<AtomKey> tombstones;
+        for (const auto& k : retained) {
+            // Already-tombstoned retained versions stay invisible without a fresh tombstone.
+            if (!entry->is_tombstoned(k)) {
+                tombstones.push_back(index_to_tombstone(k.version_id(), key.id(), now));
+                keys_to_write.push_back(tombstones.back());
+            }
+        }
+
+        // Bury everything strictly below the retained floor with a single TOMBSTONE_ALL at floor-1.
+        // A non-retained version that sits *above* the floor (e.g. a delete_version'd former head) is
+        // left individually tombstoned rather than buried — a TOMBSTONE_ALL low enough to bury it
+        // would also bury the retained anchor. It is reclaimed by a later prune once the floor rises
+        // past it. When nothing is retained, bury the whole present block.
+        std::optional<VersionId> line;
+        if (retained.empty()) {
+            if (!others.empty())
+                line = std::max_element(others.begin(), others.end(), [](const auto& a, const auto& b) {
+                           return a.version_id() < b.version_id();
+                       })->version_id();
+        } else {
+            const VersionId floor =
+                    std::min_element(retained.begin(), retained.end(), [](const auto& a, const auto& b) {
+                        return a.version_id() < b.version_id();
+                    })->version_id();
+            if (std::any_of(others.begin(), others.end(), [floor](const auto& k) { return k.version_id() < floor; }))
+                line = floor - 1;
+        }
+
+        std::optional<AtomKey> tombstone_all_key;
+        if (line) {
+            tombstone_all_key = atom_key_builder()
+                                        .version_id(*line)
+                                        .creation_ts(now)
+                                        .content_hash(0)
+                                        .start_index(NumericIndex{0})
+                                        .end_index(NumericIndex{0})
+                                        .build(key.id(), KeyType::TOMBSTONE_ALL);
+            keys_to_write.push_back(*tombstone_all_key);
+        }
+
+        do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
+        for (const auto& t : tombstones)
+            entry->tombstones_.try_emplace(t.version_id(), t);
+        if (tombstone_all_key)
+            entry->try_set_tombstone_all(*tombstone_all_key);
+        write_symbol_ref(store, *entry->keys_.cbegin(), entry->get_second_undeleted_index(), entry->head_.value());
         maybe_invalidate_cached_undeleted(*entry);
+
         if (log_changes_) {
+            for (const auto& t : tombstones)
+                log_tombstone(store, key.id(), t.version_id());
             if (tombstone_all_key)
-                log_tombstone_all(store, tombstone_all_key.value().id(), tombstone_all_key.value().version_id());
+                log_tombstone_all(store, key.id(), tombstone_all_key->version_id());
             log_write(store, key.id(), key.version_id());
         }
-
-        return result;
+        return entry;
     }
 
     std::pair<VersionId, std::deque<AtomKey>> delete_all_versions(
@@ -1114,6 +1195,7 @@ class VersionMapImpl {
 
   private:
     FRIEND_TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad);
+
     std::pair<VersionId, std::vector<AtomKey>> tombstone_from_key_or_all_internal(
             std::shared_ptr<Store> store, const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,

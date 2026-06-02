@@ -3340,7 +3340,14 @@ class NativeVersionStore:
 
     def prune_previous_versions(self, symbol: str):
         """
-        Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
+        Removes all (non-snapshotted) versions for the given symbol except the latest.
+
+        This is unconditional: the tombstoned versions' data is physically deleted immediately (only the
+        latest version and any snapshotted versions are retained). Unlike the per-write
+        ``prune_previous_version=True`` flag, this method does **not** apply the
+        ``VersionStore.PrunePreviousProtectionSecs`` protection window, so it is not safe to run while
+        other writers may be mid-append on a soon-to-be-pruned version. Use the per-write flag if you
+        need concurrent-writer safety.
 
         Parameters
         ----------

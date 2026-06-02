@@ -55,7 +55,7 @@ struct MapStorePair {
         auto version_id = prev ? prev->version_id() + 1 : 0;
 
         if (tombstones_)
-            map_->write_and_prune_previous(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX), prev);
+            map_->write_and_prune_previous(store_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX));
         else
             backwards_compat_write_and_prune_previous(
                     store_, map_, make_test_index_key(id, version_id, KeyType::TABLE_INDEX)
