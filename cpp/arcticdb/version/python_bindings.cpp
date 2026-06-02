@@ -955,6 +955,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 tsd_proto.normalization(),
                                 tsd_proto.user_meta(),
                                 tsd_proto.multi_key_meta(),
+                                {},
+                                tsd.sorted(),
                         };
                         return adapt_read_df(std::move(res), nullptr);
                     },
@@ -1109,7 +1111,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                     read_options.output_format(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
-                                    tsd_proto.multi_key_meta()
+                                    tsd_proto.multi_key_meta(),
+                                    {},
+                                    tsd.sorted(),
                             };
                             output.emplace_back(std::move(res));
                         }

@@ -352,21 +352,18 @@ def _assume_false(name, kwargs):
         return True
 
 
-def _get_index_col_from_norm(norm):
-    """Get the name of the index column from normalization metadata, or None if no physically stored index."""
+def _has_physically_stored_index(norm):
     input_type = norm.WhichOneof("input_type")
     if input_type == "experimental_arrow":
-        if norm.experimental_arrow.has_index:
-            return norm.experimental_arrow.index_column_name
-    elif input_type in ("df", "series"):
+        return norm.experimental_arrow.has_index
+    if input_type in ("df", "series"):
         common = norm.df.common if input_type == "df" else norm.series.common
         index_type = common.WhichOneof("index_type")
-        # multi_index intentionally excluded: multi-level sorting semantics are more complex
-        if index_type == "index" and common.index.is_physically_stored:
-            if common.index.fake_name:
-                return "__index__"
-            return common.index.name
-    return None
+        if index_type == "index":
+            return common.index.is_physically_stored
+        if index_type == "multi_index":
+            return True
+    return False
 
 
 class NativeVersionStore:
@@ -2670,7 +2667,7 @@ class NativeVersionStore:
         if len(read_result.node_read_results) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
             key_map = {
-                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format)
+                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format, v.sort_order)
                 for v in read_result.node_read_results
             }
             original_data = Flattener().create_original_obj_from_metastruct(meta_struct, key_map)
@@ -2918,7 +2915,7 @@ class NativeVersionStore:
             return pa.Table.from_arrays([])
         return pa.Table.from_batches(record_batches)
 
-    def _adapt_frame_data(self, frame_data, norm, output_format):
+    def _adapt_frame_data(self, frame_data, norm, output_format, sort_order):
         if isinstance(frame_data, ArrowOutputFrame):
             table = self._arrow_output_frame_to_table(frame_data)
             data = self._normalizer.denormalize(table, norm)
@@ -2933,6 +2930,7 @@ class NativeVersionStore:
                 and not norm.WhichOneof("input_type") == "msg_pack_frame"
             ):
                 data = pl.from_arrow(data, rechunk=False)
+                data = self._apply_polars_sorted_flag_to_index(data, sort_order, norm)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
             if norm.HasField("custom"):
@@ -2941,22 +2939,20 @@ class NativeVersionStore:
         return data
 
     @staticmethod
-    def _apply_polars_sorted_flag_to_index(data, read_result):
-        if pl is None or not isinstance(data, pl.DataFrame):
+    def _apply_polars_sorted_flag_to_index(data, sort_order, norm):
+        # Only ASCENDING / DESCENDING are verified. UNKNOWN covers symbols written by paths that do not check
+        # monotonicity (e.g. Arrow writes) or by ArcticDB versions before sortedness was tracked, so we cannot
+        # safely tell Polars the column is sorted.
+        if sort_order not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
             return data
-
-        sorted_val = read_result.sort_order
-        if sorted_val not in (SortedValue.ASCENDING, SortedValue.DESCENDING):
+        if not _has_physically_stored_index(norm) or len(data.columns) == 0:
             return data
-
-        index_col = _get_index_col_from_norm(read_result.norm)
-        if index_col is not None and index_col in data.columns:
-            data = data.with_columns(pl.col(index_col).set_sorted(descending=(sorted_val == SortedValue.DESCENDING)))
-        return data
+        # The index column is always the first column.
+        index_col = data.columns[0]
+        return data.with_columns(pl.col(index_col).set_sorted(descending=(sort_order == SortedValue.DESCENDING)))
 
     def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
-        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format)
-        data = self._apply_polars_sorted_flag_to_index(data, read_result)
+        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format, read_result.sort_order)
 
         if isinstance(read_result.version, list):
             versions = []

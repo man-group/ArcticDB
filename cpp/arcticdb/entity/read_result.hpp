@@ -27,7 +27,7 @@ using OutputFrame = std::variant<pipelines::PandasOutputFrame, ArrowOutputFrame>
 struct ARCTICDB_VISIBILITY_HIDDEN NodeReadResult {
     NodeReadResult(
             const StreamId& symbol, OutputFrame&& frame_data,
-            arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta, SortedValue sorted = SortedValue::UNKNOWN
+            arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta, SortedValue sorted
     ) :
         symbol_(symbol),
         frame_data_(std::move(frame_data)),
@@ -36,7 +36,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN NodeReadResult {
     StreamId symbol_;
     OutputFrame frame_data_;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta_;
-    SortedValue sorted_ = SortedValue::UNKNOWN;
+    SortedValue sorted_;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(NodeReadResult)
 };
@@ -49,7 +49,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
                     arcticdb::proto::descriptors::UserDefinedMetadata,
                     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
-            std::vector<NodeReadResult>&& node_results = {}, SortedValue sorted = SortedValue::UNKNOWN
+            std::vector<NodeReadResult>&& node_results, SortedValue sorted
     ) :
         item(versioned_item),
         frame_data(std::move(frame_data)),
@@ -69,7 +69,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
     std::vector<NodeReadResult> node_results;
-    SortedValue sorted = SortedValue::UNKNOWN;
+    SortedValue sorted;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadResult)
 };

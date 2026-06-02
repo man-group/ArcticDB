@@ -32,10 +32,11 @@ void InputFrame::set_from_columns(
                 "Specified Arrow index column has non-time type {}",
                 cols[0].type().data_type()
         );
-
         desc_.set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         index = stream::TimeseriesIndex{std::string(desc_.field(0).name())};
-        desc_.set_sorted(SortedValue::ASCENDING);
+        // We do not verify monotonicity of Arrow index columns, so the sort order is UNKNOWN. This avoids the
+        // O(n) check on write; the polars read path will not claim the column is sorted as a result.
+        seg.descriptor().set_sorted(SortedValue::UNKNOWN);
     } else {
         desc_.set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};

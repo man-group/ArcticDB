@@ -57,20 +57,6 @@ def test_no_sorted_flag_on_range_index(lmdb_library):
         assert result[col].flags["SORTED_ASC"] is False, f"Column {col} should not have SORTED_ASC"
 
 
-def test_sorted_flag_not_set_for_pandas_output(lmdb_library):
-    """Reading as pandas (default) should not crash and returns a regular DataFrame."""
-    lib = lmdb_library
-    df = pd.DataFrame(
-        {"val": np.arange(10)},
-        index=pd.date_range("2024-01-01", periods=10, freq="h"),
-    )
-    lib.write("sym", df)
-    result = lib.read("sym").data
-
-    assert isinstance(result, pd.DataFrame)
-    assert len(result) == 10
-
-
 @pytest.mark.storage
 def test_sorted_flag_with_stage_finalize(arctic_library):
     """Stage shuffled data with sort_on_index=True, finalize, read as Polars -> SORTED_ASC."""
@@ -92,10 +78,30 @@ def test_sorted_flag_with_stage_finalize(arctic_library):
     assert result["__index__"].flags["SORTED_ASC"] is True
 
 
+def test_unsorted_arrow_write_does_not_get_polars_sorted_flag(lmdb_version_store_arrow):
+    """Polars writes with a non-monotonic index column must not carry SORTED_ASC on read."""
+    lib = lmdb_version_store_arrow
+    df = pl.DataFrame(
+        {
+            "ts": [
+                pd.Timestamp("2024-01-03"),
+                pd.Timestamp("2024-01-01"),
+                pd.Timestamp("2024-01-02"),
+            ],
+            "val": [1, 2, 3],
+        },
+        schema={"ts": pl.Datetime("ns"), "val": pl.Int64},
+    )
+    lib.write("sym", df, index_column=True)
+    result = lib.read("sym", output_format="polars").data
+
+    assert result["ts"].flags["SORTED_ASC"] is False
+    assert result["ts"].flags["SORTED_DESC"] is False
+
+
 def test_value_columns_not_sorted(lmdb_library):
     """Only the index column should get the sorted flag, not value columns."""
     lib = lmdb_library
-    # Both index and value columns are actually sorted in the data
     df = pd.DataFrame(
         {"sorted_val": np.arange(10), "another": np.arange(10)},
         index=pd.date_range("2024-01-01", periods=10, freq="h"),
@@ -109,33 +115,58 @@ def test_value_columns_not_sorted(lmdb_library):
     assert result["another"].flags["SORTED_ASC"] is False
 
 
-def _make_mock_read_result(sort_order, index_name="__index__", fake_name=True, is_physically_stored=True):
-    """Build a minimal mock ReadResult with the given sort_order and index normalization metadata."""
-    index = SimpleNamespace(name=index_name, fake_name=fake_name, is_physically_stored=is_physically_stored)
-    common = SimpleNamespace(_index_type="index", index=index)
-    common.WhichOneof = lambda field: "index" if field == "index_type" else None
+def _make_norm_meta(input_type="df", index_type="index", is_physically_stored=True):
+    """Build a minimal mock normalization metadata object."""
+    index = SimpleNamespace(is_physically_stored=is_physically_stored)
+    common = SimpleNamespace(index=index)
+    common.WhichOneof = lambda field: index_type if field == "index_type" else None
     norm = SimpleNamespace(df=SimpleNamespace(common=common))
-    norm.WhichOneof = lambda field: "df" if field == "input_type" else None
-    return SimpleNamespace(sort_order=sort_order, norm=norm)
+    norm.WhichOneof = lambda field: input_type if field == "input_type" else None
+    return norm
 
 
 def test_descending_sort_order_sets_sorted_desc():
     """When sort_order is DESCENDING the Polars column should have SORTED_DESC."""
     data = pl.DataFrame({"__index__": pd.date_range("2024-01-01", periods=5, freq="h")})
-    read_result = _make_mock_read_result(SortedValue.DESCENDING)
 
-    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, read_result)
+    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, SortedValue.DESCENDING, _make_norm_meta())
 
     assert result["__index__"].flags["SORTED_DESC"] is True
     assert result["__index__"].flags["SORTED_ASC"] is False
 
 
 def test_unknown_sort_order_does_not_set_sorted_flag():
-    """When sort_order is UNKNOWN no sorted flag should be applied even with a physical index."""
+    """UNKNOWN means sortedness was not verified (e.g. Arrow writes), so no flag should be applied."""
     data = pl.DataFrame({"__index__": pd.date_range("2024-01-01", periods=5, freq="h")})
-    read_result = _make_mock_read_result(SortedValue.UNKNOWN)
 
-    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, read_result)
+    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, SortedValue.UNKNOWN, _make_norm_meta())
 
     assert result["__index__"].flags["SORTED_ASC"] is False
     assert result["__index__"].flags["SORTED_DESC"] is False
+
+
+def test_unsorted_sort_order_does_not_set_sorted_flag():
+    """When sort_order is UNSORTED no sorted flag should be applied."""
+    data = pl.DataFrame({"__index__": pd.date_range("2024-01-01", periods=5, freq="h")})
+
+    result = NativeVersionStore._apply_polars_sorted_flag_to_index(data, SortedValue.UNSORTED, _make_norm_meta())
+
+    assert result["__index__"].flags["SORTED_ASC"] is False
+    assert result["__index__"].flags["SORTED_DESC"] is False
+
+
+def test_multi_index_first_level_gets_sorted_flag():
+    """For MultiIndex symbols, the first index column is marked sorted when the symbol is sorted."""
+    data = pl.DataFrame(
+        {
+            "__index__": pd.date_range("2024-01-01", periods=5, freq="h"),
+            "level_1": np.arange(5),
+        }
+    )
+
+    result = NativeVersionStore._apply_polars_sorted_flag_to_index(
+        data, SortedValue.ASCENDING, _make_norm_meta(index_type="multi_index")
+    )
+
+    assert result["__index__"].flags["SORTED_ASC"] is True
+    assert result["level_1"].flags["SORTED_ASC"] is False

@@ -185,6 +185,10 @@ class OutputFormat(str, Enum):
         Dataframes are returned as `polars.DataFrame` objects using Apache Arrow's columnar memory format.
         Provides better performance than `PANDAS`, especially for dataframes containing many string columns.
         String format can be customized via `ArrowOutputStringFormat`.
+        If ArcticDB has verified the index column is monotonic (ascending or descending), its Polars sorted
+        flag is set automatically, enabling Polars sort-aware optimizations such as fast joins and group-bys.
+        Symbols whose sort order was never verified (Arrow writes, or symbols written by ArcticDB versions
+        before sortedness was tracked) keep the default unsorted flag.
     """
 
     PANDAS = "PANDAS"
