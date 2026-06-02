@@ -225,6 +225,21 @@ inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_a
     version_store::TombstoneVersionResult res{true, entry->head_->id()};
     res.keys_to_delete = std::move(tombstone_result.second);
 
+    // Also delete any versions a prior prune tombstoned but retained in storage (the anchor /
+    // within-window keys sitting individually-tombstoned above the TOMBSTONE_ALL line). They are
+    // already loaded in this UNDELETED_ONLY entry, so no extra storage round-trip is needed. Without
+    // this they would leak when the whole symbol is deleted. Filter on the *individual* tombstone:
+    // versions buried by a TOMBSTONE_ALL (a prior delete_all) are already physically deleted, so
+    // re-adding them would just issue wasted delete ops.
+    for (const auto& key : entry->keys_) {
+        if (is_index_key_type(key.type()) && entry->has_individual_tombstone(key.version_id()) &&
+            std::none_of(res.keys_to_delete.begin(), res.keys_to_delete.end(), [&](const AtomKey& k) {
+                return k.version_id() == key.version_id();
+            })) {
+            res.keys_to_delete.push_back(key);
+        }
+    }
+
     res.no_undeleted_left = true;
     res.latest_version_ = tombstone_result.first;
     return res;

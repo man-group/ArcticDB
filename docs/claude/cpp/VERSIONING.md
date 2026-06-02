@@ -208,15 +208,109 @@ Tombstoned versions:
 
 ### Hard Delete (Prune)
 
-`prune_previous_versions` physically removes old version data:
+Pruning comes in **two flavours with different physical-delete policies**:
 
-```python
-# Prune on write
-lib.write("sym", df, prune_previous_version=True)
+| Trigger | Tombstoning | Physical delete |
+|---|---|---|
+| Per-write flag `prune_previous_version=True` (on `write`/`append`/`update`/etc.) | Immediate, unconditional | **Windowed + anchored** — concurrent-writer safe (see below) |
+| Explicit admin `prune_previous_versions(symbol)` | Immediate, unconditional | **Aggressive** — deletes everything except the latest immediately; no protection window |
 
-# Explicit prune
-lib.prune_previous_versions("sym")
+Both tombstone pre-existing non-snapshotted versions immediately so they vanish from readers. They
+differ only in *when* the data is physically removed. The windowed path is the interesting one and
+is described below; the aggressive admin path is summarised under [Implementation](#implementation).
+
+#### Per-write prune: single-write fold + delete-only sweep
+
+The per-write path is **two phases**, but the version-chain mutation all happens in **phase 1** as a
+single journal entry — the mechanism is **individual `TOMBSTONE`s plus a `TOMBSTONE_ALL`
+high-water mark**. The chain on disk ends up looking like:
+
 ```
+   index(latest, live)                          ◄─ head; ref[0] is an index key (LATEST fast-path)
+   └─ index(retained, individually TOMBSTONE'd)   ◄─ above the line: present-but-invisible
+   └─ TOMBSTONE_ALL(version = floor − 1)           ◄─ the line
+   └─ index(...buried...)                          ◄─ at/below the line: physically deleted
+```
+
+**Phase 1 — mark + fold** (`version_map::write_and_prune_previous`): in **one journal entry** write
+the new head `TABLE_INDEX`, an **individual `TOMBSTONE`** for each *retained* previous version, and
+a single `TOMBSTONE_ALL`. Retained = the **anchor** (the latest *undeleted* previous version — the
+base a concurrent appender builds on, kept regardless of age) plus any version inside the protection
+window (`creation_ts >= now − PrunePreviousProtectionSecs`, default 600 s). The `TOMBSTONE_ALL` is
+placed at `floor − 1` where `floor` is the oldest retained version, so it buries everything
+*strictly below* the floor. A non-retained version that happens to sit *above* the floor (e.g. a
+`delete_version`'d former head) is left individually tombstoned, **not** buried — a line low enough
+to bury it would also bury the anchor; a later prune reclaims it once the floor rises past it.
+Crucially the entry's head stays the new `TABLE_INDEX`, so the symbol ref's first key is an index
+key and the LATEST read fast-path is preserved (no extra VERSION GET). The loaded+mutated entry is
+returned so phase 2 can reuse it without re-reading the chain.
+
+**Phase 2 — sweep** (`local_versioned_engine::delete_unreferenced_pruned_indexes(entry)`): reuses
+the phase-1 entry (no reload) and is **delete-only — no version-map write**, because the line is
+already persisted. Split the tombstoned index keys by the line: the buried block (`version_id <=
+line`) is `to_delete`; the retained block (`> line`) is protected. **Physically delete** `to_delete`
+except snapshotted keys. Under `delayed_deletes` (background deletion) this phase early-returns.
+
+The high-water line is what keeps prune/delete **bounded**: the version map loads with
+`UNDELETED_ONLY`, which stops walking the chain at the `TOMBSTONE_ALL` line
+(`continue_when_loading_undeleted` in `version_utils.hpp`). So each prune reads only the retained
+region above the line plus the live head — proportional to retained data, never to total history.
+When retained versions later age out of the window, the **next prune's phase 1** re-partitions them
+(it includes already-individually-tombstoned versions in its scan), drops them below the new floor,
+and the matching phase 2 deletes them — so a whole burst aged-out together is reclaimed in one
+bounded prune.
+
+`KeyType::TOMBSTONE` (individual) and `KeyType::TOMBSTONE_ALL` already coexist and are understood by
+older clients, so the layout `index <- individualTombstones(retained) <- TOMBSTONE_ALL(line)` is
+forward/backward compatible.
+
+#### Dependency safety — what protects shared data
+
+A retained (anchor / within-window) index key keeps its data segments, and a buried key being
+deleted may share those segments — via append-inheritance, via dedup, or transitively. To prevent
+dangling references the sweep assembles `PreDeleteChecks::could_share_data` from:
+
+| Source | Added by | Covers |
+|---|---|---|
+| All snapshotted index keys for the stream | `get_index_keys_partitioned_by_inclusion_in_snapshots` returns them as `in_snaps` | Anything a snapshot pins |
+| The retained anchor + within-window keys | inserted into `in_snaps` (the `retained` block) in `delete_unreferenced_pruned_indexes` | Append/dedup chains that still have at least one retained survivor (the new head is itself retained, so anything it references is covered) |
+
+`delete_trees_responsibly` then computes
+`data_to_delete = recurse_index_keys(to_delete) − recurse_index_keys(could_share_data)`.
+Because `recurse_index_keys` walks each protected TABLE_INDEX and emits every data atom key it
+lists, transitive chains are covered by their endpoint: a single retained anchor at the end of a
+long append chain protects every data segment the chain inherited from older buried versions.
+
+Failure mode the window bounds: a concurrent writer that started an append on V_K, then took
+longer than `PrunePreviousProtectionSecs` to commit, with no retained/snapshotted key in between
+holding V_K's references — that writer's commit can reference deleted segments. Tune
+`PrunePreviousProtectionSecs` higher than the slowest expected append/dedup-write latency.
+
+#### Background deletion (delayed deletes)
+
+When the library is configured with **background deletion**, phase 2 early-returns without physically
+deleting (the background tool runs its own reference-check before removing data). The
+`TOMBSTONE_ALL` line is still persisted — it was written in phase 1 regardless — so the version
+chain stays bounded. The buried index keys remain findable by the background tool via an
+`INCLUDE_DELETED` load, which ignores the line.
+
+#### Implementation
+
+- `version_map.hpp:write_and_prune_previous()` — per-write phase 1 (mark + fold): writes the new
+  head, the retained versions' individual `TOMBSTONE`s, and the `TOMBSTONE_ALL` line in one journal
+  entry. Computes the anchor internally as the latest *undeleted* previous index (not the caller's
+  `previous_key`, which can point at a tombstoned former head after a `delete_version`). Returns the
+  loaded+mutated entry so the sweep can reuse it without re-reading the chain.
+- `local_versioned_engine.cpp:delete_unreferenced_pruned_indexes(entry)` — per-write phase 2:
+  delete-only. Reuses the entry, splits the tombstoned indexes by the persisted line, deletes the
+  buried block (unless `delayed_deletes`), protects retained + snapshotted. No version-map write, so
+  the whole per-write prune is one chain read + one write.
+- `version_store_api.cpp:PythonVersionStore::prune_previous_versions()` — the **separate aggressive
+  admin path**. It does *not* use `write_and_prune_previous`; it calls
+  `version_map::tombstone_from_key_or_all` (tombstones everything below the latest) then the
+  vector-form `delete_unreferenced_pruned_indexes(pruned_indexes, key_to_keep=latest)`, which
+  physically deletes immediately (except the latest and snapshotted keys). No protection window —
+  use this only when you explicitly want unconditional reclaim and no concurrent writers are mid-append.
 
 ### TOMBSTONE_ALL
 
@@ -334,6 +428,9 @@ ArcticDB does not use locks for symbol writes. Concurrent writes use a **last-wr
 **Caveats:**
 - Concurrent appends may appear out of order or one may be dropped
 - Parallel writes to the same symbol are not recommended for modification operations
+- `prune_previous_versions=True` with concurrent writers: protected by a 10-minute window
+  (see [Hard Delete (Prune)](#hard-delete-prune)); writers that started from the same base version
+  still have their data accessible while they complete
 
 ### Read Concurrency
 
