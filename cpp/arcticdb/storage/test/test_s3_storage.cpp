@@ -18,6 +18,9 @@
 #include <arcticdb/util/test/gtest_utils.hpp>
 
 #include <aws/core/Aws.h>
+#include <aws/core/utils/memory/stl/AWSStringStream.h>
+
+#include <sstream>
 
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};
@@ -449,4 +452,21 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
     }
     ASSERT_THROW(list_in_store(store, KeyType::TABLE_DATA, prefix), UnexpectedS3ErrorException);
     ASSERT_FALSE(store.directory_bucket());
+}
+
+TEST(S3LogSystem, StdErrLogSystemWritesToStdErr) {
+    using namespace arcticdb::storage::s3;
+    StdErrLogSystem log_system(Aws::Utils::Logging::LogLevel::Info);
+
+    std::ostringstream captured;
+    auto* old_buf = std::cerr.rdbuf(captured.rdbuf());
+
+    Aws::OStringStream message;
+    message << "hello-from-aws-sdk";
+    log_system.LogStream(Aws::Utils::Logging::LogLevel::Info, "TestTag", message);
+    log_system.Flush();
+
+    std::cerr.rdbuf(old_buf);
+
+    ASSERT_NE(captured.str().find("hello-from-aws-sdk"), std::string::npos);
 }
