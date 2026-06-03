@@ -736,10 +736,6 @@ class QueryBuilder:
 
         Note that time-buckets which contain no index values in the symbol will NOT be included in the returned
         DataFrame. This is not the same as Pandas default behaviour.
-        Resampling is currently not supported with:
-
-        * Dynamic schema where an aggregation column is missing from one or more of the row-slices.
-        * Sparse data.
 
         The resample results match pandas resample with `origin="epoch"`. We plan to add an 'origin' argument in
         a future release and will then change the default value to '"start_day"' to match the Pandas default. This
@@ -787,9 +783,6 @@ class QueryBuilder:
 
             * If the aggregation specified is not compatible with the type of the column being aggregated as
               specified above.
-            * The library has dynamic schema enabled, and at least one of the columns being aggregated is missing
-              from at least one row-slice.
-            * At least one of the columns being aggregated contains sparse data.
         UserInputException
 
             * `start`, `start_day`, `end`, `end_day` is used in conjunction with `date_range`

@@ -3259,10 +3259,6 @@ class Library:
 
         The metadata from the version being compacted is maintained with the newly created version.
 
-        !!! warning
-            Compacting dynamic schema data can produce sparse data, even if the input data was dense, and resampling
-            does not yet support sparse data.
-
         Parameters
         ----------
         symbol : str
