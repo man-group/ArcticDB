@@ -441,7 +441,10 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
     ASSERT_EQ(ranges_and_keys_[structure_indices[0][1]].col_range(), ColRange(4, 6));
     std::vector<EntityId> entities = push_entities(structure_indices);
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured_entities.size(), 1);
+    ASSERT_EQ(structured_entities.front().size(), 2);
     const std::vector<EntityId> result_entities = clause.process(std::move(structured_entities[0]));
+    ASSERT_EQ(result_entities.size(), 2);
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result_entities
     );
@@ -456,6 +459,7 @@ TEST_F(MergeUpdateClauseUpdateStrategyMatchSubsetTest, MatchFirst) {
             std::array<float, 5>{0.f, 1, 2, -11.f, 4},
             std::array<timestamp, 5>{0, 1, 2, -12, 4}
     );
+    ASSERT_EQ(proc.segments_->size(), 2);
     ASSERT_EQ(*(*proc.segments_)[0], expected_segments[0]);
     ASSERT_EQ(*(*proc.segments_)[1], expected_segments[1]);
     ASSERT_EQ(*(*proc.row_ranges_)[0], RowRange(0, 5));
@@ -926,8 +930,12 @@ TEST_F(MergeUpdateClauseOnParameterTest, TwoOnColumns_BothMatch) {
     ASSERT_EQ(segments_to_process, 2);
 
     std::vector<EntityId> entities = push_entities(structure_indices);
+    ASSERT_EQ(entities.size(), 2);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured.size(), 1);
+    ASSERT_EQ(structured.front().size(), 2);
     const auto result = clause.process(std::move(structured[0]));
+    ASSERT_EQ(result.size(), 2);
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
             *component_manager_, result
     );
@@ -1135,30 +1143,31 @@ TEST_F(MergeUpdateClauseUpdateStrategyRowRange, MatchOneColumn_Segment1) {
     assert_structure_for_processing_result(structure_indices);
 
     const std::vector<EntityId> entities = push_entities(structure_indices);
+    ASSERT_EQ(entities.size(), segments_to_process);
     std::vector<std::vector<EntityId>> structured = structure_entities(structure_indices, entities);
+    ASSERT_EQ(structured.size(), 3);
+    ASSERT_TRUE(std::ranges::all_of(structured, [](const auto& vec) { return vec.size() == 2; }));
     auto [expected_segs, expected_col_ranges, expected_row_ranges] = slice_data_into_segments<RowCountIndex>(
             non_string_fields_rowcount_index_descriptor(),
             rows_per_segment_,
             cols_per_segment_,
             std::array<int8_t, num_rows_>{9, 2, 12, 33, 33, 33, 33, 33, 33, 33, 33, 6, -9, 0},
             std::array<unsigned, num_rows_>{101, 1, 100, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
-            std::array<bool, num_rows_>{
-                    false, true, true, true, false, true, false, true, false, true, false, true, false, true
-            },
-            std::array<float, num_rows_>{
+            std::array{false, true, true, true, false, true, false, true, false, true, false, true, false, true},
+            std::array{
                     1001.f,
-                    1.,
+                    1.f,
                     1000.f,
-                    3.,
-                    4.,
-                    5.,
-                    6.,
-                    7.,
-                    8.,
-                    9.,
-                    10.,
-                    11.,
-                    12.,
+                    3.f,
+                    4.f,
+                    5.f,
+                    6.f,
+                    7.f,
+                    8.f,
+                    9.f,
+                    10.f,
+                    11.f,
+                    12.f,
                     std::numeric_limits<float>::quiet_NaN()
             },
             std::array<timestamp, num_rows_>{2001, 1, 2000, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
@@ -2185,7 +2194,6 @@ INSTANTIATE_TEST_SUITE_P(
 );
 
 TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmentFirst) {
-    GTEST_SKIP();
     constexpr static std::array fields{
             FieldRef{{DataType::INT64, Dimension::Dim0}, "a"}, FieldRef{{DataType::INT32, Dimension::Dim0}, "b"}
     };
@@ -2195,7 +2203,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
     constexpr static int num_row_slices = (num_rows + rows_per_segment - 1) / rows_per_segment;
     ASSERT_EQ(num_row_slices, 6);
     const StreamDescriptor desc = TimeseriesIndex::default_index().create_stream_descriptor("TestStream", fields);
-    // Assuming indexing starts from 0, segment 1 ends with 9 and segment 2 starts with 9
+    // Assuming segment indexing starts from 0, segment 1 ends with 9 and segment 2 starts with 9
     auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex>(
             desc,
             rows_per_segment,
@@ -2206,17 +2214,17 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
             iota_view{0, int{num_rows}}
     );
     ASSERT_EQ(segments.size(), 12);
+    // Will be inserted in segment 2
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
-            desc, std::array{timestamp{9}}, std::array{int64_t{12}}, std::array{200}
+            desc, std::array<timestamp, 3>{9, 9, 9}, std::array<int64_t, 3>{10, 8, 120}, std::array{100, 200, 300}
     );
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
     ASSERT_EQ(ranges_and_keys.size(), 12);
     auto component_manager = std::make_shared<ComponentManager>();
     constexpr static MergeStrategy strategy{
-            .matched = MergeAction::DO_NOTHING, .not_matched_by_target = MergeAction::INSERT
+            .matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::INSERT
     };
-    std::vector<std::string> on{"a"};
-    MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame), std::move(on));
+    MergeUpdateClause clause = create_clause(strategy, component_manager, std::move(input_frame), {"a"});
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(structure_indices.size(), 1);
     ASSERT_EQ(structure_indices[0].size(), 4);
@@ -2245,8 +2253,41 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
     std::vector<std::vector<EntityId>> structured_entities = structure_entities(structure_indices, entities);
     ASSERT_EQ(structured_entities.size(), 1);
     ASSERT_EQ(structured_entities[0].size(), 4);
-    [[maybe_unused]] const ProcessingUnit& processing_unit =
+    const ProcessingUnit& processing_unit =
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
                     *component_manager, clause.process(std::move(structured_entities[0]))
             );
+    ASSERT_EQ(processing_unit.segments_->size(), 4);
+    ASSERT_EQ(processing_unit.row_ranges_->size(), 4);
+    ASSERT_EQ(processing_unit.col_ranges_->size(), 4);
+    // Processing unit isof two row slices
+    {
+        // First row slice stays the same
+        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                rows_per_segment,
+                cols_per_segment,
+                std::array<timestamp, 5>{6, 7, 8, 9, 9},
+                std::array<int64_t, 5>{5, 6, 7, 8, 9},
+                std::array{5, 6, 7, 200, 9}
+        );
+        ASSERT_EQ(expected_segments.size(), 2);
+        EXPECT_EQ(*(processing_unit.segments_->at(0)), expected_segments[0]);
+        EXPECT_EQ(*(processing_unit.segments_->at(1)), expected_segments[1]);
+    }
+    {
+        // When the row to be inserted has the same timestamp as the last row of the first segment, it should be
+        // inserted in the second segment
+        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
+                desc,
+                rows_per_segment + 1, // Currently there is no slicing
+                cols_per_segment,
+                std::array<timestamp, 6>{9, 9, 9, 10, 11, 12},
+                std::array<int64_t, 6>{10, 11, 120, 12, 13, 14},
+                std::array{100, 11, 300, 12, 13, 14}
+        );
+        ASSERT_EQ(expected_segments.size(), 2);
+        EXPECT_EQ(*(processing_unit.segments_->at(2)), expected_segments[0]);
+        EXPECT_EQ(*(processing_unit.segments_->at(3)), expected_segments[1]);
+    }
 }

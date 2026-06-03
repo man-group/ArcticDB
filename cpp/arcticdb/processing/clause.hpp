@@ -894,12 +894,38 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
+    class MatchRechord {
+      public:
+        MatchRechord(std::span<ProcessingUnit> row_slices, const std::pair<size_t, size_t>& source_range);
+        void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
+        void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
+        void filter_matching_rows(
+                std::string_view column_name, DataType source_type, DataType target_type,
+                const NativeTensor& source_tensor, const std::optional<NativeTensor>& source_index = {}
+        );
+        void clone_source_match(size_t source_row_src, size_t source_row_dst);
+        [[nodiscard]] size_t num_matched_rows(size_t row_slice) const;
+        [[nodiscard]] size_t num_unmatched_rows(size_t row_slice) const;
+        void validate_rows_to_update() const;
+        [[nodiscard]] std::span<const std::vector<size_t>> matched_rows(size_t target_row_slice) const;
+        [[nodiscard]] bool should_insert(size_t source_row, size_t target_Row_slice, timestamp source_index) const;
+
+      private:
+        [[nodiscard]] bool is_timeseries() const;
+        std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
+        std::vector<size_t> matched_count_;
+        std::vector<size_t> unmatched_count_;
+        std::pair<size_t, size_t> source_range_for_times_slice_;
+        std::span<ProcessingUnit> row_slices_;
+        timestamp running_index_value_;
+    };
 
   private:
     bool update_and_insert(
             const std::optional<NativeTensor>& index_tensor, const std::span<const NativeTensor> source_tensors,
-            const StreamDescriptor& source_descriptor, const ProcessingUnit& proc,
-            const std::span<const std::vector<size_t>> rows_to_update, size_t num_matched_rows
+            const StreamDescriptor& source_descriptor, std::span<const ProcessingUnit> proc,
+            const MatchRechord& match_record
+
     ) const;
 
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
@@ -909,18 +935,16 @@ struct MergeUpdateClause {
     /// @return Vector of size equal to the number of source data rows that are within the row slice being
     /// processed. Each element is a vector of the rows from the target data that has the same index as the
     /// corresponding source row
-    std::pair<std::vector<std::vector<size_t>>, size_t> filter_index_match(
-            const Column& target_index, const std::span<const timestamp> source_index, const ProcessingUnit& proc
-    ) const;
+    MatchRechord filter_index_match(const std::span<const timestamp> source_index, std::span<ProcessingUnit> row_slices)
+            const;
 
-    std::pair<std::vector<std::vector<size_t>>, size_t> filter_on_additional_columns_match(
+    MatchRechord filter_on_additional_columns_match(
             const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
-            const std::span<const NativeTensor> source_tensors, ProcessingUnit& proc,
-            std::optional<std::vector<std::vector<size_t>>>&& index_match, size_t num_matched_rows
+            std::span<ProcessingUnit> proc, std::optional<MatchRechord>&& match_record
     ) const;
 
-    std::pair<std::vector<std::vector<size_t>>, size_t> initialize_rows_to_update_for_rowrange_indexed_data(
-            ProcessingUnit& proc, const StreamDescriptor& source_descriptor
+    MatchRechord initialize_rows_to_update_for_row_range_indexed_data(
+            std::span<ProcessingUnit> row_slices, const StreamDescriptor& source_descriptor
     ) const;
 
     size_t field_index_for_matching_on_column(std::string_view name, const StreamDescriptor& descriptor) const;
@@ -934,6 +958,8 @@ struct MergeUpdateClause {
     std::pair<size_t, size_t> get_source_start_end(const ProcessingUnit& proc) const;
 
     [[nodiscard]] bool must_structure_by_time_slice() const;
+
+    std::pair<size_t, size_t> get_source_start_end_for_time_slice(std::span<const ProcessingUnit> row_slices) const;
 };
 
 struct CompactDataClause {
