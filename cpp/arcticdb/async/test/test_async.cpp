@@ -795,9 +795,8 @@ TEST(AsyncStoreRemoveKeys, EmptyKeysIsNoOp) {
     auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, 3);
     auto store = build_async_store(storage);
 
-    auto result = store->remove_keys(std::vector<entity::VariantKey>{}, as::RemoveOpts{}).get();
+    store->remove_keys(std::vector<entity::VariantKey>{}, as::RemoveOpts{}).get();
 
-    ASSERT_TRUE(result.empty());
     ASSERT_TRUE(storage->recorded_call_sizes().empty());
 }
 

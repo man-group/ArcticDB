@@ -318,7 +318,7 @@ void do_remove_impl(
 
     std::vector<std::optional<query_stats::RAIIAddTime>> stat_timers;
     if (query_stats::QueryStats::instance()->is_enabled()) {
-        auto distinct_key_types = key_types(ks);
+        auto distinct_key_types = unique_key_types(ks);
         stat_timers.reserve(distinct_key_types.size());
         for (auto kt : distinct_key_types) {
             stat_timers.emplace_back(query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, kt));

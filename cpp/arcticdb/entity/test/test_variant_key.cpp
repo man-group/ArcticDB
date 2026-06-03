@@ -29,12 +29,12 @@ AtomKey make_atom(KeyType kt, int64_t id) {
 
 TEST(VariantKey, KeyTypesEmpty) {
     std::vector<VariantKey> keys;
-    ASSERT_TRUE(key_types(keys).empty());
+    ASSERT_TRUE(unique_key_types(keys).empty());
 }
 
 TEST(VariantKey, KeyTypesSingleType) {
     std::vector<VariantKey> keys{make_atom(KeyType::TABLE_DATA, 1), make_atom(KeyType::TABLE_DATA, 2)};
-    auto result = key_types(keys);
+    auto result = unique_key_types(keys);
     ASSERT_EQ(result.size(), 1u);
     ASSERT_EQ(result.at(0), KeyType::TABLE_DATA);
 }
@@ -47,7 +47,7 @@ TEST(VariantKey, KeyTypesMultipleTypesDeduped) {
             make_atom(KeyType::VERSION, 4),
             make_atom(KeyType::TABLE_INDEX, 5),
     };
-    auto result = key_types(keys);
+    auto result = unique_key_types(keys);
     ASSERT_EQ(result.size(), 3u);
     // Results are returned in KeyType enum order.
     ASSERT_EQ(result.at(0), KeyType::TABLE_DATA);
@@ -60,7 +60,7 @@ TEST(VariantKey, KeyTypesAtomAndRefMix) {
             make_atom(KeyType::TABLE_DATA, 1),
             RefKey{"sym", KeyType::VERSION_REF},
     };
-    auto result = key_types(keys);
+    auto result = unique_key_types(keys);
     ASSERT_EQ(result.size(), 2u);
     ASSERT_EQ(result.at(0), KeyType::TABLE_DATA);
     ASSERT_EQ(result.at(1), KeyType::VERSION_REF);

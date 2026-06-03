@@ -46,13 +46,6 @@ struct PartialKey {
 };
 
 struct StreamSink {
-    /**
-     The remove_key{,s,sync} methods used to return the key to indicate success/not. However, most implementations
-     moved() the key internally to avoid expensive string copying, so no key can actually be returned.
-     In the future, may return a bool.
-    */
-    using RemoveKeyResultType = folly::Unit;
-
     virtual ~StreamSink() = default;
 
     [[nodiscard]] virtual folly::Future<entity::VariantKey> write(
@@ -121,27 +114,25 @@ struct StreamSink {
     [[nodiscard]] virtual folly::Future<folly::Unit> batch_write_compressed(std::vector<storage::KeySegmentPair> kvs
     ) = 0;
 
-    [[nodiscard]] virtual folly::Future<RemoveKeyResultType> remove_key(
+    [[nodiscard]] virtual folly::Future<folly::Unit> remove_key(
             const entity::VariantKey& key, storage::RemoveOpts opts = storage::RemoveOpts{}
     ) = 0;
 
-    virtual RemoveKeyResultType remove_key_sync(
-            const entity::VariantKey& key, storage::RemoveOpts opts = storage::RemoveOpts{}
-    ) = 0;
+    virtual void remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts = storage::RemoveOpts{}) = 0;
 
-    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
+    [[nodiscard]] virtual folly::Future<folly::Unit> remove_keys(
             const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
     ) = 0;
 
-    [[nodiscard]] virtual folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
+    [[nodiscard]] virtual folly::Future<folly::Unit> remove_keys(
             std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
     ) = 0;
 
-    virtual std::vector<RemoveKeyResultType> remove_keys_sync(
+    virtual void remove_keys_sync(
             const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
     ) = 0;
 
-    virtual std::vector<RemoveKeyResultType> remove_keys_sync(
+    virtual void remove_keys_sync(
             std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts = storage::RemoveOpts{}
     ) = 0;
 

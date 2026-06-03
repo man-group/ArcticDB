@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb_ext.storage import KeyType
-from arcticdb.util.test import config_context, query_stats_operation_count
+from arcticdb.util.test import config_context, config_context_multi, query_stats_operation_count
 import arcticdb.toolbox.query_stats as qs
 
 
@@ -22,15 +22,12 @@ def _write_versions(lib, symbol, num_versions):
 
 
 @pytest.mark.storage
-def test_bulk_delete_batching(object_and_mem_and_lmdb_version_store, sym):
+def test_delete_removes_all_keys_when_chunked(object_and_mem_and_lmdb_version_store, sym):
     lib = object_and_mem_and_lmdb_version_store
     num_versions = 12
     batch_size = 5
 
-    with (
-        config_context("S3Storage.DeleteBatchSize", batch_size),
-        config_context("AzureStorage.DeleteBatchSize", batch_size),
-    ):
+    with config_context_multi({"S3Storage.DeleteBatchSize": batch_size, "AzureStorage.DeleteBatchSize": batch_size}):
         _write_versions(lib, sym, num_versions)
 
         lib_tool = lib.library_tool()

@@ -641,9 +641,7 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     return output;
 }
 
-folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
-        std::vector<SliceAndKey>&& slices, StreamSink& sink
-) {
+folly::Future<folly::Unit> remove_slice_and_keys(std::vector<SliceAndKey>&& slices, StreamSink& sink) {
     std::vector<VariantKey> keys;
     std::transform(
             std::make_move_iterator(std::begin(slices)),
@@ -654,7 +652,7 @@ folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
     return sink.remove_keys(std::move(keys)).thenValue([](auto&&) { return folly::makeFuture(); });
 }
 
-folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys_batches(
+folly::Future<folly::Unit> remove_slice_and_keys_batches(
         std::vector<std::vector<SliceAndKey>>&& slices_batches, StreamSink& sink
 ) {
     return folly::collect(folly::window(

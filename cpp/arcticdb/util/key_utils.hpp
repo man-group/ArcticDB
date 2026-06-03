@@ -42,6 +42,8 @@ inline void delete_keys_of_type_if(
                         keys = {};
                         keys.reserve(flush_threshold);
                         const auto batch_size = batch.size();
+                        // Async remove_keys spreads the batch out across the IO threadpool, remove_keys_sync would
+                        // delete the keys in serial. We block on the result here to bound memory.
                         store->remove_keys(std::move(batch)).get();
                         total_flushed += batch_size;
                         log::storage().debug(

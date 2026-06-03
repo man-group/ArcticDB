@@ -52,7 +52,7 @@ inline KeyType variant_key_type(const VariantKey& vk) {
 
 template<std::ranges::range R>
 requires std::same_as<std::remove_cvref_t<std::ranges::range_value_t<R>>, VariantKey>
-std::vector<KeyType> key_types(R&& keys) {
+std::vector<KeyType> unique_key_types(R&& keys) {
     std::array<bool, static_cast<size_t>(KeyType::UNDEFINED)> present{};
     for (const auto& k : keys) {
         present.at(static_cast<size_t>(variant_key_type(k))) = true;
