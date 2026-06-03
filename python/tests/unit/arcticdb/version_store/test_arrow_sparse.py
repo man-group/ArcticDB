@@ -693,6 +693,12 @@ def test_sparse_dynamic_schema_type_upgrade(
     assert_frame_equal_with_arrow_for_sparse(expected, received_pandas)
 
 
+def _polars_agg_expr(col, op, alias=None):
+    # drop_nulls() is required to match pandas resampling behavior for `first` and `last`.
+    expr = getattr(pl.col(col).drop_nulls(), op)()
+    return expr.alias(alias) if alias is not None else expr
+
+
 def _assert_polars_equal_for_aggregation(received, expected, count_columns=None, check_row_order=True):
     if count_columns:
         # Polars groupby behaves differently to arcticdb groupby in two ways:
@@ -772,13 +778,6 @@ class TestSparseArrowResample:
     # TODO: `origin` = one of (start_day, end, end_day, explicit timestamp) doesn't have polars equvalent.
     # Add sparse coverage for those origin values
 
-    @staticmethod
-    def _polars_agg_expr(col, op, alias=None):
-        # Applys `op` on the resampled column `col` after `drop_nulls()`.
-        # `drop_nulls` is required to match pandas resampling behavior for `first` and `last`.
-        expr = getattr(pl.col(col).drop_nulls(), op)()
-        return expr.alias(alias) if alias is not None else expr
-
     @pytest.fixture(autouse=True)
     def setup(self, in_memory_store_factory):
         self.lib = in_memory_store_factory(segment_row_size=4)
@@ -821,7 +820,7 @@ class TestSparseArrowResample:
         if agg_col == "datetime_col" and agg_op == "sum":
             pytest.skip("sum is not a valid aggregation on a datetime column")
         q = QueryBuilder().resample(rule).agg({agg_col: agg_op})
-        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(self._polars_agg_expr(agg_col, agg_op))
+        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(_polars_agg_expr(agg_col, agg_op))
         count_columns = [agg_col] if agg_op == "count" else None
         _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns)
 
@@ -829,7 +828,7 @@ class TestSparseArrowResample:
     @pytest.mark.parametrize("rule", ["3h", "6h"])
     def test_string_agg(self, agg_op, rule):
         q = QueryBuilder().resample(rule).agg({"str_col": agg_op})
-        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(self._polars_agg_expr("str_col", agg_op))
+        expected = self.pldf.group_by_dynamic("ts", every=rule).agg(_polars_agg_expr("str_col", agg_op))
         _check_query_result(self.lib, self.sym, q, expected)
 
     @pytest.mark.parametrize("rule", ["3h", "6h"])
@@ -844,7 +843,7 @@ class TestSparseArrowResample:
             "str_last": ("str_col", "last"),
         }
         q = QueryBuilder().resample(rule).agg(agg_dict)
-        exprs = [self._polars_agg_expr(col, op, name) for name, (col, op) in agg_dict.items()]
+        exprs = [_polars_agg_expr(col, op, name) for name, (col, op) in agg_dict.items()]
         expected = self.pldf.group_by_dynamic("ts", every=rule).agg(exprs)
         count_columns = [name for name, (_, op) in agg_dict.items() if op == "count"] or None
         _check_query_result(self.lib, self.sym, q, expected, count_columns=count_columns)
@@ -878,6 +877,42 @@ class TestSparseArrowResample:
         sliced = self.pldf.filter(pl.col("ts").is_between(start, end, closed="both"))
         expected = sliced.group_by_dynamic("ts", every="3h").agg(pl.col("int_col").sum())
         _check_query_result(self.lib, self.sym, q, expected)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    data=st.data(),
+    rule=st.sampled_from(["1h", "2h", "3h", "6h"]),
+    agg_op=st.sampled_from(["sum", "mean", "min", "max", "count", "first", "last"]),
+)
+def test_sparse_polars_resample_hypothesis(in_memory_version_store_arrow, data, rule, agg_op):
+    # Draw a sorted list of unique minute-offsets within 5 days, then matching float values.
+    # Unique sorted offsets give strictly-increasing timestamps so bucket sizes vary naturally.
+    offsets = sorted(
+        data.draw(st.lists(st.integers(min_value=0, max_value=7200), min_size=1, max_size=500, unique=True))
+    )
+    float_values = data.draw(
+        st.lists(
+            st.one_of(st.none(), st.floats(min_value=0, max_value=1000, allow_nan=False)),
+            min_size=len(offsets),
+            max_size=len(offsets),
+        )
+    )
+    lib = in_memory_version_store_arrow
+    lib.set_output_format(OutputFormat.POLARS)
+    sym = "test_sparse_polars_resample_hypothesis"
+    base = pd.Timestamp("2025-01-01")
+    ts = [base + pd.Timedelta(minutes=int(m)) for m in offsets]
+    pldf = pl.DataFrame(
+        {"ts": ts, "float_col": float_values},
+        schema_overrides={"ts": pl.Datetime("ns"), "float_col": pl.Float64},
+    )
+    lib.write(sym, pldf, index_column=True)
+    q = QueryBuilder().resample(rule).agg({"float_col": agg_op})
+    count_columns = ["float_col"] if agg_op == "count" else None
+    expected = pldf.group_by_dynamic("ts", every=rule).agg(_polars_agg_expr("float_col", agg_op))
+    _check_query_result(lib, sym, q, expected, count_columns=count_columns)
 
 
 class TestSparseArrowConcat:
