@@ -12,14 +12,61 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/ec2_utils.hpp>
-#include <cstdlib>
-#include <iostream>
+#include <cstdarg>
+#include <vector>
 
 namespace arcticdb::storage::s3 {
 
-void StdErrLogSystem::ProcessFormattedStatement(Aws::String&& statement) { std::cerr << statement; }
+namespace {
+spdlog::level::level_enum to_spdlog_level(Aws::Utils::Logging::LogLevel log_level) {
+    switch (log_level) {
+    case Aws::Utils::Logging::LogLevel::Fatal:
+        return spdlog::level::critical;
+    case Aws::Utils::Logging::LogLevel::Error:
+        return spdlog::level::err;
+    case Aws::Utils::Logging::LogLevel::Warn:
+        return spdlog::level::warn;
+    case Aws::Utils::Logging::LogLevel::Info:
+        return spdlog::level::info;
+    case Aws::Utils::Logging::LogLevel::Debug:
+        return spdlog::level::debug;
+    case Aws::Utils::Logging::LogLevel::Trace:
+        return spdlog::level::trace;
+    default:
+        return spdlog::level::off;
+    }
+}
+} // namespace
 
-void StdErrLogSystem::Flush() { std::cerr.flush(); }
+void SpdlogLogSystem::Log(Aws::Utils::Logging::LogLevel log_level, const char* tag, const char* format_str, ...) {
+    va_list args;
+    va_start(args, format_str);
+    vaLog(log_level, tag, format_str, args);
+    va_end(args);
+}
+
+void SpdlogLogSystem::vaLog(
+        Aws::Utils::Logging::LogLevel log_level, const char* tag, const char* format_str, va_list args
+) {
+    va_list args_copy;
+    va_copy(args_copy, args);
+    const int length = std::vsnprintf(nullptr, 0, format_str, args_copy);
+    va_end(args_copy);
+    if (length < 0) {
+        return;
+    }
+    std::vector<char> buffer(static_cast<size_t>(length) + 1);
+    std::vsnprintf(buffer.data(), buffer.size(), format_str, args);
+    log::s3().log(to_spdlog_level(log_level), "[{}] {}", tag, buffer.data());
+}
+
+void SpdlogLogSystem::LogStream(
+        Aws::Utils::Logging::LogLevel log_level, const char* tag, const Aws::OStringStream& message_stream
+) {
+    log::s3().log(to_spdlog_level(log_level), "[{}] {}", tag, message_stream.str());
+}
+
+void SpdlogLogSystem::Flush() { log::s3().flush(); }
 
 S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level, bool log_to_file) :
     log_level_(log_level),
@@ -34,7 +81,7 @@ S3ApiInstance::S3ApiInstance(Aws::Utils::Logging::LogLevel log_level, bool log_t
                     Aws::MakeShared<Aws::Utils::Logging::DefaultLogSystem>("v", log_level, "aws_sdk_")
             );
         } else {
-            Aws::Utils::Logging::InitializeAWSLogging(Aws::MakeShared<StdErrLogSystem>("v", log_level));
+            Aws::Utils::Logging::InitializeAWSLogging(Aws::MakeShared<SpdlogLogSystem>("v", log_level));
         }
     }
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Begin initializing AWS API");

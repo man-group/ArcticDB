@@ -9,19 +9,30 @@
 #pragma once
 
 #include <aws/core/Aws.h>
-#include <aws/core/utils/logging/FormattedLogSystem.h>
+#include <aws/core/utils/logging/LogSystemInterface.h>
+#include <atomic>
 #include <memory>
 #include <mutex>
 
 namespace arcticdb::storage::s3 {
 
-class StdErrLogSystem : public Aws::Utils::Logging::FormattedLogSystem {
+// Routes AWS SDK log messages into ArcticDB's `s3` spdlog logger so they are ordered with, and formatted like, the
+// rest of ArcticDB's logging. Implementing LogSystemInterface directly (rather than deriving from FormattedLogSystem)
+// keeps each message's AWS severity on every path, including the printf-style Log/vaLog path where vaLog receives the
+// level. The severity is mapped to the equivalent spdlog level.
+class SpdlogLogSystem : public Aws::Utils::Logging::LogSystemInterface {
   public:
-    explicit StdErrLogSystem(Aws::Utils::Logging::LogLevel log_level) : FormattedLogSystem(log_level) {}
+    explicit SpdlogLogSystem(Aws::Utils::Logging::LogLevel log_level) : log_level_(log_level) {}
+
+    Aws::Utils::Logging::LogLevel GetLogLevel() const override { return log_level_.load(); }
+    void Log(Aws::Utils::Logging::LogLevel log_level, const char* tag, const char* format_str, ...) override;
+    void vaLog(Aws::Utils::Logging::LogLevel log_level, const char* tag, const char* format_str, va_list args) override;
+    void LogStream(Aws::Utils::Logging::LogLevel log_level, const char* tag, const Aws::OStringStream& message_stream)
+            override;
     void Flush() override;
 
-  protected:
-    void ProcessFormattedStatement(Aws::String&& statement) override;
+  private:
+    std::atomic<Aws::Utils::Logging::LogLevel> log_level_;
 };
 
 class S3ApiInstance {

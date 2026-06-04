@@ -37,7 +37,7 @@
 
 namespace py = pybind11;
 
-enum class LoggerId { ROOT, STORAGE, IN_MEM, CODEC, VERSION, MEMORY, TIMINGS, LOCK, SCHEDULE, SYMBOL, SNAPSHOT };
+enum class LoggerId { ROOT, STORAGE, IN_MEM, CODEC, VERSION, MEMORY, TIMINGS, LOCK, SCHEDULE, SYMBOL, SNAPSHOT, S3 };
 
 void register_log(py::module&& log) {
     log.def(
@@ -69,6 +69,7 @@ void register_log(py::module&& log) {
             .value("SCHEDULE", LoggerId::SCHEDULE)
             .value("SYMBOL", LoggerId::SYMBOL)
             .value("SNAPSHOT", LoggerId::SNAPSHOT)
+            .value("S3", LoggerId::S3)
             .export_values();
     auto choose_logger = [&](LoggerId log_id) -> decltype(arcticdb::log::storage()) /* logger ref */ {
         switch (log_id) {
@@ -94,6 +95,8 @@ void register_log(py::module&& log) {
             return arcticdb::log::symbol();
         case LoggerId::SNAPSHOT:
             return arcticdb::log::snapshot();
+        case LoggerId::S3:
+            return arcticdb::log::s3();
         default:
             arcticdb::util::raise_rte("Unsupported logger id");
         }
