@@ -53,7 +53,7 @@ def log_mocks():
 
 def _aws_log_level_set_to(mock):
     for call in mock.call_args_list:
-        if call.args and call.args[0] == "AWS.LogLevel":
+        if call.args and call.args[0].upper() == "AWS.LOGLEVEL":
             return call.args[1]
     return None
 
@@ -97,7 +97,6 @@ def test_more_verbose_of_the_two_wins(log_mocks, s3_level, aws_int, expected_int
 def test_out_of_range_aws_log_level_is_ignored(log_mocks, bad_value):
     set_config_from_env_vars({"ARCTICDB_AWS_LogLevel_int": bad_value})
 
-    # The raw value is still forwarded to ConfigsMap, but it does not feed into the reconciled effective level.
     assert _aws_log_level_set_to(log_mocks["set_config_int"]) is None
     log_mocks["storage_log"].error.assert_called()
     log_mocks["set_log_level"].assert_not_called()

@@ -62,14 +62,16 @@ def set_config_from_env_vars(env_vars: Dict[str, str]):
                 if var_type == _TYPE_STR:
                     set_config_string(config_name, v)
                 elif var_type == _TYPE_INT:
-                    set_config_int(config_name, int(v))
                     if config_name == "AWS.LOGLEVEL":
+                        # Set later in _reconcile_aws_log_level
                         if 0 <= int(v) < len(_AWS_LOG_LEVELS):
                             aws_log_level_env = int(v)
                         else:
                             storage_log.error(
                                 f"Ignoring ARCTICDB_AWS_LogLevel_int={v}: must be in 0..{len(_AWS_LOG_LEVELS) - 1}"
                             )
+                    else:
+                        set_config_int(config_name, int(v))
                 elif var_type == _TYPE_FLOAT:
                     set_config_double(config_name, float(v))
                 elif var_type == _TYPE_LOGLEVEL:
