@@ -12,6 +12,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/variant.hpp>
 #include <pybind11/numpy.h>
 #include <sparrow/record_batch.hpp>
 
@@ -280,42 +281,60 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
 
     // Fill tensors
     auto col_names = tuple[1].cast<std::vector<std::string>>();
-    auto col_vals = tuple[3].cast<std::vector<py::object>>();
+    auto col_vals = tuple[3].cast<std::vector<ColumnEntry>>();
     auto sorted = tuple[4].cast<SortedValue>();
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = [&] {
-            try {
-                return obj_to_tensor(col_vals[i].ptr(), empty_types, col_names[i]);
-            } catch (...) {
-                log::storage().debug(
-                        "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\".Printing column "
-                        "info for all columns in the input:\n{}",
-                        i,
-                        col_names[i],
-                        [&] {
-                            std::string all_column_info;
-                            for (size_t col = 0; col < col_names.size(); ++col) {
-                                all_column_info += fmt::format(
-                                        "Column [{}] \"{}\": {}\n",
-                                        col,
-                                        col_names[col],
-                                        column_info(PyArrayDescriptor(col_vals[col].ptr(), empty_types))
-                                );
-                            }
-                            return all_column_info;
-                        }()
-                );
-                throw;
-            }
-        }();
-        frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
-        if (tensor.expanded_dim() == 1) {
-            desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if (tensor.expanded_dim() == 2) {
-            desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
-        }
-        field_tensors.push_back(std::move(tensor));
+        util::variant_match(
+                col_vals[i],
+                [&](const py::array& arr) {
+                    auto tensor = [&] {
+                        try {
+                            return obj_to_tensor(arr.ptr(), empty_types, col_names[i]);
+                        } catch (...) {
+                            log::storage().debug(
+                                    "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\"."
+                                    "Printing column info for ndarray columns in the input:\n{}",
+                                    i,
+                                    col_names[i],
+                                    [&] {
+                                        std::string all_column_info;
+                                        for (size_t col = 0; col < col_names.size(); ++col) {
+                                            if (auto* arr_p = std::get_if<py::array>(&col_vals[col])) {
+                                                all_column_info += fmt::format(
+                                                        "Column [{}] \"{}\": {}\n",
+                                                        col,
+                                                        col_names[col],
+                                                        column_info(PyArrayDescriptor(arr_p->ptr(), empty_types))
+                                                );
+                                            } else {
+                                                all_column_info += fmt::format(
+                                                        "Column [{}] \"{}\": <arrow chunks>\n", col, col_names[col]
+                                                );
+                                            }
+                                        }
+                                        return all_column_info;
+                                    }()
+                            );
+                            throw;
+                        }
+                    }();
+                    frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
+                    if (tensor.expanded_dim() == 1) {
+                        desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+                    } else if (tensor.expanded_dim() == 2) {
+                        desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+                    }
+                    field_tensors.push_back(std::move(tensor));
+                },
+                [&](const std::vector<std::shared_ptr<RecordBatchData>>& /*chunks*/) {
+                    util::raise_rte(
+                            "Mixed pandas frame: per-column Arrow ingest not yet implemented (column[{}] \"{}\")",
+                            i,
+                            col_names[i]
+                    );
+                }
+        );
     }
 
     // idx_names are passed by the python layer. They are empty in case row count index is used see:
