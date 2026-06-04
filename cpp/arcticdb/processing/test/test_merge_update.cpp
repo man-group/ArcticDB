@@ -2257,39 +2257,19 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
                     *component_manager, clause.process(std::move(structured_entities[0]))
             );
-    ASSERT_EQ(processing_unit.segments_->size(), 4);
-    ASSERT_EQ(processing_unit.row_ranges_->size(), 4);
-    ASSERT_EQ(processing_unit.col_ranges_->size(), 4);
-    // Processing unit isof two row slices
-    {
-        // First row slice stays the same
-        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
-                desc,
-                rows_per_segment,
-                cols_per_segment,
-                std::array<timestamp, 5>{6, 7, 8, 9, 9},
-                std::array<int64_t, 5>{5, 6, 7, 8, 9},
-                std::array{5, 6, 7, 200, 9}
-        );
-        ASSERT_EQ(expected_segments.size(), 2);
-        EXPECT_EQ(*(processing_unit.segments_->at(0)), expected_segments[0]);
-        EXPECT_EQ(*(processing_unit.segments_->at(1)), expected_segments[1]);
-    }
-    {
-        // When the row to be inserted has the same timestamp as the last row of the first segment, it should be
-        // inserted in the second segment
-        auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
-                desc,
-                rows_per_segment + 1, // Currently, there is no slicing
-                cols_per_segment,
-                std::array<timestamp, 6>{9, 9, 9, 10, 11, 12},
-                std::array<int64_t, 6>{10, 11, 120, 12, 13, 14},
-                std::array{100, 11, 300, 12, 13, 14}
-        );
-        ASSERT_EQ(expected_segments.size(), 2);
-        EXPECT_EQ(*(processing_unit.segments_->at(2)), expected_segments[0]);
-        EXPECT_EQ(*(processing_unit.segments_->at(3)), expected_segments[1]);
-    }
+    ASSERT_EQ(processing_unit.segments_->size(), 2);
+    ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
+    ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
+    auto [expected_segments, _c, _r] = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            std::numeric_limits<size_t>::max(),
+            cols_per_segment,
+            std::array<timestamp, 11>{6, 7, 8, 9, 9, 9, 9, 9, 10, 11, 12},
+            std::array<int64_t, 11>{5, 6, 7, 8, 9, 10, 11, 120, 12, 13, 14},
+            std::array{5, 6, 7, 200, 9, 100, 11, 300, 12, 13, 14}
+    );
+    ASSERT_EQ(*processing_unit.segments_->at(0), expected_segments[0]);
+    ASSERT_EQ(*processing_unit.segments_->at(1), expected_segments[1]);
 }
 
 TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmentFirstThreeOverlappingSegments) {

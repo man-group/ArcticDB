@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/pipeline/write_options.hpp>
-
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
@@ -897,28 +895,25 @@ struct MergeUpdateClause {
     [[nodiscard]] std::string to_string() const;
     class MatchRechord {
       public:
-        MatchRechord(std::span<ProcessingUnit> row_slices, const std::pair<size_t, size_t>& source_range);
+        MatchRechord(std::span<ProcessingUnit> row_slices, size_t num_source_rows);
         void add_match(size_t source_row, size_t target_row_slice, size_t target_row);
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
         void filter_matching_rows(
-                std::string_view column_name, DataType source_type, DataType target_type,
-                const NativeTensor& source_tensor, const std::optional<NativeTensor>& source_index = {}
+                std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
+                std::span<const char> source_data, std::optional<std::span<const timestamp>> source_index = {}
         );
         void clone_source_match(size_t source_row_src, size_t source_row_dst);
         [[nodiscard]] size_t num_matched_rows(size_t row_slice) const;
-        [[nodiscard]] size_t num_unmatched_rows(size_t row_slice) const;
         [[nodiscard]] size_t total_unmatched_rows() const;
-        void validate_rows_to_update() const;
+        [[nodiscard]] std::optional<std::tuple<size_t, size_t, size_t>> validate_rows_to_update() const;
         [[nodiscard]] std::span<const std::vector<size_t>> matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool should_insert(size_t source_row, size_t target_Row_slice, timestamp source_index) const;
-        [[nodiscard]] std::pair<size_t, size_t> source_range() const;
 
       private:
         [[nodiscard]] bool is_timeseries() const;
         std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
         std::vector<size_t> matched_count_;
         std::vector<size_t> unmatched_count_;
-        std::pair<size_t, size_t> source_range_for_times_slice_;
         std::span<ProcessingUnit> row_slices_;
         timestamp running_index_value_;
     };
@@ -959,11 +954,21 @@ struct MergeUpdateClause {
     /// interval is closed in the start and open in the end: [start, end)
     ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
             source_start_end_for_row_range_;
-    std::pair<size_t, size_t> get_source_start_end(const ProcessingUnit& proc) const;
+    std::pair<size_t, size_t> get_source_start_end(std::span<const ProcessingUnit> row_slice) const;
 
     [[nodiscard]] bool must_structure_by_time_slice() const;
 
-    std::pair<size_t, size_t> get_source_start_end_for_time_slice(std::span<const ProcessingUnit> row_slices) const;
+    std::span<const timestamp> get_source_index(std::span<const ProcessingUnit> row_slices) const;
+
+    template<typename T>
+    std::span<const T> get_source_data(std::span<const ProcessingUnit> row_slices, size_t field_index) const {
+        const std::pair<size_t, size_t> source_range = get_source_start_end(row_slices);
+        return source_->field_tensors()[field_index].span<T>().subspan(
+                source_range.first, source_range.second - source_range.first
+        );
+    }
+
+    std::span<const char> get_source_data_bytes(std::span<const ProcessingUnit> row_slices, size_t field_index) const;
 };
 
 struct CompactDataClause {
