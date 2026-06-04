@@ -1243,6 +1243,7 @@ if(${TEST})
             processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
             processing/test/benchmark_common.cpp
+            processing/test/benchmark_resample.cpp
             processing/test/benchmark_ternary.cpp
             util/test/benchmark_bitset.cpp
             version/test/benchmark_write.cpp

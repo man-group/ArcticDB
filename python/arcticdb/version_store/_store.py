@@ -4056,10 +4056,6 @@ class NativeVersionStore:
 
         Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
 
-        !!! warning
-            Compacting dynamic schema data can produce sparse data, even if the input data was dense, and resampling
-            does not yet support sparse data.
-
         Parameters
         ----------
         symbol : str

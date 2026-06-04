@@ -566,26 +566,6 @@ def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1, a
         lib.read(sym, query_builder=q)
 
 
-def test_resampling_sparse_data(lmdb_version_store_v1, any_output_format):
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_resampling_sparse_data"
-
-    # col_1 will be dense, but with fewer rows than the index column, and so semantically sparse
-    data = {"col_0": [np.nan, 1.0], "col_1": [2.0, np.nan]}
-    lib.write(sym, pd.DataFrame(data, index=[pd.Timestamp(0), pd.Timestamp(1000)]), sparsify_floats=True)
-
-    q = QueryBuilder()
-    q = q.resample("us").agg({"col_0": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q.resample("s").agg({"col_1": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-
 def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1, any_output_format):
     lib = lmdb_version_store_empty_types_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
