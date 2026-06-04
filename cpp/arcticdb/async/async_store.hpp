@@ -372,37 +372,56 @@ class AsyncStore : public Store {
         return async::submit_io_task(WriteCompressedBatchTask(std::move(kvs), library_));
     }
 
-    folly::Future<RemoveKeyResultType> remove_key(const entity::VariantKey& key, storage::RemoveOpts opts) override {
+    folly::Future<folly::Unit> remove_key(const entity::VariantKey& key, storage::RemoveOpts opts) override {
         return async::submit_io_task(RemoveTask{key, library_, opts});
     }
 
-    RemoveKeyResultType remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
-        return RemoveTask{key, library_, opts}();
+    void remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
+        RemoveTask{key, library_, opts}();
     }
 
-    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>()
-                            : async::submit_io_task(RemoveBatchTask{keys, library_, opts});
-    }
-
-    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts
-    ) override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>()
-                            : async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>() : RemoveBatchTask{keys, library_, opts}();
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts)
+    folly::Future<folly::Unit> remove_keys(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts)
             override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>() : RemoveBatchTask{std::move(keys), library_, opts}();
+        return remove_keys(std::vector<entity::VariantKey>{keys}, opts);
+    }
+
+    folly::Future<folly::Unit> remove_keys(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts) override {
+        if (keys.empty()) {
+            return folly::Unit{};
+        }
+        const auto batch_size = library_->max_delete_batch_size();
+        if (!batch_size.has_value() || keys.size() <= *batch_size) {
+            return async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
+        }
+        auto chunks = chunk_keys(std::move(keys), *batch_size);
+        auto futs = folly::window(
+                std::move(chunks),
+                [this, opts](std::vector<entity::VariantKey>&& chunk) {
+                    return async::submit_io_task(RemoveBatchTask{std::move(chunk), library_, opts});
+                },
+                async::TaskScheduler::instance()->io_thread_count()
+        );
+        return folly::collect(std::move(futs)).via(&async::io_executor()).thenValue([](auto&&) {
+            return folly::Unit{};
+        });
+    }
+
+    void remove_keys_sync(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts) override {
+        remove_keys_sync(std::vector<entity::VariantKey>{keys}, opts);
+    }
+
+    void remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts) override {
+        if (keys.empty()) {
+            return;
+        }
+        const auto batch_size = library_->max_delete_batch_size();
+        if (!batch_size.has_value() || keys.size() <= *batch_size) {
+            RemoveBatchTask{std::move(keys), library_, opts}();
+            return;
+        }
+        for (auto& chunk : chunk_keys(std::move(keys), *batch_size)) {
+            RemoveBatchTask{std::move(chunk), library_, opts}();
+        }
     }
 
     std::vector<folly::Future<VariantKey>> batch_read_compressed(
@@ -513,6 +532,19 @@ class AsyncStore : public Store {
 
   private:
     friend class arcticdb::toolbox::apy::LibraryTool;
+
+    static std::vector<std::vector<entity::VariantKey>> chunk_keys(
+            std::vector<entity::VariantKey>&& keys, size_t batch_size
+    ) {
+        std::vector<std::vector<entity::VariantKey>> chunks;
+        chunks.reserve((keys.size() + batch_size - 1) / batch_size);
+        for (size_t i = 0; i < keys.size(); i += batch_size) {
+            const size_t end = std::min(i + batch_size, keys.size());
+            chunks.emplace_back(std::make_move_iterator(keys.begin() + i), std::make_move_iterator(keys.begin() + end));
+        }
+        return chunks;
+    }
+
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;

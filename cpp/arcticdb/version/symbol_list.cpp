@@ -764,9 +764,7 @@ VariantKey write_symbols(
     return store->write_sync(KeyType::SYMBOL_LIST, 0, stream_id, NumericIndex{0}, NumericIndex{0}, std::move(segment));
 }
 
-std::vector<Store::RemoveKeyResultType> delete_keys(
-        const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude
-) {
+void delete_keys(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude) {
     auto to_remove = std::move(remove);
     std::vector<VariantKey> variant_keys;
     variant_keys.reserve(to_remove.size());
@@ -777,7 +775,7 @@ std::vector<Store::RemoveKeyResultType> delete_keys(
             variant_keys.emplace_back(atom_key);
     }
 
-    return store->remove_keys_sync(variant_keys);
+    store->remove_keys_sync(variant_keys);
 }
 
 bool has_recent_compaction(

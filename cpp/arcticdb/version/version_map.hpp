@@ -709,7 +709,7 @@ class VersionMapImpl {
             );
             store->remove_key_sync(*entry.head_);
         }
-        std::vector<folly::Future<Store::RemoveKeyResultType>> key_futs;
+        std::vector<folly::Future<folly::Unit>> key_futs;
         for (const auto& key : entry.keys_) {
             if (key.type() == KeyType::VERSION)
                 key_futs.emplace_back(store->remove_key(key.to_atom_key(entry.stream_id_)));

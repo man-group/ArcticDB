@@ -218,6 +218,15 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
     s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
+std::optional<size_t> NfsBackedStorage::max_delete_batch_size() const {
+    return std::min(
+            s3::detail::DELETE_OBJECTS_LIMIT,
+            static_cast<size_t>(
+                    ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", s3::detail::DELETE_OBJECTS_LIMIT)
+            )
+    );
+}
+
 bool NfsBackedStorage::do_iterate_type_until_match(
         KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
 ) {

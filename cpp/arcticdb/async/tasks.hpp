@@ -665,10 +665,7 @@ struct RemoveTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveTask)
 
-    stream::StreamSink::RemoveKeyResultType operator()() {
-        lib_->remove(std::move(key_), opts_);
-        return {};
-    }
+    void operator()() { lib_->remove(std::move(key_), opts_); }
 };
 
 struct RemoveBatchTask : BaseTask {
@@ -685,10 +682,7 @@ struct RemoveBatchTask : BaseTask {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveBatchTask)
 
-    std::vector<stream::StreamSink::RemoveKeyResultType> operator()() {
-        lib_->remove(std::span(keys_), opts_);
-        return {};
-    }
+    void operator()() { lib_->remove(std::span(keys_), opts_); }
 };
 
 struct VisitObjectSizesTask : BaseTask {

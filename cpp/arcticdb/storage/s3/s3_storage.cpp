@@ -105,6 +105,15 @@ void S3Storage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts) {
     detail::do_remove_impl(variant_keys, root_folder_, bucket_name_, client(), FlatBucketizer{});
 }
 
+std::optional<size_t> S3Storage::max_delete_batch_size() const {
+    return std::min(
+            detail::DELETE_OBJECTS_LIMIT,
+            static_cast<size_t>(
+                    ConfigsMap::instance()->get_int("S3Storage.DeleteBatchSize", detail::DELETE_OBJECTS_LIMIT)
+            )
+    );
+}
+
 void S3Storage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     detail::do_remove_impl(std::move(variant_key), root_folder_, bucket_name_, client(), FlatBucketizer{});
 }

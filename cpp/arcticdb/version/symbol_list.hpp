@@ -215,9 +215,7 @@ class SymbolList {
     [[nodiscard]] bool needs_compaction(const LoadResult& load_result) const;
 };
 
-std::vector<Store::RemoveKeyResultType> delete_keys(
-        const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude
-);
+void delete_keys(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& remove, const AtomKey& exclude);
 
 struct WriteSymbolTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
