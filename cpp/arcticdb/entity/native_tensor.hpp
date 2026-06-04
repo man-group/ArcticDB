@@ -141,6 +141,36 @@ struct NativeTensor {
         return (&(reinterpret_cast<const T*>(ptr)[signed_pos]));
     }
 
+    template<typename T>
+    std::span<const T> span() const {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, ndim() == 1, "Cannot create a span from a multi-dimensional tensor"
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                nbytes() % sizeof(T) == 0,
+                "Tensor byte size {} is not a multiple of the size of the span element type {}",
+                nbytes(),
+                sizeof(T)
+        );
+        return std::span<const T>(static_cast<const T*>(ptr), nbytes() / sizeof(T));
+    }
+
+    template<typename T>
+    std::span<T> span() {
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE, ndim() == 1, "Cannot create a span from a multi-dimensional tensor"
+        );
+        ARCTICDB_DEBUG_CHECK(
+                ErrorCode::E_ASSERTION_FAILURE,
+                nbytes() % sizeof(T) == 0,
+                "Tensor byte size {} is not a multiple of the size of the span element type {}",
+                nbytes(),
+                sizeof(T)
+        );
+        return std::span<const T>(static_cast<const T*>(ptr), nbytes() / sizeof(T));
+    }
+
     // returns number of elements, not bytesize
     [[nodiscard]] ssize_t size() const { return calc_elements(shape(), ndim()); }
 
@@ -245,6 +275,7 @@ struct TypedTensor : public NativeTensor {
     }
 
     const T* data() const { return static_cast<const T*>(NativeTensor::data()); }
+    std::span<const T> span() const { return std::span<const T>(data(), size()); }
 
   private:
     void check_ptr_within_bounds(const NativeTensor& tensor, ssize_t slice_num, ssize_t stride_offset) {

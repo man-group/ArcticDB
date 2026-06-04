@@ -29,6 +29,7 @@
 #include <variant>
 #include <memory>
 #include <ranges>
+#include <boost/date_time/constrained_value.hpp>
 
 namespace arcticdb {
 
@@ -906,9 +907,11 @@ struct MergeUpdateClause {
         void clone_source_match(size_t source_row_src, size_t source_row_dst);
         [[nodiscard]] size_t num_matched_rows(size_t row_slice) const;
         [[nodiscard]] size_t num_unmatched_rows(size_t row_slice) const;
+        [[nodiscard]] size_t total_unmatched_rows() const;
         void validate_rows_to_update() const;
         [[nodiscard]] std::span<const std::vector<size_t>> matched_rows(size_t target_row_slice) const;
         [[nodiscard]] bool should_insert(size_t source_row, size_t target_Row_slice, timestamp source_index) const;
+        [[nodiscard]] std::pair<size_t, size_t> source_range() const;
 
       private:
         [[nodiscard]] bool is_timeseries() const;
@@ -921,20 +924,21 @@ struct MergeUpdateClause {
     };
 
   private:
-    bool update_and_insert(
-            const std::optional<NativeTensor>& index_tensor, const std::span<const NativeTensor> source_tensors,
-            const StreamDescriptor& source_descriptor, std::span<const ProcessingUnit> proc,
-            const MatchRechord& match_record
+    std::pair<std::vector<ProcessingUnit>, bool> update_and_insert(
+            const MatchRechord& match_record, const StreamDescriptor& target_descriptor,
+            std::vector<ProcessingUnit>&& row_slices
+    ) const;
 
+    std::pair<std::vector<ProcessingUnit>, bool> update(
+            const MatchRechord& match_record, std::vector<ProcessingUnit>&& row_slices
     ) const;
 
     /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
     /// of rows in the source data and m is the number of row slices in the library
     std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
 
-    /// @return Vector of size equal to the number of source data rows that are within the row slice being
-    /// processed. Each element is a vector of the rows from the target data that has the same index as the
-    /// corresponding source row
+    MatchRechord match(std::span<ProcessingUnit> row_slices) const;
+
     MatchRechord filter_index_match(const std::span<const timestamp> source_index, std::span<ProcessingUnit> row_slices)
             const;
 
