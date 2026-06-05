@@ -7,8 +7,8 @@ if(NOT DEFINED ENV{CMAKE_BUILD_PARALLEL_LEVEL} OR "$ENV{CMAKE_BUILD_PARALLEL_LEV
         set(ENV{CMAKE_BUILD_PARALLEL_LEVEL} 2)
     else()
         cmake_host_system_information(RESULT _physical_mb QUERY TOTAL_PHYSICAL_MEMORY)
-        # C++ compiler processes can use up to 3GB each; cap parallelism to avoid OOM
-        math(EXPR _mem_jobs "${_physical_mb} / 3000")
+        # C++ compiler processes can use up to 5GB each; cap parallelism to avoid OOM
+        math(EXPR _mem_jobs "${_physical_mb} / 5000")
         if(${_mem_jobs} LESS 1)
             set(_mem_jobs 1)
         endif()
