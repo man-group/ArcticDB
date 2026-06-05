@@ -155,8 +155,17 @@ There are two ways to configure log levels:
 
 If both environment variables are set, and `set_log_level` is called, then the latter takes priority.
 
-S3 logging can also be enabled by setting the environment variable `ARCTICDB_AWS_LogLevel_int=6`, which will output all S3 logs to a file in the present working directory. 
+AWS SDK (S3) logging is controlled by the `s3` log stream: set `ARCTICDB_s3_loglevel=DEBUG` (for
+example). Because AWS SDK output is very noisy, the `s3` stream is opt-in: it defaults to `CRITICAL` and is *not*
+affected by `ARCTICDB_all_loglevel`. Raise it explicitly with `ARCTICDB_s3_loglevel` to see S3 logs.
+
+To write these S3 logs to a file in the present working directory instead, set `ARCTICDB_AWS_LogToFile_int=1`.
 See the [AWS documentation](https://docs.aws.amazon.com/sdk-for-cpp/v1/developer-guide/logging.html) for more details.
+
+!!! note "Deprecated"
+    The older `ARCTICDB_AWS_LogLevel_int=<0-6>` variable still works but is deprecated and logs a warning. When both are
+    set, the more verbose of `ARCTICDB_AWS_LogLevel_int` and `ARCTICDB_s3_loglevel` is used for both the AWS SDK and the
+    `s3` stream. Prefer `ARCTICDB_s3_loglevel`.
 
 ### Logging destinations
 

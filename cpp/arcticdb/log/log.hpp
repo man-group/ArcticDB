@@ -59,6 +59,7 @@ class Loggers {
     spdlog::logger& message();
     spdlog::logger& symbol();
     spdlog::logger& snapshot();
+    spdlog::logger& s3();
 
     void flush_all();
 
@@ -80,5 +81,6 @@ spdlog::logger& schedule();
 spdlog::logger& message();
 spdlog::logger& symbol();
 spdlog::logger& snapshot();
+spdlog::logger& s3();
 
 } // namespace arcticdb::log
