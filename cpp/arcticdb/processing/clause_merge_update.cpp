@@ -438,13 +438,31 @@ std::vector<std::vector<size_t>> structure_by_time_slice(std::span<RangesAndKey>
     });
     std::vector<std::vector<size_t>> res;
     TimestampRange previous_time_range{std::numeric_limits<timestamp>::min(), std::numeric_limits<timestamp>::min()};
+    int num_ranges_ending_past_current_end = 0;
     for (const auto& [idx, ranges_and_key] : folly::enumerate(ranges)) {
         const TimestampRange current_time_range = ranges_and_key.key_.time_range();
         if (previous_time_range.second <= current_time_range.first) {
             res.emplace_back();
+            previous_time_range = current_time_range;
+            // When the same index value is repeated across several row slices, the last segment containing that index
+            // value can either end with it or can end with a different value. The latter case is interesting. The last
+            // index value of that segment can be contained in multiple row slices itself. In that case all row slices
+            // including the ones that overlap with the previous repeated index value for a new slice. (Meaning that
+            // some segments will be processed by 2 processing units, one processing all rows up to the row where the
+            // last index value of the first appeared last, and second processing all rows from that last occurrence to
+            // the end of the new time slice.) However, if that new last index value is not contained in multiple row
+            // slices we can optimize it and leave it to the current processing unit to process the whole row slice.
+            if (ranges[idx - num_ranges_ending_past_current_end].key_.time_range().second > current_time_range.first) {
+                for (size_t slice_past_current_range = idx - num_ranges_ending_past_current_end;
+                     slice_past_current_range < idx;
+                     ++slice_past_current_range) {
+                    res.back().emplace_back(slice_past_current_range);
+                }
+            }
+            num_ranges_ending_past_current_end = 0;
         }
+        num_ranges_ending_past_current_end += current_time_range.second > previous_time_range.second;
         res.back().emplace_back(idx);
-        previous_time_range = current_time_range;
     }
     return res;
 }
