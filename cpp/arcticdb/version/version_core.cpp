@@ -21,6 +21,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/column_stats_filter.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/async/tasks.hpp>
@@ -1950,9 +1951,11 @@ AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key) {
 
 void create_column_stats_impl(
         const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, ColumnStats& column_stats,
-        const ReadOptions& read_options
+        const ReadQuery& caller_read_query, const ReadOptions& read_options
 ) {
     using namespace arcticdb::pipelines;
+    const bool is_filtered = !std::holds_alternative<std::monostate>(caller_read_query.row_filter) ||
+                             caller_read_query.row_range.has_value();
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     auto index_future = store->read(versioned_item.key_);
 
@@ -2000,7 +2003,7 @@ void create_column_stats_impl(
         old_segment = std::move(column_stats_try).value();
     }
 
-    if (old_segment) {
+    if (old_segment && !is_filtered) {
         arcticc::pb2::column_stats_pb2::ColumnStatsHeader old_header;
         bool unpacked = old_segment->metadata()->UnpackTo(&old_header);
         util::check(
@@ -2026,29 +2029,57 @@ void create_column_stats_impl(
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = versioned_item.key_.id();
     auto read_query = std::make_shared<ReadQuery>(std::vector{std::make_shared<Clause>(std::move(*clause))});
+    read_query->row_filter = caller_read_query.row_filter;
+    read_query->row_range = caller_read_query.row_range;
     read_indexed_keys_to_pipeline(pipeline_context, *read_query, read_options, index_info);
 
-    auto segs = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
-    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-            !segs.empty(), "Cannot create column stats for nonexistent columns"
-    );
-
-    std::vector<SegmentInMemory> segments_in_memory;
-    for (auto& seg : segs) {
-        segments_in_memory.emplace_back(seg.release_segment(store));
+    auto segments = read_process_and_collect(store, pipeline_context, read_query, read_options).get();
+    if (segments.empty()) {
+        if (is_filtered) {
+            // No row-slices overlap the caller's range — nothing to recompute.
+            log::version().warn("create_column_stats: no row-slices overlap the requested range; nothing to do");
+            return;
+        }
+        schema::raise<ErrorCode::E_COLUMN_DOESNT_EXIST>("Cannot create column stats for nonexistent columns");
     }
-    SegmentInMemory new_segment = merge_column_stats_segments(segments_in_memory);
-    util::check(new_segment.metadata(), "new_segment should always have metadata");
-    new_segment.descriptor().set_id(versioned_item.key_.id());
+
+    std::vector<SegmentInMemory> col_stats_segments_in_memory;
+    for (auto& segment : segments) {
+        col_stats_segments_in_memory.emplace_back(segment.release_segment(store));
+    }
+
+    SegmentInMemory new_col_stats_segment = merge_column_stats_segments(col_stats_segments_in_memory);
+    util::check(new_col_stats_segment.metadata(), "new_col_stats_segment should always have metadata");
+    new_col_stats_segment.descriptor().set_id(versioned_item.key_.id());
 
     storage::UpdateOpts update_opts;
     update_opts.upsert_ = true;
+
     if (!old_segment.has_value()) {
-        store->update(column_stats_key, std::move(new_segment), update_opts).get();
+        store->update(column_stats_key, std::move(new_col_stats_segment), update_opts).get();
+    } else if (is_filtered) {
+        // Range-restricted RMW: keep out-of-range rows from old_segment, replace in-range rows with new_col_stats_segment.
+        auto range_start = std::numeric_limits<entity::timestamp>::max();
+        auto range_end = std::numeric_limits<entity::timestamp>::min();
+
+        for (size_t row = 0; row < new_col_stats_segment.row_count(); ++row) {
+            auto s = new_col_stats_segment.scalar_at<entity::timestamp>(row, start_index_column_offset);
+            auto e = new_col_stats_segment.scalar_at<entity::timestamp>(row, end_index_column_offset);
+            util::check(s.has_value() && e.has_value(), "Missing start/end index in new column stats segment");
+            range_start = std::min(range_start, *s);
+            range_end = std::max(range_end, *e);
+        }
+
+        SegmentInMemory merged = merge_column_stats_with_range_replacement(
+                *old_segment, std::move(new_col_stats_segment), entity::TimestampRange{range_start, range_end}
+        );
+
+        merged.descriptor().set_id(versioned_item.key_.id());
+        store->update(column_stats_key, std::move(merged), update_opts).get();
     } else {
         // Check that the start and end index columns match
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                new_segment.column(0) == old_segment->column(0) && new_segment.column(1) == old_segment->column(1),
+                new_col_stats_segment.column(0) == old_segment->column(0) && new_col_stats_segment.column(1) == old_segment->column(1),
                 "Cannot create column stats, existing column stats row-groups do not match"
         );
         // Merge the ColumnStatsHeader metadata from old and new segments
@@ -2058,14 +2089,14 @@ void create_column_stats_impl(
             log::version().warn(
                     "Found existing Column Stats key without metadata? Just creating new stats... {}", column_stats_key
             );
-            store->update(column_stats_key, std::move(new_segment), update_opts).get();
+            store->update(column_stats_key, std::move(new_col_stats_segment), update_opts).get();
             return;
         }
         bool unpacked = old_metadata->UnpackTo(&old_header);
         util::check(unpacked, "Could not unpack column stats metadata from the old header?");
         validate_column_stats_header_version(old_header);
         arcticc::pb2::column_stats_pb2::ColumnStatsHeader new_header;
-        unpacked = new_segment.metadata()->UnpackTo(&new_header);
+        unpacked = new_col_stats_segment.metadata()->UnpackTo(&new_header);
         util::check(unpacked, "Could not unpack column stats metadata from the new header?");
         auto next_offset = old_segment->descriptor().field_count();
         for (const auto& [data_col_offset, entry_list] : new_header.stats_by_column()) {
@@ -2077,7 +2108,7 @@ void create_column_stats_impl(
             }
         }
         // Add new stat columns to the old segment
-        old_segment->concatenate(std::move(new_segment));
+        old_segment->concatenate(std::move(new_col_stats_segment));
         google::protobuf::Any any;
         any.PackFrom(old_header);
         old_segment->reset_metadata();

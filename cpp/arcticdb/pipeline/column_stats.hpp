@@ -15,6 +15,14 @@ namespace arcticdb {
 
 SegmentInMemory merge_column_stats_segments(const std::vector<SegmentInMemory>& segments);
 
+// Builds a merged column-stats segment that keeps every row of `old_segment` whose
+// [start_index, end_index] lies fully outside `range_replaced`, and inserts the rows from
+// `new_segment` (covering the in-range row-slices). Both segments must share the same
+// stat-column schema. Used by the range-restricted RMW path in create_column_stats_impl.
+SegmentInMemory merge_column_stats_with_range_replacement(
+        const SegmentInMemory& old_segment, SegmentInMemory new_segment, const entity::TimestampRange& range_replaced
+);
+
 // User facing types - eg users are only allowed to create min and max together, not one or the other
 enum class ColumnStatType { MINMAX };
 // Total universe of column stats we support - min and max are treated separately here

@@ -1267,12 +1267,21 @@ class NativeVersionStore:
         return result
 
     def create_column_stats(
-        self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
+        self,
+        symbol: str,
+        column_stats: Dict[str, Set[str]],
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
     ) -> None:
         """
         Calculates the specified column statistics for each row-slice for the given symbol. In the future, these
         statistics will be used by `QueryBuilder` filtering operations to reduce the number of data segments read out
         of storage.
+
+        When `date_range` or `row_range` is provided, stats are only (re)computed for the row-slices overlapping that
+        range. Existing stats for row-slices that fall fully outside the range are kept; in-range slice stats are
+        replaced by the freshly computed values. `date_range` and `row_range` are mutually exclusive.
 
         Parameters
         ----------
@@ -1285,14 +1294,33 @@ class NativeVersionStore:
                 "MINMAX" : store the minimum and maximum value for the column in each row-slice
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
+        date_range: `Optional[DateRangeInput]`, default=None
+            Restrict computation to row-slices overlapping this date range. Mutually exclusive with `row_range`.
+            Only supported on timestamp-indexed symbols.
+        row_range: `Optional[Tuple[int, int]]`, default=None
+            Restrict computation to row-slices overlapping the given (start, end) row range. Mutually exclusive
+            with `date_range`.
 
         Returns
         -------
         None
         """
+        check(
+            date_range is None or row_range is None,
+            "create_column_stats: date_range and row_range are mutually exclusive",
+        )
+
         column_stats = self._get_column_stats(column_stats)
         version_query = self._get_version_query(as_of)
-        self.version_store.create_column_stats_version(symbol, column_stats, version_query)
+        read_query = _PythonVersionStoreReadQuery()
+
+        if date_range is not None:
+            read_query.row_filter = _normalize_dt_range(date_range)
+
+        if row_range is not None:
+            read_query.row_range = _SignedRowRange(row_range[0], row_range[1])
+
+        self.version_store.create_column_stats_version(symbol, column_stats, version_query, read_query)
 
     def drop_column_stats(
         self, symbol: str, column_stats: Optional[Dict[str, Set[str]]] = None, as_of: Optional[VersionQueryInput] = None
