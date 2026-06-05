@@ -372,9 +372,10 @@ TEST(S3AsyncTransfer, ConcurrentGetPutDelete) {
 // with the new-index write in a single writer; the discriminator is a large PUT immediately followed
 // by an async GET of a recently-written large object on the shared S3 client / io_executor). Each
 // writer is one "symbol" that loops: PUT a fresh large key v (the new index), then async-GET + DECODE
-// the key it wrote one iteration earlier (v-1, the "previous index" a prune reads), then DELETE v-2
-// (eager prune of the now-unreferenced older index). Multiple writers run in parallel on a shared
-// client. This supplies the read-your-recent-write ingredient the settled-object tests (v1/v2) lacked.
+// the key it wrote one iteration earlier (v-1, the "previous index" a prune reads) and then DELETE
+// that same v-1 key (prune reads the pruned index to find its data keys, then deletes it). Multiple
+// writers run in parallel on a shared client. This supplies the read-your-recent-write ingredient the
+// settled-object tests (v1/v2) lacked.
 // Detector = decode_throw on the prune read.
 TEST(S3AsyncTransfer, AppendPruneProfile) {
     const std::string endpoint = env_str("ARCTICDB_REPRO_S3_ENDPOINT");
@@ -414,7 +415,7 @@ TEST(S3AsyncTransfer, AppendPruneProfile) {
     std::mutex log_mtx;
 
     auto writer = [&](size_t id) {
-        std::string k_prev, k_prevprev;
+        std::string k_prev;
         size_t v = 0;
         while (!stop.load(std::memory_order_relaxed)) {
             const std::string k_cur = fmt::format("{}/sym_{}/v_{}", prefix, id, v++);
@@ -423,16 +424,20 @@ TEST(S3AsyncTransfer, AppendPruneProfile) {
             appends.fetch_add(1, std::memory_order_relaxed);
             if (!put.is_success())
                 put_errors.fetch_add(1, std::memory_order_relaxed);
-            // Prune: async-read + decode the index written one iteration earlier.
+            // Prune the previous version: async-read + decode its index (to find the data keys to
+            // delete), then delete that same index key. A failed decode is exactly the prod case that
+            // leaks -- the cleanup can't proceed, so the index is left undeleted.
             if (!k_prev.empty()) {
                 auto res = client.get_object_async(k_prev, bucket).get();
                 prune_reads.fetch_add(1, std::memory_order_relaxed);
+                bool decoded_ok = false;
                 if (!res.is_success()) {
                     get_errors.fetch_add(1, std::memory_order_relaxed);
                 } else {
                     try {
                         SegmentInMemory decoded = decode_segment(res.get_output());
                         (void)decoded;
+                        decoded_ok = true;
                     } catch (const std::exception& e) {
                         if (first_logged.fetch_add(1) == 0) {
                             std::lock_guard<std::mutex> g(log_mtx);
@@ -441,20 +446,16 @@ TEST(S3AsyncTransfer, AppendPruneProfile) {
                         decode_throws.fetch_add(1, std::memory_order_relaxed);
                     }
                 }
+                if (decoded_ok) {
+                    client.delete_object(k_prev, bucket).get();
+                    deletes.fetch_add(1, std::memory_order_relaxed);
+                }
             }
-            // Eager prune delete of the now-unreferenced older index.
-            if (!k_prevprev.empty()) {
-                client.delete_object(k_prevprev, bucket).get();
-                deletes.fetch_add(1, std::memory_order_relaxed);
-            }
-            k_prevprev = k_prev;
             k_prev = k_cur;
         }
-        // Best-effort cleanup of the two keys still live for this writer.
+        // Best-effort cleanup of the key still live for this writer.
         if (!k_prev.empty())
             client.delete_object(k_prev, bucket).get();
-        if (!k_prevprev.empty())
-            client.delete_object(k_prevprev, bucket).get();
     };
 
     std::vector<std::thread> threads;
