@@ -216,35 +216,56 @@ std::vector<SymbolListEntry> read_from_storage(const std::shared_ptr<StreamSourc
         return read_new_style_list_from_storage(seg);
 }
 
-void add_update_map_entry(MapType& update_map, const AtomKey& key) {
-    const auto& symbol = key.start_index();
-    const auto version_id = is_new_style_key(key) ? key.version_id() : unknown_version_id;
-    const auto ts = key.creation_ts();
-    ActionType action = std::get<StringId>(key.id()) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD;
-    update_map[symbol].emplace_back(version_id, ts, action);
+JournalEntryData journal_entry_from_atom(const AtomKey& key) {
+    return {key.version_id(),
+            key.creation_ts(),
+            key.content_hash(),
+            std::get<StringId>(key.id()) == DeleteSymbol ? ActionType::DELETE : ActionType::ADD,
+            is_new_style_key(key)};
 }
 
-void sort_update_map_entries(MapType& update_map) {
-    for (auto& [symbol, entries] : update_map) {
-        std::sort(entries.begin(), entries.end(), [](const SymbolEntryData& a, const SymbolEntryData& b) {
-            auto a_ver = a.reference_id_ == unknown_version_id ? VersionId{0} : a.reference_id_;
-            auto b_ver = b.reference_id_ == unknown_version_id ? VersionId{0} : b.reference_id_;
-            return std::tie(a_ver, a.timestamp_) < std::tie(b_ver, b.timestamp_);
+// Reconstructs the original AtomKey from a JournalEntryData + the owning symbol (map key).
+// For new-style keys the end_index encodes the version marker; for old-style it equals the symbol.
+AtomKey atom_key_from_journal_entry(const StreamId& symbol, const JournalEntryData& ck) {
+    IndexValue end_index;
+    if (ck.is_new_style) {
+        end_index = std::holds_alternative<StringId>(symbol) ? IndexValue{StringIndex{std::string{version_string}}}
+                                                             : IndexValue{NumericIndex{version_identifier}};
+    } else {
+        end_index = IndexValue{symbol};
+    }
+    return atom_key_builder()
+            .version_id(ck.key_version_id)
+            .creation_ts(ck.creation_ts)
+            .content_hash(ck.content_hash)
+            .start_index(IndexValue{symbol})
+            .end_index(end_index)
+            .build(action_id(ck.action), KeyType::SYMBOL_LIST);
+}
+
+SymbolEntryData to_symbol_entry_data(const JournalEntryData& ck) {
+    const auto reference_id = ck.is_new_style ? ck.key_version_id : unknown_version_id;
+    return {reference_id, ck.creation_ts, ck.action};
+}
+
+void add_journal_entry(JournalMapType& update_map, const AtomKey& key) {
+    update_map[key.start_index()].emplace_back(journal_entry_from_atom(key));
+}
+
+void sort_journal_map(JournalMapType& update_map) {
+    for (auto& [symbol, keys] : update_map) {
+        std::sort(keys.begin(), keys.end(), [](const JournalEntryData& a, const JournalEntryData& b) {
+            auto a_ver = a.is_new_style ? a.key_version_id : VersionId{0};
+            auto b_ver = b.is_new_style ? b.key_version_id : VersionId{0};
+            return std::tie(a_ver, a.creation_ts) < std::tie(b_ver, b.creation_ts);
         });
     }
 }
 
-auto key_sort_comparator = [](const AtomKey& l, const AtomKey& r) {
-    auto l_ver = is_new_style_key(l) ? l.version_id() : VersionId{0};
-    auto r_ver = is_new_style_key(r) ? r.version_id() : VersionId{0};
-    return std::tie(l.start_index(), l_ver, l.creation_ts()) < std::tie(r.start_index(), r_ver, r.creation_ts());
-};
-
-/// Single-pass iteration over SYMBOL_LIST keys: builds the update map directly and locates the
-/// latest compaction key, optionally collecting all keys for later deletion.
+/// Single-pass iteration over SYMBOL_LIST keys: builds the update map and locates the latest
+/// compaction key. Always uses JournalEntryData (32B/entry) for the update map.
 JournalResult load_journal_streaming(
-        const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction,
-        bool collect_keys
+        const std::shared_ptr<Store>& store, SymbolListData& data, WillAttemptCompaction will_attempt_compaction
 ) {
     JournalResult result;
     size_t uncompacted_keys_found = 0;
@@ -256,6 +277,7 @@ JournalResult load_journal_streaming(
         if (atom_key.id() == compaction_id) {
             if (!result.compaction_key || atom_key.creation_ts() > result.compaction_key->creation_ts())
                 result.compaction_key = atom_key;
+            result.compaction_keys.emplace_back(std::move(atom_key));
         } else {
             ++uncompacted_keys_found;
             if (uncompacted_keys_found == warning_threshold() && !data.warned_expected_slowdown_) {
@@ -272,15 +294,11 @@ JournalResult load_journal_streaming(
                 );
                 data.warned_expected_slowdown_ = true;
             }
-            add_update_map_entry(result.update_map, atom_key);
+            add_journal_entry(result.update_map, atom_key);
         }
-
-        if (collect_keys)
-            result.all_keys.emplace_back(std::move(atom_key));
     });
 
-    sort_update_map_entries(result.update_map);
-
+    sort_journal_map(result.update_map);
     return result;
 }
 
@@ -392,14 +410,66 @@ ProblematicResult is_problematic(
     return ProblematicResult{latest};
 }
 
+void resolve_problematic_symbols(
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
+        std::map<StreamId, std::pair<VersionId, timestamp>>& problematic_symbols, CollectionType& symbols
+) {
+    if (problematic_symbols.empty())
+        return;
+
+    auto symbol_versions = std::make_shared<std::vector<StreamId>>();
+    for (const auto& [symbol, reference_pair] : problematic_symbols)
+        symbol_versions->emplace_back(symbol);
+
+    auto versions = batch_check_latest_id_and_status(store, version_map, symbol_versions);
+
+    for (const auto& [symbol, reference_pair] : problematic_symbols) {
+        auto reference_id = reference_pair.first;
+
+        if (auto version = versions->find(symbol); version != versions->end()) {
+            const auto& symbol_state = version->second;
+            if (symbol_state.exists_) {
+                ARCTICDB_DEBUG(
+                        log::symbol(),
+                        "Problematic symbol/version pair: {}@{}: exists at id {}",
+                        symbol,
+                        reference_id,
+                        symbol_state.version_id_
+                );
+                symbols.emplace_back(symbol, symbol_state.version_id_, symbol_state.timestamp_, ActionType::ADD);
+            } else {
+                symbols.emplace_back(symbol, symbol_state.version_id_, symbol_state.timestamp_, ActionType::DELETE);
+                ARCTICDB_DEBUG(
+                        log::symbol(),
+                        "Problematic symbol/version pair: {}@{}: deleted at id {}",
+                        symbol,
+                        reference_id,
+                        symbol_state.version_id_
+                );
+            }
+        } else {
+            ARCTICDB_DEBUG(
+                    log::symbol(), "Problematic symbol/version pair: {}@{}: cannot be found", symbol, reference_id
+            );
+            symbols.emplace_back(symbol, reference_id, reference_pair.second, ActionType::DELETE);
+        }
+    }
+    std::sort(std::begin(symbols), std::end(symbols), [](const auto& l, const auto& r) {
+        return l.stream_id_ < r.stream_id_;
+    });
+}
+
+/// Merges journal entries (JournalEntryData map) with existing compacted or version-key symbols.
+/// The map is read-only so it can be moved into LoadResult for later batch deletion.
 CollectionType merge_existing_with_journal_map(
-        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store, MapType& update_map,
-        std::vector<SymbolListEntry>&& existing
+        const std::shared_ptr<VersionMap>& version_map, const std::shared_ptr<Store>& store,
+        const JournalMapType& update_map, std::vector<SymbolListEntry>&& existing
 ) {
     auto existing_keys = std::move(existing);
 
     CollectionType symbols;
     std::map<StreamId, std::pair<VersionId, timestamp>> problematic_symbols;
+    std::unordered_set<StreamId> seen_in_existing;
     const auto min_allowed_interval = ConfigsMap::instance()->get_int("SymbolList.MinIntervalNs", 100'000'000LL);
 
     for (auto& previous_entry : existing_keys) {
@@ -416,74 +486,39 @@ CollectionType merge_existing_with_journal_map(
                 );
         } else {
             util::check(!updated->second.empty(), "Unexpected empty entry for symbol {}", updated->first);
-            if (auto problematic_entry = is_problematic(previous_entry, updated->second, min_allowed_interval);
+            seen_in_existing.insert(stream_id);
+            std::vector<SymbolEntryData> entries;
+            entries.reserve(updated->second.size());
+            for (const auto& ck : updated->second)
+                entries.push_back(to_symbol_entry_data(ck));
+            if (auto problematic_entry = is_problematic(previous_entry, entries, min_allowed_interval);
                 problematic_entry) {
                 problematic_symbols.try_emplace(
                         stream_id, std::make_pair(problematic_entry.reference_id(), problematic_entry.time())
                 );
             } else {
-                const auto& last_entry = updated->second.rbegin();
-                symbols.emplace_back(
-                        updated->first, last_entry->reference_id_, last_entry->timestamp_, last_entry->action_
-                );
+                const auto last = to_symbol_entry_data(updated->second.back());
+                symbols.emplace_back(updated->first, last.reference_id_, last.timestamp_, last.action_);
             }
-            update_map.erase(updated);
         }
     }
 
-    for (const auto& [symbol, entries] : update_map) {
-        ARCTICDB_DEBUG(log::symbol(), "{} {}", symbol, entries);
+    for (const auto& [symbol, ck_entries] : update_map) {
+        if (seen_in_existing.count(symbol) > 0)
+            continue;
+        std::vector<SymbolEntryData> entries;
+        entries.reserve(ck_entries.size());
+        for (const auto& ck : ck_entries)
+            entries.push_back(to_symbol_entry_data(ck));
         if (auto problematic_entry = is_problematic(entries, min_allowed_interval); problematic_entry) {
             problematic_symbols.try_emplace(symbol, problematic_entry.reference_id(), problematic_entry.time());
         } else {
-            const auto& last_entry = entries.rbegin();
-            symbols.emplace_back(symbol, last_entry->reference_id_, last_entry->timestamp_, last_entry->action_);
+            const auto last = to_symbol_entry_data(ck_entries.back());
+            symbols.emplace_back(symbol, last.reference_id_, last.timestamp_, last.action_);
         }
     }
 
-    if (!problematic_symbols.empty()) {
-        auto symbol_versions = std::make_shared<std::vector<StreamId>>();
-        for (const auto& [symbol, reference_pair] : problematic_symbols)
-            symbol_versions->emplace_back(symbol);
-
-        auto versions = batch_check_latest_id_and_status(store, version_map, symbol_versions);
-
-        for (const auto& [symbol, reference_pair] : problematic_symbols) {
-            auto reference_id = reference_pair.first;
-
-            if (auto version = versions->find(symbol); version != versions->end()) {
-                const auto& symbol_state = version->second;
-                if (symbol_state.exists_) {
-                    ARCTICDB_DEBUG(
-                            log::symbol(),
-                            "Problematic symbol/version pair: {}@{}: exists at id {}",
-                            symbol,
-                            reference_id,
-                            symbol_state.version_id_
-                    );
-                    symbols.emplace_back(symbol, symbol_state.version_id_, symbol_state.timestamp_, ActionType::ADD);
-                } else {
-                    symbols.emplace_back(symbol, symbol_state.version_id_, symbol_state.timestamp_, ActionType::DELETE);
-                    ARCTICDB_DEBUG(
-                            log::symbol(),
-                            "Problematic symbol/version pair: {}@{}: deleted at id {}",
-                            symbol,
-                            reference_id,
-                            symbol_state.version_id_
-                    );
-                }
-            } else {
-                ARCTICDB_DEBUG(
-                        log::symbol(), "Problematic symbol/version pair: {}@{}: cannot be found", symbol, reference_id
-                );
-                symbols.emplace_back(symbol, reference_id, reference_pair.second, ActionType::DELETE);
-            }
-        }
-        std::sort(std::begin(symbols), std::end(symbols), [](const auto& l, const auto& r) {
-            return l.stream_id_ < r.stream_id_;
-        });
-    }
-
+    resolve_problematic_symbols(version_map, store, problematic_symbols, symbols);
     return symbols;
 }
 
@@ -492,39 +527,42 @@ LoadResult attempt_load(
         WillAttemptCompaction will_attempt_compaction
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Symbol list load attempt");
-    const bool collect_keys = will_attempt_compaction == WillAttemptCompaction::YES;
-    auto journal = load_journal_streaming(store, data, will_attempt_compaction, collect_keys);
+    const bool will_compact = will_attempt_compaction == WillAttemptCompaction::YES;
+    auto journal = load_journal_streaming(store, data, will_attempt_compaction);
 
     LoadResult load_result;
     load_result.compaction_key_ = journal.compaction_key;
     load_result.total_key_count_ = journal.total_key_count;
-    load_result.symbol_list_keys_ = std::move(journal.all_keys);
 
     if (journal.compaction_key) {
         ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from symbol list keys");
         auto existing = read_from_storage(store, *journal.compaction_key);
-        load_result.symbols_ =
-                merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(existing));
+        if (journal.update_map.empty()) {
+            load_result.symbols_ =
+                    CollectionType(std::make_move_iterator(existing.begin()), std::make_move_iterator(existing.end()));
+        } else {
+            load_result.symbols_ =
+                    merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(existing));
+        }
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::symbol(), "Loading symbols from version keys");
         auto previous_entries = load_previous_from_version_keys(store, data, will_attempt_compaction);
         load_result.symbols_ =
                 merge_existing_with_journal_map(version_map, store, journal.update_map, std::move(previous_entries));
-
-        // Verify every journal key we'd delete during compaction corresponds to a symbol in the
-        // merged output. Guards against silent data loss from merge bugs.
-        if (collect_keys) {
+        if (will_compact) {
+            // Verify every journal symbol we'd delete corresponds to a symbol in the merged output.
+            // Guards against silent data loss from merge bugs.
             std::unordered_set<StreamId> symbols_in_merge;
             for (const auto& entry : load_result.symbols_)
                 symbols_in_merge.emplace(entry.stream_id_);
-
-            for (const auto& key : load_result.symbol_list_keys_)
-                util::check(
-                        symbols_in_merge.count(StreamId{std::get<StringIndex>(to_atom(key).start_index())}) > 0,
-                        "Would delete unseen key {}",
-                        key
-                );
+            for (const auto& [symbol, _] : journal.update_map)
+                util::check(symbols_in_merge.count(symbol) > 0, "Would delete unseen symbol {}", symbol);
         }
+    }
+
+    if (will_compact) {
+        load_result.old_compaction_keys_ = std::move(journal.compaction_keys);
+        load_result.update_map_ = std::move(journal.update_map);
     }
 
     return load_result;
@@ -830,23 +868,40 @@ void SymbolList::compact_internal(const std::shared_ptr<Store>& store, LoadResul
     }
 
     auto written = write_symbols(store, std::move(load_result.symbols_), compaction_id, data_.type_holder_);
-    auto written_key = std::get<AtomKey>(written);
+    const auto& written_key = std::get<AtomKey>(written);
 
-    // Sort pre-collected keys for storage backend performance, then delete excluding the newly written key
-    auto& keys = load_result.symbol_list_keys_;
-    std::sort(keys.begin(), keys.end(), [](const VariantKey& l, const VariantKey& r) {
-        return key_sort_comparator(to_atom(l), to_atom(r));
-    });
-    keys.erase(
+    // Delete old compaction keys (typically 0–1 entries; exclude the newly written one).
+    auto& old_ck = load_result.old_compaction_keys_;
+    old_ck.erase(
             std::remove_if(
-                    keys.begin(),
-                    keys.end(),
+                    old_ck.begin(),
+                    old_ck.end(),
                     [&written_key](const VariantKey& vk) { return to_atom(vk) == written_key; }
             ),
-            keys.end()
+            old_ck.end()
     );
-    if (!keys.empty())
-        store->remove_keys_sync(std::move(keys));
+    if (!old_ck.empty())
+        store->remove_keys_sync(std::move(old_ck));
+
+    // Reconstruct and delete journal keys in batches from the JournalMapType, freeing each symbol's
+    // entries as they are processed. Journal keys can never equal written_key (different id field).
+    static constexpr size_t kBatchSize = 10'000;
+    std::vector<VariantKey> batch;
+    batch.reserve(kBatchSize);
+    for (auto it = load_result.update_map_.begin(); it != load_result.update_map_.end();) {
+        const auto& [symbol, ck_entries] = *it;
+        for (const auto& ck : ck_entries) {
+            batch.emplace_back(atom_key_from_journal_entry(symbol, ck));
+            if (batch.size() == kBatchSize) {
+                store->remove_keys_sync(std::move(batch));
+                batch.clear();
+                batch.reserve(kBatchSize);
+            }
+        }
+        it = load_result.update_map_.erase(it);
+    }
+    if (!batch.empty())
+        store->remove_keys_sync(std::move(batch));
 }
 
 } // namespace arcticdb
