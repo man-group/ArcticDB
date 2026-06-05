@@ -8,6 +8,7 @@
 
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
+#include <arcticdb/storage/s3/s3_stream_buffer.hpp>
 
 #include <aws/s3/S3Client.h>
 
@@ -24,6 +25,8 @@
 #include <aws/s3/model/ObjectIdentifier.h>
 
 #include <boost/interprocess/streams/bufferstream.hpp>
+
+#include <cstdlib>
 
 // GetMessage macro on windows shadows AWS's GetMessage:
 // https://github.com/aws/aws-sdk-cpp/issues/402
@@ -49,53 +52,6 @@ S3Result<std::monostate> S3ClientImpl::head_object(const std::string& s3_object_
     ARCTICDB_RUNTIME_DEBUG(log::storage(), "Returning head of object {}", s3_object_name);
     return {std::monostate()};
 }
-
-// TODO Use buffer pool once memory profile and lifetime is well understood
-struct S3StreamBuffer : public std::streambuf {
-    ARCTICDB_NO_MOVE_OR_COPY(S3StreamBuffer)
-
-    S3StreamBuffer() :
-#ifdef USE_BUFFER_POOL
-        buffer_(BufferPool::instance()->allocate()) {
-#else
-        buffer_(std::make_shared<Buffer>()) {
-#endif
-    }
-
-    std::shared_ptr<Buffer> buffer_;
-    size_t pos_ = 0;
-
-    std::shared_ptr<Buffer> get_buffer() {
-        buffer_->set_bytes(pos_);
-        return buffer_;
-    }
-
-  protected:
-    std::streamsize xsputn(const char_type* s, std::streamsize n) override {
-        ARCTICDB_TRACE(log::version(), "xsputn {} pos at {}, {} bytes", uintptr_t(buffer_.get()), pos_, n);
-        if (buffer_->bytes() < pos_ + n) {
-            ARCTICDB_TRACE(log::version(), "{} Calling ensure for {}", uintptr_t(buffer_.get()), (pos_ + n) * 2);
-            buffer_->ensure((pos_ + n) * 2);
-        }
-
-        auto target = buffer_->ptr_cast<char_type>(pos_, n);
-        ARCTICDB_TRACE(log::version(), "Putting {} bytes at {}", n, uintptr_t(target));
-        memcpy(target, s, n);
-        pos_ += n;
-        ARCTICDB_TRACE(log::version(), "{} pos is now {}, returning {}", uintptr_t(buffer_.get()), pos_, n);
-        return n;
-    }
-
-    int_type overflow(int_type ch) override { return xsputn(reinterpret_cast<char*>(&ch), 1); }
-};
-
-struct S3IOStream : public std::iostream {
-    S3StreamBuffer stream_buf_;
-
-    S3IOStream() : std::iostream(&stream_buf_) {}
-
-    std::shared_ptr<Buffer> get_buffer() { return stream_buf_.get_buffer(); }
-};
 
 Aws::IOStreamFactory S3StreamFactory() {
     return [=]() { return Aws::New<S3IOStream>(""); };
@@ -155,7 +111,55 @@ folly::Future<S3Result<Segment>> S3ClientImpl::get_object_async(
     request.SetResponseStreamFactory(S3StreamFactory());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Scheduling async read of {}", s3_object_name);
     s3_client.GetObjectAsync(request, GetObjectAsyncHandler{std::move(promise)});
-    return future;
+    if (std::getenv("ARCTICDB_VERIFY_ASYNC_READ") == nullptr)
+        return future;
+    // DIAGNOSTIC (temporary): compare the async-fetched bytes against an immediate SYNCHRONOUS
+    // re-read of the same immutable object. Any mismatch proves the async transfer corrupted the
+    // bytes in flight (catches even corruption that still happens to lz4-decode).
+    return std::move(future).thenValue(
+            [this, s3_object_name, bucket_name](S3Result<Segment>&& async_res) -> S3Result<Segment> {
+                if (async_res.is_success()) {
+                    try {
+                        auto sync_res = get_object(s3_object_name, bucket_name);
+                        if (sync_res.is_success()) {
+                            auto av = async_res.get_output().buffer();
+                            auto sv = sync_res.get_output().buffer();
+                            if (av.bytes() != sv.bytes()) {
+                                log::storage().error(
+                                        "ASYNC_READ_VERIFY: SIZE mismatch for {}: async={} sync={}",
+                                        s3_object_name,
+                                        av.bytes(),
+                                        sv.bytes()
+                                );
+                            } else {
+                                const auto n = av.bytes();
+                                const auto* a = av.data();
+                                const auto* b = sv.data();
+                                size_t i = 0;
+                                while (i < n && a[i] == b[i])
+                                    ++i;
+                                if (i < n) {
+                                    log::storage().error(
+                                            "ASYNC_READ_VERIFY: BYTE MISMATCH for {} at offset {}/{} "
+                                            "async=0x{:02x} sync=0x{:02x}",
+                                            s3_object_name,
+                                            i,
+                                            n,
+                                            static_cast<unsigned>(a[i]),
+                                            static_cast<unsigned>(b[i])
+                                    );
+                                }
+                            }
+                        }
+                    } catch (const std::exception& e) {
+                        log::storage().warn(
+                                "ASYNC_READ_VERIFY: sync re-read failed for {}: {}", s3_object_name, e.what()
+                        );
+                    }
+                }
+                return std::move(async_res);
+            }
+    );
 }
 
 S3Result<std::monostate> S3ClientImpl::put_object(

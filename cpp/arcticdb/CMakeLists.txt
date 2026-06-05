@@ -156,7 +156,9 @@ if (NOT MSVC)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
+        if(NOT ARCTICDB_SANITIZER_FLAGS)
+            add_compile_options("-Werror")
+        endif()
     endif()
     add_compile_options("-ggdb")
     if (NOT ${ARCTICDB_USING_CONDA} OR NOT CMAKE_SYSTEM_NAME STREQUAL "Darwin")
@@ -955,7 +957,9 @@ if (NOT WIN32)
     if(NOT ${ARCTICDB_USING_CONDA})
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
-        add_compile_options("-Werror")
+        if(NOT ARCTICDB_SANITIZER_FLAGS)
+            add_compile_options("-Werror")
+        endif()
     endif()
 endif ()
 
@@ -1088,6 +1092,8 @@ if(${TEST})
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
+            storage/test/test_s3_stream_assembly.cpp
+            storage/test/test_s3_async_transfer.cpp
             storage/test/test_storage_factory.cpp
             storage/test/common.hpp
             storage/test/test_storage_exceptions.cpp

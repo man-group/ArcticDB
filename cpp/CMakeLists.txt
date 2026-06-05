@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.25)
 # Make the `project` command handle the version of the project.
 cmake_policy(SET CMP0048 NEW)
 
-set(CMAKE_CXX_STANDARD 20)
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 20)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # We do not need any compilers' extensions, so we disable them.
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -85,9 +87,19 @@ endif()
 if(ARCTICDB_SANITIZER_FLAGS)
     list(APPEND ARCTICDB_SANITIZER_FLAGS "-g;-fno-omit-frame-pointer;-fno-optimize-sibling-calls;")
     if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-        add_link_options(-fuse-ld=lld)
-        # According to clang's docs only LLD can be used for lining https://clang.llvm.org/docs/AddressSanitizer.html#usage
-        message(STATUS "Clang compiler detected. Enforcing lld compiler.")
+        # clang's docs recommend lld, but gold and bfd link sanitizer binaries fine.
+        # Prefer lld when present, otherwise fall back to gold.
+        find_program(ARCTICDB_LLD_LINKER ld.lld)
+        find_program(ARCTICDB_GOLD_LINKER ld.gold)
+        if (ARCTICDB_LLD_LINKER)
+            add_link_options(-fuse-ld=lld)
+            message(STATUS "Clang sanitizer build: using lld.")
+        elseif (ARCTICDB_GOLD_LINKER)
+            add_link_options(-fuse-ld=gold)
+            message(STATUS "Clang sanitizer build: lld not found, using gold.")
+        else()
+            message(WARNING "Clang sanitizer build: neither lld nor gold found, using default linker.")
+        endif()
     else()
         message(WARNING "Sanitizers are tested only under Clang compiler and LLD linker.")
     endif()

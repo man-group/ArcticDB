@@ -2816,10 +2816,38 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
             .via(&async::io_executor())
-            .thenValue([vi = versioned_item](auto&& results) -> VersionIdentifier {
+            .thenValue([vi = versioned_item, store](auto&& results) -> VersionIdentifier {
                 auto& [index_try, column_stats_try] = results;
 
                 if (index_try.hasException()) {
+                    // ASYNC-READ CORRUPTION DIAGNOSTIC (temporary instrumentation):
+                    // The async index read (get_object_async) failed. If it was a decode error,
+                    // re-read the SAME immutable key SYNCHRONOUSLY (get_object). If the sync read
+                    // decodes cleanly, the async transfer corrupted the bytes in flight.
+                    const std::string ex_what = index_try.exception().what().toStdString();
+                    if (ex_what.find("DECODE") != std::string::npos || ex_what.find("lz4") != std::string::npos) {
+                        log::version().error(
+                                "ASYNC_READ_CORRUPTION: async read+decode of index key {} FAILED: {}",
+                                vi.key_,
+                                ex_what
+                        );
+                        try {
+                            auto sync_kv = store->read_sync(vi.key_);
+                            log::version().error(
+                                    "ASYNC_READ_CORRUPTION: SYNC re-read of {} decoded OK ({} rows) -> "
+                                    "the ASYNC transfer corrupted the bytes",
+                                    vi.key_,
+                                    sync_kv.second.row_count()
+                            );
+                        } catch (const std::exception& e2) {
+                            log::version().error(
+                                    "ASYNC_READ_CORRUPTION: SYNC re-read of {} ALSO failed: {} -> "
+                                    "not async-transient (on-disk or persistent issue)",
+                                    vi.key_,
+                                    e2.what()
+                            );
+                        }
+                    }
                     ARCTICDB_DEBUG(
                             log::version(),
                             "Key not found from versioned item {}: {}",
