@@ -17,10 +17,21 @@
 #include <util/storage_lock.hpp>
 
 namespace arcticdb {
-struct SymbolListEntry;
-struct SymbolEntryData;
+// Compact 32-byte representation of a SYMBOL_LIST journal AtomKey.
+// Stores only the fields needed to reconstruct the full AtomKey for deletion.
+// The symbol (start_index / map key) is held separately by the containing JournalMapType.
+struct JournalEntryData {
+    entity::VersionId key_version_id; // 8 bytes
+    timestamp creation_ts;            // 8 bytes
+    entity::ContentHash content_hash; // 8 bytes
+    ActionType action;                // 1 byte
+    bool is_new_style;                // 1 byte
+    // 6 bytes implicit padding
+};
 
-using MapType = std::unordered_map<StreamId, std::vector<SymbolEntryData>>;
+using JournalMapType = std::unordered_map<StreamId, std::vector<JournalEntryData>>;
+
+struct SymbolListEntry;
 using CollectionType = std::vector<SymbolListEntry>;
 
 enum class WillAttemptCompaction : uint8_t {
@@ -31,16 +42,19 @@ enum class WillAttemptCompaction : uint8_t {
 
 struct JournalResult {
     std::optional<AtomKey> compaction_key;
-    MapType update_map;
+    JournalMapType update_map; // JournalEntryData (32B/entry) for all journal entries
     size_t total_key_count = 0;
-    std::vector<VariantKey> all_keys; // only populated when collect_keys=true
+    std::vector<VariantKey> compaction_keys; // VariantKeys of all compaction keys found during scan
 };
 
 struct LoadResult {
     std::optional<AtomKey> compaction_key_;
     CollectionType symbols_;
     size_t total_key_count_ = 0;
-    std::vector<VariantKey> symbol_list_keys_;
+    // Old compaction VariantKeys (typically 0–1); freed immediately after compact_internal deletes them.
+    std::vector<VariantKey> old_compaction_keys_;
+    // Journal keys stored as JournalEntryData (32 B each); reconstructed in batches during compact_internal.
+    JournalMapType update_map_;
 };
 
 struct SymbolListData {
