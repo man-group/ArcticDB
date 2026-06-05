@@ -21,13 +21,13 @@
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/util/string_utils.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 
 #include <vector>
 #include <string>
 #include <variant>
 #include <memory>
 #include <ranges>
-#include <boost/date_time/constrained_value.hpp>
 
 namespace arcticdb {
 
@@ -900,22 +900,19 @@ struct MergeUpdateClause {
         void add_match(size_t source_row, size_t target_row_slice, std::span<size_t> target_rows);
         void filter_matching_rows(
                 std::string_view column_name, DataType source_type, DataType target_type, size_t source_offset,
-                std::span<const char> source_data, std::optional<std::span<const timestamp>> source_index = {}
+                std::span<const std::byte> source_data_bytes
         );
         void clone_source_match(size_t source_row_src, size_t source_row_dst);
         [[nodiscard]] size_t num_matched_rows(size_t row_slice) const;
         [[nodiscard]] size_t total_unmatched_rows() const;
         [[nodiscard]] std::optional<std::tuple<size_t, size_t, size_t>> validate_rows_to_update() const;
         [[nodiscard]] std::span<const std::vector<size_t>> matched_rows(size_t target_row_slice) const;
-        [[nodiscard]] bool should_insert(size_t source_row, size_t target_Row_slice, timestamp source_index) const;
+        [[nodiscard]] bool is_matched(size_t source_row) const;
 
       private:
-        [[nodiscard]] bool is_timeseries() const;
         std::vector<std::vector<std::vector<size_t>>> matched_target_rows_;
-        std::vector<size_t> matched_count_;
-        std::vector<size_t> unmatched_count_;
         std::span<ProcessingUnit> row_slices_;
-        timestamp running_index_value_;
+        std::vector<size_t> matched_count_;
     };
 
   private:
@@ -968,7 +965,8 @@ struct MergeUpdateClause {
         );
     }
 
-    std::span<const char> get_source_data_bytes(std::span<const ProcessingUnit> row_slices, size_t field_index) const;
+    std::span<const std::byte> get_source_data_bytes(std::span<const ProcessingUnit> row_slices, size_t field_index)
+            const;
 };
 
 struct CompactDataClause {

@@ -2303,7 +2303,7 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
     auto [input_frame, input_frame_owner] = input_frame_from_tensors<TimeseriesIndex>(
             desc,
             std::array<timestamp, 7>{8, 9, 9, 9, 9, 10, 11},
-            std::array<int64_t, 7>{100, 10, 8, 120, 17, 15, 100},
+            std::array<int64_t, 7>{100, 10, 8, 120, 15, 17, 100},
             std::array{100, 200, 300, 400, 500, 600, 700}
     );
     std::vector<RangesAndKey> ranges_and_keys = generate_ranges_and_keys(desc, segments, col_ranges, row_ranges);
@@ -2352,40 +2352,18 @@ TEST(MergeUpdateInsertIndexSpansMultipleSegments, LastIndexValueSameAsNextSegmen
             gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
                     *component_manager, clause.process(std::move(structured_entities[0]))
             );
-    ASSERT_EQ(processing_unit.segments_->size(), 6);
-    ASSERT_EQ(processing_unit.row_ranges_->size(), 6);
-    ASSERT_EQ(processing_unit.col_ranges_->size(), 6);
-    const std::array expected = {
-            slice_data_into_segments<TimeseriesIndex>(
-                    desc,
-                    rows_per_segment + 1, // Slicing is not implemented for insertion
-                    cols_per_segment,
-                    std::array<timestamp, 6>{6, 7, 8, 8, 9, 9},
-                    std::array<int64_t, 6>{5, 6, 7, 100, 8, 9},
-                    std::array{5, 6, 7, 100, 300, 9}
-            ),
-            slice_data_into_segments<TimeseriesIndex>(
-                    desc,
-                    rows_per_segment,
-                    cols_per_segment,
-                    std::array<timestamp, 5>{9, 9, 9, 9, 9},
-                    std::array<int64_t, 5>{10, 11, 12, 13, 14},
-                    std::array{200, 11, 12, 13, 14}
-            ),
-            slice_data_into_segments<TimeseriesIndex>(
-                    desc,
-                    rows_per_segment + 2, // Slicing is not implemented for insertion
-                    cols_per_segment,
-                    std::array<timestamp, 7>{9, 9, 9, 10, 11, 11, 12},
-                    std::array<int64_t, 7>{15, 16, 120, 17, 18, 100, 19},
-                    std::array{500, 16, 400, 600, 18, 700, 19}
-            ),
-    };
-    for (size_t i = 0; i < expected.size(); ++i) {
-        const std::vector<SegmentInMemory>& expected_segments = std::get<0>(expected[i]);
-        for (size_t j = 0; j < expected_segments.size(); ++j) {
-            ASSERT_EQ(*(processing_unit.segments_->at(i * expected_segments.size() + j)), expected_segments[j])
-                    << "Row slice " << i << " segment " << j;
-        }
+    ASSERT_EQ(processing_unit.segments_->size(), 2);
+    ASSERT_EQ(processing_unit.row_ranges_->size(), 2);
+    ASSERT_EQ(processing_unit.col_ranges_->size(), 2);
+    const auto expected = slice_data_into_segments<TimeseriesIndex>(
+            desc,
+            std::numeric_limits<size_t>::max(), // Slicing is not implemented for insertion
+            cols_per_segment,
+            std::array<timestamp, 18>{6, 7, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 10, 11, 11, 12},
+            std::array<int64_t, 18>{5, 6, 7, 100, 8, 9, 10, 11, 12, 13, 14, 15, 16, 120, 17, 18, 100, 19},
+            std::array{5, 6, 7, 100, 300, 9, 200, 11, 12, 13, 14, 500, 16, 400, 600, 18, 700, 19}
+    );
+    for (size_t i = 0; i < std::get<0>(expected).size(); ++i) {
+        ASSERT_EQ(*(processing_unit.segments_->at(i)), std::get<0>(expected)[i]);
     }
 }
