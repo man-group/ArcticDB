@@ -164,7 +164,12 @@ class Storage {
 
     [[nodiscard]] std::string key_path(const VariantKey& key) const { return do_key_path(key); }
 
-    [[nodiscard]] bool is_path_valid(std::string_view path) const { return do_is_path_valid(path); }
+    // Returns the first character of `path` that this backend cannot store faithfully in a key, or std::nullopt if the
+    // path is acceptable.
+    [[nodiscard]] std::optional<char> is_path_valid(std::string_view path) const { return do_is_path_valid(path); }
+    [[nodiscard]] std::optional<char> is_library_path_valid(std::string_view path) const {
+        return do_is_library_path_valid(path);
+    }
 
     [[nodiscard]] const LibraryPath& library_path() const { return lib_path_; }
     [[nodiscard]] OpenMode open_mode() const { return mode_; }
@@ -255,7 +260,10 @@ class Storage {
 
     [[nodiscard]] virtual std::string do_key_path(const VariantKey& key) const = 0;
 
-    [[nodiscard]] virtual bool do_is_path_valid(std::string_view) const { return true; }
+    [[nodiscard]] virtual std::optional<char> do_is_path_valid(std::string_view) const { return std::nullopt; }
+    [[nodiscard]] virtual std::optional<char> do_is_library_path_valid(std::string_view path) const {
+        return do_is_path_valid(path);
+    }
 
     LibraryPath lib_path_;
     OpenMode mode_;

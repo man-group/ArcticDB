@@ -542,7 +542,8 @@ void PythonVersionStore::remove_from_snapshot(
 }
 
 void PythonVersionStore::verify_snapshot(const SnapshotId& snap_name) {
-    if (CheckOutcome check_outcome = verify_snapshot_id(snap_name); std::holds_alternative<Error>(check_outcome)) {
+    if (CheckOutcome check_outcome = verify_snapshot_id(snap_name, store());
+        std::holds_alternative<Error>(check_outcome)) {
         std::get<Error>(check_outcome).throw_error();
     }
 }

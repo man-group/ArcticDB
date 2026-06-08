@@ -218,8 +218,9 @@ ArcticDB validates names for symbols, snapshots, and libraries. The rules are en
 - Must not be empty (i.e. the name must not contain `..` or end with `.`).
 - Must not start with `/` (this causes failures with LMDB and MongoDB backends).
 
-Some storage backends impose additional restrictions on library names:
+Some storage backends impose additional restrictions:
 
+- **Azure** forbids `\` in symbol, snapshot, and library names. The Azure Blob service silently converts `\` to `/`, so the stored path would no longer match the recorded name.
 - **MongoDB** forbids `/` anywhere in the library name.
 - **LMDB on Windows** forbids the characters `<>:"|?*`, and names ending with `.` or whitespace.
 

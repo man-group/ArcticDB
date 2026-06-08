@@ -922,7 +922,7 @@ VersionedItem LocalVersionedEngine::write_segment(
     auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
 
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(stream_id);
+        auto check_outcome = verify_symbol_key(stream_id, store());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
@@ -1717,7 +1717,7 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
         auto write_options = get_write_options();
         frame->set_bucketize_dynamic(write_options.bucketize_dynamic);
         auto [partial_key, slicing_policy] =
-                get_partial_key_and_slicing_policy(write_options, *frame, version_id, validate_index);
+                get_partial_key_and_slicing_policy(store(), write_options, *frame, version_id, validate_index);
         auto fut_slice_keys =
                 slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
         batch_futures.emplace_back(std::move(fut_slice_keys));

@@ -101,42 +101,51 @@ const auto UNSUPPORTED_S3_CHARS = std::set<char>{'*', '<', '>'};
     return std::monostate{};
 }
 
-CheckOutcome verify_symbol_key(const StreamId& symbol_key) {
+[[nodiscard]] CheckOutcome verify_name_for_backend(
+        const std::string& name_type_for_error, const VariantId& id, const std::shared_ptr<Store>& store
+) {
     if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {
         ARCTICDB_DEBUG(
                 log::version(),
                 "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable "
                 "is set to 1.",
-                symbol_key
+                id
         );
         return std::monostate{};
     }
 
     return util::variant_match(
-            symbol_key,
-            [](const NumericId&) -> CheckOutcome { return std::monostate{}; },
-            [](const StringId& str_symbol_key) -> CheckOutcome { return verify_name("symbol key", str_symbol_key); }
-    );
-}
-
-CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id) {
-    if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {
-        ARCTICDB_DEBUG(
-                log::version(),
-                "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable "
-                "is set to 1.",
-                snapshot_id
-        );
-        return std::monostate{};
-    }
-
-    return util::variant_match(
-            snapshot_id,
-            [](const StringId& str_snapshot_id) -> CheckOutcome {
-                return verify_name("snapshot name", str_snapshot_id);
+            id,
+            [&](const StringId& name) -> CheckOutcome {
+                CheckOutcome res = verify_name(name_type_for_error, name);
+                if (std::holds_alternative<Error>(res)) {
+                    return res;
+                }
+                if (auto unsupported = store->is_path_valid(name)) {
+                    return Error{
+                            throw_error<ErrorCode::E_INVALID_CHAR_IN_NAME>,
+                            fmt::format(
+                                    "The {} contains character unsupported by storage backend {}. {}: {} BadChar: {}",
+                                    name_type_for_error,
+                                    store->name(),
+                                    name_type_for_error,
+                                    name,
+                                    *unsupported
+                            )
+                    };
+                }
+                return std::monostate{};
             },
             [](const auto&) -> CheckOutcome { return std::monostate{}; }
     );
+}
+
+CheckOutcome verify_symbol_key(const StreamId& symbol_key, const std::shared_ptr<Store>& store) {
+    return verify_name_for_backend("symbol key", symbol_key, store);
+}
+
+CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id, const std::shared_ptr<Store>& store) {
+    return verify_name_for_backend("snapshot name", snapshot_id, store);
 }
 
 // Library names starting with "/" fail if storage is LMDB and library parts starting with "/" will fail in Mongo
@@ -172,11 +181,14 @@ void verify_library_path_on_write(const Store* store, const StringId& library_pa
     if (std::holds_alternative<Error>(res)) {
         std::get<Error>(res).throw_error();
     }
-    user_input::check<ErrorCode::E_INVALID_CHAR_IN_NAME>(
-            store->is_path_valid(library_path),
-            "The library name contains unsupported chars. Library Name: {}",
-            library_path
-    );
+    if (auto unsupported = store->is_library_path_valid(library_path)) {
+        user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
+                "The library name contains character unsupported by storage backend {}. Library Name: {} BadChar: {}",
+                store->name(),
+                library_path,
+                *unsupported
+        );
+    }
 }
 
 } // namespace arcticdb

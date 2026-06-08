@@ -21,6 +21,8 @@
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
+#include <optional>
+
 #undef GetMessage
 
 namespace arcticdb::storage {
@@ -361,6 +363,13 @@ std::string AzureStorage::do_key_path(const VariantKey& key) const {
     auto b = FlatBucketizer{};
     auto key_type_dir = key_type_folder(root_folder_, variant_key_type(key));
     return object_path(b.bucketize(key_type_dir, key), key);
+}
+
+std::optional<char> AzureStorage::do_is_path_valid(std::string_view path) const {
+    // '\' is silently converted to '/' by the Azure Blob service (it is built on .NET's Uri class), so a name
+    // containing it would be stored under a path that no longer matches the recorded name. Disallow it.
+    const auto pos = path.find('\\');
+    return pos == std::string_view::npos ? std::nullopt : std::optional<char>{path[pos]};
 }
 
 } // namespace azure
