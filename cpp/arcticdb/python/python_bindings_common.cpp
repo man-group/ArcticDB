@@ -8,8 +8,11 @@
 
 #include <pybind11/pybind11.h>
 #include <arcticdb/python/python_bindings_common.hpp>
+#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/metrics.hpp>
+#include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <logger.pb.h>
 
 namespace py = pybind11;
 
@@ -44,4 +47,103 @@ void register_metrics(py::module&& m, arcticdb::BindingScope scope) {
             .value("PUSH", arcticdb::MetricsConfig::Model::PUSH)
             .value("PULL", arcticdb::MetricsConfig::Model::PULL)
             .export_values();
+}
+
+void register_log(py::module&& log, arcticdb::BindingScope scope) {
+    using arcticdb::LoggerId;
+    bool local_bindings = (scope == arcticdb::BindingScope::LOCAL);
+
+    log.def(
+            "configure",
+            [](const py::object& py_log_conf, bool force = false) {
+                arcticdb::proto::logger::LoggersConfig config;
+                arcticdb::python_util::pb_from_python(py_log_conf, config);
+                return arcticdb::log::Loggers::instance().configure(config, force);
+            },
+            py::arg("py_log_conf"),
+            py::arg("force") = false
+    );
+
+    py::enum_<spdlog::level::level_enum>(log, "LogLevel", py::module_local(local_bindings))
+            .value("DEBUG", spdlog::level::level_enum::debug)
+            .value("INFO", spdlog::level::level_enum::info)
+            .value("WARN", spdlog::level::level_enum::warn)
+            .value("ERROR", spdlog::level::level_enum::err)
+            .export_values();
+
+    py::enum_<LoggerId>(log, "LoggerId", py::module_local(local_bindings))
+            .value("ROOT", LoggerId::ROOT)
+            .value("STORAGE", LoggerId::STORAGE)
+            .value("IN_MEM", LoggerId::IN_MEM)
+            .value("CODEC", LoggerId::CODEC)
+            .value("VERSION", LoggerId::VERSION)
+            .value("MEMORY", LoggerId::MEMORY)
+            .value("TIMINGS", LoggerId::TIMINGS)
+            .value("LOCK", LoggerId::LOCK)
+            .value("SCHEDULE", LoggerId::SCHEDULE)
+            .value("SYMBOL", LoggerId::SYMBOL)
+            .value("SNAPSHOT", LoggerId::SNAPSHOT)
+            .value("S3", LoggerId::S3)
+            .export_values();
+
+    auto choose_logger = [](LoggerId log_id) -> spdlog::logger& {
+        switch (log_id) {
+        case LoggerId::STORAGE:
+            return arcticdb::log::storage();
+        case LoggerId::IN_MEM:
+            return arcticdb::log::inmem();
+        case LoggerId::CODEC:
+            return arcticdb::log::codec();
+        case LoggerId::MEMORY:
+            return arcticdb::log::memory();
+        case LoggerId::VERSION:
+            return arcticdb::log::version();
+        case LoggerId::ROOT:
+            return arcticdb::log::root();
+        case LoggerId::TIMINGS:
+            return arcticdb::log::timings();
+        case LoggerId::LOCK:
+            return arcticdb::log::lock();
+        case LoggerId::SCHEDULE:
+            return arcticdb::log::schedule();
+        case LoggerId::SYMBOL:
+            return arcticdb::log::symbol();
+        case LoggerId::SNAPSHOT:
+            return arcticdb::log::snapshot();
+        case LoggerId::S3:
+            return arcticdb::log::s3();
+        default:
+            arcticdb::util::raise_rte("Unsupported logger id");
+        }
+    };
+
+    log.def("log", [choose_logger](LoggerId log_id, spdlog::level::level_enum level, const std::string& msg) {
+        py::gil_scoped_release gil_release;
+        auto& logger = choose_logger(log_id);
+        switch (level) {
+        case spdlog::level::level_enum::debug:
+            logger.debug(msg);
+            break;
+        case spdlog::level::level_enum::info:
+            logger.info(msg);
+            break;
+        case spdlog::level::level_enum::warn:
+            logger.warn(msg);
+            break;
+        case spdlog::level::level_enum::err:
+            logger.error(msg);
+            break;
+        default:
+            arcticdb::util::raise_rte("Unsupported log level", spdlog::level::to_string_view(level));
+        }
+    });
+
+    log.def("is_active", [choose_logger](LoggerId log_id, spdlog::level::level_enum level) {
+        return choose_logger(log_id).should_log(level);
+    });
+
+    log.def("flush_all", []() {
+        py::gil_scoped_release gil_release;
+        arcticdb::log::Loggers::instance().flush_all();
+    });
 }
