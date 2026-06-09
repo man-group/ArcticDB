@@ -55,7 +55,9 @@ dependencies:
   - msgpack-c
   - recycle
   # Matches the version of lmdb as vendored in its submodule.
-  - lmdb==0.9.22
+  # The build always uses the patched static lmdb target from cpp/third_party/lmdbcxx,
+  # so this package is not linked directly; it is kept for consistency.
+  - lmdb==0.9.35
   - lmdbxx
   - aws-c-s3
   # Build dependencies for tests
