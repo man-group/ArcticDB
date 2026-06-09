@@ -1,20 +1,30 @@
-"""Deterministic tests for the read-retry behaviour in read_dataframe_version_internal.
+"""
+Copyright 2026 Man Group Operations Limited
+
+Use of this software is governed by the Business Source License 1.1 included in the file
+licenses/BSL.txt.
+
+As of the Change Date specified in that file, in accordance with the Business Source License,
+use of this software will be governed by the Apache License, version 2.0.
+
+Deterministic tests for the read-retry behaviour in read_dataframe_version_internal.
 
 A reader can resolve a version from its (stale) cached version chain just before a concurrent writer
 supersedes it and eagerly prunes its keys. The read then re-resolves the symbol to the current
 version and retries instead of surfacing a missing-key error. These tests reproduce that race
 deterministically using two store handles to the same storage (separate version-map caches) plus a
-very large reload interval that pins the reader's cache."""
+very large reload interval that pins the reader's cache.
+"""
 
 import pandas as pd
 import pytest
 
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.exceptions import KeyNotFoundException, NoDataFoundException
-from arcticdb.util.test import config_context, query_stats_operation_count
+from arcticdb.util.test import config_context, config_context_multi, query_stats_operation_count
 
-# Large enough that the reader's cached version chain never expires during a test.
-STICKY_RELOAD_INTERVAL = 2_000_000_000_000
+# 2**62 nanoseconds (~146 years): effectively infinite — the cached version chain never expires.
+STICKY_RELOAD_INTERVAL = 2**62
 
 
 def _df(value):
@@ -27,6 +37,10 @@ def _version_ref_reads(stats):
 
 def _version_reads(stats):
     return query_stats_operation_count(stats, "Memory_GetObject", "VERSION")
+
+
+def _index_reads(stats):
+    return query_stats_operation_count(stats, "Memory_GetObject", "TABLE_INDEX")
 
 
 def test_read_retries_when_latest_version_pruned_concurrently(in_memory_store_factory):
@@ -58,10 +72,7 @@ def test_read_without_retries_raises_when_version_pruned_concurrently(in_memory_
     reader = in_memory_store_factory(reuse_name=True)
     sym = "sym"
 
-    with (
-        config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL),
-        config_context("VersionStore.ReadRetries", 0),
-    ):
+    with config_context_multi({"VersionMap.ReloadInterval": STICKY_RELOAD_INTERVAL, "VersionStore.ReadRetries": 0}):
         writer.write(sym, _df(0))
         assert reader.read(sym).data["a"][0] == 0
 
@@ -110,10 +121,13 @@ def test_retry_only_rereads_the_raced_symbols_version_ref(in_memory_store_factor
         qs.disable()
 
     assert raced_result.data["a"][0] == 1
-    # One retry: one ref read for the changed-ref check, one more for storage_reload's LOAD_LATEST
-    # shortcut. Both are VERSION_REF reads; no full VERSION-chain traversal.
+    # One retry: two ref reads — one to detect the head change, one inside storage_reload to
+    # rebuild the cache entry (LOAD_LATEST shortcut, no VERSION-chain traversal). The retry's
+    # check_reload is then a pure cache hit — no further ref read, no VERSION reads.
+    # Two TABLE_INDEX reads: one failed attempt on v0's (pruned) key, one successful read of v1.
     assert _version_ref_reads(raced_stats) == 2
     assert _version_reads(raced_stats) == 0
+    assert _index_reads(raced_stats) == 2
     # The unrelated symbol's cached chain survived: no version-chain reads needed.
     assert _version_ref_reads(other_stats) == 0
     assert _version_reads(other_stats) == 0
@@ -146,7 +160,33 @@ def test_retry_reads_are_bounded_regardless_of_live_versions(in_memory_store_fac
         qs.disable()
 
     assert result.data["a"][0] == N
-    # One retry: ref read for the changed-ref check + ref read for storage_reload's LOAD_LATEST
-    # shortcut. Exactly 2 VERSION_REF reads; 0 VERSION reads — O(1) regardless of N.
+    # One retry: exactly 2 VERSION_REF reads (one head-comparison check, one inside storage_reload
+    # which rebuilds the cache via the LOAD_LATEST shortcut). 0 VERSION reads, 0 extra
+    # TABLE_INDEX reads. O(1) regardless of N.
     assert _version_ref_reads(stats) == 2
     assert _version_reads(stats) == 0
+
+
+def test_specific_version_read_does_not_retry_when_pruned(in_memory_store_factory):
+    """read(as_of=0) for a version that was pruned must not silently re-resolve to a later version.
+    With ReadRetries=5 the retry loop would fire for a latest read, but a pinned version query
+    must always use max_attempts=1 regardless of the retry config."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+
+    with config_context_multi({"VersionMap.ReloadInterval": STICKY_RELOAD_INTERVAL, "VersionStore.ReadRetries": 5}):
+        writer.write("sym", _df(0))
+        assert reader.read("sym").data["a"][0] == 0  # warm cache so reader sees v0 in stale chain
+
+        writer.write("sym", _df(1), prune_previous_version=True)
+
+        # The stale cache still resolves v0, but its keys are gone. With max_attempts=1 for pinned
+        # queries the error propagates immediately — no retry, no wrong-version return.
+        with pytest.raises((NoDataFoundException, KeyNotFoundException)):
+            reader.read("sym", as_of=0)
+
+
+# Note: a snapshot test analogous to test_specific_version_read_does_not_retry_when_pruned is not
+# included because ArcticDB protects snapshot-referenced keys from pruning — prune_previous_version
+# leaves keys intact when they are held by a snapshot, so snapshot reads always succeed and the
+# "no-retry" code path is not reachable through normal API usage.

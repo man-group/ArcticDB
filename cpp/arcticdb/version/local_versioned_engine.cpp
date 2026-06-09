@@ -440,12 +440,14 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
 
     // A concurrent writer using prune_previous_version without background deletion physically deletes
     // a superseded version's keys. A reader can resolve a version just before it is pruned and then
-    // fail to fetch its (now deleted) index/data keys. Rather than surface that race, drop the cached
-    // version chains so we re-resolve to the current version, and retry. A genuinely missing version
-    // raises E_NO_SUCH_VERSION (not caught here) and still fails fast. Preloaded-index reads carry
-    // their own index segment, so re-resolution cannot help them.
-    const bool is_preloaded = std::holds_alternative<std::shared_ptr<PreloadedIndexQuery>>(version_query.content_);
-    const int64_t max_attempts = is_preloaded ? 1 : ConfigsMap::instance()->get_int("VersionStore.ReadRetries", 3) + 1;
+    // fail to fetch its (now deleted) index/data keys. Rather than surface that race, invalidate the
+    // cached version chain so we re-resolve to the current latest version, and retry.
+    // Retries are only useful for latest-version reads (std::monostate): for pinned queries
+    // (specific version, timestamp, snapshot) the target version is gone and re-resolution would
+    // silently return a different version. A genuinely missing version raises E_NO_SUCH_VERSION
+    // (not caught here) and still fails fast.
+    const bool is_latest = std::holds_alternative<std::monostate>(version_query.content_);
+    const int64_t max_attempts = is_latest ? ConfigsMap::instance()->get_int("VersionStore.ReadRetries", 1) + 1 : 1;
 
     for (int64_t attempt = 1;; ++attempt) {
         try {
@@ -501,8 +503,7 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
             if (attempt >= max_attempts || !version_map()->invalidate_if_version_ref_changed(store(), stream_id))
                 throw;
         }
-        ARCTICDB_DEBUG(
-                log::version(),
+        log::version().info(
                 "Read of symbol '{}' raced with a concurrent prune; version ref changed, retrying "
                 "(attempt {} of {})",
                 stream_id,

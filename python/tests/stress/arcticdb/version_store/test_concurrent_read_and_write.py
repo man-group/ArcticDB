@@ -2,6 +2,8 @@ import time
 import pytest
 from multiprocessing import Process, Queue
 
+from tests.util.mark import RUNS_ON_GITHUB
+
 
 @pytest.fixture
 def writer_store(lmdb_version_store_delayed_deletes_v2):
@@ -59,6 +61,9 @@ def test_concurrent_read_write(writer_store, reader_store):
     assert exceptions_in_reader.empty()
 
 
+@pytest.mark.skipif(
+    RUNS_ON_GITHUB, reason="Non-deterministic timing; covered by deterministic unit tests in test_read_retry.py"
+)
 def test_concurrent_read_write_eager_prune(eager_writer_store, eager_reader_store):
     """Without delayed deletes, prune_previous physically deletes superseded versions as soon as a
     new version is written. A concurrent reader can resolve a version just before it is pruned out
