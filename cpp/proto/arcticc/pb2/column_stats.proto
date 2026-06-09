@@ -23,6 +23,8 @@ enum ColumnStatsType {
     // misinterpret the new statistics format.
     MIN_V1 = 1;
     MAX_V1 = 2;
+    NAN_COUNT_V1 = 3;
+    NULL_COUNT_V1 = 4;
 }
 
 message StatEntry {

@@ -24,6 +24,8 @@ class MinMaxAggregatorData {
   private:
     std::optional<Value> min_;
     std::optional<Value> max_;
+    uint64_t nan_count_{0};
+    uint64_t null_count_{0};
     size_t data_col_offset_;
 };
 
@@ -31,18 +33,24 @@ class MinMaxAggregator {
   public:
     explicit MinMaxAggregator(
             ColumnName column_name, size_t data_col_offset, ColumnName output_column_name_min,
-            ColumnName output_column_name_max
+            ColumnName output_column_name_max, ColumnName output_column_name_nan_count,
+            ColumnName output_column_name_null_count
     ) :
         column_name_(std::move(column_name)),
         data_col_offset_(data_col_offset),
         output_column_name_min_(std::move(output_column_name_min)),
-        output_column_name_max_(std::move(output_column_name_max)) {}
+        output_column_name_max_(std::move(output_column_name_max)),
+        output_column_name_nan_count_(std::move(output_column_name_nan_count)),
+        output_column_name_null_count_(std::move(output_column_name_null_count)) {}
 
     ARCTICDB_MOVE_COPY_DEFAULT(MinMaxAggregator)
 
     [[nodiscard]] ColumnName get_input_column_name() const { return column_name_; }
     [[nodiscard]] std::vector<ColumnName> get_output_column_names() const {
-        return {output_column_name_min_, output_column_name_max_};
+        return {output_column_name_min_,
+                output_column_name_max_,
+                output_column_name_nan_count_,
+                output_column_name_null_count_};
     }
     [[nodiscard]] MinMaxAggregatorData get_aggregator_data() const { return MinMaxAggregatorData(data_col_offset_); }
 
@@ -51,6 +59,8 @@ class MinMaxAggregator {
     size_t data_col_offset_;
     ColumnName output_column_name_min_;
     ColumnName output_column_name_max_;
+    ColumnName output_column_name_nan_count_;
+    ColumnName output_column_name_null_count_;
 };
 
 class AggregatorDataBase {
