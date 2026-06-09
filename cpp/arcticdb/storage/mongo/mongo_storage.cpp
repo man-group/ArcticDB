@@ -203,6 +203,8 @@ std::optional<char> MongoStorage::do_is_library_path_valid(std::string_view path
     if (auto unsupported = is_path_valid(path)) {
         return unsupported;
     }
+    // (Part of) Library name forms the name of mongo database. Some characters are not allowed there
+    // https://www.mongodb.com/docs/manual/reference/limits/?atlas-provider=aws&atlas-class=general#mongodb-limit-Restrictions-on-Database-Names-for-Unix-and-Linux-Systems
     const auto pos = path.find('/');
     return pos == std::string_view::npos ? std::nullopt : std::optional<char>{path[pos]};
 }
