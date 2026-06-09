@@ -28,8 +28,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             // Sparse-map gaps are real nulls (e.g. from Arrow validity bitmaps) that the dense
             // for_each below never visits. Count them from metadata so they reach null_count_.
             if (input_column.column_->is_sparse()) {
-                const auto sparse_gap_count =
-                        input_column.column_->last_row() + 1 - input_column.column_->row_count();
+                const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
                 if (sparse_gap_count > 0) {
                     null_count_ += static_cast<uint64_t>(sparse_gap_count);
                 }

@@ -344,6 +344,52 @@ def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format)
     assert_stats_equal(column_stats, expected_column_stats)
 
 
+def test_column_stats_nan_count_single_segment(lmdb_version_store, any_output_format):
+    """NaN in a dense float column counts towards v1_NAN_COUNT, NaT in a timestamp column counts
+    towards v1_NULL_COUNT. A single write produces a single segment, so the stats have one row."""
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_nan_count_single_segment"
+    df = pd.DataFrame(
+        {
+            "float_col": [1.0, np.nan, 2.0, np.nan, np.nan],
+            "ts_col": [
+                pd.Timestamp("2020-01-01"),
+                pd.NaT,
+                pd.Timestamp("2020-06-01"),
+                pd.NaT,
+                pd.Timestamp("2020-12-01"),
+            ],
+        },
+        index=pd.date_range("2000-01-01", periods=5),
+    )
+    lib.write(sym, df)
+    lib.create_column_stats(sym, {"float_col": {"MINMAX"}, "ts_col": {"MINMAX"}})
+
+    cs = pl.from_arrow(lib.read_column_stats(sym))
+    assert cs["v1_NAN_COUNT(float_col)"].to_list() == [3]
+    assert cs["v1_NULL_COUNT(float_col)"].to_list() == [0]
+    assert cs["v1_NAN_COUNT(ts_col)"].to_list() == [0]
+    assert cs["v1_NULL_COUNT(ts_col)"].to_list() == [2]
+
+
+def test_column_stats_null_count_sparse_floats(lmdb_version_store, any_output_format):
+    """sparsify_floats=True stores NaN floats as sparse-map gaps rather than dense NaN values.
+    Those gaps are counted as nulls (v1_NULL_COUNT), not NaNs (v1_NAN_COUNT)."""
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_null_count_sparse_floats"
+    df = pd.DataFrame({"col_1": [1.0, np.nan, 2.0, np.nan, np.nan]}, index=pd.date_range("2000-01-01", periods=5))
+    lib.write(sym, df, sparsify_floats=True)
+    lib.create_column_stats(sym, {"col_1": {"MINMAX"}})
+
+    cs = pl.from_arrow(lib.read_column_stats(sym))
+    assert cs["v1_NULL_COUNT(col_1)"].to_list() == [3]
+    assert cs["v1_NAN_COUNT(col_1)"].to_list() == [0]
+    assert cs["v1_MIN(col_1)"].to_list() == [1.0]
+    assert cs["v1_MAX(col_1)"].to_list() == [2.0]
+
+
 def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):
     lib = version_store_factory(
         column_group_size=2,
@@ -662,6 +708,9 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
 
     # Slices that are missing the column come back as null via the validity bitmap. df4["col_2"] is
     # all-NaN but the column is present so the stat is computed and stored as NaN, not null.
+    # The count columns follow the same rule: a fully-missing column has no aggregator run for that
+    # slice, so its NAN_COUNT/NULL_COUNT are null (not 0). Present columns count their NaNs in
+    # NAN_COUNT and leave NULL_COUNT at 0 (NaN floats are stored densely here, not as sparse gaps).
     expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
@@ -671,6 +720,8 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
             "v1_MAX(col_1)",
             [df0["col_1"].max(), None, df2["col_1"].max(), None, df4["col_1"].max(), None],
         ),
+        pl.Series("v1_NAN_COUNT(col_1)", [0, None, 0, None, 1, None], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(col_1)", [0, None, 0, None, 0, None], dtype=pl.UInt64),
         pl.Series(
             "v1_MIN(col_2)",
             [df0["col_2"].min(), df1["col_2"].min(), None, None, df4["col_2"].min(), None],
@@ -679,8 +730,12 @@ def test_column_stats_dynamic_schema_missing_data(version_store_factory, lib_nam
             "v1_MAX(col_2)",
             [df0["col_2"].max(), df1["col_2"].max(), None, None, df4["col_2"].max(), None],
         ),
+        pl.Series("v1_NAN_COUNT(col_2)", [0, 0, None, None, 2, None], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(col_2)", [0, 0, None, None, 0, None], dtype=pl.UInt64),
         pl.Series("v1_MIN(col_5)", [None, None, None, None, None, df5["col_5"].min()], dtype=pl.Int64),
         pl.Series("v1_MAX(col_5)", [None, None, None, None, None, df5["col_5"].max()], dtype=pl.Int64),
+        pl.Series("v1_NAN_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(col_5)", [None, None, None, None, None, 0], dtype=pl.UInt64),
     )
     column_stats_dict = {"col_1": {"MINMAX"}, "col_2": {"MINMAX"}, "col_5": {"MINMAX"}}
     lib.create_column_stats(sym, column_stats_dict)
