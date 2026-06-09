@@ -286,7 +286,7 @@ def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format)
     sym = "test_column_stats_nan_and_null_counts"
 
     # Each write/append produces a separate segment, so we get one row per dataframe in the stats.
-    # float_col counts toward v1_NAN_COUNT, ts_col counts toward v1_NULL_COUNT.
+    # Both NaN (float) and NaT (timestamp) are in-band sentinels and count toward v1_NAN_COUNT.
     df0 = pd.DataFrame(
         {"float_col": [1.0, 2.0], "ts_col": [pd.Timestamp("2020-01-01"), pd.Timestamp("2020-06-01")]},
         index=pd.date_range("2000-01-01", periods=2),
@@ -336,8 +336,8 @@ def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format)
             ],
             dtype=pl.Int64,
         ).cast(pl.Datetime("ns")),
-        pl.Series("v1_NAN_COUNT(ts_col)", [0, 0, 0, 0], dtype=pl.UInt64),
-        pl.Series("v1_NULL_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+        pl.Series("v1_NAN_COUNT(ts_col)", [0, 1, 2, 1], dtype=pl.UInt64),
+        pl.Series("v1_NULL_COUNT(ts_col)", [0, 0, 0, 0], dtype=pl.UInt64),
     )
 
     column_stats = lib.read_column_stats(sym)
@@ -345,8 +345,8 @@ def test_column_stats_nan_and_null_counts(lmdb_version_store, any_output_format)
 
 
 def test_column_stats_nan_count_single_segment(lmdb_version_store, any_output_format):
-    """NaN in a dense float column counts towards v1_NAN_COUNT, NaT in a timestamp column counts
-    towards v1_NULL_COUNT. A single write produces a single segment, so the stats have one row."""
+    """In-band sentinels (NaN in a float column, NaT in a timestamp column) count towards
+    v1_NAN_COUNT. v1_NULL_COUNT is reserved for genuinely-missing rows (sparse-map gaps)."""
     lib = lmdb_version_store
     lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_column_stats_nan_count_single_segment"
@@ -369,8 +369,8 @@ def test_column_stats_nan_count_single_segment(lmdb_version_store, any_output_fo
     cs = pl.from_arrow(lib.read_column_stats(sym))
     assert cs["v1_NAN_COUNT(float_col)"].to_list() == [3]
     assert cs["v1_NULL_COUNT(float_col)"].to_list() == [0]
-    assert cs["v1_NAN_COUNT(ts_col)"].to_list() == [0]
-    assert cs["v1_NULL_COUNT(ts_col)"].to_list() == [2]
+    assert cs["v1_NAN_COUNT(ts_col)"].to_list() == [2]
+    assert cs["v1_NULL_COUNT(ts_col)"].to_list() == [0]
 
 
 def test_column_stats_null_count_sparse_floats(lmdb_version_store, any_output_format):

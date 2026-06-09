@@ -25,8 +25,9 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            // Sparse-map gaps are real nulls (e.g. from Arrow validity bitmaps) that the dense
-            // for_each below never visits. Count them from metadata so they reach null_count_.
+            // null_count_ tracks rows that are genuinely absent (sparse-map gaps from Arrow
+            // validity bitmaps). nan_count_ tracks in-band sentinel values found while iterating
+            // the dense values (NaN for floats, NaT for time types) - see the for_each below.
             if (input_column.column_->is_sparse()) {
                 const auto sparse_gap_count = input_column.column_->last_row() + 1 - input_column.column_->row_count();
                 if (sparse_gap_count > 0) {
@@ -54,15 +55,12 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             [[maybe_unused]] bool any_nan{false};
             arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [&](auto value) {
                 const auto& curr = static_cast<RawType>(value);
-                if constexpr (is_floating_point_type(type_info::data_type)) {
+                // In-band sentinel (NaN for floats, NaT for time types) - count it and skip the
+                // min/max update so those reflect only real values.
+                if constexpr (is_floating_point_type(type_info::data_type) ||
+                              is_time_type(type_info::data_type)) {
                     if (is_nat_or_nan(curr)) {
                         ++nan_count_;
-                        any_nan = true;
-                        return;
-                    }
-                } else if constexpr (is_time_type(type_info::data_type)) {
-                    if (is_nat_or_nan(curr)) {
-                        ++null_count_;
                         any_nan = true;
                         return;
                     }
