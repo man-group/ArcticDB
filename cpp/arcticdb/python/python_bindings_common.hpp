@@ -18,7 +18,7 @@ class tuple;
 namespace arcticdb {
 enum class BindingScope : uint32_t { LOCAL = 0, GLOBAL = 1 };
 
-enum class LoggerId { ROOT, STORAGE, IN_MEM, CODEC, VERSION, MEMORY, TIMINGS, LOCK, SCHEDULE, SYMBOL, SNAPSHOT };
+enum class LoggerId { ROOT, STORAGE, IN_MEM, CODEC, VERSION, MEMORY, TIMINGS, LOCK, SCHEDULE, SYMBOL, SNAPSHOT, S3 };
 
 pybind11::tuple to_tuple(const MetricsConfig& config);
 MetricsConfig metrics_config_from_tuple(const pybind11::tuple& t);

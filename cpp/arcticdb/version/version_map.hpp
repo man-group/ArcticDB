@@ -30,6 +30,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage.hpp>
+#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
@@ -135,6 +136,12 @@ class VersionMapImpl {
             const std::shared_ptr<Store>& store, const VersionMapEntry& ref_entry,
             const std::shared_ptr<VersionMapEntry>& entry, const LoadStrategy& load_strategy
     ) const {
+        util::check(
+                ref_entry.stream_id_ == entry->stream_id_,
+                "follow_version_chain called with mismatching stream ids {} != {}",
+                ref_entry.stream_id_,
+                entry->stream_id_
+        );
         auto next_key = ref_entry.head_;
         entry->head_ = ref_entry.head_;
 
@@ -144,11 +151,10 @@ class VersionMapImpl {
         std::optional<AtomKey> cached_penultimate_index;
         if (ref_entry.keys_.size() == 3) {
             util::check(
-                    is_index_or_tombstone(ref_entry.keys_[1]),
-                    "Expected index key in as second item in 3-item ref key, got {}",
-                    ref_entry.keys_[1]
+                    is_index_or_tombstone(ref_entry.keys_[1].type()),
+                    "Expected index key in as second item in 3-item ref key"
             );
-            cached_penultimate_index = ref_entry.keys_[1];
+            cached_penultimate_index = ref_entry.keys_[1].to_atom_key(ref_entry.stream_id_);
         }
 
         if (key_exists_in_ref_entry(load_strategy, ref_entry, cached_penultimate_index)) {
@@ -179,7 +185,7 @@ class VersionMapImpl {
         auto max_trials = max_trial_config;
         while (true) {
             try {
-                VersionMapEntry ref_entry;
+                VersionMapEntry ref_entry(stream_id);
                 read_symbol_ref(store, stream_id, ref_entry);
                 if (ref_entry.empty())
                     return;
@@ -257,7 +263,7 @@ class VersionMapImpl {
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
             std::optional<std::shared_ptr<VersionMapEntry>> cached_entry = std::nullopt
     ) {
-        std::shared_ptr<VersionMapEntry> entry;
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         if (cached_entry) {
             entry = cached_entry.value();
         } else {
@@ -271,7 +277,9 @@ class VersionMapImpl {
             entry->validate();
 
         if (entry->head_)
-            write_symbol_ref(store, *entry->keys_.cbegin(), std::nullopt, entry->head_.value());
+            write_symbol_ref(
+                    store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), std::nullopt, entry->head_.value()
+            );
 
         return output;
     }
@@ -302,7 +310,9 @@ class VersionMapImpl {
         }
 
         auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
-        write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
+        write_symbol_ref(
+                store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, entry->head_.value()
+        );
 
         maybe_invalidate_cached_undeleted(*entry);
         if (log_changes_) {
@@ -325,7 +335,7 @@ class VersionMapImpl {
     }
 
     bool requires_compaction(const std::shared_ptr<VersionMapEntry>& entry) const {
-        int64_t num_blocks = std::count_if(entry->keys_.cbegin(), entry->keys_.cend(), [](const AtomKey& key) {
+        int64_t num_blocks = std::count_if(entry->keys_.cbegin(), entry->keys_.cend(), [](const AtomKeyPacked& key) {
             return key.type() == KeyType::VERSION;
         });
 
@@ -358,7 +368,7 @@ class VersionMapImpl {
         });
         const auto new_version_id = latest_version->version_id();
 
-        auto new_entry = std::make_shared<VersionMapEntry>();
+        auto new_entry = std::make_shared<VersionMapEntry>(stream_id);
         new_entry->keys_.push_front(*latest_version);
 
         if (const auto first_is_tombstone = entry->get_tombstone(new_version_id); first_is_tombstone)
@@ -375,8 +385,15 @@ class VersionMapImpl {
                     else {
                         if (tombstone->type() == KeyType::TOMBSTONE_ALL)
                             new_entry->try_set_tombstone_all(*tombstone);
-                        else
-                            new_entry->tombstones_.insert(std::make_pair(key.version_id(), *tombstone));
+                        else {
+                            util::check(
+                                    key.id() == new_entry->stream_id_,
+                                    "compact_and_remove_deleted_indexes found mismatching stream ids {} != {}",
+                                    key.id(),
+                                    new_entry->stream_id_
+                            );
+                            new_entry->try_set_tombstone(*tombstone);
+                        }
 
                         new_entry->keys_.push_back(key);
                     }
@@ -495,9 +512,9 @@ class VersionMapImpl {
     }
 
     void overwrite_symbol_tree(
-            std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKey>& index_keys
+            std::shared_ptr<Store> store, const StreamId& stream_id, const std::vector<AtomKeyPacked>& index_keys
     ) {
-        auto entry = std::make_shared<VersionMapEntry>();
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         try {
             entry = check_reload(
                     store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
@@ -666,7 +683,7 @@ class VersionMapImpl {
         auto tombstone_version_id = tombstones.front().version_id();
         do_write(store, tombstone_version_id, stream_id, std::span{tombstones}, entry);
         for (const auto& key : tombstones) {
-            entry->tombstones_.try_emplace(key.version_id(), key);
+            entry->try_set_tombstone(key);
         }
         maybe_invalidate_cached_undeleted(*entry);
 
@@ -692,11 +709,10 @@ class VersionMapImpl {
             );
             store->remove_key_sync(*entry.head_);
         }
-        std::vector<folly::Future<Store::RemoveKeyResultType>> key_futs;
+        std::vector<folly::Future<folly::Unit>> key_futs;
         for (const auto& key : entry.keys_) {
-            util::check(key.id() == stream_id, "Id mismatch for entry {} vs symbol {}", key.id(), stream_id);
             if (key.type() == KeyType::VERSION)
-                key_futs.emplace_back(store->remove_key(key));
+                key_futs.emplace_back(store->remove_key(key.to_atom_key(entry.stream_id_)));
         }
         folly::collect(key_futs).get();
     }
@@ -789,23 +805,21 @@ class VersionMapImpl {
 
         // Copy version keys to be removed
         std::vector<VariantKey> version_keys_compacted;
-        std::copy_if(
-                parent + 1,
-                std::end(new_entry->keys_),
-                std::back_inserter(version_keys_compacted),
-                [](const auto& k) { return k.type() == KeyType::VERSION; }
-        );
+        for (auto key = parent + 1; key != std::end(new_entry->keys_); ++key) {
+            if (key->type() == KeyType::VERSION) {
+                version_keys_compacted.emplace_back(key->to_atom_key(new_entry->stream_id_));
+            }
+        }
 
         // Copy index keys to be compacted
         std::vector<AtomKey> index_keys_compacted;
-        std::copy_if(
-                parent + 1,
-                std::end(new_entry->keys_),
-                std::back_inserter(index_keys_compacted),
-                [](const auto& k) { return is_index_or_tombstone(k); }
-        );
+        for (auto key = parent + 1; key != std::end(new_entry->keys_); ++key) {
+            if (is_index_or_tombstone(key->type())) {
+                index_keys_compacted.emplace_back(key->to_atom_key(new_entry->stream_id_));
+            }
+        }
 
-        update_version_key(store, *parent, index_keys_compacted, stream_id);
+        update_version_key(store, parent->to_atom_key(stream_id), index_keys_compacted, stream_id);
         store->remove_keys(version_keys_compacted).get();
 
         new_entry->keys_.erase(
@@ -888,7 +902,7 @@ class VersionMapImpl {
         if (auto result = map_.find(stream_id); result != std::end(map_))
             return result->second;
 
-        return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>()).first->second;
+        return map_.try_emplace(stream_id, std::make_shared<VersionMapEntry>(stream_id)).first->second;
     }
 
     AtomKey write_entry_to_storage(
@@ -914,12 +928,12 @@ class VersionMapImpl {
         );
 
         for (const auto& key : entry->keys_) {
-            version_agg.add_key(key);
+            version_agg.add_key(key.to_atom_key(entry->stream_id_));
         }
 
         version_agg.commit();
         auto previous_index = entry->get_second_undeleted_index();
-        write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, journal_key);
+        write_symbol_ref(store, entry->keys_.cbegin()->to_atom_key(entry->stream_id_), previous_index, journal_key);
         return journal_key;
     }
 
@@ -954,12 +968,12 @@ class VersionMapImpl {
     std::shared_ptr<VersionMapEntry> rewrite_entry(
             std::shared_ptr<Store> store, const StreamId& stream_id, const std::shared_ptr<VersionMapEntry>& entry
     ) {
-        auto new_entry = std::make_shared<VersionMapEntry>();
+        auto new_entry = std::make_shared<VersionMapEntry>(stream_id);
         std::copy_if(
                 std::begin(entry->keys_),
                 std::end(entry->keys_),
                 std::back_inserter(new_entry->keys_),
-                [](const auto& key) { return is_index_or_tombstone(key); }
+                [](const auto& key) { return is_index_or_tombstone(key.type()); }
         );
         const auto first_index = new_entry->get_first_index(true).first;
         util::check(static_cast<bool>(first_index), "No index exists in rewrite entry");
@@ -975,7 +989,7 @@ class VersionMapImpl {
 
   public:
     bool check_ref_key(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        auto entry_iteration = std::make_shared<VersionMapEntry>();
+        auto entry_iteration = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry_iteration);
         auto maybe_latest_pair = get_latest_key_pair(entry_iteration);
         if (!maybe_latest_pair) {
@@ -983,7 +997,7 @@ class VersionMapImpl {
             return false;
         }
 
-        VersionMapEntry ref_entry;
+        VersionMapEntry ref_entry(stream_id);
         read_symbol_ref(store, stream_id, ref_entry);
 
         if (ref_entry.empty() || ref_entry.keys_.size() < 2) {
@@ -992,7 +1006,8 @@ class VersionMapImpl {
         }
 
         util::check(static_cast<bool>(ref_entry.head_), "Expected head to be set");
-        if (maybe_latest_pair->first != ref_entry.keys_[0] || maybe_latest_pair->second != *ref_entry.head_) {
+        if (maybe_latest_pair->first != ref_entry.keys_[0].to_atom_key(ref_entry.stream_id_) ||
+            maybe_latest_pair->second != *ref_entry.head_) {
             log::version().warn(
                     "Ref entry is incorrect for stream {}, either {} != {} or {} != {}",
                     stream_id,
@@ -1005,7 +1020,7 @@ class VersionMapImpl {
         }
 
         try {
-            auto entry_ref = std::make_shared<VersionMapEntry>();
+            auto entry_ref = std::make_shared<VersionMapEntry>(stream_id);
             load_via_ref_key(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
             entry_ref->validate();
         } catch (const std::exception& err) {
@@ -1020,7 +1035,7 @@ class VersionMapImpl {
     }
 
     bool indexes_sorted(const std::shared_ptr<Store>& store, const StreamId& stream_id) {
-        auto entry_ref = std::make_shared<VersionMapEntry>();
+        auto entry_ref = std::make_shared<VersionMapEntry>(stream_id);
         load_via_ref_key(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
         auto indexes = entry_ref->get_indexes(true);
         return std::is_sorted(std::cbegin(indexes), std::cend(indexes), [](const auto& l, const auto& r) {
@@ -1073,7 +1088,7 @@ class VersionMapImpl {
                             std::find_if(std::begin(entry->keys_), std::end(entry->keys_), [&](const auto& entry_key) {
                                 return entry_key.type() == KeyType::VERSION &&
                                        std::tie(key.id(), key.version_id()) ==
-                                               std::tie(entry_key.id(), entry_key.version_id());
+                                               std::tie(entry->stream_id_, entry_key.version_id());
                             });
                     if (it == std::end(entry->keys_)) {
                         util::check(
@@ -1091,7 +1106,7 @@ class VersionMapImpl {
     }
 
     std::vector<AtomKey> find_deleted_version_keys(std::shared_ptr<Store> store, const StreamId& stream_id) {
-        auto entry = std::make_shared<VersionMapEntry>();
+        auto entry = std::make_shared<VersionMapEntry>(stream_id);
         load_via_iteration(store, stream_id, entry);
         return find_deleted_version_keys_for_entry(store, stream_id, entry);
     }
@@ -1132,7 +1147,7 @@ class VersionMapImpl {
         for (const auto& key : entry->keys_) {
             if (is_index_key_type(key.type()) && !entry->is_tombstoned(key) &&
                 key.version_id() <= first_key_to_tombstone->version_id()) {
-                output.emplace_back(key);
+                output.emplace_back(key.to_atom_key(entry->stream_id_));
             }
         }
 

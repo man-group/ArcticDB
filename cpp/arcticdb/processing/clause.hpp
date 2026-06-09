@@ -438,11 +438,6 @@ struct ResampleClause {
     std::vector<timestamp> generate_bucket_boundaries(
             timestamp first_ts, timestamp last_ts, bool responsible_for_first_overlapping_bucket
     ) const;
-
-    std::shared_ptr<Column> generate_output_index_column(
-            const std::vector<std::shared_ptr<Column>>& input_index_columns,
-            const std::vector<timestamp>& bucket_boundaries
-    ) const;
 };
 
 template<typename T>
@@ -817,7 +812,8 @@ struct WriteClause {
     std::shared_ptr<Store> store_;
 
     WriteClause(
-            const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+            const IndexPartialKey& index_partial_key, std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store,
+            ProcessingStructure input_processing_structure
     );
     ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
 

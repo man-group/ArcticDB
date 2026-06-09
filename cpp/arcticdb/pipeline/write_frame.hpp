@@ -102,7 +102,7 @@ template<typename T>
 requires std::is_same_v<T, SliceAndKey> || std::is_same_v<T, std::vector<SliceAndKey>>
 folly::SemiFuture<std::vector<T>> rollback_on_quota_exceeded(
         std::vector<folly::Try<T>>&& try_slices,
-        folly::Function<folly::Future<StreamSink::RemoveKeyResultType>(std::vector<T>&&)>&& remove_future
+        folly::Function<folly::Future<folly::Unit>(std::vector<T>&&)>&& remove_future
 ) {
     std::vector<T> succeeded;
     std::optional<folly::exception_wrapper> exception;
@@ -145,8 +145,6 @@ folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quo
         const std::shared_ptr<stream::StreamSink>& sink
 );
 
-folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
-        std::vector<SliceAndKey>&& slices, StreamSink& sink
-);
+folly::Future<folly::Unit> remove_slice_and_keys(std::vector<SliceAndKey>&& slices, StreamSink& sink);
 
 } // namespace arcticdb::pipelines

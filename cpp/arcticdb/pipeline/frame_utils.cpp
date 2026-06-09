@@ -15,9 +15,8 @@ namespace arcticdb {
 TimeseriesDescriptor make_timeseries_descriptor(
         // TODO: It would be more explicit to use uint64_t instead of size_t. Not doing now as it involves a lot of type
         // changes and needs to be done carefully.
-        size_t total_rows, const StreamDescriptor& desc,
-        arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
+        size_t total_rows, const StreamDescriptor& desc, proto::descriptors::NormalizationMetadata&& norm_meta,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
         std::optional<AtomKey>&& next_key, bool bucketize_dynamic
 ) {
     auto frame_desc = std::make_shared<FrameDescriptorImpl>();
@@ -47,8 +46,8 @@ TimeseriesDescriptor make_timeseries_descriptor(
 }
 
 TimeseriesDescriptor make_timeseries_descriptor(
-        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
-        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
+        size_t total_rows, StreamDescriptor&& desc, proto::descriptors::NormalizationMetadata&& norm_meta,
+        std::optional<proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
         std::optional<AtomKey>&& next_key, bool bucketize_dynamic
 ) {
     return make_timeseries_descriptor(

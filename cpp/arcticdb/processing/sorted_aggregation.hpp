@@ -15,6 +15,7 @@
 #include <folly/Poly.h>
 
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 
@@ -22,26 +23,28 @@ namespace arcticdb {
 
 enum class ResampleBoundary { LEFT, RIGHT };
 
+// Identifies a row position within a sequence of sorted-row-slice index columns. `input_column_idx` indexes into the
+// outer `input_index_columns` vector; `offset` is the row offset within that column.
+struct ResampleInputCursor {
+    size_t input_column_idx;
+    size_t offset;
+};
+
+// Mapping from output row to input range. For output row i, the input values feeding it are
+// `[mapping[i], mapping[i+1])` interpreted as a contiguous range across the input index columns. The vector has length
+// N+1 where N is the number of non-empty buckets (= output rows). The trailing cursor is the one-past-the-end position.
+using ResampleMapping = std::vector<ResampleInputCursor>;
+
 struct ISortedAggregator {
     template<class Base>
     struct Interface : Base {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
         [[nodiscard]] std::optional<Column> aggregate(
-                const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-                const std::vector<timestamp>& bucket_boundaries, const Column& output_index_column,
-                StringPool& string_pool, ResampleBoundary label
+                const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns, const ResampleMapping& mapping,
+                StringPool& string_pool
         ) const {
-            return folly::poly_call<2>(
-                    *this,
-                    input_index_columns,
-                    input_agg_columns,
-                    bucket_boundaries,
-                    output_index_column,
-                    string_pool,
-                    label
-            );
+            return folly::poly_call<2>(*this, input_agg_columns, mapping, string_pool);
         }
         void check_aggregator_supported_with_data_type(DataType data_type) const {
             folly::poly_call<3>(*this, data_type);
@@ -88,6 +91,13 @@ class Bucket {
     timestamp start_;
     timestamp end_;
 };
+
+template<ResampleBoundary closed_boundary>
+std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column(
+        const std::vector<std::shared_ptr<Column>>& input_index_columns,
+        const std::vector<timestamp>& bucket_boundaries, const TimestampRange& date_range,
+        ResampleBoundary label_boundary
+);
 
 enum class AggregationOperator { SUM, MEAN, MIN, MAX, FIRST, LAST, COUNT };
 
@@ -387,26 +397,21 @@ class SortedAggregator {
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
 
     [[nodiscard]] std::optional<Column> aggregate(
-            const std::vector<std::shared_ptr<Column>>& input_index_columns,
-            const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-            const std::vector<timestamp>& bucket_boundaries, const Column& output_index_column, StringPool& string_pool,
-            ResampleBoundary label
+            const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns, const ResampleMapping& mapping,
+            StringPool& string_pool
     ) const;
 
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] std::optional<Value> get_default_value(DataType common_input_data_type) const;
     [[nodiscard]] DataType generate_output_data_type(const DataType common_input_data_type) const;
     [[nodiscard]] std::optional<Column> generate_resampling_output_column(
-            const std::span<const std::shared_ptr<Column>> input_index_columns,
-            const std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
-            const Column& output_index_column, const ResampleBoundary label
+            std::span<const std::optional<ColumnWithStrings>> input_agg_columns, const ResampleMapping& mapping
     ) const;
 
   private:
     [[nodiscard]] SortedAggregatorOutputColumnInfo generate_common_input_type(std::span<
                                                                               const std::optional<ColumnWithStrings>>)
             const;
-    [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
 
     template<DataType input_data_type, typename Aggregator, typename T>
     void push_to_aggregator(

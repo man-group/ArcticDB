@@ -206,102 +206,50 @@ batch_get_latest_undeleted_version_and_next_version_id_async(
     return vector_fut;
 }
 
-// This version assumes that there is only one version per symbol, so no need for the state machine below
-inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_specific_version(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::map<StreamId, VersionId>& sym_versions,
-        BatchGetVersionOption option = BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE
-) {
-    static_assert(
-            static_cast<int>(BatchGetVersionOption::COUNT) == 2,
-            "Update this function if new enum value added in BatchGetVersionOption"
-    );
-    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
-    auto output = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
-    auto output_mutex = std::make_shared<std::mutex>();
-    auto tombstoned_vers = std::make_shared<std::vector<std::pair<StreamId, AtomKey>>>();
-    auto tombstoned_vers_mutex = std::make_shared<std::mutex>();
-
-    auto tasks_input = std::vector(sym_versions.begin(), sym_versions.end());
-    submit_tasks_for_range(
-            std::move(tasks_input),
-            [store, version_map](auto& sym_version) {
-                LoadStrategy load_strategy{
-                        LoadType::DOWNTO,
-                        LoadObjective::UNDELETED_ONLY,
-                        static_cast<SignedVersionId>(sym_version.second)
-                };
-                return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
-            },
-            [output, option, output_mutex, store, tombstoned_vers, tombstoned_vers_mutex](
-                    auto sym_version, const std::shared_ptr<VersionMapEntry>& entry
-            ) {
-                auto version_details = find_index_key_for_version_id_and_tombstone_status(sym_version.second, entry);
-                if ((option == BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE &&
-                     version_details.version_status_ == VersionStatus::TOMBSTONED) ||
-                    version_details.version_status_ == VersionStatus::LIVE) {
-                    std::lock_guard lock{*output_mutex};
-                    (*output)[sym_version.first] = version_details.key_.value();
-                } else if (option == BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT &&
-                           version_details.version_status_ == VersionStatus::TOMBSTONED) {
-                    // Need to allow tombstoned version but referenced in other snapshot(s) can be "re-snapshot"
-                    log::version().warn(
-                            "Version {} for symbol {} is tombstoned, need to check snapshots (this can be slow)",
-                            sym_version.second,
-                            sym_version.first
-                    );
-                    std::lock_guard lock{*tombstoned_vers_mutex};
-                    tombstoned_vers->emplace_back(sym_version.first, version_details.key_.value());
-                }
-            }
-    );
-
-    if (!tombstoned_vers->empty()) {
-        const auto snap_map = get_master_snapshots_map(store);
-        for (const auto& tombstoned_ver : *tombstoned_vers) {
-            auto cit = snap_map.find(tombstoned_ver.first);
-            if (cit != snap_map.cend() && std::any_of(
-                                                  cit->second.cbegin(),
-                                                  cit->second.cend(),
-                                                  [tombstoned_ver, &sym_versions](const auto& key_and_snapshot_ids) {
-                                                      return key_and_snapshot_ids.first.version_id() ==
-                                                             sym_versions.at(tombstoned_ver.first);
-                                                  }
-                                          ))
-                (*output)[tombstoned_ver.first] = tombstoned_ver.second;
-        }
-    }
-
-    return output;
-}
-
 using VersionVectorType = std::vector<VersionId>;
+using SymbolVersion = std::pair<StreamId, VersionId>;
+
+template<typename FoundKey>
+struct BatchGetVersionResult {
+    std::unordered_map<FoundKey, AtomKey> found;
+    std::vector<SymbolVersion> rejected;
+};
 
 /**
- * Returns multiple versions for the same symbol
- * @return Does not guarantee the returned keys actually exist in storage.
- * Only non-negative version per symbol is supported. Versions that do not exist in storage are silently skipped.
+ * Returns multiple versions for the same symbol.
+ * Only non-negative version per symbol is supported.
+ *
+ * When option is LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT:
+ *  - found: LIVE versions + TOMBSTONED versions referenced in another snapshot
+ *  - rejected: TOMBSTONED versions not preserved in any snapshot
+ * Versions that never existed (symbol or version number) are silently skipped.
  */
-inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> batch_get_specific_versions(
+inline BatchGetVersionResult<SymbolVersion> batch_get_specific_versions(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::map<StreamId, VersionVectorType>& sym_versions, bool include_deleted = true
+        const std::map<StreamId, VersionVectorType>& sym_versions,
+        BatchGetVersionOption option = BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE
 ) {
     ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
-    auto output = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
-    auto mutex = std::make_shared<std::mutex>();
+    auto found = std::make_shared<std::unordered_map<SymbolVersion, AtomKey>>();
+    auto found_mutex = std::make_shared<std::mutex>();
+    auto tombstoned_vers = std::make_shared<std::vector<std::pair<SymbolVersion, AtomKey>>>();
+    auto tombstoned_mutex = std::make_shared<std::mutex>();
+    auto rejected = std::make_shared<std::vector<SymbolVersion>>();
+
+    auto objective = option == BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
+                             ? LoadObjective::INCLUDE_DELETED
+                             : LoadObjective::UNDELETED_ONLY;
 
     auto tasks_input = std::vector(sym_versions.begin(), sym_versions.end());
     submit_tasks_for_range(
             std::move(tasks_input),
-            [store, version_map](auto sym_version) {
+            [store, version_map, objective](auto sym_version) {
                 auto first_version = *std::min_element(std::begin(sym_version.second), std::end(sym_version.second));
-                LoadStrategy load_strategy{
-                        LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(first_version)
-                };
+                LoadStrategy load_strategy{LoadType::DOWNTO, objective, static_cast<SignedVersionId>(first_version)};
                 return async::submit_io_task(CheckReloadTask{store, version_map, sym_version.first, load_strategy});
             },
 
-            [output, &sym_versions, include_deleted, mutex](
+            [found, option, &sym_versions, found_mutex, tombstoned_vers, tombstoned_mutex](
                     auto sym_version, const std::shared_ptr<VersionMapEntry>& entry
             ) {
                 auto sym_it = sym_versions.find(sym_version.first);
@@ -309,17 +257,65 @@ inline std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKe
                 const auto& versions = sym_it->second;
 
                 for (auto version : versions) {
-                    auto index_key = find_index_key_for_version_id(version, entry, include_deleted);
-
-                    if (index_key) {
-                        std::lock_guard lock{*mutex};
-                        (*output)[std::pair(sym_version.first, version)] = *index_key;
+                    auto version_details = find_index_key_for_version_id_and_tombstone_status(version, entry);
+                    if ((option == BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE &&
+                         version_details.version_status_ == VersionStatus::TOMBSTONED) ||
+                        version_details.version_status_ == VersionStatus::LIVE) {
+                        std::lock_guard lock{*found_mutex};
+                        (*found)[SymbolVersion(sym_version.first, version)] = version_details.key_.value();
+                    } else if (option == BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT &&
+                               version_details.version_status_ == VersionStatus::TOMBSTONED) {
+                        // Need to allow tombstoned version but referenced in other snapshot(s) can be "re-snapshot"
+                        log::version().warn(
+                                "Version {} for symbol {} is tombstoned, need to check snapshots (this can be slow)",
+                                version,
+                                sym_version.first
+                        );
+                        std::lock_guard lock{*tombstoned_mutex};
+                        tombstoned_vers->emplace_back(
+                                SymbolVersion(sym_version.first, version), version_details.key_.value()
+                        );
                     }
                 }
             }
     );
 
-    return output;
+    if (!tombstoned_vers->empty()) {
+        const auto snap_map = get_master_snapshots_map(store);
+        for (const auto& [sym_version, key] : *tombstoned_vers) {
+            auto cit = snap_map.find(sym_version.first);
+            if (cit != snap_map.cend() &&
+                std::any_of(cit->second.cbegin(), cit->second.cend(), [&sym_version](const auto& key_and_snapshot_ids) {
+                    return key_and_snapshot_ids.first.version_id() == sym_version.second;
+                })) {
+                (*found)[sym_version] = key;
+            } else {
+                rejected->push_back(sym_version);
+            }
+        }
+    }
+
+    return {std::move(*found), std::move(*rejected)};
+}
+
+// Convenience wrapper: assumes at most one version per symbol. Delegates to batch_get_specific_versions.
+inline BatchGetVersionResult<StreamId> batch_get_specific_version(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
+        const std::map<StreamId, VersionId>& sym_versions,
+        BatchGetVersionOption option = BatchGetVersionOption::ALL_VER_FOUND_IN_STORAGE
+) {
+    std::map<StreamId, VersionVectorType> multi_sym_versions;
+    for (const auto& [stream_id, version_id] : sym_versions) {
+        multi_sym_versions[stream_id] = {version_id};
+    }
+
+    auto result = batch_get_specific_versions(store, version_map, multi_sym_versions, option);
+
+    std::unordered_map<StreamId, AtomKey> found;
+    for (auto& [sym_version, key] : result.found) {
+        found[sym_version.first] = std::move(key);
+    }
+    return {std::move(found), std::move(result.rejected)};
 }
 
 // [StreamVersionData] is used to combine different [VersionQuery]s for a stream_id into a list of needed snapshots and

@@ -83,6 +83,7 @@ void register_log(py::module&& log, arcticdb::BindingScope scope) {
             .value("SCHEDULE", LoggerId::SCHEDULE)
             .value("SYMBOL", LoggerId::SYMBOL)
             .value("SNAPSHOT", LoggerId::SNAPSHOT)
+            .value("S3", LoggerId::S3)
             .export_values();
 
     auto choose_logger = [](LoggerId log_id) -> spdlog::logger& {
@@ -109,6 +110,8 @@ void register_log(py::module&& log, arcticdb::BindingScope scope) {
             return arcticdb::log::symbol();
         case LoggerId::SNAPSHOT:
             return arcticdb::log::snapshot();
+        case LoggerId::S3:
+            return arcticdb::log::s3();
         default:
             arcticdb::util::raise_rte("Unsupported logger id");
         }

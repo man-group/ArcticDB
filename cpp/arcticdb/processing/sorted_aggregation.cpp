@@ -6,8 +6,10 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
+#include <arcticdb/processing/clause_utils.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
 #include <arcticdb/util/type_traits.hpp>
 #include <folly/container/Enumerate.h>
@@ -65,6 +67,9 @@ SortedAggregatorOutputColumnInfo SortedAggregator<aggregation_operator, closed_b
             auto input_data_type = opt_input_agg_column->column_->type().data_type();
             check_aggregator_supported_with_data_type(input_data_type);
             add_data_type_impl(input_data_type, output_column_info.data_type_);
+            if (opt_input_agg_column->column_->is_sparse()) {
+                output_column_info.maybe_sparse_ = true;
+            }
         } else {
             output_column_info.maybe_sparse_ = true;
         }
@@ -73,76 +78,183 @@ SortedAggregatorOutputColumnInfo SortedAggregator<aggregation_operator, closed_b
 }
 
 template<ResampleBoundary closed_boundary>
-bool value_past_bucket_start(const timestamp bucket_start, const timestamp value) {
-    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-        return value >= bucket_start;
+std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column(
+        const std::vector<std::shared_ptr<Column>>& input_index_columns,
+        const std::vector<timestamp>& bucket_boundaries, const TimestampRange& date_range,
+        const ResampleBoundary label_boundary
+) {
+    constexpr auto data_type = DataType::NANOSECONDS_UTC64;
+    using IndexTDT = ScalarTagType<DataTypeTag<data_type>>;
+
+    // The output row count is bounded by both the number of buckets and the number of input rows
+    const size_t total_input_rows = std::accumulate(
+            input_index_columns.begin(),
+            input_index_columns.end(),
+            size_t{0},
+            [](size_t acc, const auto& col) { return acc + col->row_count(); }
+    );
+    const auto max_output_rows = std::min(bucket_boundaries.size() - 1, total_input_rows);
+    // Below this rows/bucket threshold, element-by-element iteration benchmarked to beat galloping search.
+    // The threshold assumes rows are distributed uniformly across buckets; the less uniform the distribution, the more
+    // galloping search wins, so this is a conservative threshold.
+    constexpr size_t linear_scan_threshold = 32;
+    const size_t num_buckets = bucket_boundaries.size() - 1;
+    // Equivalent to `total_input_rows / num_buckets < linear_scan_threshold` and avoids potential division by zero.
+    const bool use_linear_scan = total_input_rows < linear_scan_threshold * num_buckets;
+    const auto max_index_column_bytes = max_output_rows * get_type_size(data_type);
+    auto output_index_column = std::make_shared<Column>(
+            TypeDescriptor(data_type, Dimension::Dim0),
+            Sparsity::NOT_PERMITTED,
+            ChunkedBuffer::presized_in_blocks(max_index_column_bytes)
+    );
+    auto output_index_column_data = output_index_column->data();
+    auto output_index_column_it = output_index_column_data.template begin<IndexTDT>();
+    size_t output_index_column_row_count{0};
+
+    ResampleMapping mapping;
+    mapping.reserve(max_output_rows + 1);
+
+    // Largest value contained in the bucket that ends at `bucket_end_value`.
+    // LEFT-closed [_, end) → end - 1; RIGHT-closed (_, end] → end.
+    constexpr auto inclusive_bucket_end = [](timestamp bucket_end_value) {
+        if constexpr (closed_boundary == ResampleBoundary::LEFT) {
+            return bucket_end_value - 1;
+        } else {
+            return bucket_end_value;
+        }
+    };
+
+    auto bucket_end_it = std::next(bucket_boundaries.cbegin());
+    Bucket<closed_boundary> current_bucket{*std::prev(bucket_end_it), *bucket_end_it};
+    bool current_bucket_added_to_index{false};
+    bool reached_end_of_buckets{false};
+    ResampleInputCursor close_cursor{input_index_columns.size(), 0};
+    for (auto&& [col_idx, input_index_column] : folly::enumerate(input_index_columns)) {
+        if (reached_end_of_buckets) {
+            break;
+        }
+        auto index_column_data = input_index_column->data();
+        const auto cend = index_column_data.template cend<IndexTDT, IteratorType::ENUMERATED>();
+        auto it = index_column_data.template cbegin<IndexTDT, IteratorType::ENUMERATED>();
+        // Skip rows before the date range start and rows before the current bucket
+        it = exponential_upper_bound(
+                it, cend, std::max(date_range.first - 1, inclusive_bucket_end(*std::prev(bucket_end_it)))
+        );
+
+        auto advance_it = [&]() {
+            const auto advance_until = std::min(date_range.second, inclusive_bucket_end(*bucket_end_it));
+            if (use_linear_scan) {
+                while (ARCTICDB_LIKELY(it != cend && it->value() <= advance_until)) {
+                    ++it;
+                }
+            } else {
+                ++it;
+                it = exponential_upper_bound(it, cend, advance_until);
+            }
+        };
+        for (; it != cend && it->value() <= date_range.second; advance_it()) {
+            if (ARCTICDB_LIKELY(!current_bucket.contains(it->value()))) {
+                advance_boundary_past_value<closed_boundary>(bucket_boundaries, bucket_end_it, it->value());
+
+                if (bucket_end_it == bucket_boundaries.end()) {
+                    close_cursor = {col_idx, static_cast<size_t>(it->idx())};
+                    reached_end_of_buckets = true;
+                    break;
+                }
+
+                current_bucket.set_boundaries(*std::prev(bucket_end_it), *bucket_end_it);
+                current_bucket_added_to_index = false;
+            }
+
+            if (ARCTICDB_LIKELY(!current_bucket_added_to_index)) {
+                *output_index_column_it++ =
+                        label_boundary == ResampleBoundary::LEFT ? *std::prev(bucket_end_it) : *bucket_end_it;
+                ++output_index_column_row_count;
+                mapping.push_back({col_idx, static_cast<size_t>(it->idx())});
+                current_bucket_added_to_index = true;
+            }
+        }
+        if (!reached_end_of_buckets && it != cend) {
+            // Stopped because *it > date_range.second
+            close_cursor = {col_idx, static_cast<size_t>(it->idx())};
+            reached_end_of_buckets = true;
+        }
     }
-    return value > bucket_start;
+    mapping.push_back(close_cursor);
+    const auto actual_index_column_bytes = output_index_column_row_count * get_type_size(data_type);
+    output_index_column->buffer().trim(actual_index_column_bytes);
+    output_index_column->set_row_data(output_index_column_row_count - 1);
+    return {std::move(output_index_column), std::move(mapping)};
 }
+
+template std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column<ResampleBoundary::LEFT>(
+        const std::vector<std::shared_ptr<Column>>&, const std::vector<timestamp>&, const TimestampRange&,
+        ResampleBoundary
+);
+template std::pair<std::shared_ptr<Column>, ResampleMapping> generate_output_index_column<ResampleBoundary::RIGHT>(
+        const std::vector<std::shared_ptr<Column>>&, const std::vector<timestamp>&, const TimestampRange&,
+        ResampleBoundary
+);
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::generate_resampling_output_column(
-        [[maybe_unused]] const std::span<const std::shared_ptr<Column>> input_index_columns,
-        const std::span<const std::optional<ColumnWithStrings>> input_agg_columns, const Column& output_index_column,
-        [[maybe_unused]] const ResampleBoundary label
+        const std::span<const std::optional<ColumnWithStrings>> input_agg_columns, const ResampleMapping& mapping
 ) const {
-    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const SortedAggregatorOutputColumnInfo type_info = generate_common_input_type(input_agg_columns);
-
     if (!type_info.data_type_) {
         return std::nullopt;
     }
-
+    const int64_t output_row_count = static_cast<int64_t>(mapping.size()) - 1;
     if (!type_info.maybe_sparse_) {
         return Column(
                 make_scalar_type(generate_output_data_type(*type_info.data_type_)),
-                output_index_column.row_count(),
+                output_row_count,
                 AllocationType::PRESIZED,
                 Sparsity::NOT_PERMITTED
         );
     }
 
-    auto output_data = output_index_column.data();
-    const auto output_accessor = random_accessor<IndexTDT>(&output_data);
-    util::BitSet sparse_map(output_index_column.row_count());
-    int64_t output_row = 0;
-    int64_t output_row_prev = 0;
-
-    for (auto&& [col_index, input_index_column] : folly::enumerate(input_index_columns)) {
-        // Skip all labels that come before the first index value in the input column
-        const timestamp first_index_value = *(input_index_column->template begin<IndexTDT>());
-        while (output_row < output_index_column.row_count() &&
-               value_past_bucket_start<closed>(output_accessor.at(output_row), first_index_value)) {
-            ++output_row;
-        }
-        // If label is left this means the "bucket" is represented by the start of the interval, thus the loop above
-        // skipped to the beginning of the next bucket.
-        output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
-        output_row_prev = output_row;
-
-        // Compute how many output index values does the column span
-        const timestamp last_index_value =
-                *(input_index_column->template begin<IndexTDT>() + (input_index_column->row_count() - 1));
-        while (output_row < output_index_column.row_count() &&
-               value_past_bucket_start<closed>(output_accessor.at(output_row), last_index_value)) {
-            ++output_row;
-        }
-        output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
-
-        if (input_agg_columns[col_index]) {
-            // This can happen when a column has values in the last bucket and there are columns after that which are
-            // also in the last bucket. There's no need to iterate over the rest columns as we only need to know
-            // if there's something in the bucket.
-            if (output_row >= sparse_map.size()) {
-                sparse_map.set_range(output_row_prev, sparse_map.size() - 1);
+    util::BitIndex rs_index;
+    ssize_t rs_index_built_for_idx = -1;
+    util::BitSet sparse_map(output_row_count);
+    for (int64_t out_row = 0; out_row < output_row_count; ++out_row) {
+        const auto& start = mapping[out_row];
+        const auto& end = mapping[out_row + 1];
+        const size_t last_contributing_exclusive = end.input_column_idx + (end.offset > 0 ? 1 : 0);
+        for (size_t col_idx = start.input_column_idx;
+             col_idx < last_contributing_exclusive && col_idx < input_agg_columns.size();
+             ++col_idx) {
+            const auto& opt_col = input_agg_columns[col_idx];
+            if (!opt_col.has_value()) {
+                continue;
+            }
+            const auto& col = *opt_col->column_;
+            if (!col.is_sparse()) {
+                sparse_map.set(out_row);
                 break;
             }
-            sparse_map.set_range(output_row_prev, output_row);
+            if (static_cast<ssize_t>(col_idx) != rs_index_built_for_idx) {
+                // Build the rs_index just once per column
+                col.sparse_map().build_rs_index(&rs_index);
+                rs_index_built_for_idx = static_cast<ssize_t>(col_idx);
+            }
+            const size_t range_start = (col_idx == start.input_column_idx) ? start.offset : 0;
+            const size_t range_end_exclusive =
+                    (col_idx == end.input_column_idx) ? end.offset : static_cast<size_t>(col.last_row()) + 1;
+            if (range_start >= range_end_exclusive) {
+                continue;
+            }
+            const auto cnt = col.sparse_map().count_range_no_check(
+                    bv_size(range_start), bv_size(range_end_exclusive - 1), rs_index
+            );
+            if (cnt > 0) {
+                sparse_map.set(out_row);
+                break;
+            }
         }
-        output_row_prev = output_row;
     }
     const Sparsity sparsity = sparse_map.count() == sparse_map.size() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
-    const int64_t row_count = sparsity == Sparsity::PERMITTED ? sparse_map.count() : output_index_column.row_count();
+    const int64_t row_count = sparsity == Sparsity::PERMITTED ? sparse_map.count() : output_row_count;
     Column result(
             make_scalar_type(generate_output_data_type(*type_info.data_type_)),
             row_count,
@@ -152,134 +264,127 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
     if (sparsity == Sparsity::PERMITTED) {
         result.set_sparse_map(std::move(sparse_map));
     }
-    result.set_row_data(output_index_column.row_count() - 1);
+    result.set_row_data(output_row_count - 1);
     return result;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::aggregate(
-        const std::vector<std::shared_ptr<Column>>& input_index_columns,
-        const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-        const std::vector<timestamp>& bucket_boundaries, const Column& output_index_column, StringPool& string_pool,
-        const ResampleBoundary label
+        const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns, const ResampleMapping& mapping,
+        StringPool& string_pool
 ) const {
-    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    std::optional<Column> res =
-            generate_resampling_output_column(input_index_columns, input_agg_columns, output_index_column, label);
+    std::optional<Column> res = generate_resampling_output_column(input_agg_columns, mapping);
     if (!res) {
         return std::nullopt;
     }
     details::visit_type(res->type().data_type(), [&](auto output_type_desc_tag) {
         using output_type_info = ScalarTypeInfo<decltype(output_type_desc_tag)>;
-        auto output_data = res->data();
-        auto output_it = output_data.begin<typename output_type_info::TDT>();
-        auto output_end_it = output_data.end<typename output_type_info::TDT>();
         // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at
         // runtime
         if constexpr (is_aggregation_allowed<output_type_info>(aggregation_operator)) {
             auto bucket_aggregator = get_bucket_aggregator<output_type_info>();
-            bool reached_end_of_buckets{false};
-            auto bucket_start_it = bucket_boundaries.cbegin();
-            auto bucket_end_it = std::next(bucket_start_it);
-            Bucket<closed_boundary> current_bucket(*bucket_start_it, *bucket_end_it);
-            bool bucket_has_values{false};
-            const auto bucket_boundaries_end = bucket_boundaries.cend();
-            for (auto [idx, input_agg_column] : folly::enumerate(input_agg_columns)) {
-                // If input_agg_column is std::nullopt this means that the aggregated column is missing from the
-                // segment. This means that there is no way we can push in the aggregator. The only thing that must
-                // be done is skipping buckets and (if needed) finalize the aggregator but that is covered by the
-                // else if (index_value_past_end_of_bucket(*index_it, current_bucket.end())) && output_it !=
-                // output_end_it) below. This works because the sparse structure of the output column is precomputed by
-                // generate_resampling_output_column and the column data is pre-allocated.
-                if (input_agg_column.has_value()) {
+            auto output_data = res->data();
+            const auto run = [&]<IteratorDensity output_density>() {
+                auto output_it = output_data.template begin<
+                        typename output_type_info::TDT,
+                        IteratorType::ENUMERATED,
+                        output_density>();
+                const auto output_end =
+                        output_data
+                                .template end<typename output_type_info::TDT, IteratorType::ENUMERATED, output_density>(
+                                );
+                if (output_it == output_end) {
+                    return;
+                }
+                size_t start_col_idx = mapping[output_it->idx()].input_column_idx;
+                size_t start_col_offset = mapping[output_it->idx()].offset;
+                size_t end_col_idx = mapping[output_it->idx() + 1].input_column_idx;
+                size_t end_col_offset = mapping[output_it->idx() + 1].offset;
+                const auto advance_output = [&]() {
+                    output_it->value() =
+                            finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                    ++output_it;
+                    if (output_it != output_end) {
+                        start_col_idx = mapping[output_it->idx()].input_column_idx;
+                        start_col_offset = mapping[output_it->idx()].offset;
+                        end_col_idx = mapping[output_it->idx() + 1].input_column_idx;
+                        end_col_offset = mapping[output_it->idx() + 1].offset;
+                    }
+                };
+                for (size_t col_idx = 0; col_idx < input_agg_columns.size() && output_it != output_end; ++col_idx) {
+                    // Finalise any buckets whose exclusive end falls at or before the start of this column.
+                    while (output_it != output_end &&
+                           (col_idx > end_col_idx || (col_idx == end_col_idx && end_col_offset == 0))) {
+                        advance_output();
+                    }
+                    if (output_it == output_end) {
+                        break;
+                    }
+                    if (col_idx < start_col_idx) {
+                        continue;
+                    }
+                    const auto& opt_input_agg_column = input_agg_columns[col_idx];
+                    if (!opt_input_agg_column.has_value()) {
+                        continue;
+                    }
+                    const auto& agg_column = *opt_input_agg_column;
                     details::visit_type(
-                            input_agg_column->column_->type().data_type(),
-                            [&,
-                             &agg_column = *input_agg_column,
-                             &input_index_column = input_index_columns.at(idx)](auto input_type_desc_tag) {
+                            agg_column.column_->type().data_type(),
+                            [&, &agg_column = agg_column](auto input_type_desc_tag) {
                                 using input_type_info = ScalarTypeInfo<decltype(input_type_desc_tag)>;
-                                // Again, only needed to generate valid code below, exception will have been thrown
-                                // earlier at runtime
                                 if constexpr (is_aggregation_allowed<input_type_info, output_type_info>(
                                                       aggregation_operator
                                               )) {
-                                    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                                            !agg_column.column_->is_sparse() &&
-                                                    agg_column.column_->row_count() == input_index_column->row_count(),
-                                            "Not implemented yet: Cannot aggregate sparse column '{}' during "
-                                            "resampling.",
-                                            get_input_column_name().value
-                                    );
-                                    auto index_data = input_index_column->data();
-                                    const auto index_cend = index_data.template cend<IndexTDT>();
                                     auto agg_data = agg_column.column_->data();
-                                    auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
-                                    for (auto index_it = index_data.template cbegin<IndexTDT>();
-                                         index_it != index_cend && !reached_end_of_buckets;
-                                         ++index_it, ++agg_it) {
-                                        if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
+                                    const auto run_iter = [&]<IteratorDensity input_density>() {
+                                        auto col_it = agg_data.template cbegin<
+                                                typename input_type_info::TDT,
+                                                IteratorType::ENUMERATED,
+                                                input_density>();
+                                        const auto col_end = agg_data.template cend<
+                                                typename input_type_info::TDT,
+                                                IteratorType::ENUMERATED,
+                                                input_density>();
+                                        for (; col_it != col_end && output_it != output_end; ++col_it) {
+                                            const auto idx = static_cast<size_t>(col_it->idx());
+                                            // Finalise any buckets whose exclusive end falls at or before this row.
+                                            while (output_it != output_end &&
+                                                   (col_idx > end_col_idx ||
+                                                    (col_idx == end_col_idx && idx >= end_col_offset))) {
+                                                advance_output();
+                                            }
+                                            if (output_it == output_end || col_idx < start_col_idx) {
+                                                break;
+                                            }
+                                            // Skip rows before the bucket's start (e.g., right-closed bucket excluding
+                                            // its leftmost edge, or date_range trimming).
+                                            if (col_idx == start_col_idx && idx < start_col_offset) {
+                                                continue;
+                                            }
                                             push_to_aggregator<input_type_info::data_type>(
-                                                    bucket_aggregator, *agg_it, agg_column
+                                                    bucket_aggregator, col_it->value(), agg_column
                                             );
-                                            bucket_has_values = true;
-                                        } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(
-                                                           *index_it, current_bucket.end()
-                                                   )) &&
-                                                   output_it != output_end_it) {
-                                            if (bucket_has_values) {
-                                                *output_it = finalize_aggregator<output_type_info::data_type>(
-                                                        bucket_aggregator, string_pool
-                                                );
-                                                ++output_it;
-                                            }
-                                            // The following code is equivalent to:
-                                            // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-                                            //     bucket_end_it = std::upper_bound(bucket_end_it,
-                                            //     bucket_boundaries_end, *index_it);
-                                            // } else {
-                                            //     bucket_end_it = std::upper_bound(bucket_end_it,
-                                            //     bucket_boundaries_end, *index_it, std::less_equal{});
-                                            // }
-                                            // bucket_start_it = std::prev(bucket_end_it);
-                                            // reached_end_of_buckets = bucket_end_it == bucket_boundaries_end;
-                                            // The above code will be more performant when the vast majority of buckets
-                                            // are empty See comment in  ResampleClause::advance_boundary_past_value for
-                                            // mathematical and experimental bounds
-                                            ++bucket_start_it;
-                                            if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
-                                                reached_end_of_buckets = true;
-                                            } else {
-                                                while (ARCTICDB_UNLIKELY(
-                                                        index_value_past_end_of_bucket(*index_it, *bucket_end_it)
-                                                )) {
-                                                    ++bucket_start_it;
-                                                    if (ARCTICDB_UNLIKELY(++bucket_end_it == bucket_boundaries_end)) {
-                                                        reached_end_of_buckets = true;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            if (ARCTICDB_LIKELY(!reached_end_of_buckets)) {
-                                                bucket_has_values = false;
-                                                current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
-                                                if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
-                                                    push_to_aggregator<input_type_info::data_type>(
-                                                            bucket_aggregator, *agg_it, agg_column
-                                                    );
-                                                    bucket_has_values = true;
-                                                }
-                                            }
                                         }
+                                    };
+                                    if (agg_column.column_->is_sparse()) {
+                                        run_iter.template operator()<IteratorDensity::SPARSE>();
+                                    } else {
+                                        run_iter.template operator()<IteratorDensity::DENSE>();
                                     }
                                 }
                             }
                     );
                 }
-            }
-            // We were in the middle of aggregating a bucket when we ran out of index values
-            if (output_it != output_end_it) {
-                *output_it = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
-                ++output_it;
+                // The trailing bucket (whose exclusive end is past the last input column) is finalised here.
+                if (output_it != output_end) {
+                    advance_output();
+                }
+                util::check(output_it == output_end, "Resample aggregation finished without consuming all output rows");
+            };
+            if (res->is_sparse()) {
+                run.template operator()<IteratorDensity::SPARSE>();
+            } else {
+                run.template operator()<IteratorDensity::DENSE>();
             }
         }
     });
@@ -317,18 +422,6 @@ std::optional<Value> SortedAggregator<aggregation_operator, closed_boundary>::ge
         );
     } else {
         return {};
-    }
-}
-
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-bool SortedAggregator<aggregation_operator, closed_boundary>::index_value_past_end_of_bucket(
-        timestamp index_value, timestamp bucket_end
-) const {
-    if constexpr (closed_boundary == ResampleBoundary::LEFT) {
-        return index_value >= bucket_end;
-    } else {
-        // closed_boundary == ResampleBoundary::RIGHT
-        return index_value > bucket_end;
     }
 }
 

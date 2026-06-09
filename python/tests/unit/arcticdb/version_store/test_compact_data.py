@@ -61,7 +61,7 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     pre_compaction_index = lib.read_index(sym)
     pre_compaction_data_keys = len(pre_compaction_index)
     with qs.query_stats():
-        compact_data_info = lib.compact_data_explain_plan_experimental(sym, rows_per_segment=method_arg)
+        compact_data_info = lib.compact_data_explain_plan(sym, rows_per_segment=method_arg)
         stats = qs.get_query_stats()
     qs.reset_stats()
     # No data keys read and no keys of any type written
@@ -69,7 +69,7 @@ def generic_compact_data_test(lib, sym, method_arg=None):
     assert "Memory_PutObject" not in stats["storage_operations"]
 
     with qs.query_stats():
-        lib.compact_data_experimental(sym, rows_per_segment=method_arg)
+        lib.compact_data(sym, rows_per_segment=method_arg)
         stats = qs.get_query_stats()
     qs.reset_stats()
     rows_per_segment = (
@@ -119,7 +119,7 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     expected = vit_before_compaction.data
     pre_compaction_index = lib.read_index(sym)
     with qs.query_stats():
-        compact_data_info = lib.compact_data_explain_plan_experimental(sym, rows_per_segment=rows_per_segment)
+        compact_data_info = lib.compact_data_explain_plan(sym, rows_per_segment=rows_per_segment)
         stats = qs.get_query_stats()
     qs.reset_stats()
     assert compact_data_info.num_row_slices_before == compact_data_info.num_row_slices_after
@@ -131,7 +131,7 @@ def generic_compact_data_test_noop(lib, sym, rows_per_segment=None):
     assert "Memory_PutObject" not in stats["storage_operations"]
 
     with qs.query_stats():
-        compacted_version = lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment).version
+        compacted_version = lib.compact_data(sym, rows_per_segment=rows_per_segment).version
         stats = qs.get_query_stats()
     qs.reset_stats()
     assert vit_before_compaction.version == compacted_version
@@ -159,8 +159,8 @@ def test_compact_data_explain_plan(in_memory_store_factory):
     lib.write(sym, pd.DataFrame({"col": [0, 1, 2, 3, 4]}))
     lib.append(sym, pd.DataFrame({"col": [5, 6, 7, 8, 9]}))
     # Run it twice to prove that it isn't compacting anything
-    compact_data_info = lib.compact_data_explain_plan_experimental(sym)
-    compact_data_info_again = lib.compact_data_explain_plan_experimental(sym)
+    compact_data_info = lib.compact_data_explain_plan(sym)
+    compact_data_info_again = lib.compact_data_explain_plan(sym)
     # We don't need an equality operator for this class for any other reason, so just compare the repr for this test
     assert str(compact_data_info) == str(compact_data_info_again)
     assert isinstance(compact_data_info, CompactDataInfo)
@@ -173,8 +173,8 @@ def test_compact_data_explain_plan(in_memory_store_factory):
     assert compact_data_info.will_do_work
 
     # After compaction there will be no work to do
-    lib.compact_data_experimental(sym)
-    compact_data_info = lib.compact_data_explain_plan_experimental(sym)
+    lib.compact_data(sym)
+    compact_data_info = lib.compact_data_explain_plan(sym)
     assert isinstance(compact_data_info, CompactDataInfo)
     assert compact_data_info.num_row_slices_before == 1
     assert compact_data_info.num_row_slices_after == 1
@@ -190,7 +190,7 @@ def test_compact_data_explain_plan_docstring_example(lmdb_version_store_v1):
     df = pd.DataFrame({"col": np.arange(100_000)})
     for idx in range(100):
         lib.append("sym", df[idx * 1_000 : (idx + 1) * 1_000])
-    compact_data_info = lib.compact_data_explain_plan_experimental("sym")
+    compact_data_info = lib.compact_data_explain_plan("sym")
     assert compact_data_info.row_slices_before == list(range(0, 101_000, 1_000))
     assert compact_data_info.row_slices_after == [0, 100_000]
     assert compact_data_info.num_row_slices_before == 100
@@ -206,7 +206,7 @@ def test_compact_data_docstring_example_v1(lmdb_version_store_v1):
     for idx in range(100):
         lib.append("sym", df[idx * 1_000 : (idx + 1) * 1_000])
     assert len(lib.read_index("sym")) == 100
-    lib.compact_data_experimental("sym")
+    lib.compact_data("sym")
     assert len(lib.read_index("sym")) == 1
 
 
@@ -217,7 +217,7 @@ def test_compact_data_docstring_example_v2(lmdb_library):
         lib.append("sym", df[idx * 1_000 : (idx + 1) * 1_000])
     lib_tool = lib._dev_tools.library_tool()
     assert len(lib_tool.read_index("sym")) == 100
-    lib.compact_data_experimental("sym")
+    lib.compact_data("sym")
     assert len(lib_tool.read_index("sym")) == 1
 
 
@@ -225,7 +225,7 @@ def test_compact_data_symbol_doesnt_exist(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_compact_data_symbol_doesnt_exist"
     with pytest.raises(StorageException) as e:
-        lib.compact_data_experimental(sym)
+        lib.compact_data(sym)
     assert sym in str(e.value)
 
 
@@ -234,7 +234,7 @@ def test_compact_data_invalid_rows_per_segment(lmdb_version_store_v1, rows_per_s
     lib = lmdb_version_store_v1
     sym = "test_compact_data_invalid_rows_per_segment"
     with pytest.raises(ArcticNativeException):
-        lib.compact_data_experimental(sym, rows_per_segment=rows_per_segment)
+        lib.compact_data(sym, rows_per_segment=rows_per_segment)
 
 
 def test_compact_data_maintain_metadata(lmdb_version_store_v1):
@@ -245,7 +245,7 @@ def test_compact_data_maintain_metadata(lmdb_version_store_v1):
     metadata = {"hello": "world"}
     lib.append(sym, df, metadata=metadata)
     assert lib.read_metadata(sym).metadata == metadata
-    lib.compact_data_experimental(sym)
+    lib.compact_data(sym)
     assert len(lib.read_index(sym)) == 1
     assert lib.read_metadata(sym).metadata == metadata
 
@@ -456,7 +456,7 @@ def test_compact_data_read_previous_version(in_memory_store_factory):
     df = pd.DataFrame({"col": np.arange(10)})
     lib.write(sym, df[:5])  # v0
     lib.append(sym, df[5:])  # v1
-    lib.compact_data_experimental(sym)  # v2
+    lib.compact_data(sym)  # v2
     assert_frame_equal(df[:5], lib.read(sym, as_of=0).data)
     assert_frame_equal(df, lib.read(sym, as_of=1).data)
     assert_frame_equal(df, lib.read(sym).data)
@@ -476,7 +476,7 @@ def test_compact_data_date_range_read(in_memory_store_factory, rows_per_segment)
     mid = index[num_rows // 2]
     expected_first_half = lib.read(sym, date_range=(index[0], mid)).data
     expected_second_half = lib.read(sym, date_range=(mid, index[-1])).data
-    lib.compact_data_experimental(sym)
+    lib.compact_data(sym)
     assert_frame_equal(expected_first_half, lib.read(sym, date_range=(index[0], mid)).data)
     assert_frame_equal(expected_second_half, lib.read(sym, date_range=(mid, index[-1])).data)
 
@@ -587,7 +587,7 @@ def test_compact_recursively_normalized_data(lmdb_version_store_v1):
     lib.write(sym, data, recursive_normalizers=True)
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     with pytest.raises(SchemaException) as e:
-        lib.compact_data_experimental(sym)
+        lib.compact_data(sym)
     assert "recursive" in str(e.value) and sym in str(e.value)
 
 

@@ -34,8 +34,7 @@ using VersionedItemOrError = std::variant<VersionedItem, DataError>;
  * Requirements for the latter is fluid, so methods here could be lifted.
  */
 using SpecificAndLatestVersionKeys = std::pair<
-        std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
-        std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
+        std::shared_ptr<std::unordered_map<StreamId, AtomKey>>, std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
 struct VersionIdAndDedupMapInfo {
     VersionId version_id;
     std::shared_ptr<DeDupMap> de_dup_map;

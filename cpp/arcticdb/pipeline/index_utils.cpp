@@ -7,11 +7,68 @@
  */
 
 #include <arcticdb/pipeline/index_utils.hpp>
+
+#include <arcticdb/python/normalization_utils.hpp>
+
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
+
+namespace {
+using namespace arcticdb;
+
+template<typename T>
+concept common_normalization = util::any_of<
+        T, proto::descriptors::NormalizationMetadata_Pandas,
+        proto::descriptors::NormalizationMetadata_NormalisedTimeSeries>;
+
+template<common_normalization CommonNormalization>
+void set_index(CommonNormalization& dest_common, const CommonNormalization& source_common) {
+    if (dest_common.has_index()) {
+        *dest_common.mutable_index() = source_common.index();
+    } else if (dest_common.has_multi_index()) {
+        *dest_common.mutable_multi_index() = source_common.multi_index();
+    }
+}
+
+template<common_normalization CommonNormalization>
+void set_tz(CommonNormalization& dest, const CommonNormalization& source) {
+    if (dest.has_multi_index()) {
+        dest.mutable_multi_index()->set_tz(source.multi_index().tz());
+    } else {
+        dest.mutable_index()->set_tz(source.index().tz());
+    }
+}
+
+void merge_rowrange_index(
+        proto::descriptors::NormalizationMetadata& dest, const proto::descriptors::NormalizationMetadata& source
+) {
+    // The current behavior is the last modification operation is setting the index name. See Monday 9797097831, it
+    // would be best to require that index names are always matching. This is the case for datetime index because
+    // it's a physical column. It's a potentially breaking change. Covered in:
+    // test_append.py::test_append_series_with_different_row_range_index_name
+    if (dest.has_series()) {
+        set_index(*dest.mutable_series()->mutable_common(), source.series().common());
+    } else if (dest.has_df()) {
+        set_index(*dest.mutable_df()->mutable_common(), source.df().common());
+    }
+}
+
+void merge_timeseries_index(
+        proto::descriptors::NormalizationMetadata& dest, const proto::descriptors::NormalizationMetadata& source
+) {
+    // See Monday 12029540807
+    // It's a known bug that the new metadata overwrites the timezone but it's an API break to fix it.
+    if (dest.has_series()) {
+        set_tz(*dest.mutable_series()->mutable_common(), source.series().common());
+    } else if (dest.has_df()) {
+        set_tz(*dest.mutable_df()->mutable_common(), source.df().common());
+    }
+}
+
+} // namespace
 
 namespace arcticdb::pipelines::index {
 
@@ -71,9 +128,31 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
     return {std::move(index_segment_reader), std::move(slice_and_keys)};
 }
 
+proto::descriptors::NormalizationMetadata merge_normalization_metadata(
+        const TimeseriesDescriptor& existing_tsd, const InputFrame& new_frame
+) {
+    if (existing_tsd.index().type() == IndexDescriptor::Type::EMPTY) {
+        return new_frame.norm_meta;
+    }
+
+    proto::descriptors::NormalizationMetadata result = existing_tsd.normalization();
+    accumulate_norm_metadata_column_names(result, new_frame.norm_meta);
+    if (result.has_np()) {
+        // Only append is allowed for numpy arrays, and it's checked up the callstack.
+        (*result.mutable_np()->mutable_shape())[0] += new_frame.norm_meta.np().shape()[0];
+    }
+
+    if (existing_tsd.index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        merge_rowrange_index(result, new_frame.norm_meta);
+    } else if (existing_tsd.index().type() == IndexDescriptor::Type::TIMESTAMP) {
+        merge_timeseries_index(result, new_frame.norm_meta);
+    }
+    return result;
+}
+
 TimeseriesDescriptor get_merged_tsd(
         size_t row_count, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const std::shared_ptr<pipelines::InputFrame>& new_frame
+        const std::shared_ptr<InputFrame>& new_frame
 ) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
@@ -106,7 +185,7 @@ TimeseriesDescriptor get_merged_tsd(
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),
-            std::move(new_frame->norm_meta),
+            merge_normalization_metadata(existing_tsd, *new_frame),
             std::move(new_frame->user_meta),
             std::nullopt,
             std::nullopt,

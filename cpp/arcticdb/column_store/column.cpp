@@ -326,7 +326,9 @@ void Column::allocate_and_advance_by(std::size_t bytes) {
     advance_data(bytes);
 }
 
-[[nodiscard]] ChunkedBuffer& Column::buffer() { return data_.buffer(); }
+ChunkedBuffer& Column::buffer() { return data_.buffer(); }
+
+const ChunkedBuffer& Column::buffer() const { return data_.buffer(); }
 
 uint8_t* Column::bytes_at(size_t bytes, size_t required) {
     ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);

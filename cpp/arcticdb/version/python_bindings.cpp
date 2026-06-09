@@ -13,6 +13,7 @@
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/version/version_constants.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -27,6 +28,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
 
 namespace arcticdb::version_store {
@@ -147,6 +149,22 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
+    // Useful for enterprise
+    auto constants = version.def_submodule("constants", "Reserved stream id constants used by ArcticDB");
+    constants.attr("WRITE_VERSION_ID") = py::str(WriteVersionId);
+    constants.attr("TOMBSTONE_VERSION_ID") = py::str(TombstoneVersionId);
+    constants.attr("TOMBSTONE_ALL_VERSION_ID") = py::str(TombstoneAllVersionId);
+    constants.attr("CREATE_SNAPSHOT_ID") = py::str(CreateSnapshotId);
+    constants.attr("DELETE_SNAPSHOT_ID") = py::str(DeleteSnapshotId);
+    constants.attr("LAST_SYNC_ID") = py::str(LastSyncId);
+    constants.attr("LAST_BACKUP_ID") = py::str(LastBackupId);
+    constants.attr("LAST_BACKGROUND_DELETION_ID") = py::str(LastBackgroundDeletionId);
+    constants.attr("FAILED_TARGET_ID") = py::str(FailedTargetId);
+    constants.attr("STORAGE_LOG_ID") = py::str(StorageLogId);
+    constants.attr("FAILED_STORAGE_LOG_ID") = py::str(FailedStorageLogId);
+    constants.attr("RECREATE_SYMBOL_ID") = py::str(RecreateSymbolId);
+    constants.attr("REFRESH_SYMBOL_ID") = py::str(RefreshSymbolId);
+
     entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
     py::class_<Value, std::shared_ptr<Value>>(version, "ValueType").def(py::init());
@@ -187,11 +205,13 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }))
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
+    py::class_<storage::KeySegmentPair>(version, "KeySegmentPair").def(py::init<>());
+
     py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
-            .def(py::init<AtomKey, SegmentInMemory, std::optional<SegmentInMemory>>(),
+            .def(py::init<AtomKey, SegmentInMemory, std::shared_ptr<Segment>>(),
                  py::arg("index_key"),
                  py::arg("index_seg"),
-                 py::arg("column_stats_seg") = std::nullopt);
+                 py::arg("column_stats_seg") = nullptr);
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
@@ -509,6 +529,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("SUB", OperationType::SUB)
             .value("MUL", OperationType::MUL)
             .value("DIV", OperationType::DIV)
+            .value("POW", OperationType::POW)
             .value("EQ", OperationType::EQ)
             .value("NE", OperationType::NE)
             .value("LT", OperationType::LT)

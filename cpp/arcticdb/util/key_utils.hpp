@@ -21,25 +21,53 @@ inline void delete_keys_of_type_if(
         const std::shared_ptr<Store>& store, Predicate&& predicate, KeyType key_type,
         const std::string& prefix = std::string(), bool continue_on_error = false
 ) {
-    static const size_t delete_object_limit = ConfigsMap::instance()->get_int("Storage.DeleteBatchSize", 1000);
-    std::vector<VariantKey> keys{};
+    const size_t flush_threshold = ConfigsMap::instance()->get_int("Storage.DeletePendingBufferSize", 100'000);
+    std::vector<VariantKey> keys;
+    keys.reserve(flush_threshold);
+    size_t total_flushed = 0;
     try {
         store->iterate_type(
                 key_type,
-                [predicate = std::forward<Predicate>(predicate), store = store, &keys](VariantKey&& key) {
-                    if (predicate(key))
-                        keys.emplace_back(std::move(key));
-
-                    if (keys.size() == delete_object_limit) {
-                        store->remove_keys(keys).get();
-                        keys.clear();
+                [predicate = std::forward<Predicate>(predicate),
+                 &keys,
+                 &total_flushed,
+                 store,
+                 key_type,
+                 flush_threshold](VariantKey&& key) {
+                    if (!predicate(key))
+                        return;
+                    keys.emplace_back(std::move(key));
+                    if (keys.size() >= flush_threshold) {
+                        auto batch = std::move(keys);
+                        keys = {};
+                        keys.reserve(flush_threshold);
+                        const auto batch_size = batch.size();
+                        // Async remove_keys spreads the batch out across the IO threadpool, remove_keys_sync would
+                        // delete the keys in serial. We block on the result here to bound memory.
+                        store->remove_keys(std::move(batch)).get();
+                        total_flushed += batch_size;
+                        log::storage().debug(
+                                "delete_keys_of_type_if: flushed {} keys of type {} (cumulative {})",
+                                batch_size,
+                                key_type,
+                                total_flushed
+                        );
                     }
                 },
                 prefix
         );
 
-        if (!keys.empty())
-            store->remove_keys(keys).get();
+        if (!keys.empty()) {
+            const auto batch_size = keys.size();
+            store->remove_keys(std::move(keys)).get();
+            total_flushed += batch_size;
+            log::storage().debug(
+                    "delete_keys_of_type_if: final flush of {} keys of type {} (cumulative {})",
+                    batch_size,
+                    key_type,
+                    total_flushed
+            );
+        }
     } catch (const std::exception& ex) {
         if (continue_on_error)
             log::storage().warn("Caught exception {} trying to delete key, continuing", ex.what());

@@ -80,7 +80,7 @@ def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
             arctic_library_v1._dev_tools.remove_incompletes(["sym"])
         return  # remove_incompletes not implemented on Mongo 8784267430
 
-    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+    with config_context_multi({"S3Storage.DeleteBatchSize": batch_size, "AzureStorage.DeleteBatchSize": batch_size}):
         lib_tool = lib.library_tool()
         assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
         assert lib.list_symbols_with_incomplete_data() == []
@@ -134,7 +134,7 @@ def test_remove_incompletes(arctic_library_v1, batch_size):
             arctic_library_v1._dev_tools.remove_incompletes(["sym"])
         return  # remove_incompletes not implemented on Mongo 8784267430
 
-    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+    with config_context_multi({"S3Storage.DeleteBatchSize": batch_size, "AzureStorage.DeleteBatchSize": batch_size}):
         lib = arctic_library_v1
         lib_tool = lib._dev_tools.library_tool()
         assert lib_tool.find_keys(KeyType.APPEND_DATA) == []

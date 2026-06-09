@@ -40,6 +40,8 @@ class S3Storage : public Storage, AsyncStorage {
 
     bool supports_object_size_calculation() const final;
 
+    std::optional<size_t> max_delete_batch_size() const override;
+
     // These are only public for testing purposes
     S3ClientInterface& client() { return *s3_client_; }
     bool directory_bucket() const { return directory_bucket_; }
@@ -102,6 +104,8 @@ class S3Storage : public Storage, AsyncStorage {
 class GCPXMLStorage : public S3Storage {
   public:
     GCPXMLStorage(const LibraryPath& lib, OpenMode mode, const GCPXMLSettings& conf);
+
+    std::optional<size_t> max_delete_batch_size() const override { return std::nullopt; }
 
   protected:
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;

@@ -207,7 +207,12 @@ def make_loggers_config(
         sink.file.path = file_output_path
 
     for logger_name in logger_by_name:
-        level_to_set = specific_log_levels.get(logger_name, default_level)
+        # The s3 stream carries AWS SDK output, which is very noisy. It ignores the global default level
+        # (so ARCTICDB_all_loglevel does not enable it) and stays quiet unless explicitly enabled.
+        if logger_name == "s3":
+            level_to_set = specific_log_levels.get("s3", "CRITICAL")
+        else:
+            level_to_set = specific_log_levels.get(logger_name, default_level)
         logger = log_cfgs.logger_by_id[logger_name]
         if console_output:
             logger.sink_ids.append("console")

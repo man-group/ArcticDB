@@ -92,7 +92,7 @@ struct ArrowInputContiguousSlice {
 
 std::vector<ArrowInputContiguousSlice> arrow_contiguous_slices_in_range(const Column& col, size_t from, size_t to) {
     auto slices = std::vector<ArrowInputContiguousSlice>();
-    const auto& buffer = col.data().buffer();
+    const auto& buffer = col.buffer();
     const auto type_size = get_type_size(col.type().data_type());
     const auto from_byte = from * type_size;
     const auto to_byte = to * type_size;
@@ -506,7 +506,7 @@ folly::Future<entity::AtomKey> write_frame(
             });
 }
 
-folly::Future<entity::AtomKey> append_frame(
+folly::Future<AtomKey> append_frame(
         IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
         index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema,
         bool ignore_sort_order
@@ -545,16 +545,12 @@ folly::Future<entity::AtomKey> append_frame(
                 std::make_move_iterator(std::begin(slice_and_keys_to_append)),
                 std::make_move_iterator(std::end(slice_and_keys_to_append))
         );
-        std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-        auto tsd = index::get_merged_tsd(
+        ranges::sort(slices_to_write);
+        const auto tsd = index::get_merged_tsd(
                 frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame
         );
         return index::write_index(
-                stream::index_type_from_descriptor(tsd.as_stream_descriptor()),
-                tsd,
-                std::move(slices_to_write),
-                key,
-                store
+                index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store
         );
     });
 }
@@ -645,9 +641,7 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     return output;
 }
 
-folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
-        std::vector<SliceAndKey>&& slices, StreamSink& sink
-) {
+folly::Future<folly::Unit> remove_slice_and_keys(std::vector<SliceAndKey>&& slices, StreamSink& sink) {
     std::vector<VariantKey> keys;
     std::transform(
             std::make_move_iterator(std::begin(slices)),
@@ -658,7 +652,7 @@ folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
     return sink.remove_keys(std::move(keys)).thenValue([](auto&&) { return folly::makeFuture(); });
 }
 
-folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys_batches(
+folly::Future<folly::Unit> remove_slice_and_keys_batches(
         std::vector<std::vector<SliceAndKey>>&& slices_batches, StreamSink& sink
 ) {
     return folly::collect(folly::window(

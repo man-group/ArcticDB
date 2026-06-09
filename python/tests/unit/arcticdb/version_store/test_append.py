@@ -265,29 +265,19 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
     assert_frame_equal(vit.data, expected)
 
 
-def test_append_numpy_array(lmdb_version_store):
+@pytest.mark.xfail(
+    condition=WINDOWS, raises=arcticdb.exceptions.ArcticDbNotYetImplemented, reason="Not implemented on Windows"
+)
+@pytest.mark.parametrize("dtype", supported_types_list)
+def test_append_numpy_array(lmdb_version_store, dtype):
     """Tests append with all supported by arctic data types"""
-    logger = get_logger()
-    for index, _type in enumerate(supported_types_list):
-        sym = f"test_append_numpy_array_{index}"
-        logger.info(f"Storing type: {_type} in symbol: {sym}")
-        np1 = generate_random_numpy_array(10, _type)
-        try:
-            lmdb_version_store.write(sym, np1)
-        except arcticdb.exceptions.ArcticDbNotYetImplemented as e:
-            if WINDOWS:
-                logger.info(f"not supported on windows: {str(e)}")
-                # never mind lets do something even if it is not main subject of the test
-                lmdb_version_store.write(sym, np1, pickle_on_failure=True)
-                assert_array_equal(np1, lmdb_version_store.read(sym).data)
-                continue
-            else:
-                raise
-        np2 = generate_random_numpy_array(10, _type)
-        logger.info(f"Appending {np2}")
-        lmdb_version_store.append(sym, np2)
-        expected = np.concatenate((np1, np2))
-        assert_array_equal(lmdb_version_store.read(sym).data, expected)
+    sym = f"test_append_numpy_array"
+    np1 = generate_random_numpy_array(10, dtype)
+    lmdb_version_store.write(sym, np1)
+    np2 = generate_random_numpy_array(10, dtype)
+    lmdb_version_store.append(sym, np2)
+    expected = np.concatenate((np1, np2))
+    assert_array_equal(lmdb_version_store.read(sym).data, expected)
 
 
 def test_append_pickled_symbol(lmdb_version_store):
@@ -756,18 +746,6 @@ def test_append_series_with_different_row_range_index_name(lmdb_version_store_dy
     # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
     # datetime index because it's a physical column. It's a potentially breaking change.
     assert lib.read("sym").data.index.name == "index_name_2"
-
-
-@pytest.mark.xfail(reason="Wrong normalization metadata update. Monday ref: 10029194063")
-def test_append_no_columns(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    to_write = pd.DataFrame({"col": [1, 2, 3]}, index=pd.date_range(pd.Timestamp(2025, 1, 1), periods=3))
-    to_append = pd.DataFrame({}, index=pd.date_range(pd.Timestamp(2025, 1, 4), periods=3))
-    lib.write("sym", to_write)
-    lib.append("sym", to_append)
-    expected = pd.concat([to_write, to_append])
-    result = lib.read("sym").data
-    assert_frame_equal(result, expected)
 
 
 def get_next_business_date(d: datetime) -> datetime:

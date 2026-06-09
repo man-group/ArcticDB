@@ -93,6 +93,7 @@ ac = Arctic("s3://localhost:9000:my-bucket?access=minioadmin&secret=minioadmin")
 - **Batch operations**: Multiple keys read/written in parallel
 - **Retry logic**: Automatic retry on transient failures
 - **Path prefix**: Organize data under a prefix within the bucket
+- **AWS SDK logging**: AWS SDK logs are routed into the `s3` spdlog stream via `s3_api.cpp:SpdlogLogSystem` (per-message severity mapped to spdlog levels, AWS tag preserved as a `[tag]` prefix), so they interleave with ArcticDB's own logs. The effective level is reconciled in Python (`tools.py:_reconcile_aws_log_level`): the more verbose of `ARCTICDB_s3_loglevel` and the deprecated `ARCTICDB_AWS_LogLevel_int` drives both the AWS SDK emission (`AWS.LogLevel` config, read in `S3ApiInstance::init`) and the `s3` stream level. The `s3` stream is opt-in: defaults to `CRITICAL`, ignores `ARCTICDB_all_loglevel`. Set `AWS.LogToFile` to write to a file in the cwd via `DefaultLogSystem` instead.
 
 ## Azure Blob Storage
 

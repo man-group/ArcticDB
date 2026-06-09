@@ -766,10 +766,6 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
         std::shared_ptr<ankerl::unordered_dense::map<EntityId, size_t>>&& id_to_pos,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>>& clauses
 ) {
-    // TODO 11961775873: remove this kill switch
-    static const bool process_on_cpu_executor = ConfigsMap::instance()->get_int("Storage.ProcessOnCpuExecutor", 1) == 1;
-    auto* processing_executor = process_on_cpu_executor ? dynamic_cast<folly::Executor*>(&async::cpu_executor())
-                                                        : dynamic_cast<folly::Executor*>(&async::io_executor());
     // Used to make sure each entity is only added into the component manager once
     auto slice_added_mtx = std::make_shared<std::vector<std::mutex>>(num_segments);
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
@@ -793,10 +789,10 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
             );
         }
 
-        // Switch to the CPU executor by default (but with a kill switch) for reasons detailed in the PR description:
+        // Switch to the CPU executor for reasons detailed in the PR description
         // https://github.com/man-group/ArcticDB/pull/3086
         futures->emplace_back(folly::collect(local_futs)
-                                      .via(processing_executor)
+                                      .via(&async::cpu_executor())
                                       .thenValueInline([component_manager,
                                                         segment_fetch_counts,
                                                         id_to_pos,
@@ -1368,9 +1364,8 @@ static void read_indexed_keys_to_pipeline(
     );
 
     if (index_information.column_stats_.has_value()) {
-        auto column_stats_filter =
-                create_column_stats_filter(std::move(*index_information.column_stats_), tsd, read_query.clauses_);
-        queries.push_back(std::move(column_stats_filter));
+        auto& [data, query_metadata] = *index_information.column_stats_;
+        queries.push_back(create_column_stats_filter(std::move(data), tsd, std::move(query_metadata)));
     }
 
     pipeline_context->slice_and_keys_ = filter_index(index_segment_reader, combine_filter_functions(queries));
@@ -2800,17 +2795,19 @@ static folly::Future<VersionIdentifier> fetch_index_and_column_stats(
 ) {
     auto index_future = store->read(versioned_item.key_);
 
-    using OptionalKeySeg = std::optional<SegmentInMemory>;
-    const bool need_column_stats = should_try_column_stats_read(read_query);
-    folly::Future<OptionalKeySeg> column_stats_future = folly::makeFuture<OptionalKeySeg>(std::nullopt);
-    if (need_column_stats) {
+    using OptionalColumnStatsSource = std::optional<ColumnStatsSource>;
+    ColumnStatsQueryMetadata query_metadata(read_query.clauses_);
+    folly::Future<OptionalColumnStatsSource> column_stats_future =
+            folly::makeFuture<OptionalColumnStatsSource>(std::nullopt);
+    if (query_metadata.should_try_column_stats_read()) {
         auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
         storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
         column_stats_future =
-                store->read(column_stats_key, stats_read_opts)
-                        .thenValue([](std::pair<VariantKey, SegmentInMemory>&& key_seg) -> OptionalKeySeg {
-                            return std::move(key_seg.second);
-                        });
+                store->read_compressed(column_stats_key, stats_read_opts)
+                        .thenValueInline(
+                                [qm = std::move(query_metadata)](storage::KeySegmentPair&& key_seg
+                                ) -> OptionalColumnStatsSource { return ColumnStatsSource{key_seg.segment_ptr(), qm}; }
+                        );
     }
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
@@ -3002,9 +2999,12 @@ folly::Future<std::vector<SliceAndKey>> read_modify_write_data_keys(
         const std::shared_ptr<Store>& store, std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options,
         const IndexPartialKey& target_partial_index_key, const std::shared_ptr<PipelineContext>& pipeline_context
 ) {
-    read_query->clauses_.push_back(
-            std::make_shared<Clause>(WriteClause(target_partial_index_key, std::make_shared<DeDupMap>(), store))
-    );
+    auto write_clause_processing_structure = read_query->clauses_.empty()
+                                                     ? ProcessingStructure::ROW_SLICE
+                                                     : read_query->clauses_.back()->clause_info().output_structure_;
+    read_query->clauses_.push_back(std::make_shared<Clause>(WriteClause(
+            target_partial_index_key, std::make_shared<DeDupMap>(), store, write_clause_processing_structure
+    )));
 
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)

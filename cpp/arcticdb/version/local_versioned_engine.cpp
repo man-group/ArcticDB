@@ -440,10 +440,12 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                // Clone because Python holds the PreloadedIndexQuery across multiple collect() calls.
-                auto column_stats = preloaded_index_query->column_stats_seg_.has_value()
-                                            ? std::optional{preloaded_index_query->column_stats_seg_->clone()}
-                                            : std::nullopt;
+                std::optional<ColumnStatsSource> column_stats;
+                if (preloaded_index_query->column_stats_seg_) {
+                    column_stats.emplace(ColumnStatsSource{
+                            preloaded_index_query->column_stats_seg_, ColumnStatsQueryMetadata(read_query->clauses_)
+                    });
+                }
                 return std::make_shared<IndexInformation>(
                         std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
                         std::move(column_stats)
@@ -521,15 +523,15 @@ folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, 
     const auto key = std::move(k);
     auto index_future = store()->read(key);
 
-    auto column_stats_future = folly::makeFuture<std::optional<SegmentInMemory>>(std::nullopt);
+    auto column_stats_future = folly::makeFuture<std::shared_ptr<Segment>>(std::shared_ptr<Segment>{});
     if (include_index_segment && is_column_stats_enabled()) {
         auto column_stats_key = index_key_to_column_stats_key(key);
         storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
-        column_stats_future = store()->read(column_stats_key, stats_read_opts)
-                                      .thenValue(
-                                              [](std::pair<VariantKey, SegmentInMemory>&& key_seg
-                                              ) -> std::optional<SegmentInMemory> { return std::move(key_seg.second); }
-                                      );
+        column_stats_future =
+                store()->read_compressed(column_stats_key, stats_read_opts)
+                        .thenValueInline([](storage::KeySegmentPair&& key_seg) -> std::shared_ptr<Segment> {
+                            return key_seg.segment_ptr();
+                        });
     }
 
     return folly::collectAll(std::move(index_future), std::move(column_stats_future))
@@ -1146,16 +1148,16 @@ folly::Future<DeleteTreesStats> delete_trees_responsibly(
             get_matching_prev_and_next_versions(
                     entry,
                     key.version_id(), // Check 2)
-                    [](const AtomKey&) {},
-                    [&check, &not_to_delete](auto& prev) {
+                    [](const AtomKeyPacked&) {},
+                    [&check, &not_to_delete, &entry](auto& prev) {
                         if (check.prev_version)
-                            not_to_delete.insert(prev);
+                            not_to_delete.insert(prev.to_atom_key(entry->stream_id_));
                     },
-                    [&check, &not_to_delete](auto& next) {
+                    [&check, &not_to_delete, &entry](auto& next) {
                         if (check.next_version)
-                            not_to_delete.insert(next);
+                            not_to_delete.insert(next.to_atom_key(entry->stream_id_));
                     },
-                    [v = key.version_id()](const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
+                    [v = key.version_id()](const AtomKeyPacked& key, const std::shared_ptr<VersionMapEntry>& entry) {
                         // Can't use is_live_index_type_key() because the target version's index key might have
                         // already been tombstoned, so will miss it and thus not able to find the prev/next key.
                         return is_index_key_type(key.type()) && (key.version_id() == v || !entry->is_tombstoned(key));
@@ -2207,21 +2209,44 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
     std::shared_ptr<std::unordered_map<StreamId, AtomKey>> latest_versions;
-    std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> specific_versions;
+    std::shared_ptr<std::unordered_map<StreamId, AtomKey>> specific_versions;
     if (!version_queries.empty()) {
-        auto sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
+        auto multi_sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
 
         auto symbol_with_more_than_one_version =
-                std::ranges::find_if(sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
+                std::ranges::find_if(multi_sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
 
-        if (symbol_with_more_than_one_version != sym_versions.end()) {
+        if (symbol_with_more_than_one_version != multi_sym_versions.end()) {
             auto stream_id = symbol_with_more_than_one_version->first;
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
             );
         }
 
-        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
+        std::map<StreamId, VersionId> sym_versions;
+        for (const auto& [symbol, versions] : multi_sym_versions) {
+            sym_versions[symbol] = versions.front();
+        }
+
+        auto result = batch_get_specific_version(
+                store(),
+                version_map(),
+                sym_versions,
+                BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
+        );
+        specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>(std::move(result.found));
+
+        if (!result.rejected.empty()) {
+            std::vector<std::string> rejected_strs;
+            for (const auto& [symbol, version] : result.rejected) {
+                rejected_strs.push_back(fmt::format("{}:{}", symbol, version));
+            }
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                    "add_to_snapshot: the following versions have been deleted "
+                    "and are not preserved in any other snapshot: {}",
+                    fmt::join(rejected_strs, ", ")
+            );
+        }
         std::vector<StreamId> latest_ids;
         std::copy_if(
                 std::begin(stream_ids),
@@ -2231,7 +2256,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
         );
         latest_versions = batch_get_latest_version(store(), version_map(), latest_ids, false);
     } else {
-        specific_versions = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
+        specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
         latest_versions = batch_get_latest_version(store(), version_map(), stream_ids, false);
     }
 

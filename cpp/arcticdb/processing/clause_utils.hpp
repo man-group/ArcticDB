@@ -26,7 +26,14 @@ namespace arcticdb {
 using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
 
-enum class ProcessingStructure { ROW_SLICE, TIME_BUCKETED, HASH_BUCKETED, ALL, MULTI_SYMBOL };
+enum class ProcessingStructure {
+    ROW_SLICE,
+    TIME_BUCKETED,
+    HASH_BUCKETED,
+    ALL,
+    MULTI_SYMBOL,
+    ONE_COL_SLICE_MULTIPLE_ROW_SLICES
+};
 
 struct KeepCurrentIndex {};
 struct KeepCurrentTopLevelIndex {};
@@ -225,10 +232,6 @@ std::pair<StreamDescriptor, proto::descriptors::NormalizationMetadata> join_inde
 IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& input_schemas);
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
-
-proto::descriptors::NormalizationMetadata generate_norm_meta(
-        const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
-);
 
 void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 

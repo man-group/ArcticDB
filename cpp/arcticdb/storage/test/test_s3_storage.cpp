@@ -17,7 +17,14 @@
 #include <arcticdb/storage/test/common.hpp>
 #include <arcticdb/util/test/gtest_utils.hpp>
 
+#include <arcticdb/log/log.hpp>
+
 #include <aws/core/Aws.h>
+#include <aws/core/utils/memory/stl/AWSStringStream.h>
+
+#include <spdlog/sinks/ostream_sink.h>
+
+#include <sstream>
 
 struct EnvFunctionShim : ::testing::Test {
     std::unordered_set<const char*> env_vars_to_unset{};
@@ -449,4 +456,46 @@ TEST_F(S3StorageFixture, test_list_directory_bucket_failure) {
     }
     ASSERT_THROW(list_in_store(store, KeyType::TABLE_DATA, prefix), UnexpectedS3ErrorException);
     ASSERT_FALSE(store.directory_bucket());
+}
+
+TEST(S3LogSystem, RoutesToSpdlogWithLevelAndTag) {
+    using namespace arcticdb::storage::s3;
+    using Aws::Utils::Logging::LogLevel;
+
+    auto& logger = arcticdb::log::s3();
+    const auto saved_level = logger.level();
+
+    std::ostringstream captured;
+    auto sink = std::make_shared<spdlog::sinks::ostream_sink_mt>(captured);
+    sink->set_pattern("%l|%v");
+    logger.sinks().push_back(sink);
+    logger.set_level(spdlog::level::trace);
+
+    SpdlogLogSystem log_system(LogLevel::Trace);
+    for (auto [aws_level, tag] :
+         {std::pair{LogLevel::Fatal, "FatalTag"},
+          {LogLevel::Error, "ErrorTag"},
+          {LogLevel::Warn, "WarnTag"},
+          {LogLevel::Info, "InfoTag"},
+          {LogLevel::Debug, "DebugTag"},
+          {LogLevel::Trace, "TraceTag"}}) {
+        Aws::OStringStream message;
+        message << "msg-" << tag;
+        log_system.LogStream(aws_level, tag, message);
+    }
+    // The printf-style Log path must keep the per-message level too.
+    log_system.Log(LogLevel::Error, "FmtTag", "value=%d", 42);
+    log_system.Flush();
+
+    logger.sinks().pop_back();
+    logger.set_level(saved_level);
+
+    const auto out = captured.str();
+    ASSERT_NE(out.find("critical|[FatalTag] msg-FatalTag"), std::string::npos);
+    ASSERT_NE(out.find("error|[ErrorTag] msg-ErrorTag"), std::string::npos);
+    ASSERT_NE(out.find("warning|[WarnTag] msg-WarnTag"), std::string::npos);
+    ASSERT_NE(out.find("info|[InfoTag] msg-InfoTag"), std::string::npos);
+    ASSERT_NE(out.find("debug|[DebugTag] msg-DebugTag"), std::string::npos);
+    ASSERT_NE(out.find("trace|[TraceTag] msg-TraceTag"), std::string::npos);
+    ASSERT_NE(out.find("error|[FmtTag] value=42"), std::string::npos);
 }

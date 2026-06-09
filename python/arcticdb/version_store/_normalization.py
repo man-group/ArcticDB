@@ -476,14 +476,16 @@ def _denormalize_single_index(item, norm_meta):
 
 
 def _denormalize_columns_names(columns_names, norm_meta):
+    contains_none = False
     if columns_names is None:
-        return None
+        return None, contains_none
     for idx in range(len(columns_names)):
         col = columns_names[idx]
         if col in norm_meta.common.col_names:
             col_data = norm_meta.common.col_names[col]
             if col_data.is_none:
                 columns_names[idx] = None
+                contains_none = True
             elif col_data.is_empty:
                 columns_names[idx] = ""
             elif col_data.is_int:
@@ -492,27 +494,30 @@ def _denormalize_columns_names(columns_names, norm_meta):
                 # Very old clients may not have written the original_name, so if it's not there just leave the name alone
                 columns_names[idx] = col_data.original_name
 
-    return columns_names
+    return columns_names, contains_none
 
 
 def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
     columns = None
     data = None
     denormed_columns = None
+    denormed_columns_contain_none = False
     if len(item.names) > 0:
         if norm_meta.has_synthetic_columns and idx_type != "multi_index":
             columns = RangeIndex(0, len(item.names))
         else:
             columns = item.names
             if len(norm_meta.common.col_names) > 0:
-                denormed_columns = _denormalize_columns_names(copy.deepcopy(columns), norm_meta)
+                denormed_columns, denormed_columns_contain_none = _denormalize_columns_names(
+                    copy.deepcopy(columns), norm_meta
+                )
             else:
                 denormed_columns = columns
         if len(item.data) == 0:
             data = None
         else:
             data = {n: item.data[i + n_indexes] if i < len(item.data) else [] for i, n in enumerate(columns)}
-    return columns, denormed_columns, data
+    return columns, denormed_columns, data, denormed_columns_contain_none
 
 
 def _check_valid_name(name):
@@ -1157,7 +1162,9 @@ class DataFrameNormalizer(_PandasNormalizer):
         n_indexes = len(item.index_columns)
         idx_type = norm_meta.common.WhichOneof("index_type")
 
-        columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
+        columns, denormed_columns, data, denormed_columns_contain_none = _denormalize_columns(
+            item, norm_meta, idx_type, n_indexes
+        )
 
         if not self._skip_df_consolidation:
             df = DataFrame(data, index=index, columns=columns)
@@ -1197,7 +1204,12 @@ class DataFrameNormalizer(_PandasNormalizer):
                 df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
         if denormed_columns is not None:
-            df.columns = denormed_columns
+            # Set the dtype to object otherwise columns with names int(1) and None will become 1.0 and np.nan, because
+            # Pandas assumes this is a float64 array
+            if denormed_columns_contain_none:
+                df.columns = pd.Index(denormed_columns, dtype=object)
+            else:
+                df.columns = denormed_columns
         if norm_meta.common.columns.fake_name is False and len(norm_meta.common.columns.name) > 0:
             df.columns.name = norm_meta.common.columns.name
         for key in norm_meta.common.categories:
@@ -1510,7 +1522,7 @@ class TimeFrameNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         idx = _denormalize_single_index(item, norm_meta.common)
-        columns, denormed_columns, data = _denormalize_columns(item, norm_meta, "index", 1)
+        columns, denormed_columns, data, _ = _denormalize_columns(item, norm_meta, "index", 1)
         if columns is None:
             columns = []
             denormed_columns = []

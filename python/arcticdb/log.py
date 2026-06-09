@@ -62,6 +62,7 @@ def build_loggers(ext_log):
         "schedule": _Logger(_LoggerId.SCHEDULE),
         "symbol": _Logger(_LoggerId.SYMBOL),
         "snapshot": _Logger(_LoggerId.SNAPSHOT),
+        "s3": _Logger(_LoggerId.S3),
     }
 
 

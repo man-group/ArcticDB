@@ -185,29 +185,51 @@ def test_column_stats_nat_values(lmdb_version_store, any_output_format):
         index=pd.date_range("2000-01-05", periods=2),
     )
     df3 = pd.DataFrame(
-        {"col_1": [pd.Timestamp("2025-02-01"), pd.NaT, pd.Timestamp("2025-01-01")]},
-        index=pd.date_range("2000-01-07", periods=3),
+        {"col_1": [pd.NaT, pd.NaT]},
+        index=pd.date_range("2000-01-07", periods=2),
+    )
+    df4 = pd.DataFrame(
+        {"col_1": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-06-01")]},
+        index=pd.date_range("2000-01-09", periods=3),
+    )
+    df5 = pd.DataFrame(
+        {"col_1": [pd.NaT, pd.Timestamp("2023-01-01"), pd.Timestamp("2023-06-01"), pd.NaT]},
+        index=pd.date_range("2000-01-12", periods=4),
     )
     lib.write(sym, df0)
     lib.append(sym, df1)
     lib.append(sym, df2)
     lib.append(sym, df3)
+    lib.append(sym, df4)
+    lib.append(sym, df5)
+
+    # We store NaT stats iff the whole block is NaT. The Arrow output path converts NaT to null,
+    # so the public read_column_stats API surfaces None for the all-NaT block.
     expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
         pl.Series(
             "v1_MIN(col_1)",
-            [pd.Timestamp("2020-01-01").value, None, None, None],
+            [
+                pd.Timestamp("2020-01-01").value,
+                pd.Timestamp("2025-01-01").value,
+                pd.Timestamp("2025-01-01").value,
+                None,
+                pd.Timestamp("2024-01-01").value,
+                pd.Timestamp("2023-01-01").value,
+            ],
             dtype=pl.Int64,
         ).cast(pl.Datetime("ns")),
         pl.Series(
             "v1_MAX(col_1)",
             [
-                pd.Timestamp("2020-06-01"),
-                pd.Timestamp("2025-01-01"),
-                pd.Timestamp("2025-01-01"),
-                pd.Timestamp("2025-02-01"),
+                pd.Timestamp("2020-06-01").value,
+                pd.Timestamp("2025-01-01").value,
+                pd.Timestamp("2025-01-01").value,
+                None,
+                pd.Timestamp("2024-06-01").value,
+                pd.Timestamp("2023-06-01").value,
             ],
-            dtype=pl.Datetime("ns"),
-        ),
+            dtype=pl.Int64,
+        ).cast(pl.Datetime("ns")),
     )
     column_stats_dict = {"col_1": {"MINMAX"}}
 
@@ -215,6 +237,41 @@ def test_column_stats_nat_values(lmdb_version_store, any_output_format):
 
     column_stats = lib.read_column_stats(sym)
     assert_stats_equal(column_stats, expected_column_stats)
+
+    nat_sentinel = np.iinfo(np.int64).min
+    lib_tool = lib.library_tool()
+    keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
+    assert len(keys) == 1
+    raw_stats = lib_tool.read_to_dataframe(keys[0])
+    assert raw_stats["v1_MIN(col_1)"].values.view("int64")[3] == nat_sentinel
+    assert raw_stats["v1_MAX(col_1)"].values.view("int64")[3] == nat_sentinel
+
+
+def test_column_stats_only_nat_values(lmdb_version_store, any_output_format):
+    lib = lmdb_version_store
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    sym = "test_column_stats_only_nat_values"
+    df = pd.DataFrame({"col_1": [pd.NaT, pd.NaT]}, index=pd.date_range("2000-01-07", periods=2))
+    lib.write(sym, df)
+
+    expected_column_stats = index_columns_to_pl(lib, sym).with_columns(
+        pl.Series("v1_MIN(col_1)", [None], dtype=pl.Int64).cast(pl.Datetime("ns")),
+        pl.Series("v1_MAX(col_1)", [None], dtype=pl.Int64).cast(pl.Datetime("ns")),
+    )
+    column_stats_dict = {"col_1": {"MINMAX"}}
+
+    lib.create_column_stats(sym, column_stats_dict)
+
+    column_stats = lib.read_column_stats(sym)
+    assert_stats_equal(column_stats, expected_column_stats)
+
+    nat_sentinel = np.iinfo(np.int64).min
+    lib_tool = lib.library_tool()
+    keys = lib_tool.find_keys_for_symbol(KeyType.COLUMN_STATS, sym)
+    assert len(keys) == 1
+    raw_stats = lib_tool.read_to_dataframe(keys[0])
+    assert raw_stats["v1_MIN(col_1)"].values.view("int64")[0] == nat_sentinel
+    assert raw_stats["v1_MAX(col_1)"].values.view("int64")[0] == nat_sentinel
 
 
 def test_column_stats_as_of(version_store_factory, lib_name, encoding_version, any_output_format):

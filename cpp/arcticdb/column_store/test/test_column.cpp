@@ -7,11 +7,15 @@
  */
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <numeric>
+#include <vector>
 
 #include <arcticdb/util/test/test_utils.hpp>
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
@@ -275,6 +279,71 @@ TEST(ColumnData, Iterator) {
     }
 }
 
+TEST(ColumnData, IteratorSkipsEmptyBlocks) {
+    using namespace arcticdb;
+
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
+    // Trailing empty block
+    Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    std::array<int64_t, 3> data{10, 20, 30};
+    col.set_external_block(0, data.data(), data.size());
+    col.set_external_block(static_cast<ssize_t>(data.size()), static_cast<int64_t*>(nullptr), 0);
+    ASSERT_EQ(col.buffer().num_blocks(), 2u);
+    ASSERT_EQ(col.buffer().blocks()[0]->logical_size(), data.size() * sizeof(int64_t));
+    ASSERT_EQ(col.buffer().blocks()[1]->logical_size(), 0u);
+
+    auto column_data = col.data();
+    std::vector<int64_t> visited;
+    for (auto it = column_data.cbegin<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>(),
+              end = column_data.cend<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+         it != end;
+         ++it) {
+        visited.push_back(*it);
+    }
+    EXPECT_EQ(visited, (std::vector<int64_t>{10, 20, 30}));
+
+    // All-empty column: a single zero-size external block. begin must compare equal to end.
+    Column empty_col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    empty_col.set_external_block(0, static_cast<int64_t*>(nullptr), 0);
+    ASSERT_EQ(empty_col.buffer().num_blocks(), 1u);
+    ASSERT_EQ(empty_col.buffer().blocks()[0]->logical_size(), 0u);
+    auto empty_data = empty_col.data();
+    auto begin = empty_data.cbegin<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+    auto end = empty_data.cend<TDT, IteratorType::REGULAR, IteratorDensity::SPARSE>();
+    EXPECT_EQ(begin, end);
+}
+
+// We should be able to differentiate iterators to same shared memory in different blocks.
+TEST(ColumnData, IteratorEqualityAcrossSharedExternalMemory) {
+    using namespace arcticdb;
+
+    using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+    Column col(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
+
+    std::array<int64_t, 3> shared{100, 200, 300};
+    col.set_external_block(0, shared.data(), shared.size());
+    col.set_external_block(static_cast<ssize_t>(shared.size()), shared.data(), shared.size());
+
+    auto column_data = col.data();
+    auto it_in_block0 = column_data.citerator_at<TDT>(1);                 // (block 0, offset 1)
+    auto it_in_block1 = column_data.citerator_at<TDT>(shared.size() + 1); // (block 1, offset 1)
+
+    EXPECT_NE(it_in_block0, it_in_block1);
+    // Dereferences agree because both iterators see the same underlying memory.
+    EXPECT_EQ(*it_in_block0, *it_in_block1);
+
+    // And a full iteration
+    std::vector<int64_t> visited;
+    for (auto it = column_data.cbegin<TDT, IteratorType::REGULAR, IteratorDensity::DENSE>(),
+              end = column_data.cend<TDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+         it != end;
+         ++it) {
+        visited.push_back(*it);
+    }
+    EXPECT_EQ(visited, (std::vector<int64_t>{100, 200, 300, 100, 200, 300}));
+}
+
 TEST(ColumnData, LowerBound) {
     using namespace arcticdb;
 
@@ -400,6 +469,195 @@ TEST(ColumnStats, DoubleColumn) {
     EXPECT_DOUBLE_EQ(stats.get_max<double>(), 20.5);
     EXPECT_EQ(stats.unique_count_, 4);
     EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
+}
+
+// ─── Sorted-column search tests ──────────────────────────────────────────────────────────────────
+
+namespace {
+using namespace arcticdb;
+using SearchTDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>;
+
+void populate(Column& col, const std::vector<int64_t>& values) {
+    for (size_t i = 0; i < values.size(); ++i) {
+        col.reference_at<int64_t>(i) = values[i];
+    }
+}
+
+// Three column shapes exercise the three random_accessor paths: SINGLE / REGULAR / IRREGULAR.
+Column make_single_block(const std::vector<int64_t>& values) {
+    Column col(
+            static_cast<TypeDescriptor>(SearchTDT{}), values.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED
+    );
+    populate(col, values);
+    return col;
+}
+
+Column make_regular_blocks(const std::vector<int64_t>& values) {
+    Column col(
+            static_cast<TypeDescriptor>(SearchTDT{}),
+            Sparsity::NOT_PERMITTED,
+            ChunkedBuffer::presized_in_blocks(values.size() * sizeof(int64_t))
+    );
+    populate(col, values);
+    return col;
+}
+
+Column make_irregular_blocks(const std::vector<int64_t>& values, const std::vector<size_t>& block_sizes) {
+    Column col(static_cast<TypeDescriptor>(SearchTDT{}), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+    for (size_t block_size : block_sizes) {
+        col.allocate_data(block_size * sizeof(int64_t));
+        col.advance_data(block_size * sizeof(int64_t));
+    }
+    populate(col, values);
+    return col;
+}
+
+// Default irregular pattern: [1, 1, 1, 3, 1, 5, 1, 7, ...] — alternates 1-element and i-element blocks.
+std::vector<size_t> default_irregular_sizes(size_t total) {
+    std::vector<size_t> sizes;
+    size_t remaining = total;
+    for (size_t i = 0; remaining > 0; ++i) {
+        size_t current = i % 2 == 0 ? 1 : i;
+        current = std::min(current, remaining);
+        sizes.push_back(current);
+        remaining -= current;
+    }
+    return sizes;
+}
+
+Column make_irregular_blocks(const std::vector<int64_t>& values) {
+    return make_irregular_blocks(values, default_irregular_sizes(values.size()));
+}
+
+// Cross-checks our search functions against std::lower_bound / upper_bound on the reference vector.
+// from/to (when set) restrict the column-side search via citerator_at; otherwise cbegin/cend are used.
+void check_search_on_column(
+        const std::vector<int64_t>& values, const Column& col, const std::vector<int64_t>& probes,
+        std::string_view label, std::optional<size_t> from = std::nullopt, std::optional<size_t> to = std::nullopt
+) {
+    auto column_data = col.data();
+    const ssize_t total = static_cast<ssize_t>(values.size());
+    auto begin = from.has_value() ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*from)
+                                  : column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = to.has_value() ? column_data.citerator_at<SearchTDT, IteratorType::ENUMERATED>(*to)
+                              : column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto res_idx = [&](auto& it) { return it.current_block_data() != nullptr ? it->idx() : total; };
+    const auto std_begin = values.begin() + from.value_or(0);
+    const auto std_end = values.begin() + to.value_or(values.size());
+    for (auto v : probes) {
+        auto std_lb = std::lower_bound(std_begin, std_end, v);
+        auto std_ub = std::upper_bound(std_begin, std_end, v);
+        auto lb_it = lower_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        auto ub_it = upper_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        auto ex_lb_it =
+                exponential_lower_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        auto ex_ub_it =
+                exponential_upper_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, v);
+        ASSERT_EQ(res_idx(lb_it), std_lb - values.begin()) << label << " lower_bound(" << v << ")";
+        ASSERT_EQ(res_idx(ub_it), std_ub - values.begin()) << label << " upper_bound(" << v << ")";
+        ASSERT_EQ(res_idx(ex_lb_it), std_lb - values.begin()) << label << " exponential_lower_bound(" << v << ")";
+        ASSERT_EQ(res_idx(ex_ub_it), std_ub - values.begin()) << label << " exponential_upper_bound(" << v << ")";
+    }
+}
+
+void check_search(
+        const std::vector<int64_t>& values, const std::vector<int64_t>& probes,
+        std::optional<size_t> from = std::nullopt, std::optional<size_t> to = std::nullopt
+) {
+    check_search_on_column(values, make_single_block(values), probes, "single", from, to);
+    check_search_on_column(values, make_regular_blocks(values), probes, "regular", from, to);
+    check_search_on_column(values, make_irregular_blocks(values), probes, "irregular", from, to);
+    check_search_on_column(
+            values,
+            make_irregular_blocks(values, std::vector<size_t>(values.size(), 1)),
+            probes,
+            "all-1-blocks",
+            from,
+            to
+    );
+}
+
+} // namespace
+
+TEST(ColumnSearch, BasicRegular) {
+    std::vector<int64_t> values{0, 5, 10, 15, 20, 20, 25, 25, 30, 35};
+    Column col = make_regular_blocks(values);
+    auto column_data = col.data();
+    auto begin = column_data.cbegin<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    auto end = column_data.cend<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>();
+    auto lb = lower_bound<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(*lb, 20);
+    auto ub = upper_bound<SearchTDT, IteratorType::REGULAR, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(*ub, 25);
+}
+
+TEST(ColumnSearch, BasicEnumerated) {
+    std::vector<int64_t> values{0, 5, 10, 15, 20, 20, 25, 25, 30, 35};
+    Column col = make_regular_blocks(values);
+    auto column_data = col.data();
+    auto begin = column_data.cbegin<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto end = column_data.cend<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>();
+    auto lb = lower_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(lb->idx(), 4);
+    ASSERT_EQ(lb->value(), 20);
+    auto ub = upper_bound<SearchTDT, IteratorType::ENUMERATED, IteratorDensity::DENSE>(begin, end, int64_t{20});
+    ASSERT_EQ(ub->idx(), 6);
+    ASSERT_EQ(ub->value(), 25);
+}
+
+TEST(ColumnSearch, BasicCoverage) {
+    // Small column; mix of unique and duplicated values to make lower_bound / upper_bound diverge.
+    std::vector<int64_t> values{0, 1, 2, 2, 2, 5, 7, 7, 9, 10};
+    std::vector<int64_t> probes{-1, 0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, LargeArray) {
+    // Large array test ensures jumping across regular sized blocks works as well
+    std::vector<int64_t> values(10000);
+    std::iota(values.begin(), values.end(), 0);
+    std::vector<int64_t> probes{-1, 0, 1, 511, 512, 1023, 1024, 2500, 5000, 7500, 8191, 8192, 9999, 10000};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, SingleElement) {
+    std::vector<int64_t> values{42};
+    std::vector<int64_t> probes{41, 42, 43};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, AllEqual) {
+    std::vector<int64_t> values(64, 5);
+    std::vector<int64_t> probes{4, 5, 6};
+    check_search(values, probes);
+}
+
+TEST(ColumnSearch, SubRange) {
+    std::vector<int64_t> values(500);
+    std::iota(values.begin(), values.end(), 0);
+    std::vector<int64_t> probes{-1, 0, 99, 100, 200, 399, 400, 500};
+    check_search(values, probes, 100, 400);
+}
+
+TEST(ColumnSearch, EmptySubRange) {
+    std::vector<int64_t> values{1, 2, 3, 4, 5};
+    std::vector<int64_t> probes{0, 3, 6};
+    check_search(values, probes, 2, 2);
+}
+
+TEST(ColumnSearch, SubRangeAtRunOfEquals) {
+    std::vector<int64_t> values{0, 1, 1, 1, 1, 2, 3, 3, 3, 3, 4};
+    std::vector<int64_t> probes{0, 1, 2, 3, 4};
+    check_search(values, probes, 2, 8);
+    check_search(values, probes, 3, 7);
+}
+
+// Covers boundary condition where galloping to the position 0 + 2**2 = 4 is the precisely the last element in the block
+TEST(ColumnSearch, GallopProbeAtFirstBlockEnd) {
+    std::vector<int64_t> values{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    std::vector<int64_t> probes{0, 4, 5, 6, 10, 16};
+    check_search_on_column(values, make_irregular_blocks(values, std::vector<size_t>{5, 5, 5}), probes, "fixed-5");
+    check_search_on_column(values, make_irregular_blocks(values, std::vector<size_t>{5, 5, 5}), probes, "fixed-5", 2);
 }
 
 TEST(ColumnStats, MultipleBlocks) {

@@ -973,13 +973,11 @@ struct CheckSymbolsTask {
 TEST_F(SymbolListSuite, AddAndCompact) {
     log::version().set_pattern("%Y%m%d %H:%M:%S.%f %t %L %n | %v");
     std::vector<Future<Unit>> futures;
-    std::optional<AtomKey> previous_key;
     for (auto x = 0; x < 1000; ++x) {
         auto symbol = fmt::format("symbol_{}", x);
         SymbolList::add_symbol(store_, symbol, 0);
         auto key = atom_key_builder().build(symbol, KeyType::TABLE_INDEX);
-        version_map_->write_version(store_, key, previous_key);
-        previous_key = key;
+        version_map_->write_version(store_, key, std::nullopt);
     }
     (void)symbol_list_->get_symbol_set(store_);
     auto versions = std::make_shared<ReferenceVersionMap>();

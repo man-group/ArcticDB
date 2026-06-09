@@ -64,10 +64,10 @@ class ReslicingInfo {
 // applications:
 // - Combining an arbitrary number of columns into a single one - by providing max_rows_per_segment to the constructor
 //   that is >= the total number of rows in the input segments
-// - Splitting a columns into a set of (approximately) equally sized smaller columns
+// - Splitting a column into a set of (approximately) equally sized smaller columns
 class ColumnReslicer {
   public:
-    explicit ColumnReslicer(const ReslicingInfo& reslicing_info);
+    explicit ColumnReslicer(const size_t num_input_slices, const ReslicingInfo& reslicing_info);
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ColumnReslicer)
 
@@ -76,6 +76,8 @@ class ColumnReslicer {
     // There should be as many provided string pools as there will be output columns as these are for the output
     // segments
     std::vector<Column> reslice_columns(std::vector<StringPool>& string_pools);
+    // Public only for benchmarking
+    std::vector<Column> initialise_output_columns() const;
 
   private:
     // Note that both of these methods care about sparsity only when calling initialise_output_columns
@@ -83,7 +85,6 @@ class ColumnReslicer {
     // value from the input must be copied to an element of the output.
     std::vector<Column> reslice_by_memcpy();
     std::vector<Column> reslice_by_iteration(std::vector<StringPool>& string_pools);
-    std::vector<Column> initialise_output_columns() const;
 
     ReslicingInfo reslicing_info_;
     // Holds either a column along with its string pool, or the number of skipped rows if a row-slice was missing with

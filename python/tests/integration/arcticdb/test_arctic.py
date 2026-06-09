@@ -1621,7 +1621,7 @@ def test_compact_data(lmdb_library, rows_per_segment, prune_previous_versions):
     df = pd.DataFrame({"col": np.arange(100)})
     for i in range(10):
         lib.append(sym, df[i * 10 : (i + 1) * 10])
-    lib.compact_data_experimental(sym, rows_per_segment, prune_previous_versions)
+    lib.compact_data(sym, rows_per_segment, prune_previous_versions)
     assert_frame_equal(df, lib.read(sym).data)
     rows_per_segment = 100_000 if rows_per_segment is None else rows_per_segment
     assert len(lib._dev_tools.library_tool().read_index(sym)) == max(len(df) // rows_per_segment, 1)

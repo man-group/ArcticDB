@@ -10,6 +10,7 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause_utils.hpp>
+#include <arcticdb/python/normalization_utils.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::pipelines;

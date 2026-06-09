@@ -49,6 +49,7 @@ struct Loggers::Impl {
     std::unique_ptr<spdlog::logger> message_;
     std::unique_ptr<spdlog::logger> symbol_;
     std::unique_ptr<spdlog::logger> snapshot_;
+    std::unique_ptr<spdlog::logger> s3_;
     std::shared_ptr<spdlog::details::thread_pool> thread_pool_;
     std::optional<spdlog::details::periodic_worker> periodic_worker_;
 
@@ -85,6 +86,8 @@ spdlog::logger& message() { return Loggers::instance().message(); }
 spdlog::logger& symbol() { return Loggers::instance().symbol(); }
 
 spdlog::logger& snapshot() { return Loggers::instance().snapshot(); }
+
+spdlog::logger& s3() { return Loggers::instance().s3(); }
 
 namespace fs = std::filesystem;
 
@@ -124,6 +127,8 @@ spdlog::logger& Loggers::symbol() { return impl_->logger_ref(impl_->symbol_); }
 
 spdlog::logger& Loggers::snapshot() { return impl_->logger_ref(impl_->snapshot_); }
 
+spdlog::logger& Loggers::s3() { return impl_->logger_ref(impl_->s3_); }
+
 spdlog::logger& Loggers::root() { return impl_->logger_ref(impl_->root_); }
 
 void Loggers::flush_all() {
@@ -139,6 +144,7 @@ void Loggers::flush_all() {
     message().flush();
     symbol().flush();
     snapshot().flush();
+    s3().flush();
 }
 
 void Loggers::destroy_instance() { loggers_instance_.reset(); }
@@ -255,6 +261,7 @@ bool Loggers::configure(const arcticdb::proto::logger::LoggersConfig& conf, bool
     check_and_configure("message", "root", impl_->message_);
     check_and_configure("symbol", "root", impl_->symbol_);
     check_and_configure("snapshot", "root", impl_->snapshot_);
+    check_and_configure("s3", "root", impl_->s3_);
 
     if (auto flush_sec = util::as_opt(conf.flush_interval_seconds()).value_or(1); flush_sec != 0) {
         impl_->periodic_worker_.emplace(

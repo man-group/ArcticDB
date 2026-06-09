@@ -25,6 +25,8 @@ class NfsBackedStorage final : public Storage {
 
     bool supports_object_size_calculation() const final override;
 
+    std::optional<size_t> max_delete_batch_size() const final override;
+
   private:
     void do_write(KeySegmentPair& key_seg) final;
 

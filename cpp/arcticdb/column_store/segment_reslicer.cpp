@@ -36,7 +36,7 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     ReslicingInfo reslicing_info{total_rows, max_rows_per_segment_};
     for (const auto& segment : segments) {
         for (const auto& field : segment.descriptor().fields()) {
-            if (column_map.emplace(field.name(), ColumnReslicer(reslicing_info)).second) {
+            if (column_map.emplace(field.name(), ColumnReslicer(segments.size(), reslicing_info)).second) {
                 col_names_in_order.emplace_back(field.name());
             }
         }
@@ -68,6 +68,13 @@ std::vector<SegmentInMemory> SegmentReslicer::reslice_segments(std::vector<Segme
     // variable is in use
     ankerl::unordered_dense::map<std::string_view, std::vector<Column>, util::TransparentStringHash, std::equal_to<>>
             resliced_column_map;
+    // There is a possible optimisation here in the fairly common case where we are merging all of the input segments
+    // into a single output segment. Namely, to pre-populate the output stringpool with the union of the input string
+    // pools, as we know a priori that is how it will end up. While doing this, we could generate one map for each
+    // input segment from their stringpool offsets to the stringpool offsets in the output string pool, and pass these
+    // maps into the reslice_columns call instead of the string pools. It is not clear that this would provide much
+    // benefit though, as the introduction of the offsets_map in ColumnReslicer::reslice_by_iteration only had a small
+    // impact even with extremely low cardinality string columns.
     for (auto&& [col_name, column_reslicer] : column_map) {
         resliced_column_map.emplace(col_name, column_reslicer.reslice_columns(string_pools));
     }

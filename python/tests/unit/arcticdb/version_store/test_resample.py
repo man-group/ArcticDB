@@ -566,26 +566,6 @@ def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1, a
         lib.read(sym, query_builder=q)
 
 
-def test_resampling_sparse_data(lmdb_version_store_v1, any_output_format):
-    lib = lmdb_version_store_v1
-    lib._set_output_format_for_pipeline_tests(any_output_format)
-    sym = "test_resampling_sparse_data"
-
-    # col_1 will be dense, but with fewer rows than the index column, and so semantically sparse
-    data = {"col_0": [np.nan, 1.0], "col_1": [2.0, np.nan]}
-    lib.write(sym, pd.DataFrame(data, index=[pd.Timestamp(0), pd.Timestamp(1000)]), sparsify_floats=True)
-
-    q = QueryBuilder()
-    q = q.resample("us").agg({"col_0": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-    q = QueryBuilder()
-    q = q.resample("s").agg({"col_1": "sum"})
-    with pytest.raises(SchemaException):
-        lib.read(sym, query_builder=q)
-
-
 def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1, any_output_format):
     lib = lmdb_version_store_empty_types_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -968,7 +948,7 @@ class TestResampleDynamicSchema:
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
-    @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
+    @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16, "datetime64[ns]"])
     def test_aggregation_column_not_in_segment(
         self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype, any_output_format
     ):
@@ -976,6 +956,7 @@ class TestResampleDynamicSchema:
         lib = lmdb_version_store_dynamic_schema_v1
         lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "sym"
+        is_datetime = np.issubdtype(np.dtype(dtype), np.datetime64)
         df1 = pd.DataFrame(
             {"aggregated": np.array([1, 2, 3], dtype), "_empty_bucket_tracker_": [0] * 3},
             index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(30)]),
@@ -991,16 +972,19 @@ class TestResampleDynamicSchema:
         df_list = [df1, df2, df3]
         for df in df_list:
             lib.append(sym, df)
-        agg = {f"{name}_{op}": (name, op) for name in ["aggregated"] for op in ALL_AGGREGATIONS}
+        # sum is not a valid aggregation for datetime columns
+        ops = [op for op in ALL_AGGREGATIONS if not (is_datetime and op == "sum")]
+        agg = {f"aggregated_{op}": ("aggregated", op) for op in ops}
         expected_types = {
             "aggregated_min": dtype,
             "aggregated_max": dtype,
-            "aggregated_sum": largest_numeric_type(dtype),
-            "aggregated_mean": np.float64,
+            "aggregated_mean": dtype if is_datetime else np.float64,
             "aggregated_first": dtype,
             "aggregated_last": dtype,
             "aggregated_count": np.uint64,
         }
+        if not is_datetime:
+            expected_types["aggregated_sum"] = largest_numeric_type(dtype)
         generic_resample_test(
             lib,
             sym,
