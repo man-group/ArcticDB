@@ -24,6 +24,8 @@
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
+#include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/key_utils.hpp>
 #include <aws/core/Aws.h>
 
 using namespace arcticdb;
@@ -596,4 +598,219 @@ TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailure) {
     auto read_result_2 = targets[2]->read_sync(key);
     ASSERT_EQ(std::get<RefKey>(read_result_2.first), key);
     ASSERT_EQ(read_result_2.second.row_count(), row_count);
+}
+
+TEST(Async, CopyCompressedInterStoreKeyExistsCheckFailureWithRetry) {
+    using namespace arcticdb::async;
+
+    // Given - same setup as CopyCompressedInterStoreKeyExistsCheckFailure
+    as::EnvironmentName environment_name{"research"};
+    as::StorageName storage_name("storage_name");
+    as::LibraryPath library_path{"a", "b"};
+
+    auto config = proto::nfs_backed_storage::Config();
+    config.set_use_mock_storage_for_testing(true);
+
+    auto env_config = arcticdb::get_test_environment_config(
+            library_path, storage_name, environment_name, std::make_optional(config)
+    );
+    auto config_resolver = as::create_in_memory_resolver(env_config);
+    as::LibraryIndex library_index{environment_name, config_resolver};
+
+    auto failed_config = proto::s3_storage::Config();
+    failed_config.set_use_mock_storage_for_testing(true);
+
+    auto failed_env_config = arcticdb::get_test_environment_config(
+            library_path, storage_name, environment_name, std::make_optional(failed_config)
+    );
+    auto failed_config_resolver = as::create_in_memory_resolver(failed_env_config);
+    as::LibraryIndex failed_library_index{environment_name, failed_config_resolver};
+
+    as::UserAuth user_auth{"abc"};
+    auto codec_opt = std::make_shared<arcticdb::proto::encoding::VariantCodec>();
+
+    auto source_store = create_store(library_path, library_index, user_auth, codec_opt);
+
+    std::string failureSymbol = as::s3::S3ClientTestWrapper::get_failure_trigger(
+            "sym", storage::StorageOperation::EXISTS, Aws::S3::S3Errors::INTERNAL_FAILURE
+    );
+
+    // 1 target fails on key_exists (S3-backed), 2 succeed (NFS-backed)
+    auto targets = std::vector<std::shared_ptr<arcticdb::Store>>{
+            create_store(library_path, library_index, user_auth, codec_opt),
+            create_store(library_path, failed_library_index, user_auth, codec_opt),
+            create_store(library_path, library_index, user_auth, codec_opt)
+    };
+
+    const arcticdb::entity::RefKey& key = arcticdb::entity::RefKey{failureSymbol, KeyType::VERSION_REF};
+    auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
+    auto row_count = segment_in_memory.row_count();
+    ASSERT_GT(row_count, 0);
+    auto segment = encode_dispatch(std::move(segment_in_memory), *codec_opt, arcticdb::EncodingVersion::V1);
+    (void)segment.calculate_size();
+    source_store->write_compressed_sync(as::KeySegmentPair{key, std::move(segment)});
+
+    // check_key_exists_on_targets=true (3rd param), retry_on_failure=true (4th param)
+    CopyCompressedInterStoreTask task{
+            key, std::nullopt, true, true, source_store, targets, std::shared_ptr<BitRateStats>()
+    };
+
+    auto res = task();
+
+    // The first copy() removes target[1] from its local targets copy (fails key_exists check)
+    // and successfully writes to target[0] and target[2].
+    // The retry re-copies target_stores_ and must still report the failed target[1].
+    ASSERT_TRUE(std::holds_alternative<CopyCompressedInterStoreTask::FailedTargets>(res));
+    auto failed_targets = std::get<CopyCompressedInterStoreTask::FailedTargets>(res);
+    ASSERT_EQ(failed_targets.size(), 1);
+
+    // Non-failing targets should still have the data
+    auto read_result_0 = targets[0]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_0.first), key);
+    ASSERT_EQ(read_result_0.second.row_count(), row_count);
+
+    auto read_result_2 = targets[2]->read_sync(key);
+    ASSERT_EQ(std::get<RefKey>(read_result_2.first), key);
+    ASSERT_EQ(read_result_2.second.row_count(), row_count);
+}
+
+namespace remove_batch_test {
+
+class RecordingStorage final : public as::Storage {
+  public:
+    RecordingStorage(const as::LibraryPath& lib, as::OpenMode mode, std::optional<size_t> batch_size) :
+        Storage(lib, mode),
+        batch_size_(batch_size) {}
+
+    std::string name() const final { return "recording_storage"; }
+
+    std::optional<size_t> max_delete_batch_size() const override { return batch_size_; }
+
+    std::vector<size_t> recorded_call_sizes() {
+        std::lock_guard guard(mutex_);
+        return recorded_;
+    }
+
+    void seed_iter_keys(std::vector<entity::VariantKey> keys) {
+        std::lock_guard guard(mutex_);
+        iter_keys_ = std::move(keys);
+    }
+
+  private:
+    void do_write(as::KeySegmentPair&) final { util::raise_rte("unused"); }
+    void do_write_if_none(as::KeySegmentPair&) final { util::raise_rte("unused"); }
+    void do_update(as::KeySegmentPair&, as::UpdateOpts) final { util::raise_rte("unused"); }
+    void do_read(entity::VariantKey&&, const as::ReadVisitor&, as::ReadKeyOpts) final { util::raise_rte("unused"); }
+    as::KeySegmentPair do_read(entity::VariantKey&&, as::ReadKeyOpts) final { util::raise_rte("unused"); }
+
+    void do_remove(entity::VariantKey&&, as::RemoveOpts) final {
+        std::lock_guard guard(mutex_);
+        recorded_.push_back(1);
+    }
+
+    void do_remove(std::span<entity::VariantKey> keys, as::RemoveOpts) final {
+        std::lock_guard guard(mutex_);
+        recorded_.push_back(keys.size());
+    }
+
+    bool do_key_exists(const entity::VariantKey&) final { return false; }
+    bool do_supports_prefix_matching() const final { return false; }
+    as::SupportsAtomicWrites do_supports_atomic_writes() const final { return as::SupportsAtomicWrites::NO; }
+    bool do_fast_delete() final { return false; }
+    bool do_iterate_type_until_match(entity::KeyType, const as::IterateTypePredicate& visitor, const std::string&)
+            final {
+        std::vector<entity::VariantKey> keys;
+        {
+            std::lock_guard guard(mutex_);
+            keys = iter_keys_;
+        }
+        for (auto& key : keys) {
+            if (visitor(entity::VariantKey{key})) {
+                return true;
+            }
+        }
+        return false;
+    }
+    std::string do_key_path(const entity::VariantKey&) const final { return {}; }
+
+    std::optional<size_t> batch_size_;
+    std::mutex mutex_;
+    std::vector<size_t> recorded_;
+    std::vector<entity::VariantKey> iter_keys_;
+};
+
+inline std::shared_ptr<aa::AsyncStore<>> build_async_store(std::shared_ptr<RecordingStorage> storage) {
+    auto storages = std::make_shared<as::Storages>(as::Storages::StorageVector{storage}, as::OpenMode::DELETE);
+    auto library = std::make_shared<as::Library>(as::LibraryPath{"a", "b"}, std::move(storages));
+    return std::make_shared<aa::AsyncStore<>>(std::move(library), proto::encoding::VariantCodec{}, EncodingVersion::V1);
+}
+
+inline std::vector<entity::VariantKey> make_keys(size_t n) {
+    std::vector<entity::VariantKey> keys;
+    keys.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        keys.emplace_back(arcticdb::atom_key_builder().build(fmt::format("k_{}", i), entity::KeyType::TABLE_DATA));
+    }
+    return keys;
+}
+
+} // namespace remove_batch_test
+
+TEST(AsyncStoreRemoveKeys, AsyncSplitsIntoChunksRespectingBatchSize) {
+    using namespace remove_batch_test;
+    auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, 3);
+    auto store = build_async_store(storage);
+
+    store->remove_keys(make_keys(10), as::RemoveOpts{}).get();
+
+    auto sizes = storage->recorded_call_sizes();
+    std::sort(sizes.begin(), sizes.end());
+    ASSERT_EQ(sizes, std::vector<size_t>({1, 3, 3, 3}));
+}
+
+TEST(AsyncStoreRemoveKeys, SyncSplitsIntoChunksRespectingBatchSize) {
+    using namespace remove_batch_test;
+    auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, 3);
+    auto store = build_async_store(storage);
+
+    store->remove_keys_sync(make_keys(10), as::RemoveOpts{});
+
+    auto sizes = storage->recorded_call_sizes();
+    ASSERT_EQ(sizes, std::vector<size_t>({3, 3, 3, 1}));
+}
+
+TEST(AsyncStoreRemoveKeys, NulloptBatchSizeSendsSingleCall) {
+    using namespace remove_batch_test;
+    auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, std::nullopt);
+    auto store = build_async_store(storage);
+
+    store->remove_keys(make_keys(100), as::RemoveOpts{}).get();
+
+    auto sizes = storage->recorded_call_sizes();
+    ASSERT_EQ(sizes, std::vector<size_t>({100}));
+}
+
+TEST(AsyncStoreRemoveKeys, EmptyKeysIsNoOp) {
+    using namespace remove_batch_test;
+    auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, 3);
+    auto store = build_async_store(storage);
+
+    store->remove_keys(std::vector<entity::VariantKey>{}, as::RemoveOpts{}).get();
+
+    ASSERT_TRUE(storage->recorded_call_sizes().empty());
+}
+
+TEST(KeyUtilsDeleteBatching, FlushesPendingBufferAtThreshold) {
+    using namespace remove_batch_test;
+    ScopedConfig scoped("Storage.DeletePendingBufferSize", 3);
+
+    auto storage = std::make_shared<RecordingStorage>(as::LibraryPath{"a", "b"}, as::OpenMode::DELETE, std::nullopt);
+    storage->seed_iter_keys(make_keys(11));
+    auto store = build_async_store(storage);
+
+    arcticdb::delete_keys_of_type_if(
+            store, [](const entity::VariantKey&) { return true; }, entity::KeyType::TABLE_DATA
+    );
+
+    ASSERT_EQ(storage->recorded_call_sizes(), std::vector<size_t>({3, 3, 3, 2}));
 }

@@ -16,6 +16,7 @@
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/allocator.hpp>
+#include <arcticdb/util/constants.hpp>
 
 using namespace arcticdb;
 
@@ -28,16 +29,16 @@ SegmentInMemory get_detachable_segment(
     auto handler = ArrowStringHandler();
     auto segment = SegmentInMemory();
     for (auto& field : fields_with_index) {
-        size_t extra_bytes_per_block = 0;
+        DetachableBlockConfig block_config = detachable_block_config::Regular{0};
         if (is_sequence_type(field.type().data_type())) {
-            auto [type, extra_bytes] = handler.output_type_and_extra_bytes(field.type(), field.name(), read_options);
+            auto [type, config] = handler.output_type_and_block_config(field.type(), field.name(), read_options);
             field.type_ = type;
-            extra_bytes_per_block = extra_bytes;
+            block_config = config;
         }
         segment.add_column(
                 field,
                 std::make_shared<Column>(
-                        field.type(), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes_per_block
+                        field.type(), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config
                 )
         );
     }
@@ -69,7 +70,7 @@ void fill_chunked_string_column(
     // Use arrow string handler to populate the column in arrow format chunk by chunk
     auto handler = ArrowStringHandler();
     auto source_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
-    auto dest_type_desc = handler.output_type_and_extra_bytes(source_type_desc, col_name, read_options).first;
+    auto dest_type_desc = handler.output_type_and_block_config(source_type_desc, col_name, read_options).first;
     for (auto chunk = 0u; chunk < num_chunks; ++chunk) {
         auto row_count = std::min(chunk_size, num_rows - chunk * chunk_size);
         // To use the `handler.convert_type` we prepare the source data for each chunk in `source_column`.
@@ -166,10 +167,10 @@ TEST_P(ArrowStringColumnRead, Basic) {
     auto read_options = ReadOptions();
     read_options.set_output_format(OutputFormat::ARROW);
     read_options.set_arrow_output_default_string_format(output_string_format());
-    auto [type_desc, extra_bytes] = handler.output_type_and_extra_bytes(
+    auto [type_desc, block_config] = handler.output_type_and_block_config(
             TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, column_name, read_options
     );
-    auto column = Column(type_desc, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes);
+    auto column = Column(type_desc, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
     allocate_chunked_column(column, num_rows, chunk_size);
     fill_chunked_string_column(column, column_name, num_rows, chunk_size, pool, column_values, read_options);
 
@@ -274,8 +275,8 @@ TEST(ArrowRead, ConvertSegmentBasic) {
 
     auto arrow_data = segment_to_arrow_data(segment);
     // We expect to see num_chunks record batches
-    EXPECT_EQ(arrow_data->size(), num_chunks);
-    for (const auto& record_batch : *arrow_data) {
+    EXPECT_EQ(arrow_data.size(), num_chunks);
+    for (const auto& record_batch : arrow_data) {
         auto names = record_batch.names();
         auto columns = record_batch.columns();
         // Each record batch should have all columns for the row range (including the index)
@@ -338,10 +339,10 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
 
     // Convert to arrow
     auto arrow_data = segment_to_arrow_data(segment);
-    EXPECT_EQ(arrow_data->size(), num_chunks);
+    EXPECT_EQ(arrow_data.size(), num_chunks);
     for (auto i = 0u; i < num_chunks; ++i) {
         auto row_count = std::min(chunk_size, num_rows - i * chunk_size);
-        const auto& record_batch = (*arrow_data)[i];
+        const auto& record_batch = (arrow_data)[i];
         auto names = record_batch.names();
         auto columns = record_batch.columns();
         // Each record batch should have all columns for the row range (including the index)
@@ -366,3 +367,97 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
         }
     }
 }
+
+struct TimestampConvertParam {
+    std::string name;
+    bool sparse;
+    bool has_nats;
+    size_t source_chunk_size; // 0 = single block, >0 = multi-block with this chunk size
+};
+
+class ArrowTimestampConvert : public testing::TestWithParam<TimestampConvertParam> {
+  public:
+    static constexpr size_t num_rows = 100;
+    ArrowTimestampHandler handler;
+    TypeDescriptor source_type = make_scalar_type(DataType::NANOSECONDS_UTC64);
+    TypeDescriptor dest_type;
+    DetachableBlockConfig block_config;
+    size_t dest_size;
+    ReadOptions read_options;
+
+    ArrowTimestampConvert() {
+        read_options.set_output_format(OutputFormat::ARROW);
+        std::tie(dest_type, block_config) = handler.output_type_and_block_config(source_type, "ts", read_options);
+        dest_size = data_type_size(dest_type);
+    }
+};
+
+TEST_P(ArrowTimestampConvert, NullPositions) {
+    const auto& p = GetParam();
+    auto sparsity = p.sparse ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED;
+    bool multi_block = p.source_chunk_size > 0;
+
+    // Build values and expected validity
+    std::vector<timestamp> values(num_rows);
+    std::vector<bool> expected_valid(num_rows, !p.sparse);
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (p.sparse && i % 3 != 0)
+            continue;
+        bool is_nat = p.has_nats && (i % 10 == 0);
+        values[i] = is_nat ? NaT : static_cast<timestamp>(i);
+        expected_valid[i] = !is_nat;
+    }
+
+    // Build source column
+    auto source = [&]() {
+        if (multi_block) {
+            auto col = Column(source_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
+            allocate_and_fill_chunked_column<timestamp>(
+                    col, num_rows, p.source_chunk_size, std::span<timestamp>(values)
+            );
+            return col;
+        }
+        auto col = Column(source_type, num_rows, AllocationType::DYNAMIC, sparsity);
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (p.sparse && i % 3 != 0)
+                continue;
+            col.set_scalar(i, values[i]);
+        }
+        return col;
+    }();
+    if (multi_block) {
+        ASSERT_GT(source.num_blocks(), 1u);
+    }
+
+    // Run convert_type
+    auto dest = Column(dest_type, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config);
+    allocate_chunked_column(dest, num_rows, num_rows);
+    auto field_wrapper = FieldWrapper(dest_type, "ts");
+    auto mapping = ColumnMapping(
+            source_type, dest_type, field_wrapper.field(), dest_size, num_rows, 0, 0, dest_size * num_rows, 0
+    );
+    auto handler_data = std::any{};
+    auto string_pool = std::make_shared<StringPool>();
+    handler.convert_type(source, dest, mapping, DecodePathData{}, handler_data, string_pool, read_options);
+
+    // Verify
+    bool has_any_nulls = std::any_of(expected_valid.begin(), expected_valid.end(), [](bool v) { return !v; });
+    EXPECT_EQ(dest.has_extra_buffer(0, ExtraBufferType::BITMAP), has_any_nulls);
+    auto arrays = arrow_arrays_from_column(dest, "ts");
+    ASSERT_EQ(arrays.size(), 1);
+    for (size_t i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(arrays[0][i].has_value(), expected_valid[i]);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        AllCases, ArrowTimestampConvert,
+        testing::Values(
+                TimestampConvertParam{"DenseNoNats", false, false, 0},
+                TimestampConvertParam{"DenseWithNats", false, true, 0},
+                TimestampConvertParam{"SparseWithNats", true, true, 0},
+                TimestampConvertParam{"MultiBlockDenseNoNats", false, false, 25},
+                TimestampConvertParam{"MultiBlockDenseWithNats", false, true, 25}
+        ),
+        [](const auto& info) { return info.param.name; }
+);

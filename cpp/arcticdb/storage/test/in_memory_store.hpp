@@ -10,6 +10,7 @@
 
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
@@ -41,6 +42,11 @@ class InMemoryStore : public Store {
     bool supports_atomic_writes() const override { return true; }
 
     bool fast_delete() override { return false; }
+
+    storage::OpenMode open_mode() const override {
+        // Test store always has full permissions
+        return storage::OpenMode::DELETE;
+    }
 
     std::vector<folly::Future<pipelines::SegmentAndSlice>>
     batch_read_uncompressed(std::vector<pipelines::RangesAndKey>&&, std::shared_ptr<std::unordered_set<std::string>>)
@@ -275,7 +281,7 @@ class InMemoryStore : public Store {
         }
     }
 
-    RemoveKeyResultType remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
+    void remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
         StorageFailureSimulator::instance()->go(FailureType::DELETE);
         std::lock_guard lock{mutex_};
         size_t removed = util::variant_match(
@@ -287,11 +293,11 @@ class InMemoryStore : public Store {
         if (removed == 0 && !opts.ignores_missing_key_) {
             throw storage::KeyNotFoundException(VariantKey(key));
         }
-        return {};
     }
 
-    folly::Future<RemoveKeyResultType> remove_key(const VariantKey& key, storage::RemoveOpts opts) override {
-        return folly::makeFuture(remove_key_sync(key, opts));
+    folly::Future<folly::Unit> remove_key(const VariantKey& key, storage::RemoveOpts opts) override {
+        remove_key_sync(key, opts);
+        return folly::Unit{};
     }
 
     timestamp current_timestamp() override { return PilotedClock::nanos_since_epoch(); }
@@ -395,47 +401,31 @@ class InMemoryStore : public Store {
         return output;
     }
 
-    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
-        std::vector<RemoveKeyResultType> output;
-        for (const auto& key : keys) {
-            output.emplace_back(remove_key_sync(key, opts));
-        }
-
-        return output;
-    }
-
-    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts
-    ) override {
-        std::vector<RemoveKeyResultType> output;
-        for (const auto& key : keys) {
-            output.emplace_back(remove_key_sync(key, opts));
-        }
-
-        return output;
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
-        std::vector<RemoveKeyResultType> output;
-        for (const auto& key : keys) {
-            output.emplace_back(remove_key_sync(key, opts));
-        }
-
-        return output;
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts)
+    folly::Future<folly::Unit> remove_keys(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts)
             override {
-        std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {
-            output.emplace_back(remove_key_sync(key, opts));
+            remove_key_sync(key, opts);
         }
+        return folly::Unit{};
+    }
 
-        return output;
+    folly::Future<folly::Unit> remove_keys(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts) override {
+        for (const auto& key : keys) {
+            remove_key_sync(key, opts);
+        }
+        return folly::Unit{};
+    }
+
+    void remove_keys_sync(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts) override {
+        for (const auto& key : keys) {
+            remove_key_sync(key, opts);
+        }
+    }
+
+    void remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts) override {
+        for (const auto& key : keys) {
+            remove_key_sync(key, opts);
+        }
     }
 
     size_t num_atom_keys() const { return seg_by_atom_key_.size(); }
@@ -521,8 +511,8 @@ class InMemoryStore : public Store {
         return folly::makeFuture(std::move(components));
     }
 
-    folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>>
-    read_timeseries_descriptor(const entity::VariantKey& key, storage::ReadKeyOpts /*opts*/) override {
+    std::pair<VariantKey, arcticdb::TimeseriesDescriptor>
+    read_timeseries_descriptor_sync(const entity::VariantKey& key, storage::ReadKeyOpts /*opts*/) override {
         auto failure_sim = StorageFailureSimulator::instance();
         failure_sim->go(FailureType::READ);
         return util::variant_match(
@@ -542,6 +532,12 @@ class InMemoryStore : public Store {
                     return std::make_pair(key, it->second->index_descriptor());
                 }
         );
+    }
+
+    folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>> read_timeseries_descriptor(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts
+    ) override {
+        return folly::makeFuture(read_timeseries_descriptor_sync(key, opts));
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator&) override {}

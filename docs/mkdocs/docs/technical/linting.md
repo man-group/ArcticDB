@@ -6,29 +6,14 @@ The `.clang-format` file in the root of this repo is based on LLVM style with so
 
 ### Running Linters
 
-Activate a Python3 virtual environment and run the following from the project root to
-install the linters:
+The easiest way to run the linters is via the root Makefile:
 
-```
-python build_tooling/format.py --install-tools  # install the linters
-```
-
-Then check your formatting:
-
-```
-python build_tooling/format.py --check --type python
-python build_tooling/format.py --check --type cpp
+```bash
+make lint           # reformat in-place (all languages)
+make lint-check     # check formatting without changes
 ```
 
-To reformat your working copy, run:
-
-```
-python build_tooling/format.py --in-place --type python
-python build_tooling/format.py --in-place --type cpp
-
-# Or just do everything at once,
-python build_tooling/format.py --in-place --type all
-```
+The `make venv` target installs the linter tools automatically.
 
 ### Rebasing Old Work
 

@@ -21,7 +21,7 @@ from enum import Enum
 import multiprocessing
 
 from arcticdb_ext import get_config_int, set_config_int
-from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
+from arcticdb_ext.exceptions import InternalException, UnsortedDataException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException, KeyType, AWSAuthMethod
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
@@ -441,10 +441,10 @@ def test_parallel_writes_and_appends_index_validation(arctic_library, finalize_m
     lib.write(sym, df_1, staged=True)
     if validate_index is None:
         # Test default behaviour when arg isn't provided
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(sym, finalize_method)
     elif validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.finalize_staged_data(sym, finalize_method, validate_index=True)
     else:
         lib.finalize_staged_data(sym, finalize_method, validate_index=False)
@@ -476,7 +476,7 @@ class TestAppendStagedData:
         lib.write("sym", initial_df)
         df1 = pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([np.datetime64("2023-01-02")], dtype="datetime64[ns]"))
         lib.write("sym", df1, staged=True)
-        with pytest.raises(SortingException) as exception_info:
+        with pytest.raises(UnsortedDataException) as exception_info:
             lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
         assert "append" in str(exception_info.value)
 
@@ -1610,3 +1610,20 @@ def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
             with pytest.raises(InternalException) as exception_info:
                 operation_func()
             assert "E_MONGO_RETRYABLE" in str(exception_info.value), f"Failed for operation: {operation_name}"
+
+
+@pytest.mark.parametrize("rows_per_segment", [None, 20, 50])
+@pytest.mark.parametrize("prune_previous_versions", [None, True, False])
+def test_compact_data(lmdb_library, rows_per_segment, prune_previous_versions):
+    lib = lmdb_library
+    assert not lib._nvs.lib_cfg().lib_desc.version.write_options.prune_previous_version
+    sym = "test_compact_data"
+    df = pd.DataFrame({"col": np.arange(100)})
+    for i in range(10):
+        lib.append(sym, df[i * 10 : (i + 1) * 10])
+    lib.compact_data(sym, rows_per_segment, prune_previous_versions)
+    assert_frame_equal(df, lib.read(sym).data)
+    rows_per_segment = 100_000 if rows_per_segment is None else rows_per_segment
+    assert len(lib._dev_tools.library_tool().read_index(sym)) == max(len(df) // rows_per_segment, 1)
+    prune_previous_versions = False if prune_previous_versions is None else prune_previous_versions
+    assert len(lib.list_versions(sym)) == (1 if prune_previous_versions else 11)

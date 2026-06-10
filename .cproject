@@ -13,6 +13,5 @@
 	<storageModule moduleId="org.eclipse.cdt.internal.ui.text.commentOwnerProjectMappings"/>
 	<storageModule moduleId="org.eclipse.cdt.core.pathentry">
 		<pathentry kind="out" path=""/>
-		<pathentry kind="src" path=""/>
 	</storageModule>
 </cproject>

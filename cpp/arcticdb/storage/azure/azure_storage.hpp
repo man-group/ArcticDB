@@ -25,6 +25,8 @@ class AzureStorage final : public Storage {
 
     std::string name() const final;
 
+    std::optional<size_t> max_delete_batch_size() const final override;
+
   protected:
     void do_write(KeySegmentPair& key_seg) final;
 

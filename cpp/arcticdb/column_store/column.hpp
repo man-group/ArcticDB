@@ -226,7 +226,7 @@ class Column {
     Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
     Column(TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-           size_t extra_bytes_per_block = 0);
+           DetachableBlockConfig block_config = detachable_block_config::Regular{0});
 
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 
@@ -252,7 +252,7 @@ class Column {
     [[nodiscard]] util::BitMagic& sparse_map();
     [[nodiscard]] const util::BitMagic& sparse_map() const;
     [[nodiscard]] std::optional<util::BitMagic>& opt_sparse_map();
-    [[nodiscard]] std::optional<util::BitMagic> opt_sparse_map() const;
+    [[nodiscard]] const std::optional<util::BitMagic>& opt_sparse_map() const;
 
     template<typename TagType>
     auto begin() const {
@@ -499,6 +499,8 @@ class Column {
 
     void advance_shapes(std::size_t size);
 
+    void allocate_and_advance_by(std::size_t bytes);
+
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
         auto physical_row = get_physical_row(row);
@@ -562,6 +564,8 @@ class Column {
 
     [[nodiscard]] ChunkedBuffer& buffer();
 
+    [[nodiscard]] const ChunkedBuffer& buffer() const;
+
     uint8_t* bytes_at(size_t bytes, size_t required);
 
     const uint8_t* bytes_at(size_t bytes, size_t required) const;
@@ -576,75 +580,6 @@ class Column {
                 return i;
         }
         return std::nullopt;
-    }
-
-    // Only works if column is of numeric type and is monotonically increasing
-    // Returns the index such that if val were inserted before that index, the order would be preserved
-    // By default returns the lowest index satisfying this property. If from_right=true, returns the highest such index
-    // from (inclusive) and to (exclusive) can optionally be provided to search a subset of the rows in the column
-    template<class T>
-    requires std::integral<T> || std::floating_point<T>
-    size_t search_sorted(
-            T val, bool from_right = false, std::optional<int64_t> from = std::nullopt,
-            std::optional<int64_t> to = std::nullopt
-    ) const {
-        // There will not necessarily be a unique answer for sparse columns
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                !is_sparse(), "Column::search_sorted not supported with sparse columns"
-        );
-        auto column_data = data();
-        return details::visit_type(
-                type().data_type(),
-                [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
-                    using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
-                    auto accessor = random_accessor<typename type_info::TDT>(&column_data);
-                    if constexpr (std::is_same_v<T, typename type_info::RawType>) {
-                        int64_t first = from.value_or(0);
-                        const int64_t last = to.value_or(row_count());
-                        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                                last >= first,
-                                "Invalid input range for Column::search_sorted. First: {}, Last: {}",
-                                first,
-                                last
-                        );
-                        int64_t step;
-                        int64_t count{last - first};
-                        int64_t idx;
-                        if (from_right) {
-                            while (count > 0) {
-                                idx = first;
-                                step = count / 2;
-                                idx = std::min(idx + step, last);
-                                if (accessor.at(idx) <= val) {
-                                    first = ++idx;
-                                    count -= step + 1;
-                                } else {
-                                    count = step;
-                                }
-                            }
-                        } else {
-                            while (count > 0) {
-                                idx = first;
-                                step = count / 2;
-                                idx = std::min(idx + step, last);
-                                if (accessor.at(idx) < val) {
-                                    first = ++idx;
-                                    count -= step + 1;
-                                } else {
-                                    count = step;
-                                }
-                            }
-                        }
-                        return first;
-                    } else {
-                        // TODO: Could relax this requirement using something like has_valid_common_type
-                        internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                                "Column::search_sorted requires input value to be of same type as column"
-                        );
-                        return {};
-                    }
-                }
-        );
     }
 
     [[nodiscard]] static std::vector<std::shared_ptr<Column>> split(

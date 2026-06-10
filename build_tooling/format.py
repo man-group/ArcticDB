@@ -26,8 +26,8 @@ clang_format_version = "19.1.2"
 
 
 def install_tools():
-    black = subprocess.run(["pip", "install", f"black=={black_version}"]).returncode
-    clang = subprocess.run(["pip", "install", f"clang-format=={clang_format_version}"]).returncode
+    black = subprocess.run([sys.executable, "-m", "pip", "install", f"black=={black_version}"]).returncode
+    clang = subprocess.run([sys.executable, "-m", "pip", "install", f"clang-format=={clang_format_version}"]).returncode
     return black or clang
 
 
@@ -47,7 +47,7 @@ def lint_python(in_place: bool, specific_file: str = None):
     else:
         path = "python/"
 
-    command = ["black", "-l", "120", "--extend-exclude", "/(.asv)/"]
+    command = [sys.executable, "-m", "black", "-l", "120", "--extend-exclude", "/(.asv)/"]
 
     if not in_place:
         command.append("--check")
@@ -61,6 +61,7 @@ def lint_python(in_place: bool, specific_file: str = None):
 def lint_cpp(in_place: bool, specific_file: str = None):
     try:
         import clang_format
+        formatter = clang_format._get_executable("clang-format")
     except ImportError:
         raise RuntimeError("clang-format not installed. Run this script with --install-tools then try again")
 
@@ -73,7 +74,7 @@ def lint_cpp(in_place: bool, specific_file: str = None):
             for f in root.rglob(e):
                 files.append(str(f))
 
-    args = ["clang-format"]
+    args = [formatter]
     if in_place:
         args.append("-i")
     else:

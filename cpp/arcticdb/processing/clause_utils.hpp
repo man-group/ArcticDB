@@ -26,7 +26,14 @@ namespace arcticdb {
 using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
 
-enum class ProcessingStructure { ROW_SLICE, TIME_BUCKETED, HASH_BUCKETED, ALL, MULTI_SYMBOL };
+enum class ProcessingStructure {
+    ROW_SLICE,
+    TIME_BUCKETED,
+    HASH_BUCKETED,
+    ALL,
+    MULTI_SYMBOL,
+    ONE_COL_SLICE_MULTIPLE_ROW_SLICES
+};
 
 struct KeepCurrentIndex {};
 struct KeepCurrentTopLevelIndex {};
@@ -198,7 +205,6 @@ ProcessingUnit gather_entities(ComponentManager& component_manager, const std::v
     );
     return res;
 }
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
 using FutureOrSplitter =
         std::variant<folly::Future<pipelines::SegmentAndSlice>, folly::FutureSplitter<pipelines::SegmentAndSlice>>;
@@ -227,12 +233,15 @@ IndexDescriptorImpl generate_index_descriptor(const std::vector<OutputSchema>& i
 
 std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
-proto::descriptors::NormalizationMetadata generate_norm_meta(
-        const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
-);
-
 void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
 
 void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas);
+
+void check_column_presence(
+        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
+        std::string_view clause_name
+);
+
+void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name);
 
 } // namespace arcticdb

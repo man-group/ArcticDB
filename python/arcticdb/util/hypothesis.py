@@ -31,6 +31,8 @@ class column_strategy:
     name: str
     dtype_strategy: Any = None
     restrict_range: bool = False
+    min_value: Any = None
+    max_value: Any = None
 
 
 def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
@@ -107,6 +109,18 @@ def supported_numeric_dtypes(draw):
 
 
 @st.composite
+def signed_only_integer_dtypes(draw):
+    return draw(integer_dtypes(endianness=ENDIANNESS))
+
+
+@st.composite
+def small_nonneg_integer_type_strategies(draw):
+    """Generates numpy signed integer scalars in [0, 49]. Safe as pow exponents (output is always double)."""
+    dtype = draw(integer_dtypes(endianness=ENDIANNESS))
+    return draw(from_dtype(dtype, allow_nan=False, allow_infinity=False, min_value=0, max_value=49))
+
+
+@st.composite
 def supported_string_dtypes(draw):
     return draw(st.just("object"))
 
@@ -124,7 +138,11 @@ def dataframe_strategy(draw, column_strategies, min_size=0):
         if dtype == "object":
             elements = string_strategy
         else:
-            min_value, max_value = restricted_numeric_range(dtype) if column_strat.restrict_range else (None, None)
+            computed_min, computed_max = (
+                restricted_numeric_range(dtype) if column_strat.restrict_range else (None, None)
+            )
+            min_value = column_strat.min_value if column_strat.min_value is not None else computed_min
+            max_value = column_strat.max_value if column_strat.max_value is not None else computed_max
             elements = from_dtype(
                 dtype,
                 allow_nan=False,
@@ -180,10 +198,26 @@ def date(draw, min_date, max_date, unit="ns"):
     return min_date + np.timedelta64(offset_from_start_in_ns, unit)
 
 
+class DataframeStrategyIndexType(Enum):
+    ROWRANGE = "ROWRANGE"
+    DATETIME = "DATETIME"
+
+
 @st.composite
-def dataframe(draw, column_names, column_dtypes, min_date, max_date, index_name="index"):
+def dataframe(
+    draw,
+    column_names,
+    column_dtypes,
+    min_date,
+    max_date,
+    index_name="index",
+    index_type=DataframeStrategyIndexType.DATETIME,
+):
     assert index_name not in column_names, f"Column name '{index_name}' conflicts with index name"
-    index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
+    if index_type == DataframeStrategyIndexType.DATETIME:
+        index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
+    else:
+        index = hs_pd.range_indexes(min_size=1)
     columns = []
     for name, dtype in zip(column_names, column_dtypes):
         if pd.api.types.is_integer_dtype(dtype):

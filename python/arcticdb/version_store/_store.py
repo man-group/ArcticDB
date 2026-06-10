@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import copy
 from dataclasses import dataclass
 import datetime
+import inspect
 import os
 import sys
 from warnings import warn
@@ -23,6 +24,8 @@ import attr
 import warnings
 import difflib
 from datetime import datetime
+
+from arcticdb_ext.exceptions import UserInputException
 from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set, NamedTuple
@@ -32,14 +35,22 @@ import time
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
+from arcticdb_ext.version_store import CompactDataInfo, RecordBatchData, SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
-from arcticdb_ext import get_config_int
+from arcticdb_ext import (
+    get_config_int,
+    get_all_config_int,
+    set_all_config_int,
+    get_all_config_string,
+    set_all_config_string,
+    get_all_config_double,
+    set_all_config_double,
+)
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -354,6 +365,20 @@ class NativeVersionStore:
     )
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
+    _valid_read_kwargs = frozenset(
+        {
+            "iterate_snapshots_if_tombstoned",
+            "force_string_to_object",
+            "optimise_string_memory",
+            "output_format",
+            "dynamic_schema",
+            "set_tz",
+            "allow_sparse",
+            "incomplete",
+            "arrow_string_format_default",
+            "arrow_string_format_per_column",
+        }
+    )
 
     def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
@@ -461,6 +486,19 @@ class NativeVersionStore:
             return cfgs, None
 
     def __setstate__(self, state):
+        # Restore ConfigsMap before any library creation so that
+        # settings like AWS.LogLevel are available when S3ApiInstance initializes.
+        # Note: this merges into the process-wide ConfigsMap singleton rather than
+        # replacing it. In spawn/forkserver children the singleton already has
+        # values from env vars (set_config_from_env_vars runs on import), so the
+        # merge adds back any values that were set via set_config_* in the parent.
+        # Values from the pickle payload take precedence over existing entries.
+        configs = state.get("configs_map")
+        if configs:
+            set_all_config_int(configs.get("int", {}))
+            set_all_config_string(configs.get("string", {}))
+            set_all_config_double(configs.get("double", {}))
+
         lib_cfg = LibraryConfig()
         lib_cfg.ParseFromString(state["lib_cfg"])
         custom_norm = CompositeCustomNormalizer([], False)
@@ -476,6 +514,8 @@ class NativeVersionStore:
             open_mode=open_mode,
             native_cfg=native_cfg,
         )
+        if state.get("skip_df_consolidation"):
+            self._normalizer.df.set_skip_df_consolidation()
 
     def __getstate__(self):
         return {
@@ -484,6 +524,12 @@ class NativeVersionStore:
             "custom_norm": self._custom_normalizer.__getstate__() if self._custom_normalizer is not None else "",
             "open_mode": self._open_mode,
             "native_cfg": self._native_cfg,
+            "configs_map": {
+                "int": get_all_config_int(),
+                "string": get_all_config_string(),
+                "double": get_all_config_double(),
+            },
+            "skip_df_consolidation": getattr(self._normalizer.df, "_skip_df_consolidation", False),
         }
 
     def __repr__(self):
@@ -514,7 +560,7 @@ class NativeVersionStore:
         dynamic_strings,
         coerce_columns,
         norm_failure_options_msg="",
-        index_column=None,
+        index_column=False,
         recursive_normalize_msgpack_no_pickle_fallback=None,
         **kwargs,
     ):
@@ -641,6 +687,25 @@ class NativeVersionStore:
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
 
+    @staticmethod
+    def _validate_kwargs(method, valid_kwargs, kwargs):
+        if "dynamic_schema" in kwargs and "dynamic_schema" in valid_kwargs:
+            log.warning(
+                f"{method}() received 'dynamic_schema' parameter which overrides the library setting. "
+                "Per-call dynamic_schema override is planned to be removed."
+            )
+        invalid_args = []
+        for arg in kwargs.keys():
+            if arg not in valid_kwargs:
+                invalid_args.append(arg)
+        if invalid_args:
+            # Log formatting gets confused by curly braces in input string, hence the conversion to a list
+            msg = f"{method} received invalid kwargs {invalid_args}. Supported kwargs are {sorted(list(valid_kwargs))}"
+            if os.environ.get("ARCTICDB_DISABLE_KWARG_VALIDATION", None) == "1":
+                log.warning(msg)
+            else:
+                raise ArcticNativeException(msg)
+
     def stage(
         self,
         symbol: str,
@@ -648,9 +713,10 @@ class NativeVersionStore:
         validate_index: bool = False,
         sort_on_index: bool = False,
         sort_columns: List[str] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ):
+        self._validate_kwargs("stage", {"norm_failure_options_msg"}, kwargs)
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
         _handle_categorical_columns(symbol, data, True, operation_supports_categoricals=True)
         udm, item, norm_meta = self._try_normalize(
@@ -688,7 +754,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         pickle_on_failure: Optional[bool] = None,
         validate_index: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         """
@@ -728,9 +794,9 @@ class NativeVersionStore:
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
             data to be sorted. Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         kwargs :
             passed through to the write handler
 
@@ -756,6 +822,20 @@ class NativeVersionStore:
         1       6
         2       7
         """
+        self._validate_kwargs(
+            "write",
+            {
+                "dynamic_strings",
+                "parallel",
+                "incomplete",
+                "recursive_normalizers",
+                "recursive_normalize_msgpack_no_pickle_fallback",
+                "coerce_columns",
+                "sparsify_floats",
+                "norm_failure_options_msg",
+            },
+            kwargs,
+        )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
@@ -817,10 +897,11 @@ class NativeVersionStore:
         )
         if self._valid_item_type(item):
             if parallel or incomplete:
+                stacklevel = 3 if inspect.stack()[1].filename.endswith("arcticdb/version_store/library.py") else 2
                 warn(
                     "Staging data with write() is deprecated. Use stage() instead.",
                     DeprecationWarning,
-                    stacklevel=2,
+                    stacklevel=stacklevel,
                 )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
@@ -860,7 +941,7 @@ class NativeVersionStore:
         incomplete: bool = False,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -887,9 +968,9 @@ class NativeVersionStore:
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
             on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
         kwargs :
             passed through to the write handler
 
@@ -932,6 +1013,15 @@ class NativeVersionStore:
         2018-01-05       5
         2018-01-06       6
         """
+        self._validate_kwargs(
+            "append",
+            {
+                "dynamic_strings",
+                "coerce_columns",
+                "write_if_missing",
+            },
+            kwargs,
+        )
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
@@ -959,6 +1049,8 @@ class NativeVersionStore:
         if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
+                    # Note that the V2 API has never called append with the incomplete kwarg, so we don't need the
+                    # stacklevel switching behaviour
                     warn(
                         "Staging data with append() is deprecated. Use stage() instead.",
                         DeprecationWarning,
@@ -988,7 +1080,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
         prune_previous_version: Optional[bool] = None,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -1019,9 +1111,9 @@ class NativeVersionStore:
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
-        index_column: Optional[str], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column: bool, default=False
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True, the first column
+            is treated as the timeseries index.
 
         Returns
         -------
@@ -1052,6 +1144,16 @@ class NativeVersionStore:
         2018-01-03      40
         2018-01-04       4
         """
+        self._validate_kwargs(
+            "update",
+            {
+                "dynamic_strings",
+                "dynamic_schema",
+                "coerce_columns",
+            },
+            kwargs,
+        )
+
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1096,7 +1198,7 @@ class NativeVersionStore:
         data: TimeSeriesType,
         date_range: Optional[DateRangeInput],
         update_query: _PythonVersionStoreUpdateQuery,
-        index_column: Optional[str] = None,
+        index_column: bool = False,
     ) -> TimeSeriesType:
         """
         Parameters
@@ -1126,7 +1228,7 @@ class NativeVersionStore:
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
         upsert: bool = False,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[bool]] = None,
     ):
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
@@ -1216,7 +1318,7 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of)
         self.version_store.drop_column_stats_version(symbol, column_stats, version_query)
 
-    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> pd.DataFrame:
+    def read_column_stats(self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs) -> "pa.Table":
         """
         Read all the column statistics data that has been generated for the given symbol.
 
@@ -1229,12 +1331,12 @@ class NativeVersionStore:
 
         Returns
         -------
-        `pandas.DataFrame`
-            DataFrame representing the stored column statistics for each row-slice in a human-readable format.
+        `pyarrow.Table`
+            Table representing the stored column statistics for each row-slice in a human-readable format.
         """
         version_query = self._get_version_query(as_of, **kwargs)
-        data = denormalize_dataframe(self.version_store.read_column_stats_version(symbol, version_query))
-        return data
+        read_result = ReadResult(*self.version_store.read_column_stats_version(symbol, version_query))
+        return self._arrow_output_frame_to_table(read_result.frame_data)
 
     def get_column_stats_info(
         self, symbol: str, as_of: Optional[VersionQueryInput] = None, **kwargs
@@ -1338,6 +1440,8 @@ class NativeVersionStore:
         Dict
             Dictionary of symbol mapping with the versioned items
         """
+        self._validate_kwargs("batch_read", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+
         _check_batch_kwargs(NativeVersionStore.batch_read, NativeVersionStore.read, kwargs)
         throw_on_error = True
         versioned_items = self._batch_read_to_versioned_items(
@@ -1504,6 +1608,8 @@ class NativeVersionStore:
                 * Different index types, including MultiIndexes with different numbers of levels
                 * Incompatible column types e.g. joining a string column to an integer column
         """
+        self._validate_kwargs("batch_read_and_join", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+
         implement_read_index = kwargs.get("implement_read_index", False)
         if columns:
             columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
@@ -1558,6 +1664,8 @@ class NativeVersionStore:
         Dict
             Dictionary of symbol mapping with the versioned items. The data attribute will be None.
         """
+        self._validate_kwargs("batch_read_metadata", self._valid_read_kwargs, kwargs)
+
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         include_errors_and_none_meta = False
         meta_items = self._batch_read_metadata_to_versioned_items(
@@ -1626,6 +1734,7 @@ class NativeVersionStore:
             Dictionary of symbol mapped to dictionary of [int, VersionedItem], where the int represents the version for
             each VersionedItem for each symbol. The data attribute will be None.
         """
+        self._validate_kwargs("batch_read_metadata_multi", self._valid_read_kwargs, kwargs)
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
@@ -1668,7 +1777,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         pickle_on_failure=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1697,9 +1806,9 @@ class NativeVersionStore:
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
             Note that no checks are performed for Arrow input data.
-        index_column_vector: Optional[List[Optional[str]]], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column_vector: Optional[List[bool]], default=None
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
+            the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
@@ -1723,6 +1832,12 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        self._validate_kwargs(
+            "batch_write",
+            {"dynamic_strings", "norm_failure_options_msg"},
+            kwargs,
+        )
+
         _check_batch_kwargs(NativeVersionStore.batch_write, NativeVersionStore.write, kwargs)
         throw_on_error = True
         return self._batch_write_internal(
@@ -1746,7 +1861,7 @@ class NativeVersionStore:
         pickle_on_failure: bool,
         norm_failure_msg: str,
         operation_supports_categoricals: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
@@ -1755,7 +1870,7 @@ class NativeVersionStore:
             metadata_vector = list(metadata_vector)
 
         if index_column_vector is None:
-            index_column_vector = len(symbols) * [None]
+            index_column_vector = len(symbols) * [False]
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(
@@ -1790,7 +1905,7 @@ class NativeVersionStore:
         pickle_on_failure=None,
         validate_index: bool = False,
         throw_on_error: bool = True,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1879,7 +1994,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[Optional[str]]] = None,
+        index_column_vector: Optional[List[bool]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1906,9 +2021,9 @@ class NativeVersionStore:
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
             Note that no checks are performed for Arrow input data.
-        index_column_vector: Optional[List[Optional[str]]], default=None
-            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
-            table.
+        index_column_vector: Optional[List[bool]], default=None
+            Only applicable when data is a PyArrow Table or Polars DataFrame. If True for a given entry,
+            the first column is treated as the timeseries index.
             i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
@@ -1924,6 +2039,12 @@ class NativeVersionStore:
         UnsortedDataException
             If data is unsorted, when validate_index is set to True.
         """
+        self._validate_kwargs(
+            "batch_append",
+            {"dynamic_strings", "write_if_missing"},
+            kwargs,
+        )
+
         throw_on_error = True
         _check_batch_kwargs(NativeVersionStore.batch_append, NativeVersionStore.append, kwargs)
         return self._batch_append_to_versioned_items(
@@ -2015,6 +2136,8 @@ class NativeVersionStore:
             Includes the version number that was just written.
             i-th entry corresponds to i-th element of `symbols`.
         """
+        self._validate_kwargs("batch_restore_version", self._valid_read_kwargs, kwargs)
+
         _check_batch_kwargs(NativeVersionStore.batch_restore_version, NativeVersionStore.restore_version, kwargs)
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
@@ -2262,7 +2385,14 @@ class NativeVersionStore:
         return version_query, read_options, read_query, output_format
 
     def _get_column_stats(self, column_stats):
-        return None if column_stats is None else _ColumnStats(column_stats)
+        if column_stats is None:
+            return None
+        for k, v in column_stats.items():
+            if k is None:
+                raise UserInputException("Found None key in provided column_stats")
+            if not isinstance(k, str):
+                raise UserInputException(f"Found non-str key in provided column_stats [{k}]")
+        return _ColumnStats(column_stats)
 
     def _postprocess_df_with_only_rowcount_idx(self, read_result, row_range):
         index_meta = read_result.norm.df.common.index
@@ -2345,6 +2475,13 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        # allow_secondary does not do anything with arcticdb (and never has), but it was a valid argument to read with
+        # Arctic Python. Some users have code that is agnostic to whether ArcticDB or Arctic Python is the backend, so
+        # do not raise/log for this specific kwarg
+        self._validate_kwargs(
+            "read", self._valid_read_kwargs.union({"implement_read_index", "allow_secondary"}), kwargs
+        )
+
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         # Take a copy as _get_queries can modify the input argument, which makes reusing the input counter-intuitive
@@ -2388,6 +2525,8 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        self._validate_kwargs("head", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
+
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
         q = QueryBuilder()
@@ -2422,6 +2561,7 @@ class NativeVersionStore:
         -------
         VersionedItem
         """
+        self._validate_kwargs("tail", self._valid_read_kwargs.union({"implement_read_index"}), kwargs)
 
         implement_read_index = kwargs.get("implement_read_index", False)
         columns = self._resolve_empty_columns(columns, implement_read_index)
@@ -2484,8 +2624,12 @@ class NativeVersionStore:
                     row_range = (0, head)
                 elif tail:
                     row_range = (-tail, None)
-                elif read_query.row_filter is not None:
-                    row_range = self._compute_filter_start_end_row(read_result, read_query)
+                elif isinstance(read_query.row_filter, _RowRange):
+                    # Compute n_rows from the filter, clamped to the total symbol row count.
+                    # This helps us to match _denormalize_single_index.
+                    total_rows = read_result.frame_data.row_count
+                    n_rows = max(0, min(read_query.row_filter.end, total_rows) - read_query.row_filter.start)
+                    row_range = (0, n_rows)
                 return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
             if read_query.row_filter is not None and read_query.needs_post_processing:
@@ -2566,6 +2710,14 @@ class NativeVersionStore:
         -------
         Pandas DataFrame representing the index key in a human-readable format.
         """
+        self._validate_kwargs(
+            "read_index",
+            {
+                "iterate_snapshots_if_tombstoned",
+            },
+            kwargs,
+        )
+
         version_query = self._get_version_query(as_of, **kwargs)
         data = denormalize_dataframe(self.version_store.read_index(symbol, version_query))
         return data
@@ -2587,6 +2739,8 @@ class NativeVersionStore:
         VersionedItem
             Includes the version number that was just written.
         """
+        self._validate_kwargs("restore_version", self._valid_read_kwargs, kwargs)
+
         version_query = self._get_version_query(as_of, **kwargs)
         read_options, _ = self._get_read_options_and_output_format(**kwargs)
         read_result = ReadResult(*self.version_store.restore_version(symbol, version_query, read_options))
@@ -2737,16 +2891,19 @@ class NativeVersionStore:
 
         return index_columns
 
+    @staticmethod
+    def _arrow_output_frame_to_table(frame_data: ArrowOutputFrame) -> "pa.Table":
+        record_batches = [
+            pa.RecordBatch._import_from_c(rb.array(), rb.schema()) for rb in frame_data.extract_record_batches()
+        ]
+        if len(record_batches) == 0:
+            # We get an empty list of record batches when output has no columns
+            return pa.Table.from_arrays([])
+        return pa.Table.from_batches(record_batches)
+
     def _adapt_frame_data(self, frame_data, norm, output_format):
         if isinstance(frame_data, ArrowOutputFrame):
-            record_batches = []
-            for record_batch in frame_data.extract_record_batches():
-                record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            if len(record_batches) == 0:
-                # We get an empty list of record batches when output has no columns
-                table = pa.Table.from_arrays([])
-            else:
-                table = pa.Table.from_batches(record_batches)
+            table = self._arrow_output_frame_to_table(frame_data)
             data = self._normalizer.denormalize(table, norm)
             if norm.HasField("custom"):
                 raise ArcticDbNotYetImplemented(
@@ -2754,7 +2911,10 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.POLARS.lower():
+            if (
+                output_format.lower() == OutputFormat.POLARS.lower()
+                and not norm.WhichOneof("input_type") == "msg_pack_frame"
+            ):
                 data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(frame_data, norm)
@@ -3022,6 +3182,14 @@ class NativeVersionStore:
             List of version queries. See documentation of `read` method for more details.
             i-th entry corresponds to i-th element of `symbols`.
         """
+        self._validate_kwargs(
+            "add_to_snapshot",
+            {
+                "iterate_snapshots_if_tombstoned",
+            },
+            kwargs,
+        )
+
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
         self.version_store.add_to_snapshot(snap_name, symbols, version_queries)
 
@@ -3066,6 +3234,12 @@ class NativeVersionStore:
         prune_previous_versions : `Optional[bool]`, default=False
             Remove previous versions from version list. Uses library default if left as None.
         """
+        self._validate_kwargs(
+            "delete",
+            {"dynamic_schema", "prune_previous_versions", "prune_previous_version"},
+            kwargs,
+        )
+
         if date_range is not None:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
             dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
@@ -3310,6 +3484,14 @@ class NativeVersionStore:
             Structure including the metadata read from the store.
             The data attribute will not be populated.
         """
+        self._validate_kwargs(
+            "read_metadata",
+            {
+                "iterate_snapshots_if_tombstoned",
+            },
+            kwargs,
+        )
+
         version_query = self._get_version_query(as_of, **kwargs)
         version_item, udm = self.version_store.read_metadata(symbol, version_query)
         meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
@@ -3454,6 +3636,14 @@ class NativeVersionStore:
         `bool`
             True if the symbol is pickled, False otherwise.
         """
+        self._validate_kwargs(
+            "is_symbol_pickled",
+            {
+                "iterate_snapshots_if_tombstoned",
+                "include_index_segment",
+            },
+            kwargs,
+        )
         dit = self._get_info(symbol, as_of, **kwargs)
         return self.is_pickled_descriptor(dit.timeseries_descriptor)
 
@@ -3518,6 +3708,8 @@ class NativeVersionStore:
         `Tuple[datetime, datetime]`
             The earliest and latest timestamps in the index.
         """
+        self._validate_kwargs("get_timerange_for_symbol", set(), kwargs)
+
         given_version = max([v["version"] for v in self.list_versions(symbol)]) if version is None else version
         version_query = self._get_version_query(given_version)
 
@@ -3551,6 +3743,7 @@ class NativeVersionStore:
         `Optional[int]`
             The number of rows in the specified revision of the symbol, or `None` if the symbol is pickled.
         """
+        self._validate_kwargs("get_num_rows", {"iterate_snapshots_if_tombstoned", "include_index_segment"}, kwargs)
         dit = self._get_info(symbol, as_of, **kwargs)
         return None if self.is_pickled_descriptor(dit.timeseries_descriptor) else dit.timeseries_descriptor.total_rows
 
@@ -3685,6 +3878,11 @@ class NativeVersionStore:
             - date_range, `tuple`
             - sorted, `str`
         """
+        self._validate_kwargs(
+            "get_info",
+            {"iterate_snapshots_if_tombstoned", "include_index_segment", "date_range_ns_precision"},
+            kwargs,
+        )
         dit = self._get_info(symbol, version, **kwargs)
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         return self._process_info(dit, date_range_ns_precision)
@@ -3780,8 +3978,140 @@ class NativeVersionStore:
         v = self.version_store.write_metadata(symbol, udm, prune_previous_version)
         return self._convert_thin_cxx_item_to_python(v, metadata)
 
+    def compact_data_explain_plan(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+    ) -> CompactDataInfo:
+        """
+        Do a dry run of compact_data, demonstrating what the impact would be of calling compact_data without actually
+        modifying any data on disk.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to perform the dry run on.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting.
+
+        Returns
+        -------
+        CompactDataInfo
+            Structure containing information about what the fragmentation of the symbol looks like currently, and what
+            it would look like after a call to compact_data.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> compact_data_info = lib.compact_data_explain_plan("sym")
+        >>> compact_data_info.row_slices_before
+        [0, 1000, 2000, ..., 99000, 100000]
+        >>> compact_data_info.row_slices_after
+        [0, 100000]
+        >>> compact_data_info.num_row_slices_before
+        100
+        >>> compact_data_info.num_row_slices_after
+        1
+        >>> compact_data_info.version_id_before
+        99
+        >>> compact_data_info.version_id_after
+        100
+        >>> compact_data_info.will_do_work
+        True
+        """
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        res = self.version_store._compact_data_explain_plan(symbol, rows_per_segment)
+        return res
+
+    def compact_data(
+        self,
+        symbol: str,
+        rows_per_segment: Optional[int] = None,
+        prune_previous_version: Optional[bool] = None,
+    ) -> VersionedItem:
+        """
+        Compact the data keys associated with the latest version of a symbol such that the number of rows in each
+        segment is close to rows_per_segment. After compaction, all segments will have a row count within 33% of
+        rows_per_segment.
+
+        This operation creates a new version, unless the data is already compacted.
+
+        The metadata from the version being compacted is maintained with the newly created version.
+
+        Note that any fixed-width string columns that are compacted by this method will be coerced to dynamic UTF-8.
+
+        Parameters
+        ----------
+        symbol : str
+            The symbol to compact the data keys of.
+        rows_per_segment : Optional[int], default=None
+            The target number of rows for each segment after the compaction. If None, uses the library configuration
+            setting. Note that subsequent calls to write, append, and update will continue to use the library
+            configuration setting.
+        prune_previous_version : bool, default=None
+            Remove previous versions from version list. Uses library default if left as None.
+
+        Returns
+        -------
+        VersionedItem
+            Structure containing information including the version number of the written symbol in the store. The data
+            and metadata attributes will not be populated.
+
+        Raises
+        ------
+        StorageException
+            If symbol doesn't exist
+        ArcticNativeException
+            If invalid rows_per_segment is provided
+        SchemaException
+            If the existing data is recursively normalized
+
+        Examples
+        --------
+
+        >>> df = pd.DataFrame({"col": np.arange(100_000)})
+        >>> for idx in range(100):
+        >>>     lib.append("sym", df[idx * 1_000: (idx + 1) * 1_000])
+        >>> len(lib.read_index("sym"))
+        100
+        >>> lib.compact_data("sym")
+        >>> len(lib.read_index("sym"))
+        1
+        """
+        check(
+            rows_per_segment is None or rows_per_segment > 0,
+            f"rows_per_segment must be >0, received {rows_per_segment}",
+        )
+        prune_previous_version = resolve_defaults(
+            "prune_previous_version",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            existing_value=prune_previous_version,
+        )
+        cxx_versioned_item = self.version_store._compact_data(symbol, rows_per_segment, prune_previous_version)
+        return self._convert_thin_cxx_item_to_python(cxx_versioned_item, None)
+
     def is_symbol_fragmented(self, symbol: str, segment_size: Optional[int] = None) -> bool:
         """
+        This method has been deprecated and will be removed in a future release. Please use compact_data_explain_plan
+        instead.
+
         Check whether the number of segments that would be reduced by compaction is more than or equal to the
         value specified by the configuration option "SymbolDataCompact.SegmentCount" (defaults to 100).
 
@@ -3802,6 +4132,12 @@ class NativeVersionStore:
         -------
         bool
         """
+        stacklevel = 3 if inspect.stack()[1].filename.endswith("arcticdb/version_store/library.py") else 2
+        warn(
+            "is_symbol_fragmented is deprecated and will be removed in a future release. Please use compact_data_explain_plan instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
         return self.version_store.is_symbol_fragmented(symbol, segment_size)
 
     def defragment_symbol_data(
@@ -3812,6 +4148,8 @@ class NativeVersionStore:
         **kwargs,
     ) -> VersionedItem:
         """
+        This method has been deprecated and will be removed in a future release. Please use compact_data instead.
+
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
         This method calls `is_symbol_fragmented` to determine whether to proceed with the defragmentation operation.
 
@@ -3869,6 +4207,13 @@ class NativeVersionStore:
         Config map setting - SymbolDataCompact.SegmentCount will be replaced by a library setting
         in the future. This API will allow overriding the setting as well.
         """
+        stacklevel = 3 if inspect.stack()[1].filename.endswith("arcticdb/version_store/library.py") else 2
+        warn(
+            "defragment_symbol_data is deprecated and will be removed in a future release. Please use compact_data instead.",
+            DeprecationWarning,
+            stacklevel=stacklevel,
+        )
+        self._validate_kwargs("defragment_symbol_data", {"prune_previous_version"}, kwargs)
 
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
         if proto_cfg.bucketize_dynamic:
@@ -3937,13 +4282,21 @@ class NativeVersionStore:
             The elements of `MergeStrategy` can be either values of the `MergeAction` enum or case-insensitive strings
             representing the enum values.
         on : Optional[List[str]]
-            !!! warning
-                Not yet implemented
-
             Columns which are used to determine row equality between source and target. A row is considered matched when
             all specified columns have equal values in both source and target.
 
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
+
+            Note on equality semantics:
+                - In float columns, NaN is considered equal to NaN.
+                - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
+                  and None == NaN all evaluate to True.
+
+            If a column name appears more than once in the source or the target it must not be added in the on
+            parameter.
+
+            In the case of a datetime-indexed DataFrame the on parameter must not contain the name of the datetime
+            index.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
@@ -3966,7 +4319,7 @@ class NativeVersionStore:
             If symbol doesn't exist and `upsert=False`
         UserInputException
             If strategy is not one of the supported strategies listed above
-        SortingException
+        UnsortedDataException
             If date-time index is used and source or target are not sorted
         SchemaException
             If dynamic schema is used or if source's schema is incompatible with target's schema

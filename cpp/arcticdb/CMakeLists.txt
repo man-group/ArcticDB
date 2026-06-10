@@ -2,6 +2,7 @@ option(TEST "Build all tests." ON)
 option(BUILD_WITH_REMOTERY "Build ArcticDB with Remotery (used for performance analysis)" OFF)
 option(SSL_LINK "Link against SSL libraries." ON)
 option(HIDE_LINKED_SYMBOLS "Passed `exclude-libs` through to linker, ensuring linked library symbols are not exported. Shrinks binary size." ON)
+option(ARCTICDB_THIN_ARCHIVES "Use thin archives for intermediate static libraries. Faster incremental builds but archives are not self-contained — do not use if distributing link-time intermediate results like arcticdb_core_static.a." OFF)
 
 find_package(GTest CONFIG REQUIRED)
 include(CTest)
@@ -102,11 +103,7 @@ add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
-# Libraries baked into the internal and external Linux images are found by searching various paths
-# On Windows, vcpkg will provide a "Config" which takes precedence
-if (WIN32)
-    find_package(Iconv)
-else ()
+if (NOT WIN32)
     find_library(Sasl2_LIBRARY NAMES sasl2 libsasl2 PATHS /usr/local/lib/libsasl2.a REQUIRED)
 endif ()
 
@@ -188,7 +185,7 @@ set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
         arrow/arrow_handlers.hpp
-        arrow/arrow_output_frame.hpp
+        arrow/arrow_c_interface.hpp
         arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
@@ -215,15 +212,18 @@ set(arcticdb_srcs
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
         column_store/column_algorithms.hpp
+        column_store/column_reslicer.hpp
         column_store/column_utils.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
+        column_store/segment_reslicer.hpp
         column_store/segment_utils.hpp
         column_store/memory_segment_pretty_print.hpp
         entity/atom_key.hpp
+        entity/compact_data_info.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
         entity/key.hpp
@@ -253,7 +253,10 @@ set(arcticdb_srcs
         log/log.hpp
         log/trace.hpp
         pipeline/column_mapping.hpp
+        pipeline/column_name_resolution.hpp
         pipeline/column_stats.hpp
+        pipeline/column_stats_filter.hpp
+        pipeline/column_stats_dispatch.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -273,6 +276,7 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/normalization_utils.hpp
         python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
@@ -371,6 +375,7 @@ set(arcticdb_srcs
         util/buffer.hpp
         util/buffer_pool.hpp
         util/clock.hpp
+        util/collection_utils.hpp
         util/configs_map.hpp
         util/constants.hpp
         util/constructors.hpp
@@ -417,6 +422,7 @@ set(arcticdb_srcs
         util/variant.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
+        version/merge_options.hpp
         version/schema_checks.hpp
         version/snapshot.hpp
         version/version_constants.hpp
@@ -434,7 +440,7 @@ set(arcticdb_srcs
         version/python_bindings_common.hpp
         # CPP files
         arrow/arrow_handlers.cpp
-        arrow/arrow_output_frame.cpp
+        arrow/arrow_c_interface.cpp
         arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
@@ -451,15 +457,18 @@ set(arcticdb_srcs
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
+        column_store/column_reslicer.cpp
         column_store/column_utils.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
         column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/segment_reslicer.cpp
         column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
+        entity/compact_data_info.cpp
         entity/data_error.cpp
         entity/field_collection.cpp
         entity/field_collection_proto.cpp
@@ -474,7 +483,10 @@ set(arcticdb_srcs
         entity/types_proto.cpp
         log/log.cpp
         pipeline/column_mapping.cpp
+        pipeline/column_name_resolution.cpp
         pipeline/column_stats.cpp
+        pipeline/column_stats_filter.cpp
+        pipeline/column_stats_dispatch.cpp
         pipeline/frame_slice.cpp
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
@@ -491,13 +503,16 @@ set(arcticdb_srcs
         pipeline/value_set.cpp
         pipeline/write_frame.cpp
         python/python_bindings_common.cpp
-        python/normalization_checks.cpp
+        python/normalization_utils.cpp
         python/python_strings.cpp
         python/python_utils.cpp
         python/numpy_buffer_holder.cpp
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
+        processing/clause_compact_data.cpp
+        processing/clause_merge_update.cpp
+        processing/clause_resample.cpp
         processing/clause_utils.cpp
         processing/component_manager.cpp
         processing/expression_node.cpp
@@ -514,6 +529,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_binary_operator_pow.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
@@ -574,6 +590,7 @@ set(arcticdb_srcs
         version/local_versioned_engine.cpp
         version/schema_checks.cpp
         version/op_log.cpp
+        version/merge_options.cpp
         version/snapshot.cpp
         version/symbol_list.cpp
         version/version_core.cpp
@@ -585,6 +602,8 @@ set(arcticdb_srcs
         version/python_bindings_common.cpp
         storage/s3/ec2_utils.cpp
 )
+strip_fd_from_compile_object()
+set_pdb_name_per_translation_unit(${arcticdb_srcs})
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -793,11 +812,7 @@ else()
     endif()
 endif()
 
-if (WIN32)
-    list (APPEND arcticdb_core_libraries
-            Iconv::Iconv
-            )
-else ()
+if (NOT WIN32)
 
     if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         list (APPEND arcticdb_core_libraries stdc++fs)
@@ -814,6 +829,9 @@ else ()
             ${Sasl2_LIBRARY}
             )
 endif ()
+
+find_package(Boost REQUIRED COMPONENTS thread)
+list (APPEND arcticdb_core_libraries Boost::thread)
 
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
@@ -858,6 +876,18 @@ if(NOT ${ARCTICDB_USING_CONDA})
     target_include_directories(arcticdb_core_object PRIVATE ${THIRD_PARTY_INCLUDE_DIRS})
 endif()
 
+if(ARCTICDB_THIN_ARCHIVES)
+    # Override archive creation to use thin archives (store paths, not data).
+    # Skip ranlib: the symbol index is unnecessary because arcticdb_core_static contributes
+    # nearly all its members to arcticdb_ext.so (mold reads all members directly; GNU ld
+    # selects them all via symbol resolution since almost every symbol is referenced).
+    # Saves ~26s per incremental build (ar: 14s + ranlib: 12s → ar qcT: 3.5s + no ranlib).
+    set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_FINISH "true")
+    set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcT <TARGET> <LINK_FLAGS> <OBJECTS>")
+    set(CMAKE_C_ARCHIVE_FINISH   "true")
+endif()
+
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
 # Disable default api so both UTF-8 and UTF-32 can be supported
@@ -891,11 +921,13 @@ set(arcticdb_python_srcs
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
         util/python_bindings.cpp
-        python/reader.hpp
-        python/adapt_read_dataframe.hpp)
-
-add_library(arcticdb_python STATIC ${arcticdb_python_srcs})
-
+)
+set(arcticdb_python_headers
+    python/reader.hpp
+    python/adapt_read_dataframe.hpp
+)
+set_pdb_name_per_translation_unit(${arcticdb_python_srcs})
+add_library(arcticdb_python STATIC ${arcticdb_python_srcs} ${arcticdb_python_headers})
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_python")
     target_precompile_headers(
@@ -933,12 +965,13 @@ endif ()
 
 ## arcticdb_ext python module
 # This configures: linking to Python::Module + pybind, output pre-/suf-fix, -fvisibility=hidden, strip release build
-pybind11_add_module(arcticdb_ext MODULE
+set(arcticdb_pybind_module_src
         python/python_module.cpp
         python/arctic_version.cpp
-        python/arctic_version.hpp
-        )
-
+)
+set(arcticdb_pybind_module_headers python/arctic_version.hpp)
+pybind11_add_module(arcticdb_ext MODULE ${arcticdb_pybind_module_src} ${arcticdb_pybind_module_headers})
+set_pdb_name_per_translation_unit(${arcticdb_pybind_module_src})
 
 if (HIDE_LINKED_SYMBOLS AND NOT WIN32)
     if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
@@ -1016,6 +1049,7 @@ if(${TEST})
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_column_data_random_accessor.cpp
+            column_store/test/test_column_reslicer.cpp
             column_store/test/test_index_filtering.cpp
             column_store/test/test_memory_segment.cpp
             column_store/test/test_statistics.cpp
@@ -1023,6 +1057,7 @@ if(${TEST})
             entity/test/test_key_serialization.cpp
             entity/test/test_metrics.cpp
             entity/test/test_ref_key.cpp
+            entity/test/test_variant_key.cpp
             entity/test/test_tensor.cpp
             log/test/test_log.cpp
             pipeline/test/test_container.hpp
@@ -1031,9 +1066,14 @@ if(${TEST})
             pipeline/test/test_frame_allocation.cpp
             pipeline/test/test_rollback.cpp
             pipeline/test/test_value.cpp
+            pipeline/test/test_column_stats_data.cpp
+            pipeline/test/test_column_stats_dispatch.cpp
+            pipeline/test/test_column_stats_dispatch_range_vs_range.cpp
+            pipeline/test/test_column_stats_isin.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
+            processing/test/test_compact_data.cpp
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
@@ -1070,6 +1110,7 @@ if(${TEST})
             util/test/gtest_main.cpp
             util/test/random_throw.hpp
             util/test/test_bitmagic.cpp
+            util/test/test_bitset.cpp
             util/test/test_buffer_pool.cpp
             util/test/test_composite.cpp
             util/test/test_cursor.cpp
@@ -1104,7 +1145,8 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-)
+    )
+    set_pdb_name_per_translation_unit(${unit_test_srcs})
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1200,13 +1242,17 @@ if(${TEST})
             arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
+            column_store/test/benchmark_column_reslicer.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
             processing/test/benchmark_common.cpp
+            processing/test/benchmark_resample.cpp
             processing/test/benchmark_ternary.cpp
             util/test/benchmark_bitset.cpp
-            version/test/benchmark_write.cpp)
+            version/test/benchmark_write.cpp
+    )
+    set_pdb_name_per_translation_unit(${benchmark_srcs})
 
     add_executable(benchmarks ${benchmark_srcs})
 
@@ -1230,6 +1276,7 @@ if(${TEST})
             column_store/test/rapidcheck_column.cpp
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
+            processing/test/rapidcheck_compact_data.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_bitset.cpp
@@ -1238,8 +1285,9 @@ if(${TEST})
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
-            version/test/rapidcheck_version_map.cpp)
-
+            version/test/rapidcheck_version_map.cpp
+    )
+    set_pdb_name_per_translation_unit(${rapidcheck_srcs})
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME

@@ -185,8 +185,16 @@ bool operator==(const Column& left, const Column& right) {
                 for (auto i = 0u; i < left.row_count(); ++i) {
                     auto left_val = left.scalar_at<LeftRawType>(i);
                     auto right_val = right.scalar_at<RightRawType>(i);
-                    if (left_val != right_val)
-                        return false;
+                    const bool same = left_val == right_val;
+                    if constexpr (std::floating_point<LeftRawType>) {
+                        if (!same && !(left_val && right_val && std::isnan(*left_val) && std::isnan(*right_val))) {
+                            return false;
+                        }
+                    } else {
+                        if (!same) {
+                            return false;
+                        }
+                    }
                 }
                 return true;
             } else {
@@ -217,9 +225,9 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
 
 Column::Column(
         TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-        size_t extra_bytes_per_block
+        DetachableBlockConfig block_config
 ) :
-    data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
+    data_(expected_rows * entity::data_type_size(type), allocation_type, block_config),
     type_(type),
     allow_sparse_(allow_sparse) {
     ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -312,7 +320,15 @@ void Column::advance_data(std::size_t size) { data_.advance(position_t(size)); }
 
 void Column::advance_shapes(std::size_t size) { shapes_.advance(position_t(size)); }
 
-[[nodiscard]] ChunkedBuffer& Column::buffer() { return data_.buffer(); }
+void Column::allocate_and_advance_by(std::size_t bytes) {
+    util::check(bytes != 0, "allocate_and_advance_by data called with zero size");
+    data_.ensure_bytes(bytes);
+    advance_data(bytes);
+}
+
+ChunkedBuffer& Column::buffer() { return data_.buffer(); }
+
+const ChunkedBuffer& Column::buffer() const { return data_.buffer(); }
 
 uint8_t* Column::bytes_at(size_t bytes, size_t required) {
     ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);
@@ -399,9 +415,11 @@ void Column::unsparsify(size_t num_rows) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
-        auto dest = ChunkedBuffer::presized(dest_bytes);
+        auto alloc_type = data_.buffer().allocation_type();
+        auto dest = alloc_type == AllocationType::DETACHABLE ? ChunkedBuffer(dest_bytes, AllocationType::DETACHABLE)
+                                                             : ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
-        util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
+        util::expand_dense_buffer_and_promote_type<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
         std::swap(dest, data_.buffer());
     });
     sparse_map_ = std::nullopt;
@@ -777,6 +795,12 @@ void Column::inflate_string_arrays(const StringPool& string_pool) {
 
     CursoredBuffer<ChunkedBuffer> data;
     CursoredBuffer<Buffer> shapes;
+    // Preallocate shapes once for all rows. Without this each per-row
+    // inflate_string_array call would grow Buffer-backed shapes_ by 8 bytes,
+    // realloc+memcpy'ing the cumulative array — O(N^2) on tall string-array
+    // columns.
+    if (row_count() > 0)
+        shapes.buffer().reserve(row_count() * sizeof(shape_t));
     boost::container::small_vector<position_t, 1> offsets;
     for (position_t row = 0; row < row_count(); ++row) {
         auto string_refs = tensor_at<position_t>(row).value();
@@ -1033,6 +1057,6 @@ const util::BitMagic& Column::sparse_map() const {
 
 std::optional<util::BitMagic>& Column::opt_sparse_map() { return sparse_map_; }
 
-std::optional<util::BitMagic> Column::opt_sparse_map() const { return sparse_map_; }
+const std::optional<util::BitMagic>& Column::opt_sparse_map() const { return sparse_map_; }
 
 } // namespace arcticdb

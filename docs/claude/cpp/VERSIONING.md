@@ -114,8 +114,16 @@ Read Request (symbol, version_query)
            │
            ▼
 ┌─────────────────────┐
-│   Index Lookup      │  ← Read TABLE_INDEX
-│                     │     Determine which segments needed
+│   Index + Stats     │  ← Read TABLE_INDEX and COLUMN_STATS
+│   Fetch (parallel)  │     in parallel via fetch_index_and_column_stats()
+│                     │     Bundled into IndexInformation
+└──────────┬──────────┘
+           │
+           ▼
+┌─────────────────────┐
+│   Segment filtering │  ← Determine which segments needed
+│                     │     Column stats prune segments
+│                     │     that cannot match the filter
 └──────────┬──────────┘
            │
            ▼
@@ -130,6 +138,28 @@ Read Request (symbol, version_query)
 │   (read_frame)      │
 └─────────────────────┘
 ```
+
+### IndexInformation and VersionIdentifier
+
+`IndexInformation` (`version_tasks.hpp`) bundles a pre-fetched index key/segment pair with an optional column stats segment:
+
+```cpp
+struct IndexInformation {
+    std::pair<VariantKey, SegmentInMemory> index_;
+    std::optional<SegmentInMemory> column_stats_;
+};
+```
+
+`VersionIdentifier` (`version_tasks.hpp`) is the variant passed into `setup_pipeline_context()`:
+
+| Alternative | When used |
+|-------------|-----------|
+| `VersionedItem` | Resolved to `IndexInformation` by `fetch_index_and_column_stats()` before pipeline setup |
+| `StreamId` | Reading incompletes when no version exists |
+| `std::shared_ptr<PreloadedIndexQuery>` | `_collect_schema()` / Polars plugin pre-loaded index |
+| `std::shared_ptr<IndexInformation>` | Normal read path after index + stats have been fetched |
+
+`setup_pipeline_context()` will raise if it receives a bare `VersionedItem`; callers must resolve it to `IndexInformation` first. Non-query callers (compaction, defragmentation, merge-update) use `read_index_key_without_column_stats()` to produce an `IndexInformation` with `column_stats_ = std::nullopt`.
 
 ### Version Query Types
 
@@ -150,6 +180,8 @@ VersionQuery can be:
 | `cpp/arcticdb/version/local_versioned_engine.cpp` | `get_version_to_read()` |
 | `cpp/arcticdb/pipeline/read_frame.cpp` | DataFrame deserialization |
 | `cpp/arcticdb/version/version_functions.hpp` | Version lookup helpers |
+| `cpp/arcticdb/version/version_tasks.hpp` | `IndexInformation`, `VersionIdentifier`, `SetupPipelineContextTask` |
+| `cpp/arcticdb/version/version_core.cpp` | `fetch_index_and_column_stats()`, `read_index_key_without_column_stats()` |
 
 ## Deletion and Tombstones
 

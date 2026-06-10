@@ -4,6 +4,7 @@ FIND_PACKAGE(Protobuf REQUIRED)
 SET(PROTO_IN_FILES
 		utils.proto
         descriptors.proto
+        column_stats.proto
         encoding.proto
         storage.proto
         config.proto
@@ -45,4 +46,6 @@ PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
         ${PROTO_ALTERED_FILES}
         )
 
+strip_fd_from_compile_object()
+set_pdb_name_per_translation_unit(${PROTO_SRC})
 ADD_LIBRARY(arcticdb_proto ${PROTO_HEADER} ${PROTO_SRC})

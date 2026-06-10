@@ -3,7 +3,7 @@ name: review-pr
 description: Review a pull request for ArcticDB
 ---
 
-Perform a thorough code review of an ArcticDB pull request.
+Perform a code review of an ArcticDB pull request.
 
 ## Context variables
 
@@ -89,16 +89,22 @@ same `path` and `line`:
 
 ## Step 5 — Review outputs
 
+Only make remarks about things that must be changed. Do not make minor or nit comments. Focus on
+important issues. Do not mention things that are fine at all - you never need to say "no issue found in X".
+You do not need a section for "items reviewed and OK" or similar. Make your output concise.
+
 ### Inline comments
 Post only on lines present in the **delta diff**, subject to the deduplication rule above.
 
-### Summary checklist
+### Summary
+
+Do not include items that do not need attention in the summary.
 
 **If `EVENT_ACTION` is `synchronize` and a previous sticky summary exists:**
 
 - Evaluate only the **delta diff** against the guidelines.
-- Read the previous summary checklist.
-- Update individual checklist items that are affected by the delta:
+- Read the previous summary.
+- Update individual items that are affected by the delta:
   - A new commit that **introduces** an issue: change the item to ❌ and add a note.
   - A new commit that **fixes** a previously flagged issue: change the item to ✅ and
     note the fix.
@@ -107,7 +113,7 @@ Post only on lines present in the **delta diff**, subject to the deduplication r
 
 **Otherwise** (event is `opened`, `reopened`, `ready_for_review`, or no previous summary):
 
-Evaluate the **full diff** and post a fresh summary checklist.
+Evaluate the **full diff** and post a fresh summary.
 
 ---
 
@@ -115,4 +121,4 @@ Evaluate the **full diff** and post a fresh summary checklist.
 
 Read the file `docs/claude/PR_REVIEW_GUIDELINES.md` from the repository root using the
 Read tool. Apply all sections relevant to the files changed in the PR. The file also
-contains the summary checklist format to use when posting the sticky comment.
+contains the summary format to use when posting the sticky comment.

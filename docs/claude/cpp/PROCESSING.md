@@ -82,6 +82,8 @@ Represents: (a > 5) AND (b < 10)
 
 Expressions are evaluated via `compute()` on `ExpressionContext` which holds the expression tree.
 
+`ExpressionContext` (`expression_context.hpp`) also supports `merge_from()` to combine multiple contexts (used when AND-ing together filter clause expressions for column stats evaluation). `ConstantMap::contains()` checks whether a name is present.
+
 ## Operation Dispatch
 
 ### Location
@@ -101,6 +103,36 @@ Dispatches operations based on data types at runtime.
 | Logical | `AND`, `OR`, `NOT` |
 | Aggregation | `SUM`, `MEAN`, `MIN`, `MAX`, `COUNT`, `FIRST`, `LAST` |
 | String | `ISIN`, `ISNOTIN`, `STARTSWITH`, `ENDSWITH` |
+
+### Column Stats Evaluation
+
+The comparison operator structs (`LessThanOperator`, `GreaterThanOperator`, `EqualsOperator`, etc.) in `operation_types.hpp` have `ValueRange<T>` overloads that return `StatsComparison` instead of `bool`. These determine whether a min/max range satisfies a comparison against a constant value, using three-valued logic:
+
+| Value | Meaning |
+|-------|---------|
+| `ALL_MATCH` | Every row in the segment must satisfy the predicate |
+| `NONE_MATCH` | No row can satisfy — segment can be skipped |
+| `UNKNOWN` | Some rows may match — segment must be fetched |
+
+`ValueRange<T>` holds `min` and `max` fields. The `FlippedComparator` trait (in `column_stats_dispatch.hpp`) handles reversed operand order (e.g. `5 < col` becomes `col > 5`).
+
+#### Column-to-Column Comparisons
+
+The comparison operator structs also have `ValueRange<T>, ValueRange<U>` overloads for `col1 OP col2` predicates where both sides have per-segment stats. The `stats_comparator(ColumnStatsValues, ColumnStatsValues, Func)` overload in `column_stats_dispatch.hpp` dispatches on both sides' types and invokes the range-vs-range comparator. Ordering operators (`<`, `<=`, `>`, `>=`) return `ALL_MATCH` when the ranges are disjoint in the right direction and `NONE_MATCH` when disjoint in the wrong direction. `!=` returns `ALL_MATCH` when ranges are disjoint and `NONE_MATCH` only when both ranges collapse to the same single point.
+
+`ColumnStatsValues::column_absent` distinguishes "column not present in segment" from "column present but stats unavailable". If either side is absent, the comparator returns `NONE_MATCH`; if either side lacks min/max but was present, it returns `UNKNOWN`. `ColumnStatsData::ColumnStatsData()` in `column_stats_filter.cpp` sets `column_absent` when both min and max are absent after reading the sparse bitmap.
+
+NaN handling is factored into `check_range_for_nan()` and `check_scalar_for_nan()` helpers in `operation_types.hpp`, shared by the `ValueRange/ValueRange` and `ValueRange/scalar` overloads of `EqualsOperator` and `NotEqualsOperator`.
+
+NaT handling follows Pandas semantics: any comparison involving NaT is False, except `!=` which is True. The `MinMaxAggregatorData` aggregator (in `unsorted_aggregation.cpp`) skips NaT values when computing per-slice min/max for time columns and only sets stats to `(NaT, NaT)` when the slice contains nothing but NaT. `stats_comparator` and `stats_membership_comparator` rely on that invariant: if either side's min is NaT they short-circuit to `ALL_MATCH` for `!=` and `NONE_MATCH` otherwise. The `check_time_stats_for_nat()` helper in `operation_types.hpp` covers the `ValueRange/scalar` case; the `ValueRange/ValueRange` and membership paths inline the same check. Per-row evaluation in `binary_comparator()` (in `operation_dispatch_binary.hpp`) applies the same rule, with a hoisted fast path that fills the bitset directly when the query value is NaT.
+
+#### Membership Operators (isin / isnotin)
+
+`stats_membership_comparator()` in `column_stats_dispatch.cpp` evaluates a segment's min/max stats against a `ValueSet`. It uses the `ValueSet`'s cached `min_value()` / `max_value()` (computed lazily via `std::call_once`, filtering out NaN values) for a fast range disjointness check. If the ranges overlap and the result is ambiguous, it falls back to iterating individual set elements against the segment's `ValueRange`. The `isnotin` result is the logical inverse of `isin`. `visit_binary_membership_stats()` applies this per row-slice across the stats vector.
+
+`Value::is_nan()` supports the NaN handling: segments where both min and max are NaN are treated as all-NaN and produce `NONE_MATCH` for `isin`.
+
+See [PIPELINE.md - Column Stats Filtering](PIPELINE.md#column-stats-filtering) for the full read-path integration.
 
 ### Type Dispatch
 
@@ -205,6 +237,8 @@ Build filters using `ExpressionNode` with `ExpressionNodeType::BINARY_OP` and co
 | `processing_unit.hpp` | Processing unit structure |
 | `component_manager.hpp` | Component lifecycle |
 | `aggregation_utils.cpp` | Aggregation helpers |
+| `operation_types.hpp` | Operator structs, `StatsComparison`, `ValueRange` |
+| `query_planner.cpp` | `plan_query()`, `and_filter_expression_contexts()` |
 
 ## Python Integration
 

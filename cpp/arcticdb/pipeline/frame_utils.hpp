@@ -61,6 +61,14 @@ TimeseriesDescriptor make_timeseries_descriptor(
         std::optional<AtomKey>&& next_key, bool bucketize_dynamic
 );
 
+// The overload above returns a TSD that shares a std::shared_ptr<FieldCollection> with the input StreamDescriptor,
+// which is error-prone. However, it is sometimes the desired behaviour, so needs to still be available.
+TimeseriesDescriptor make_timeseries_descriptor(
+        size_t total_rows, StreamDescriptor&& desc, arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta,
+        std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>&& um, std::optional<AtomKey>&& prev_key,
+        std::optional<AtomKey>&& next_key, bool bucketize_dynamic
+);
+
 TimeseriesDescriptor timseries_descriptor_from_index_segment(
         size_t total_rows, pipelines::index::IndexSegmentReader&& index_segment_reader,
         std::optional<AtomKey>&& prev_key, bool bucketize_dynamic
@@ -90,6 +98,17 @@ RawType* flatten_tensor(
 }
 
 template<DataType dt>
+std::variant<convert::StringEncodingError, convert::PyStringWrapper> create_py_object_wrapper_or_error(
+        PyObject* py_string_object, std::optional<ScopedGILLock>& scoped_gil_lock
+) {
+    if constexpr (is_utf_type(slice_value_type(dt))) {
+        return convert::py_unicode_to_buffer(py_string_object, scoped_gil_lock);
+    } else {
+        return convert::pystring_to_buffer(py_string_object, false);
+    }
+}
+
+template<DataType dt>
 std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
         PyObject* py_string_object, std::optional<ScopedGILLock>& scoped_gil_lock, StringPool& pool
 ) {
@@ -98,12 +117,8 @@ std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
     } else if (is_py_nan(py_string_object)) {
         return nan_placeholder();
     } else {
-        std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
-        if constexpr (is_utf_type(slice_value_type(dt))) {
-            wrapper_or_error = convert::py_unicode_to_buffer(py_string_object, scoped_gil_lock);
-        } else {
-            wrapper_or_error = convert::pystring_to_buffer(py_string_object, false);
-        }
+        std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error =
+                create_py_object_wrapper_or_error<dt>(py_string_object, scoped_gil_lock);
         // Cannot use util::variant_match as only one of the branches would have a return type
         if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
             const convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));

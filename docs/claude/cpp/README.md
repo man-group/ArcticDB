@@ -55,11 +55,10 @@ cpp/arcticdb/
 
 ```bash
 # Configure and build
-cmake -DTEST=ON --preset linux-debug cpp
-cmake --build cpp/out/linux-debug-build
+make build-debug        # or: make build (release)
 
 # Run C++ tests
-cpp/out/linux-debug-build/arcticdb/test_unit_arcticdb
+make test-cpp-debug     # or: make test-cpp (release), FILTER= for gtest_filter
 ```
 
 ### Key Header Files

@@ -38,8 +38,7 @@
       "inherits": "common",
       "cacheVariables": {
         "ARCTICDB_USING_CONDA": "ON",
-        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
+        "ARCTICDB_COMPILER_CACHE": "sccache"
       },
       "condition": {
         "type": "allOf",
@@ -66,7 +65,9 @@
       "environment": { "cmakepreset_expected_host_system": "Windows" },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "cl",
-        "CMAKE_CXX_COMPILER": "cl"
+        "CMAKE_CXX_COMPILER": "cl",
+        "ARCTICDB_COMPILER_CACHE": "sccache",
+        "ARCTICDB_PDB_GENERATION_MODE": "TU"
       }
     },
     {
@@ -121,7 +122,10 @@
     },
     {
       "name": "linux-debug",
-      "inherits": ["common_vcpkg", "linux"]
+      "inherits": ["common_vcpkg", "linux"],
+      "cacheVariables": {
+        "ARCTICDB_THIN_ARCHIVES": "ON"
+      }
     },
     {
       "name": "linux-conda-debug",
@@ -145,8 +149,7 @@
       "inherits": ["common_vcpkg", "macos"],
       "cacheVariables": {
         "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0",
-        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
-        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
+        "ARCTICDB_COMPILER_CACHE": "sccache"
       }
     },
     { "name": "windows-cl-release",       "inherits": "windows-cl-debug",       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }},

@@ -456,10 +456,8 @@ void PythonVersionStore::add_to_snapshot(
     auto [snap_key, snap_segment] = std::move(*opt_snapshot);
     auto [snapshot_contents, user_meta] = get_versions_and_metadata_from_snapshot(store(), snap_key);
     auto [specific_versions_index_map, latest_versions_index_map] = get_stream_index_map(stream_ids, version_queries);
-    for (const auto& latest_version : *latest_versions_index_map) {
-        specific_versions_index_map->try_emplace(
-                std::make_pair(latest_version.first, latest_version.second.version_id()), latest_version.second
-        );
+    for (const auto& [stream_id, key] : *latest_versions_index_map) {
+        specific_versions_index_map->try_emplace(stream_id, key);
     }
 
     auto missing = filter_keys_on_existence(
@@ -469,17 +467,11 @@ void PythonVersionStore::add_to_snapshot(
 
     std::vector<AtomKey> deleted_keys;
     std::vector<AtomKey> retained_keys;
-    std::unordered_set<StreamId> affected_keys;
-    for (const auto& [id_version, key] : *specific_versions_index_map) {
-        auto [it, inserted] = affected_keys.insert(id_version.first);
-        util::check(inserted, "Multiple elements in add_to_snapshot with key {}", id_version.first);
-    }
 
     bool is_delete_keys_immediately =
             variant_key_type(snap_key) != KeyType::SNAPSHOT_REF || !cfg().write_options().delayed_deletes();
     for (auto&& key : snapshot_contents) {
-        auto new_version = affected_keys.find(key.id());
-        if (new_version == std::end(affected_keys)) {
+        if (!specific_versions_index_map->contains(key.id())) {
             retained_keys.emplace_back(std::move(key));
         } else {
             if (is_delete_keys_immediately) {
@@ -492,6 +484,7 @@ void PythonVersionStore::add_to_snapshot(
         retained_keys.emplace_back(std::move(key));
 
     std::sort(std::begin(retained_keys), std::end(retained_keys));
+    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
                 .get();
@@ -499,7 +492,6 @@ void PythonVersionStore::add_to_snapshot(
             log_delete_snapshot(store(), snap_name);
         }
     }
-    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
 }
 
 void PythonVersionStore::remove_from_snapshot(
@@ -539,6 +531,7 @@ void PythonVersionStore::remove_from_snapshot(
         }
     }
 
+    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
     if (is_delete_keys_immediately) {
         delete_trees_responsibly(store(), version_map(), deleted_keys, get_master_snapshots_map(store()), snap_name)
                 .get();
@@ -546,7 +539,6 @@ void PythonVersionStore::remove_from_snapshot(
             log_delete_snapshot(store(), snap_name);
         }
     }
-    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
 }
 
 void PythonVersionStore::verify_snapshot(const SnapshotId& snap_name) {
@@ -598,31 +590,32 @@ void PythonVersionStore::snapshot(
         auto sym_index_map = batch_get_latest_version(store(), version_map(), filtered_symbols, false);
         index_keys = utils::values(*sym_index_map);
     } else {
-        auto sym_index_map = batch_get_specific_version(
+        auto batch_result = batch_get_specific_version(
                 store(), version_map(), versions, BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
         );
         if (allow_partial_snapshot) {
             missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                    !sym_index_map->empty(),
+                    !batch_result.found.empty(),
                     "None of the symbol-version pairs specified in versions exist, skipping creation for snapshot: {}",
                     snap_name
             );
         } else {
-            if (sym_index_map->size() != versions.size()) {
+            if (batch_result.found.size() != versions.size()) {
                 std::string error_msg = fmt::format(
                         "Snapshot {} will not be created. Specified symbol-version pairs do not exist in the library: ",
                         snap_name
                 );
                 for (const auto& kv : versions) {
-                    if (!sym_index_map->count(kv.first)) {
+                    if (!batch_result.found.contains(kv.first)) {
                         error_msg += fmt::format("{}:{} ", kv.first, kv.second);
                     }
                 }
                 missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(error_msg);
             }
         }
-        index_keys = utils::values(*sym_index_map);
-        auto missing = filter_keys_on_existence(utils::copy_of_values_as<VariantKey>(*sym_index_map), store(), false);
+        index_keys = utils::values(batch_result.found);
+        auto missing =
+                filter_keys_on_existence(utils::copy_of_values_as<VariantKey>(batch_result.found), store(), false);
         util::check(missing.empty(), "Cannot snapshot version(s) that have been deleted: {}", missing);
     }
 
@@ -851,7 +844,7 @@ ReadResult PythonVersionStore::read_column_stats_version(
 ) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::PANDAS);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::ARROW);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
@@ -952,7 +945,7 @@ std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versi
 std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 ) {
 
     auto read_versions_or_errors =
@@ -988,7 +981,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
 ReadResult PythonVersionStore::batch_read_and_join(
         std::shared_ptr<std::vector<StreamId>> stream_ids, std::shared_ptr<std::vector<VersionQuery>> version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
-        std::vector<std::shared_ptr<Clause>>&& clauses, std::any& handler_data
+        std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
 ) {
     auto versions_and_frame = batch_read_and_join_internal(
             std::move(stream_ids),
@@ -1044,7 +1037,7 @@ void PythonVersionStore::delete_snapshot_sync(const SnapshotId& snap_name, const
 
 ReadResult PythonVersionStore::read_dataframe_version(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
 
     auto opt_version_and_frame =
@@ -1406,7 +1399,7 @@ ReadResult PythonVersionStore::read_index(
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
-    return get_index_and_tombstone_keys(store(), version_map(), stream_id);
+    return get_index_and_tombstone_keys<AtomKey>(store(), version_map(), stream_id);
 }
 
 void PythonVersionStore::_compact_version_map(const StreamId& id) { version_map()->compact(store(), id); }
@@ -1460,7 +1453,7 @@ void write_dataframe_to_file(
 
 ReadResult read_dataframe_from_file(
         const StreamId& stream_id, const std::string& path, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
 
     auto release_gil = std::make_unique<py::gil_scoped_release>();
@@ -1496,6 +1489,18 @@ VersionedItem PythonVersionStore::merge(
             strategy,
             std::move(on)
     );
+}
+
+CompactDataInfo PythonVersionStore::compact_data_explain_plan(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+) {
+    return compact_data_explain_plan_internal(stream_id, rows_per_segment);
+}
+
+VersionedItem PythonVersionStore::compact_data(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+) {
+    return compact_data_internal(stream_id, rows_per_segment, prune_previous_versions);
 }
 
 } // namespace arcticdb::version_store

@@ -46,3 +46,20 @@ BENCHMARK(BM_packed_bits_to_buffer)
         ->Args({10'000'000})
         ->Args({100'000'000})
         ->Args({1'000'000'000});
+
+static void BM_bools_to_packed_bits(benchmark::State& state) {
+    auto num_bools = static_cast<size_t>(state.range(0));
+    std::vector<uint8_t> flat_bools(num_bools);
+    std::uniform_int_distribution<int> dis(0, 1);
+    for (size_t i = 0; i < num_bools; ++i) {
+        flat_bools[i] = dis(gen);
+    }
+    auto* src = reinterpret_cast<const bool*>(flat_bools.data());
+    std::vector<uint8_t> dest(bitset_packed_size_bytes(num_bools));
+    for (auto _ : state) {
+        bools_to_packed_bits(src, num_bools, dest.data());
+        benchmark::DoNotOptimize(dest.data());
+    }
+}
+
+BENCHMARK(BM_bools_to_packed_bits)->Args({100'000})->Args({1'000'000})->Args({10'000'000});

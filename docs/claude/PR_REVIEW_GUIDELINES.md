@@ -9,8 +9,13 @@ Style nitpicks are handled by `build_tooling/format.py` — focus on substantive
 
 ## 1. PR TITLE & DESCRIPTION
 
-- **Title clarity**: Concise, grammatically correct summary of *what* the PR does.
-  Avoid vague titles like "Changes" or "WIP".
+- **Title clarity**: The title must adequately reflect the changes made — it should be
+  descriptive enough to understand the PR's purpose without reading the description. It
+  should name the specific component or area affected and describe the concrete change.
+  Reject vague or generic titles such as "Changes", "Update", "WIP", "Misc",
+  "Improvements", or bare issue numbers. Good titles use an imperative verb and mention
+  what is being changed, e.g. "Fix version chain corruption on concurrent append" or
+  "Add ZSTD compression support for string columns".
 - **Grammar and spelling**: Check for typos and unclear phrasing.
 - **Description completeness**: Explain *what* changed and *why*. Flag any significant
   diff changes not mentioned in the description.
@@ -18,6 +23,11 @@ Style nitpicks are handled by `build_tooling/format.py` — focus on substantive
   defaults, exceptions) must be explicitly called out.
 - **Breaking changes labelled**: On-disk format or breaking changes must be highlighted
   and the PR labelled appropriately (`enhancement`, `bug`, etc.).
+- **`no-release-notes` label**: This label must be set on PRs that have no user-facing
+  impact (CI/build changes, internal refactors, test-only changes, doc-only changes,
+  developer tooling). It must NOT be set on PRs that add features, fix bugs, change
+  public API behaviour, or alter on-disk format — these all require release notes.
+  Flag the label as missing or incorrectly applied.
 - **Linked issues**: Reference related issues (e.g., "Fixes #1234").
 - **Scope match**: Title/description should match the actual scope of changes.
 
@@ -37,7 +47,7 @@ ArcticDB has a layered Python API: `Arctic` -> `Library` -> `NativeVersionStore`
 - **QueryBuilder**: New operations must follow the existing fluent builder pattern.
 - **Return type changes** from read/write operations affect downstream code.
 - **Exception hierarchy**: Preserve error codes and exception types users may catch.
-- **Docstrings**: Public methods must have accurate docstrings matching signatures.
+- **Docstrings**: See §21 for scope and format requirements.
 
 ---
 
@@ -305,7 +315,26 @@ ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
 
 ---
 
+## 21. DOCUMENTATION
+
+Full documentation requirements and checklists are in
+[`.claude/skills/update-docs/SKILL.md`](../../.claude/skills/update-docs/SKILL.md).
+Read that file and apply its checks when reviewing documentation completeness.
+
+Key areas to verify:
+
+- **Docstrings**: New/modified public methods in `library.py`, `arctic.py`, and `_store.py`
+  have complete NumPy-format docstrings.
+- **Tutorials**: Complex features have a tutorial in `docs/mkdocs/docs/tutorials/`.
+- **mkdocs.yml nav**: New pages are reachable.
+- **Edge cases & disambiguation**: Surprising behaviour and "A vs B" guidance documented.
+- **`docs/claude/` technical docs**: Updated for each area of code that was changed.
+
+---
+
 ## REVIEW SUMMARY CHECKLIST
+
+In your reviews only include items that need attention from the below, do not mention items that are fine.
 
 ```markdown
 ## ArcticDB Code Review Summary
@@ -357,15 +386,19 @@ ArcticDB supports protobuf versions 3 through 6 via separate generated bindings.
 - [ ] No buffer overflow potential in C++ code
 
 ### PR Title & Description
-- [ ] Title is clear, concise, and uses imperative verb
+- [ ] Title is descriptive — names the component/area and the concrete change (not generic like "Fix", "Update", "Changes")
 - [ ] Title and description are free of typos and grammatical errors
 - [ ] Description explains what changed and why
 - [ ] All significant changes in the diff are mentioned in the description
 - [ ] API/breaking changes explicitly called out in the description
 - [ ] Linked issues referenced where applicable
 - [ ] PR labelled appropriately (enhancement, bug, etc.)
+- [ ] `no-release-notes` label correctly set (present for internal-only changes, absent for user-facing changes)
 
 ### Documentation
-- [ ] Public API docstrings accurate
-- [ ] Breaking changes flagged with appropriate labels
+- [ ] New/modified public methods in `library.py`, `arctic.py`, `_store.py` have complete NumPy-format docstrings
+- [ ] Complex or multi-use features have a tutorial in `docs/mkdocs/docs/tutorials/`
+- [ ] `docs/mkdocs/mkdocs.yml` nav updated for any new documentation pages
+- [ ] Edge cases, limitations, and "when to use A vs B" guidance documented where applicable
+- [ ] `docs/claude/` technical doc updated if code in a documented area was changed
 ```

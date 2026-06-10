@@ -16,9 +16,61 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/type_traits.hpp>
+#include <arcticdb/log/log.hpp>
+
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
+
+// We need a Kleene three-valued logic for filtering with column stats. Consider the filter,
+// ~(q["a"] < 5)
+// If a block has [min, max] = [4, 6] then we need to include it for both (q["a"] < 5) and
+// ~(q["a"] < 5). So we evaluate q["a"] < 5 to UNKNOWN.
+enum class StatsComparison : uint8_t { ALL_MATCH, NONE_MATCH, UNKNOWN };
+
+constexpr bool is_match(StatsComparison c) { return c == StatsComparison::ALL_MATCH; }
+
+template<typename T>
+struct ValueRange {
+    T min;
+    T max;
+};
+
+template<typename T>
+std::optional<StatsComparison> check_range_for_nan(const ValueRange<T>& range, StatsComparison nan_result) {
+    if constexpr (std::is_floating_point_v<T>) {
+        bool is_min_nan = std::isnan(range.min);
+        bool is_max_nan = std::isnan(range.max);
+        if (is_min_nan != is_max_nan) {
+            log::version().warn("Expected NaN at both ends of stats or neither, saw {}", range);
+            return StatsComparison::UNKNOWN;
+        }
+        if (is_min_nan) {
+            return nan_result;
+        }
+    }
+    return std::nullopt;
+}
+
+template<typename T>
+std::optional<StatsComparison> check_scalar_for_nan(T value, StatsComparison nan_result) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (std::isnan(value)) {
+            return nan_result;
+        }
+    }
+    return std::nullopt;
+}
+
+inline std::optional<StatsComparison> check_time_stats_for_nat(
+        timestamp min_val, timestamp query_value, StatsComparison nat_result
+) {
+    if (min_val == NaT || query_value == NaT) {
+        return nat_result;
+    }
+    return std::nullopt;
+}
+
 // If reordering this enum, is_binary_operation may also need to be changed
 enum class OperationType : uint8_t {
     // Unary
@@ -37,6 +89,7 @@ enum class OperationType : uint8_t {
     SUB,
     MUL,
     DIV,
+    POW,
     // Comparison
     EQ,
     NE,
@@ -70,6 +123,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(SUB)
         TO_STR(MUL)
         TO_STR(DIV)
+        TO_STR(POW)
         TO_STR(EQ)
         TO_STR(NE)
         TO_STR(LT)
@@ -103,6 +157,7 @@ struct PlusOperator;
 struct MinusOperator;
 struct TimesOperator;
 struct DivideOperator;
+struct PowOperator;
 struct MembershipOperator;
 
 namespace arithmetic_promoted_type::details {
@@ -172,62 +227,84 @@ struct binary_operation_promoted_type {
                             double>,
                     // Otherwise, both types are integers
                     std::conditional_t<
-                            std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
-                            // Both types are unsigned
+                            std::is_same_v<Func, PowOperator>,
+                            // Pow operator special handling for integer types
                             std::conditional_t<
-                                    std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, TimesOperator>,
-                                    /* Plus and Times operators can overflow if using max_width, so promote to a wider
-                                     * unsigned type e.g. 255*255 (both uint8_t's) = 65025, requiring uint16_t to hold
-                                     * the result */
-                                    arithmetic_promoted_type::details::unsigned_width_t<2 * max_width>,
+                                    std::is_unsigned_v<RHS>,
+                                    // Exponent is unsigned
                                     std::conditional_t<
-                                            std::is_same_v<Func, MinusOperator>,
-                                            /* The result of Minus with two unsigned types can be negative
-                                             * Can also underflow if using max_width, so promote to a wider signed type
-                                             * e.g. 0 - 255 (both uint8_t's) = -255, requiring int16_t to hold the
-                                             * result */
-                                            arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                                            // IsIn/IsNotIn operators, just use the type of the widest input
-                                            arithmetic_promoted_type::details::unsigned_width_t<max_width>>>,
+                                            std::is_unsigned_v<LHS>,
+                                            // uint ^ uint -> uint64
+                                            uint64_t,
+                                            // int ^ uint -> int64
+                                            int64_t>,
+                                    // Exponent is signed -> always double
+                                    // (negative exponent produces fractional results)
+                                    // uint ^ int -> double
+                                    // int ^ int -> double
+                                    double>,
+                            // Non-pow integer operations
                             std::conditional_t<
-                                    std::is_signed_v<LHS> && std::is_signed_v<RHS>,
-                                    // Both types are signed integers (as we are in the "else" of the floating point
-                                    // checks)
+                                    std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
+                                    // Both types are unsigned
                                     std::conditional_t<
-                                            std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> ||
-                                                    std::is_same_v<Func, TimesOperator>,
-                                            /* Plus, Minus, and Times operators can overflow if using max_width, so
-                                             * promote to a wider signed type e.g. -100*100 (both int8_t's) = -10000,
-                                             * requiring int16_t to hold the result */
-                                            arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                                            // IsIn/IsNotIn operators, just use the type of the widest input
-                                            arithmetic_promoted_type::details::signed_width_t<max_width>>,
-                                    // We have one signed and one unsigned type
-                                    std::conditional_t<
-                                            std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, MinusOperator> ||
-                                                    std::is_same_v<Func, TimesOperator>,
-                                            // Plus, Minus, and Times operators can overflow if using max_width, so
-                                            // promote to a wider signed type
-                                            arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
-                                            // IsIn/IsNotIn Operator
+                                            std::is_same_v<Func, PlusOperator> || std::is_same_v<Func, TimesOperator>,
+                                            /* Plus and Times operators can overflow if using max_width, so promote to a
+                                             * wider unsigned type e.g. 255*255 (both uint8_t's) = 65025, requiring
+                                             * uint16_t to hold the result */
+                                            arithmetic_promoted_type::details::unsigned_width_t<2 * max_width>,
                                             std::conditional_t<
-                                                    (std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)) ||
-                                                            (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
-                                                    // If the signed type is strictly larger than the unsigned type,
-                                                    // then promote to the signed type
-                                                    arithmetic_promoted_type::details::signed_width_t<max_width>,
-                                                    // Otherwise, check if the unsigned one is the widest type we
-                                                    // support
+                                                    std::is_same_v<Func, MinusOperator>,
+                                                    /* The result of Minus with two unsigned types can be negative
+                                                     * Can also underflow if using max_width, so promote to a wider
+                                                     * signed type e.g. 0 - 255 (both uint8_t's) = -255, requiring
+                                                     * int16_t to hold the result */
+                                                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
+                                                    // IsIn/IsNotIn operators, just use the type of the widest input
+                                                    arithmetic_promoted_type::details::unsigned_width_t<max_width>>>,
+                                    std::conditional_t<
+                                            std::is_signed_v<LHS> && std::is_signed_v<RHS>,
+                                            // Both types are signed integers (as we are in the "else" of the floating
+                                            // point checks)
+                                            std::conditional_t<
+                                                    std::is_same_v<Func, PlusOperator> ||
+                                                            std::is_same_v<Func, MinusOperator> ||
+                                                            std::is_same_v<Func, TimesOperator>,
+                                                    /* Plus, Minus, and Times operators can overflow if using max_width,
+                                                     * so promote to a wider signed type e.g. -100*100 (both int8_t's) =
+                                                     * -10000, requiring int16_t to hold the result */
+                                                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
+                                                    // IsIn/IsNotIn operators, just use the type of the widest input
+                                                    arithmetic_promoted_type::details::signed_width_t<max_width>>,
+                                            // We have one signed and one unsigned type
+                                            std::conditional_t<
+                                                    std::is_same_v<Func, PlusOperator> ||
+                                                            std::is_same_v<Func, MinusOperator> ||
+                                                            std::is_same_v<Func, TimesOperator>,
+                                                    // Plus, Minus, and Times operators can overflow if using max_width,
+                                                    // so promote to a wider signed type
+                                                    arithmetic_promoted_type::details::signed_width_t<2 * max_width>,
+                                                    // IsIn/IsNotIn Operator
                                                     std::conditional_t<
-                                                            std::is_same_v<LHS, uint64_t> ||
-                                                                    std::is_same_v<RHS, uint64_t>,
-                                                            // Retains ValueSetBaseType in binary_membership(), which
-                                                            // handles mixed int64/uint64 operations gracefully
-                                                            RHS,
-                                                            // There should be a signed type wider than the unsigned
-                                                            // type, so both can be exactly represented
+                                                            (std::is_signed_v<LHS> && sizeof(LHS) > sizeof(RHS)
+                                                            ) || (std::is_signed_v<RHS> && sizeof(RHS) > sizeof(LHS)),
+                                                            // If the signed type is strictly larger than the unsigned
+                                                            // type, then promote to the signed type
                                                             arithmetic_promoted_type::details::signed_width_t<
-                                                                    2 * max_width>>>>>>>>;
+                                                                    max_width>,
+                                                            // Otherwise, check if the unsigned one is the widest type
+                                                            // we support
+                                                            std::conditional_t<
+                                                                    std::is_same_v<LHS, uint64_t> ||
+                                                                            std::is_same_v<RHS, uint64_t>,
+                                                                    // Retains ValueSetBaseType in binary_membership(),
+                                                                    // which handles mixed int64/uint64 operations
+                                                                    // gracefully
+                                                                    RHS,
+                                                                    // There should be a signed type wider than the
+                                                                    // unsigned type, so both can be exactly represented
+                                                                    arithmetic_promoted_type::details::signed_width_t<
+                                                                            2 * max_width>>>>>>>>>;
 };
 
 template<class LHS, class RHS>
@@ -356,11 +433,205 @@ struct DivideOperator {
     }
 };
 
+struct LessThanOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t < u;
+    }
+    // MSVC warns about using < on bool (C4804).
+    bool operator()(bool t, bool u) const { return !t && u; }
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Less than operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Less than operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.max, rhs.min))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.min, rhs.max))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct LessThanEqualsOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t <= u;
+    }
+
+    // MSVC warns about using comparisons on bool (C4804).
+    bool operator()(bool t, bool u) const { return !t || (t && u); }
+
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Less than equals operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Less than equals operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than_equals(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.max, rhs.min))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.min, rhs.max))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct GreaterThanOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t > u;
+    }
+
+    // MSVC warns about using comparisons on bool (C4804).
+    bool operator()(bool t, bool u) const { return t && !u; }
+
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Greater than operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Greater than operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.min, rhs.max))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.max, rhs.min))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+};
+
+struct GreaterThanEqualsOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return t >= u;
+    }
+
+    // MSVC warns about using comparisons on bool (C4804).
+    bool operator()(bool t, bool u) const { return t || !u; }
+
+    template<typename T>
+    bool operator()(std::optional<T>, T) const {
+        util::raise_rte("Greater than equals operator not supported with strings");
+    }
+    template<typename T>
+    bool operator()(T, std::optional<T>) const {
+        util::raise_rte("Greater than equals operator not supported with strings");
+    }
+    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than_equals(t, u); }
+    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than_equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if ((*this)(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if ((*this)(lhs.min, rhs.max))
+            return StatsComparison::ALL_MATCH;
+        if (!(*this)(lhs.max, rhs.min))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    };
+};
+
+struct PowOperator {
+    template<typename T, typename U, typename V = typename binary_operation_promoted_type<T, U, PowOperator>::type>
+    V apply(T t, U u) {
+        if constexpr (std::is_unsigned_v<T> && std::is_unsigned_v<U>) {
+            uint64_t result = 1;
+            uint64_t base = static_cast<uint64_t>(t);
+            uint64_t exponent = static_cast<uint64_t>(u);
+
+            while (exponent > 0) {
+                if (exponent & 1) {
+                    result *= base;
+                }
+
+                base *= base;
+                exponent >>= 1;
+            }
+
+            return result;
+        } else if constexpr (std::is_signed_v<T> && std::is_unsigned_v<U>) {
+            int64_t result = 1;
+            int64_t base = static_cast<int64_t>(t);
+            uint64_t exponent = static_cast<uint64_t>(u);
+
+            while (exponent > 0) {
+                if (exponent & 1) {
+                    result *= base;
+                }
+
+                base *= base;
+                exponent >>= 1;
+            }
+
+            return result;
+        }
+
+        return static_cast<V>(std::pow(static_cast<V>(t), static_cast<V>(u)));
+    }
+};
+
 struct EqualsOperator {
     template<typename T, typename U>
     bool operator()(T t, U u) const {
         return t == u;
     }
+
     template<typename T>
     bool operator()(T t, std::optional<T> u) const {
         if (u.has_value())
@@ -370,10 +641,7 @@ struct EqualsOperator {
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t == u;
-        else
-            return false;
+        return operator()(u, t);
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
@@ -384,6 +652,36 @@ struct EqualsOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::equals(t, u); }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if (auto r = check_range_for_nan(range, StatsComparison::NONE_MATCH))
+            return *r;
+        if (auto r = check_scalar_for_nan(value, StatsComparison::NONE_MATCH))
+            return *r;
+
+        if ((*this)(range.min, value) && (*this)(range.max, value))
+            return StatsComparison::ALL_MATCH;
+        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
+
+    template<typename T, typename U>
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if (auto r = check_range_for_nan(lhs, StatsComparison::NONE_MATCH))
+            return *r;
+        if (auto r = check_range_for_nan(rhs, StatsComparison::NONE_MATCH))
+            return *r;
+
+        // Both ranges are a single identical point: all values are equal
+        if ((*this)(lhs.min, lhs.max) && (*this)(rhs.min, rhs.max) && (*this)(lhs.min, rhs.min))
+            return StatsComparison::ALL_MATCH;
+        // Ranges are disjoint: all values in lhs differ from all values in rhs
+        if (LessThanOperator{}(lhs.max, rhs.min) || LessThanOperator{}(rhs.max, lhs.min))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
+    }
 };
 
 struct NotEqualsOperator {
@@ -400,10 +698,7 @@ struct NotEqualsOperator {
     }
     template<typename T>
     bool operator()(std::optional<T> t, T u) const {
-        if (t.has_value())
-            return *t != u;
-        else
-            return true;
+        return operator()(u, t);
     }
     template<typename T>
     bool operator()(std::optional<T> t, std::optional<T> u) const {
@@ -414,74 +709,37 @@ struct NotEqualsOperator {
     }
     bool operator()(uint64_t t, int64_t u) const { return comparison::not_equals(t, u); }
     bool operator()(int64_t t, uint64_t u) const { return comparison::not_equals(t, u); }
-};
 
-struct LessThanOperator {
     template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t < u;
-    }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Less than operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Less than operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than(t, u); }
-};
+    StatsComparison operator()(ValueRange<T> range, U value) const {
+        if (auto r = check_range_for_nan(range, StatsComparison::ALL_MATCH))
+            return *r;
+        if (auto r = check_scalar_for_nan(value, StatsComparison::ALL_MATCH))
+            return *r;
 
-struct LessThanEqualsOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t <= u;
+        if (LessThanOperator{}(range.max, value) || GreaterThanOperator{}(range.min, value))
+            return StatsComparison::ALL_MATCH;
+        if (EqualsOperator{}(range.min, value) && EqualsOperator{}(range.max, value))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
     }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Less than equals operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Less than equals operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::less_than_equals(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::less_than_equals(t, u); }
-};
 
-struct GreaterThanOperator {
     template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t > u;
-    }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Greater than operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Greater than operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than(t, u); }
-};
+    StatsComparison operator()(ValueRange<T> lhs, ValueRange<U> rhs) const {
+        if (auto r = check_range_for_nan(lhs, StatsComparison::ALL_MATCH))
+            return *r;
+        if (auto r = check_range_for_nan(rhs, StatsComparison::ALL_MATCH))
+            return *r;
 
-struct GreaterThanEqualsOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return t >= u;
+        // Ranges are disjoint: all values in lhs differ from all values in rhs
+        if (LessThanOperator{}(lhs.max, rhs.min) || LessThanOperator{}(rhs.max, lhs.min))
+            return StatsComparison::ALL_MATCH;
+        // Both ranges are a single identical point: all values are equal
+        if (EqualsOperator{}(lhs.min, lhs.max) && EqualsOperator{}(rhs.min, rhs.max) &&
+            EqualsOperator{}(lhs.min, rhs.min))
+            return StatsComparison::NONE_MATCH;
+        return StatsComparison::UNKNOWN;
     }
-    template<typename T>
-    bool operator()(std::optional<T>, T) const {
-        util::raise_rte("Greater than equals operator not supported with strings");
-    }
-    template<typename T>
-    bool operator()(T, std::optional<T>) const {
-        util::raise_rte("Greater than equals operator not supported with strings");
-    }
-    bool operator()(uint64_t t, int64_t u) const { return comparison::greater_than_equals(t, u); }
-    bool operator()(int64_t t, uint64_t u) const { return comparison::greater_than_equals(t, u); }
 };
 
 struct RegexMatchOperator {
@@ -500,8 +758,8 @@ struct MembershipOperator {
     static constexpr bool is_signed_int = std::is_integral_v<U> && std::is_signed_v<U>;
 
   public:
-    /** This is tighter than the signatures of the special handling operator()s below to reject argument types smaller
-     * than uint64 going down the special handling via type promotion. */
+    /** This is tighter than the signatures of the special handling operator()s below to reject argument types
+     * smaller than uint64 going down the special handling via type promotion. */
     template<typename ColumnType, typename ValueSetBaseType>
     static constexpr bool needs_uint64_special_handling =
             (std::is_same_v<ColumnType, uint64_t> && is_signed_int<ValueSetBaseType>) ||
@@ -716,6 +974,19 @@ struct formatter<arcticdb::DivideOperator> {
 };
 
 template<>
+struct formatter<arcticdb::PowOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::PowOperator, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "**");
+    }
+};
+
+template<>
 struct formatter<arcticdb::EqualsOperator> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx) {
@@ -829,6 +1100,41 @@ struct formatter<arcticdb::RegexMatchOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::RegexMatchOperator, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "REGEX MATCH");
+    }
+};
+
+template<>
+struct formatter<arcticdb::StatsComparison> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::StatsComparison c, FormatContext& ctx) const {
+        switch (c) {
+        case arcticdb::StatsComparison::ALL_MATCH:
+            return fmt::format_to(ctx.out(), "ALL_MATCH");
+        case arcticdb::StatsComparison::NONE_MATCH:
+            return fmt::format_to(ctx.out(), "NONE_MATCH");
+        case arcticdb::StatsComparison::UNKNOWN:
+            return fmt::format_to(ctx.out(), "UNKNOWN");
+        default:
+            return fmt::format_to(ctx.out(), "INVALID");
+        }
+    }
+};
+
+template<typename T>
+struct formatter<arcticdb::ValueRange<T>> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::ValueRange<T>& range, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "[{}, {}]", range.min, range.max);
     }
 };
 

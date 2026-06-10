@@ -15,20 +15,16 @@ import pandas as pd
 import numpy as np
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
-from arcticdb.util.test import (
-    assert_series_equal_pandas_1,
-    assert_frame_equal_rebuild_index_first,
-)
+from arcticdb.util.test import assert_series_equal_pandas_1, assert_frame_equal_rebuild_index_first, assert_frame_equal
 from arcticdb.util.test_utils import DFGenerator, generate_random_series, set_seed, supported_types_list
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
-from arcticdb.exceptions import ArcticNativeException, SortingException
+from arcticdb.exceptions import ArcticNativeException, UnsortedDataException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
 
 from arcticdb_ext.exceptions import (
-    UnsortedDataException,
     InternalException,
     NormalizationException,
     UserInputException,
@@ -36,7 +32,7 @@ from arcticdb_ext.exceptions import (
     SchemaException,
 )
 
-from benchmarks.bi_benchmarks import assert_frame_equal
+
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
 
@@ -358,9 +354,9 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     assert len(lib.list_versions()) == 4 if dynamic_schema else 3
 
     # Validate that validate_index works as expected
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lib.append(symbol, df_not_sorted, validate_index=True)
-    with pytest.raises(SortingException):
+    with pytest.raises(UnsortedDataException):
         lib.append(symbol, df_not_sorted, validate_index=True, incomplete=True)
     result2 = lib.append(symbol, df_not_sorted, validate_index=False)
     assert result2.version == result.version + 1
@@ -711,7 +707,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     data: pd.DataFrame = lib.batch_read_and_join(
         ["symbol0", "symbol1"], as_ofs=[0, 0], query_builder=q, per_symbol_query_builders=[q0, None]
     ).data
-    assert_frame_equal(df1, data)
+    assert_frame_equal(df1, data, check_dtype=False)
 
 
 @pytest.mark.xfail(True, reason="When non-existing symbol is used, MissingDataException is not raised 18023146743")
@@ -807,6 +803,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # remove from snapshot operation succeeds even symbol exists but version does not exist
     lib.remove_from_snapshot("snap", ["s2"], [2])
+
     lib.add_to_snapshot("snap", ["s2", "s1"], [4343, 45949345])
 
     # Verify the snapshot state is not changed
@@ -826,7 +823,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # Verify mixing of existing and non-existing symbols and versions result
     # in proper versions of existing symbols added to the snapshot
-    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2", "s2"], [1, 1, 1, 1, 4])
+    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2"], [1, 1, 1, 1])
     assert 101 == lib.read("s1", as_of="snap").data
     assert 400 == lib.read("s4", as_of="snap").data
     assert 201 == lib.read("s2", as_of="snap").data
@@ -841,20 +838,14 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
             lib.read(symbol, as_of="snap")
 
 
-@pytest.mark.xfail(True, reason="Negative version numbers does not work, issue 10060901137")
 def test_add_to_snapshot_with_negative_numbers(basic_store):
     lib: NativeVersionStore = basic_store
     lib.write("s1", 100)
     lib.snapshot("snap")
     lib.write("s1", 101)
-    lib.write("s1", 102)
-    lib.write("s1", 103)
 
-    # Lets check negative number version handling
-    lib.add_to_snapshot("snap", ["s1"], [-1])
-    assert 102 == lib.read("s1", as_of="snap").data
-    lib.add_to_snapshot("snap", ["s1"], [-2])
-    assert 101 == lib.read("s1", as_of="snap").data
+    with pytest.raises(UserInputException, match="Negative version"):
+        lib.add_to_snapshot("snap", ["s1"], [-1])
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])

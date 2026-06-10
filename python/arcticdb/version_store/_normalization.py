@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import datetime
+import contextlib
 import io
 import sys
 
@@ -25,7 +26,7 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
-from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
+from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE, pyarrow as pa, polars as pl
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
@@ -36,7 +37,7 @@ from arcticdb.exceptions import (
     ArcticNativeException,
     ArcticDbNotYetImplemented,
     NormalizationException,
-    SortingException,
+    UnsortedDataException,
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
@@ -71,6 +72,25 @@ except ImportError:
 
 
 IS_WINDOWS = sys.platform == "win32"
+
+
+@contextlib.contextmanager
+def _tz_error_context():
+    """Wraps PyArrow timezone operations with a helpful error message on Windows."""
+    try:
+        yield
+    except pa.lib.ArrowInvalid as e:
+        if not IS_WINDOWS or "timezone" not in str(e).lower():
+            raise
+        raise NormalizationException(
+            f"{e}\n\n"
+            "ArcticDB Arrow/Polars output uses PyArrow for timezone conversion, which "
+            "requires a timezone database on Windows.\n"
+            "To install, run:\n"
+            '  python -c "from pyarrow.util import download_tzdata_on_windows; '
+            'download_tzdata_on_windows()"\n'
+            "Details: https://arrow.apache.org/docs/python/install.html#tzdata-on-windows"
+        ) from e
 
 
 NPDDataFrame = NamedTuple(
@@ -456,14 +476,16 @@ def _denormalize_single_index(item, norm_meta):
 
 
 def _denormalize_columns_names(columns_names, norm_meta):
+    contains_none = False
     if columns_names is None:
-        return None
+        return None, contains_none
     for idx in range(len(columns_names)):
         col = columns_names[idx]
         if col in norm_meta.common.col_names:
             col_data = norm_meta.common.col_names[col]
             if col_data.is_none:
                 columns_names[idx] = None
+                contains_none = True
             elif col_data.is_empty:
                 columns_names[idx] = ""
             elif col_data.is_int:
@@ -472,27 +494,30 @@ def _denormalize_columns_names(columns_names, norm_meta):
                 # Very old clients may not have written the original_name, so if it's not there just leave the name alone
                 columns_names[idx] = col_data.original_name
 
-    return columns_names
+    return columns_names, contains_none
 
 
 def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
     columns = None
     data = None
     denormed_columns = None
+    denormed_columns_contain_none = False
     if len(item.names) > 0:
         if norm_meta.has_synthetic_columns and idx_type != "multi_index":
             columns = RangeIndex(0, len(item.names))
         else:
             columns = item.names
             if len(norm_meta.common.col_names) > 0:
-                denormed_columns = _denormalize_columns_names(copy.deepcopy(columns), norm_meta)
+                denormed_columns, denormed_columns_contain_none = _denormalize_columns_names(
+                    copy.deepcopy(columns), norm_meta
+                )
             else:
                 denormed_columns = columns
         if len(item.data) == 0:
             data = None
         else:
             data = {n: item.data[i + n_indexes] if i < len(item.data) else [] for i, n in enumerate(columns)}
-    return columns, denormed_columns, data
+    return columns, denormed_columns, data, denormed_columns_contain_none
 
 
 def _check_valid_name(name):
@@ -712,9 +737,9 @@ class ArrowTableNormalizer(Normalizer):
                 field = field.with_name(op.renames_for_table[i])
             if i in op.timezones:
                 timezone = op.timezones[i]
-                # All arcticdb timestamps are stored as UTC for timezone aware timestamps.
-                col = pa.compute.assume_timezone(col, timezone="UTC")
-                col = col.cast(pa.timestamp("ns", timezone))
+                with _tz_error_context():
+                    col = pa.compute.assume_timezone(col, timezone="UTC")
+                    col = col.cast(pa.timestamp("ns", timezone))
                 field = field.with_type(pa.timestamp("ns", timezone))
             new_columns.append(col)
             new_fields.append(field)
@@ -726,6 +751,12 @@ class ArrowTableNormalizer(Normalizer):
         )
 
     def normalize(self, table, **kwargs):
+        if _POLARS_AVAILABLE and isinstance(table, pl.DataFrame):
+            if not _PYARROW_AVAILABLE:
+                raise ModuleNotFoundError(
+                    "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
+                )
+            table = table.to_arrow()
         if table.num_rows == 0:
             # to_batches has a bug https://github.com/apache/arrow/issues/49309 so that it returns an empty list when
             # the table has zero rows, losing the schema information
@@ -742,15 +773,7 @@ class ArrowTableNormalizer(Normalizer):
             pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
             arcticdb_record_batches.append(arcticdb_record_batch)
         norm_metadata = NormalizationMetadata()
-        index_column = kwargs.get("index_column", None)
-        if index_column is None:
-            norm_metadata.experimental_arrow.has_index = False
-        else:
-            check(isinstance(index_column, str), "Arrow index column specifier must be a string")
-            norm_metadata.experimental_arrow.has_index = True
-            norm_metadata.experimental_arrow.index_column_name = index_column
-            # It would be cleaner if the index column position finding happened here. However, finding a column by name
-            # is O(n), and we have to iterate through the columns in the C++ layer anyway
+        norm_metadata.experimental_arrow.has_index = kwargs.get("index_column", False)
         return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
@@ -803,15 +826,6 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             pandas_meta = norm_meta.series.common
         elif input_type == "experimental_arrow":
-            if norm_meta.experimental_arrow.has_index:
-                index_column_position = norm_meta.experimental_arrow.index_column_position
-                if index_column_position != 0 and index_column_position < item.num_columns:
-                    # Verified experimentally that this is zero-copy as the docs do not specify
-                    item = item.select(
-                        list(range(1, index_column_position + 1))
-                        + [0]
-                        + list(range(index_column_position + 1, item.num_columns))
-                    )
             return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
@@ -1121,12 +1135,12 @@ class DataFrameNormalizer(_PandasNormalizer):
         return df_from_arrays(item.data, columns, index, n_indexes)
 
     def _pandas_norm_meta_from_arrow_norm_meta(
-        self, arrow_table: NormalizationMetadata.ExperimentalArrow
+        self, arrow_meta: NormalizationMetadata.ExperimentalArrow, item: FrameData
     ) -> NormalizationMetadata.PandasDataFrame:
         res = NormalizationMetadata.PandasDataFrame()
-        if arrow_table.has_index:
+        if arrow_meta.has_index:
             res.common.index.is_physically_stored = True
-            res.common.index.name = arrow_table.index_column_name
+            res.common.index.name = item.names[0]
             # Handle timezones, issue number 9929831600
         else:
             res.common.index.step = 1
@@ -1137,7 +1151,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
         if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
-            norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta)
+            norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta, item)
 
         if norm_meta.HasField("multi_columns"):
             raise ArcticDbNotYetImplemented(
@@ -1148,7 +1162,9 @@ class DataFrameNormalizer(_PandasNormalizer):
         n_indexes = len(item.index_columns)
         idx_type = norm_meta.common.WhichOneof("index_type")
 
-        columns, denormed_columns, data = _denormalize_columns(item, norm_meta, idx_type, n_indexes)
+        columns, denormed_columns, data, denormed_columns_contain_none = _denormalize_columns(
+            item, norm_meta, idx_type, n_indexes
+        )
 
         if not self._skip_df_consolidation:
             df = DataFrame(data, index=index, columns=columns)
@@ -1188,7 +1204,12 @@ class DataFrameNormalizer(_PandasNormalizer):
                 df = self.df_without_consolidation(columns, item.data[0], item, n_indexes, data)
 
         if denormed_columns is not None:
-            df.columns = denormed_columns
+            # Set the dtype to object otherwise columns with names int(1) and None will become 1.0 and np.nan, because
+            # Pandas assumes this is a float64 array
+            if denormed_columns_contain_none:
+                df.columns = pd.Index(denormed_columns, dtype=object)
+            else:
+                df.columns = denormed_columns
         if norm_meta.common.columns.fake_name is False and len(norm_meta.common.columns.name) > 0:
             df.columns.name = norm_meta.common.columns.name
         for key in norm_meta.common.categories:
@@ -1384,6 +1405,7 @@ class MsgPackNormalizer(Normalizer):
         if isinstance(obj, FrameData):
             np_arr = obj.data[0]
         elif _PYARROW_AVAILABLE and isinstance(obj, pa.Table):
+            # It would avoid the memcpys of combine_chunks if we always returned pickled data as Pandas
             np_arr = obj.column(0).combine_chunks().to_numpy(zero_copy_only=True)
         else:
             raise ArcticNativeException(f"Unexpected denormalization input in MsgPackNormlizer: {input}")
@@ -1500,7 +1522,7 @@ class TimeFrameNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         idx = _denormalize_single_index(item, norm_meta.common)
-        columns, denormed_columns, data = _denormalize_columns(item, norm_meta, "index", 1)
+        columns, denormed_columns, data, _ = _denormalize_columns(item, norm_meta, "index", 1)
         if columns is None:
             columns = []
             denormed_columns = []
@@ -1562,7 +1584,7 @@ class CompositeNormalizer(Normalizer):
         dynamic_strings=False,
         coerce_columns=None,
         empty_types=False,
-        index_column=None,
+        index_column=False,
         allow_arrow_input=False,
         **kwargs,
     ):
@@ -1609,8 +1631,11 @@ class CompositeNormalizer(Normalizer):
         if isinstance(item, np.ndarray):
             return self.np.normalize
 
-        if _PYARROW_AVAILABLE and isinstance(item, pa.Table) and allow_arrow_input:
-            return self.pa.normalize
+        if allow_arrow_input:
+            if _PYARROW_AVAILABLE and isinstance(item, pa.Table):
+                return self.pa.normalize
+            if _POLARS_AVAILABLE and isinstance(item, pl.DataFrame):
+                return self.pa.normalize
 
         if self.fallback_normalizer is not None:
             # Msgpack normalize if everything else fails.
@@ -1783,12 +1808,58 @@ def normalize_dataframe(df, **kwargs):
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
 
-def restrict_data_to_date_range_only(
-    data: T, *, start: Timestamp, end: Timestamp, index_column: Optional[str] = None
-) -> T:
+def _filter_pyarrow_table_to_date_range(data: "pa.Table", index_column: str, start, end) -> "pa.Table":
+    """Slice a sorted PyArrow table to rows where ``start <= index <= end``.
+
+    Uses Python binary search over the index column. This is suboptimal for two reasons:
+     - Python loops are slow.
+     - Random access into a heavily fragmented ChunkedArray is O(log num_chunks) per element.
+    The ideal solution is a C++ binary search over chunks then within the target chunk.
+    A hybrid approach (Python bisect to find the chunk, numpy.searchsorted within it) was
+    attempted but is slower beyond ~100 chunks because PyArrow doesn't expose its internal
+    ChunkResolver with precomputed offsets, making efficient chunk-level slicing impossible.
+    """
+    col = data.column(index_column)
+    check(
+        pa.types.is_timestamp(col.type) and col.type.unit == "ns",
+        f"Expected timestamp[ns] index column, got {col.type}",
+    )
+    n = len(col)
+    start_ns = start.value
+    end_ns = end.value
+
+    # bisect_left for start
+    lo, hi = 0, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if col[mid].value < start_ns:
+            lo = mid + 1
+        else:
+            hi = mid
+    left = lo
+
+    # bisect_right for end
+    lo, hi = left, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if col[mid].value <= end_ns:
+            lo = mid + 1
+        else:
+            hi = mid
+    right = lo
+
+    return data.slice(left, right - left)
+
+
+def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp, index_column: bool = False) -> Any:
     """Return a copy of `data` filtered so that its contents lie between `start` and `end` (inclusive).
 
     `data` must be time-indexed.
+
+    For polars DataFrames, the result is a ``pa.Table`` rather than a ``pl.DataFrame``.
+    The PyArrow binary search produces a zero-copy slice (a view into the original buffers),
+    and the caller's normalizer would convert a polars DataFrame back to ``pa.Table`` anyway,
+    so the round-trip is avoided.
     """
 
     def _strip_tz(s, e):
@@ -1807,16 +1878,30 @@ def restrict_data_to_date_range_only(
             # data.loc[...] and let version_core.cpp::sorted_data_check_update handle this, but that will be confusing
             # as the frame input to sorted_data_check_update WILL be sorted. Instead, we fail early here, at the cost
             # of duplicating exception messages.
-            raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
+            raise UnsortedDataException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
-    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
-        check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
-        col = data.column(index_column)
-        start, end = _strip_tz(start, end)
-        check(
-            start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None),
-            "update with date_range and pyarrow Table not yet supported with date_range overlapping the data",
-        )
+    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table) or _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+        if _POLARS_AVAILABLE and isinstance(data, pl.DataFrame):
+            if not _PYARROW_AVAILABLE:
+                raise ModuleNotFoundError(
+                    "ArcticDB's pyarrow optional dependency is missing and is required for working with polars DataFrames."
+                )
+            # PyArrow binary search + slice is benchmarked faster than polars native filtering
+            # (filter/is_between with set_sorted), which materializes a boolean mask over the
+            # entire column. The result is a zero-copy pa.Table view which the caller's
+            # normalizer accepts directly, avoiding a needless round-trip back to polars.
+            data = data.to_arrow()
+        check(index_column, "Cannot update with pyarrow Table without specifying index_column=True")
+        col_name = data.column_names[0]
+        if not data.column(col_name).type.tz:
+            # Matches pandas behavior to strip the timezone if index column is timezone naive.
+            # TODO: This is potentially surprising and we should consider raising when comparing
+            # naive vs timezone aware timestamps. (monday ref: 11669271306)
+            start, end = _strip_tz(start, end)
+        # Assumes index column is sorted.
+        # TODO: Decide on a consistent way to deal with unsorted index column. E.g. a flag `validate_index`
+        # which will enable the index sortedness check. (monday ref: 11668250872)
+        data = _filter_pyarrow_table_to_date_range(data, col_name, start, end)
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)

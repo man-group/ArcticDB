@@ -8,6 +8,7 @@
 #include <arrow/arrow_handlers.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/util/string_utils.hpp>
@@ -78,6 +79,9 @@ void ArrowStringHandler::handle_type(
     data += decode_field(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
+    // Calling `set_row_data` should be done after `sparse_map` is modified by `decode_field`.
+    // TODO: Refactor so that `last_logical_row` is inferred from sparse_map as described in #2932
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
 
     convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
@@ -212,9 +216,7 @@ void encode_variable_length(
     handle_truncation(dest_bitset, mapping.truncate_);
     handle_truncation(dest_column, mapping.truncate_);
 
-    if (dest_bitset.count() != dest_bitset.size()) {
-        create_dense_bitmap(positions.extra_buffer_position, dest_bitset, dest_column, AllocationType::DETACHABLE);
-    } // else there weren't any missing values
+    create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
 
     if (dest_bitset.count() > 0) {
         auto& string_buffer = dest_column.create_extra_buffer(
@@ -363,9 +365,7 @@ void encode_dictionary(
     handle_truncation(dest_bitset, mapping.truncate_);
     handle_truncation(dest_column, mapping);
 
-    if (dest_bitset.count() != dest_bitset.size()) {
-        create_dense_bitmap(positions.extra_buffer_position, dest_bitset, dest_column, AllocationType::DETACHABLE);
-    } // else there weren't any missing values
+    create_dense_bitmap_if_any_nulls(positions.extra_buffer_position, dest_bitset, dest_column);
 
     // bitset.count() == 0 is the special case where all the rows were missing. In this case, do not create
     // the extra string and offset buffers. string_dict_from_block will then do the right thing and call
@@ -417,17 +417,17 @@ void ArrowStringHandler::convert_type(
     }
 }
 
-std::pair<TypeDescriptor, size_t> ArrowStringHandler::output_type_and_extra_bytes(
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowStringHandler::output_type_and_block_config(
         const TypeDescriptor&, std::string_view column_name, const ReadOptions& read_options
 ) const {
     auto string_format = output_string_format(column_name, read_options);
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), 0};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{0}};
     case ArrowOutputStringFormat::LARGE_STRING:
-        return {make_scalar_type(DataType::UTF_DYNAMIC64), sizeof(int64_t)};
+        return {make_scalar_type(DataType::UTF_DYNAMIC64), detachable_block_config::Regular{sizeof(int64_t)}};
     case ArrowOutputStringFormat::SMALL_STRING:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), sizeof(int32_t)};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), detachable_block_config::Regular{sizeof(int32_t)}};
     default:
         util::raise_rte("Unknown arrow string output format {}", static_cast<int32_t>(string_format));
     }
@@ -449,6 +449,180 @@ void ArrowStringHandler::default_initialize(
         auto bytes_with_extra = bytes + buffer.extra_bytes_per_block();
         memset(dest_ptr, 0, bytes_with_extra);
     }
+}
+
+void ArrowBoolHandler::handle_type(
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
+    util::check(field.has_ndarray(), "Bool handler expected array");
+    const auto& ndarray = field.ndarray();
+    const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+
+    Column decoded_data{
+            m.source_type_desc_,
+            bytes / get_type_size(m.source_type_desc_.data_type()),
+            AllocationType::DYNAMIC,
+            Sparsity::PERMITTED
+    };
+
+    data += decode_field(
+            m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
+    );
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
+
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
+}
+
+void ArrowBoolHandler::
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>&, const ReadOptions&)
+                const {
+    auto* packed_dest = dest_column.buffer().block_at_offset(m.offset_bytes_)->data();
+    const auto positions = get_positions_after_truncation(m);
+
+    const bool is_sparse = source_column.opt_sparse_map().has_value();
+    if (is_sparse) {
+        using BoolTypeTag = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
+        for_each_enumerated_flattened<BoolTypeTag>(
+                source_column,
+                [&] ARCTICDB_LAMBDA_INLINE(const auto& en) { set_bit_at(packed_dest, en.idx(), en.value()); },
+                positions.first_idx_after_truncation,
+                positions.end_idx_after_truncation
+        );
+        const auto& sparse_map = *source_column.opt_sparse_map();
+        // Copy the sparse map, because handle_truncation modifies the bitset inplace.
+        auto validity_bitset = sparse_map;
+        auto bitmap_truncate = m.truncate_;
+        if (bitmap_truncate.start_.has_value()) {
+            // Round down the bitmap truncation start to the nearest byte boundary so that the BITMAP buffer's
+            // bit layout matches the packed data block's non-zero shift after handle_truncation(dest_column).
+            *bitmap_truncate.start_ -= *bitmap_truncate.start_ % 8;
+        }
+        handle_truncation(validity_bitset, bitmap_truncate);
+
+        if (validity_bitset.count() != validity_bitset.size()) {
+            create_dense_bitmap(
+                    positions.extra_buffer_position, validity_bitset, dest_column, AllocationType::DETACHABLE
+            );
+        }
+    } else {
+        bools_to_packed_bits(
+                reinterpret_cast<const bool*>(source_column.data().buffer().data()), m.num_rows_, packed_dest
+        );
+    }
+
+    handle_truncation(dest_column, m.truncate_);
+}
+
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowBoolHandler::
+        output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
+    return {input_type, detachable_block_config::Packed{}};
+}
+
+void ArrowBoolHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+    // No-op: The validity bitmap extra buffer is populated with zeros upstream.
+    // The packed data buffer does not need initialization since missing values are masked by the bitmap.
+}
+
+void ArrowTimestampHandler::handle_type(
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
+    util::check(field.has_ndarray(), "Timestamp handler expected array");
+    const auto& ndarray = field.ndarray();
+    const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+
+    auto decoded_data = [&m, bytes, &dest_column]() -> Column {
+        const auto num_non_empty_rows = bytes / get_type_size(m.source_type_desc_.data_type());
+        const bool is_sparse = num_non_empty_rows < m.num_rows_;
+        if (is_sparse) {
+            return Column(m.source_type_desc_, num_non_empty_rows, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+        } else {
+            Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
+            // When the column is not sparse we can decode directly onto the destination buffer. So, we make
+            // decoded_data hold a non-owning pointer to the destination buffer.
+            column.buffer().add_external_block(dest_column.bytes_at(m.offset_bytes_, bytes), bytes);
+            return column;
+        }
+    }();
+
+    data += decode_field(
+            m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
+    );
+    decoded_data.set_row_data(static_cast<ssize_t>(m.num_rows_) - 1);
+
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
+}
+
+void ArrowTimestampHandler::
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& m, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>&, const ReadOptions&)
+                const {
+    auto* dest = reinterpret_cast<timestamp*>(dest_column.bytes_at(m.offset_bytes_, m.dest_bytes_));
+    const auto positions = get_positions_after_truncation(m);
+
+    const bool is_sparse = source_column.opt_sparse_map().has_value();
+    const auto first_idx = positions.first_idx_after_truncation.value_or(0);
+    const auto end_idx = positions.end_idx_after_truncation.value_or(m.num_rows_);
+    using TimestampTag = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    util::BitSet validity;
+    validity.resize(end_idx - first_idx);
+    util::BitSet::bulk_insert_iterator inserter(validity);
+
+    if (is_sparse) {
+        for_each_enumerated_flattened<TimestampTag>(
+                source_column,
+                [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+                    if (en.value() != NaT) {
+                        dest[en.idx()] = en.value();
+                        inserter = en.idx() - first_idx;
+                    }
+                },
+                first_idx,
+                end_idx
+        );
+        inserter.flush();
+    } else {
+        auto column_data = source_column.data();
+        const auto* src_ptr = reinterpret_cast<timestamp*>(column_data.buffer().blocks()[0]->data());
+
+        // 3x faster for dense to `memcpy` + scan each element than doing the copy in the for_each_enumerated.
+        // If going through the `handle_type` codepath we can skip the memcpy as we have decoded directly onto the
+        // destination buffer.
+        if (auto* dest_ptr = dest; dest_ptr != src_ptr) {
+            while (auto block = column_data.next<TimestampTag>()) {
+                const auto row_count = block->row_count();
+                memcpy(dest_ptr, block->data(), row_count * sizeof(timestamp));
+                dest_ptr += row_count;
+            }
+        }
+
+        for (size_t i = first_idx; i < end_idx; ++i) {
+            // Will invert the validity map below, as we expect fewer values to actually be NaT.
+            if (dest[i] == NaT) {
+                inserter = i - first_idx;
+            }
+        }
+        inserter.flush();
+        validity.invert();
+    }
+
+    if (validity.count() != validity.size()) {
+        create_dense_bitmap(positions.extra_buffer_position, validity, dest_column, AllocationType::DETACHABLE);
+    }
+
+    handle_truncation(dest_column, m.truncate_);
+}
+
+std::pair<TypeDescriptor, DetachableBlockConfig> ArrowTimestampHandler::
+        output_type_and_block_config(const TypeDescriptor& input_type, std::string_view, const ReadOptions&) const {
+    return {input_type, detachable_block_config::Regular{0}};
+}
+
+void ArrowTimestampHandler::default_initialize(ChunkedBuffer&, size_t, size_t, const DecodePathData&, std::any&) const {
+    // No-op: The validity bitmap extra buffer is populated with zeros upstream.
+    // The data buffer does not need initialization since missing values are masked by the bitmap.
 }
 
 } // namespace arcticdb

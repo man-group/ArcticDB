@@ -1,4 +1,4 @@
-/* Copyright 2025 Man Group Operations Limited
+/* Copyright 2026 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -15,6 +15,8 @@ struct MergeStrategy {
     MergeAction matched;
     MergeAction not_matched_by_target;
     bool operator==(const MergeStrategy&) const = default;
+    bool update_only() const;
+    bool insert_only() const;
 };
 
 } // namespace arcticdb

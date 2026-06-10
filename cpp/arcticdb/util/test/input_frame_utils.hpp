@@ -27,7 +27,7 @@ NativeTensor one_dimensional_tensor(const T& data, const DataType data_type) {
 template<ValidIndex Index, typename... T>
 requires(
         (Index::field_count() == 0 || Index::field_count() == 1) && (std::ranges::sized_range<T> && ...) &&
-        // strings are not supported yet, in order to support them we need to initialise python strings
+        // strings are not supported yet; to support them, we need to initialise python strings
         (!std::convertible_to<std::ranges::range_value_t<T>, std::string_view> && ...)
 )
 auto input_frame_from_tensors(const StreamDescriptor& desc, T&&... input) {

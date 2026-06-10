@@ -15,7 +15,6 @@
 #include <arcticdb/util/configs_map.hpp>
 
 #include <mutex>
-#include <folly/experimental/FunctionScheduler.h>
 
 namespace arcticdb {
 

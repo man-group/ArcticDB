@@ -14,7 +14,7 @@ import pytest
 
 
 from arcticdb.exceptions import (
-    SortingException,
+    UnsortedDataException,
     SchemaException,
     UserInputException,
     ArcticDbNotYetImplemented,
@@ -28,7 +28,6 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.library import Library
-from arcticdb_ext.exceptions import UnsortedDataException
 from arcticdb_ext.storage import KeyType
 
 from arcticdb import util, LibraryOptions
@@ -81,7 +80,7 @@ def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
             arctic_library_v1._dev_tools.remove_incompletes(["sym"])
         return  # remove_incompletes not implemented on Mongo 8784267430
 
-    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+    with config_context_multi({"S3Storage.DeleteBatchSize": batch_size, "AzureStorage.DeleteBatchSize": batch_size}):
         lib_tool = lib.library_tool()
         assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
         assert lib.list_symbols_with_incomplete_data() == []
@@ -135,7 +134,7 @@ def test_remove_incompletes(arctic_library_v1, batch_size):
             arctic_library_v1._dev_tools.remove_incompletes(["sym"])
         return  # remove_incompletes not implemented on Mongo 8784267430
 
-    with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
+    with config_context_multi({"S3Storage.DeleteBatchSize": batch_size, "AzureStorage.DeleteBatchSize": batch_size}):
         lib = arctic_library_v1
         lib_tool = lib._dev_tools.library_tool()
         assert lib_tool.find_keys(KeyType.APPEND_DATA) == []
@@ -559,7 +558,7 @@ def test_parallel_sortedness_checks_unsorted_data(lmdb_version_store, append, va
         lib.write(sym, df_0)
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-03")])
     if validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             if append:
                 lib.append(sym, df_1, incomplete=True, validate_index=True)
             else:
@@ -686,7 +685,7 @@ def test_parallel_overlapping_incomplete_segments(
         lib.write(sym, df_2, parallel=True)
         lib.write(sym, df_1, parallel=True)
     if validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.compact_incomplete(
                 sym,
                 append,
@@ -744,7 +743,7 @@ def test_parallel_all_incomplete_segments_same_index(
         lib.write(sym, df_2, parallel=True)
         lib.write(sym, df_1, parallel=True)
     if validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.compact_incomplete(
                 sym,
                 append,
@@ -782,7 +781,7 @@ def test_parallel_append_overlapping_with_existing(lmdb_version_store, validate_
     )
     lib.append(sym, df_1, incomplete=True)
     if validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.compact_incomplete(
                 sym,
                 True,
@@ -824,7 +823,7 @@ def test_parallel_append_existing_data_unsorted(
     df_1 = pd.DataFrame({"col": [3, 4]}, index=[pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-06")])
     lib.append(sym, df_1, incomplete=True)
     if validate_index:
-        with pytest.raises(SortingException):
+        with pytest.raises(UnsortedDataException):
             lib.compact_incomplete(
                 sym,
                 True,

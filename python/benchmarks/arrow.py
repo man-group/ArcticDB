@@ -12,12 +12,11 @@ import numpy as np
 import pandas as pd
 
 from arcticdb import Arctic, OutputFormat, ArrowOutputStringFormat
+from arcticdb.options import LibraryOptions
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 from asv_runner.benchmarks.mark import SkipNotImplemented
-
-from benchmarks.common import generate_pseudo_random_dataframe
 
 
 class ArrowNumeric:
@@ -74,23 +73,188 @@ class ArrowNumeric:
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
         self.fresh_lib = self.get_fresh_lib()
         self.fresh_lib._nvs._set_allow_arrow_input()
-        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))
+        num_cols = 9
+        index = pd.date_range("1970-01-01", freq="ns", periods=rows)
+        names = ["ts"] + [f"col{idx}" for idx in range(num_cols)]
+        self.table = pa.Table.from_arrays(
+            [index] + [np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)],
+            names=names,
+        )
 
     def get_fresh_lib(self):
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
     def time_write(self, rows, date_range):
-        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column=True)
 
     def peakmem_write(self, rows, date_range):
-        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column=True)
 
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
     def peakmem_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
+
+
+class ArrowSparseNumeric:
+    timeout = 600
+    connection_string = "lmdb://arrow_sparse_numeric"
+    lib_name_prewritten = "arrow_sparse_numeric_prewritten"
+    lib_name_fresh = "arrow_sparse_numeric_fresh"
+    type_promotion_suffix = "_with_type_promotion"
+    num_cols = 9
+    params = ([1_000_000, 10_000_000], [0.1, 0.5, 0.9])
+    param_names = ["rows", "sparsity"]
+
+    def symbol_name(self, num_rows: int, sparsity: float, suffix=""):
+        return f"sparse_{num_rows}_{sparsity}{suffix}"
+
+    def _generate_table(self, num_rows, sparsity, pa_type=pa.int64()):
+        rng = np.random.default_rng(42)
+        mask = rng.random(num_rows) < sparsity
+        columns = {}
+        for i in range(self.num_cols):
+            vals = np.arange(i * num_rows, (i + 1) * num_rows, dtype=np.int64)
+            columns[f"col{i}"] = pa.array(np.where(mask, None, vals), pa_type)
+        return pa.table(columns)
+
+    def setup_cache(self):
+        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        num_rows_list, sparsity_list = self.params
+        ac.delete_library(self.lib_name_prewritten)
+        lib = ac.create_library(self.lib_name_prewritten, library_options=LibraryOptions(dynamic_schema=True))
+        lib._nvs._set_allow_arrow_input()
+        for rows in num_rows_list:
+            for sparsity in sparsity_list:
+                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))
+                lib.write(
+                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),
+                    self._generate_table(rows // 2, sparsity, pa.int32()),
+                )
+                lib.append(
+                    self.symbol_name(rows, sparsity, self.type_promotion_suffix),
+                    self._generate_table(rows // 2, sparsity, pa.int64()),
+                )
+
+    def teardown(self, rows, sparsity):
+        for lib in self.ac.list_libraries():
+            if "prewritten" in lib:
+                continue
+            self.ac.delete_library(lib)
+        del self.ac
+
+    def setup(self, rows, sparsity):
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        self.lib = self.ac.get_library(self.lib_name_prewritten)
+        self.lib._nvs._set_allow_arrow_input()
+        self.fresh_lib = self.get_fresh_lib()
+        self.fresh_lib._nvs._set_allow_arrow_input()
+        self.table = self._generate_table(rows, sparsity)
+        self.sym = self.symbol_name(rows, sparsity)
+        self.sym_with_type_promotion = self.symbol_name(rows, sparsity, self.type_promotion_suffix)
+
+    def get_fresh_lib(self):
+        self.ac.delete_library(self.lib_name_fresh)
+        return self.ac.create_library(self.lib_name_fresh)
+
+    def time_write(self, rows, sparsity):
+        self.fresh_lib.write(self.sym, self.table)
+
+    def peakmem_write(self, rows, sparsity):
+        self.fresh_lib.write(self.sym, self.table)
+
+    def time_read(self, rows, sparsity):
+        self.lib.read(self.sym)
+
+    def peakmem_read(self, rows, sparsity):
+        self.lib.read(self.sym)
+
+    def time_read_pandas(self, rows, sparsity):
+        self.lib.read(self.sym, output_format="PANDAS")
+
+    def peakmem_read_pandas(self, rows, sparsity):
+        self.lib.read(self.sym, output_format="PANDAS")
+
+    def time_read_with_type_promotion(self, rows, sparsity):
+        self.lib.read(self.sym_with_type_promotion)
+
+    def peakmem_read_with_type_promotion(self, rows, sparsity):
+        self.lib.read(self.sym_with_type_promotion)
+
+
+class ArrowBools:
+    timeout = 600
+    connection_string = "lmdb://arrow_bools"
+    lib_name_prewritten = "arrow_bools_prewritten"
+    lib_name_fresh = "arrow_bools_fresh"
+    num_cols = 9
+    params = ([1_000_000, 10_000_000], [0.0, 0.1, 0.5, 0.9])
+    param_names = ["rows", "sparsity"]
+
+    def symbol_name(self, num_rows: int, sparsity: float):
+        return f"bools_{num_rows}_{sparsity}"
+
+    def _generate_table(self, num_rows, sparsity):
+        rng = np.random.default_rng(42)
+        vals = rng.random(num_rows) < 0.5
+        if sparsity > 0.0:
+            null_mask = rng.random(num_rows) < sparsity
+            columns = {f"col{i}": pa.array(np.where(null_mask, None, vals), pa.bool_()) for i in range(self.num_cols)}
+        else:
+            columns = {f"col{i}": pa.array(vals, pa.bool_()) for i in range(self.num_cols)}
+        return pa.table(columns)
+
+    def setup_cache(self):
+        ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        num_rows_list, sparsity_list = self.params
+        ac.delete_library(self.lib_name_prewritten)
+        lib = ac.create_library(self.lib_name_prewritten)
+        lib._nvs._set_allow_arrow_input()
+        for rows in num_rows_list:
+            for sparsity in sparsity_list:
+                lib.write(self.symbol_name(rows, sparsity), self._generate_table(rows, sparsity))
+
+    def teardown(self, rows, sparsity):
+        for lib in self.ac.list_libraries():
+            if "prewritten" in lib:
+                continue
+            self.ac.delete_library(lib)
+        del self.ac
+
+    def setup(self, rows, sparsity):
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
+        self.lib = self.ac.get_library(self.lib_name_prewritten)
+        self.lib._nvs._set_allow_arrow_input()
+        self.fresh_lib = self.get_fresh_lib()
+        self.fresh_lib._nvs._set_allow_arrow_input()
+        self.table = self._generate_table(rows, sparsity)
+        self.sym = self.symbol_name(rows, sparsity)
+
+    def get_fresh_lib(self):
+        self.ac.delete_library(self.lib_name_fresh)
+        return self.ac.create_library(self.lib_name_fresh)
+
+    def time_write(self, rows, sparsity):
+        self.fresh_lib.write(self.sym, self.table)
+
+    def peakmem_write(self, rows, sparsity):
+        self.fresh_lib.write(self.sym, self.table)
+
+    def time_read(self, rows, sparsity):
+        self.lib.read(self.sym)
+
+    def time_read_row_range_byte_aligned(self, rows, sparsity):
+        # Should read the first two blocks and truncate both to a byte aligned offsets
+        self.lib.read(self.sym, row_range=(8, 100_008))
+
+    def time_read_row_range_byte_unaligned(self, rows, sparsity):
+        # Should read the first two blocks and truncate both to a byte unaligned offsets
+        self.lib.read(self.sym, row_range=(5, 100_005))
+
+    def peakmem_read(self, rows, sparsity):
+        self.lib.read(self.sym)
 
 
 class ArrowStrings:
@@ -133,7 +297,7 @@ class ArrowStrings:
         for rows in num_rows:
             for unique_string_count in unique_string_counts:
                 table = self._generate_table(rows, self.num_cols, unique_string_count)
-                lib.write(self.symbol_name(rows, unique_string_count), table, index_column="ts")
+                lib.write(self.symbol_name(rows, unique_string_count), table, index_column=True)
 
     def teardown(self, rows, date_range, unique_string_count, arrow_string_format):
         for lib in self.ac.list_libraries():
@@ -162,14 +326,14 @@ class ArrowStrings:
     def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
-            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
-            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=True)
         else:
             raise SkipNotImplemented
 

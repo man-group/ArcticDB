@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import copy
 import os
+import sys
 from contextlib import contextmanager
 from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
@@ -25,6 +26,11 @@ from arcticdb.dependencies import pyarrow as pa
 from arcticdb.dependencies import polars as pl
 
 from arcticdb.util.marks import SHORTER_LOGS
+from arcticdb.util._versions import IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
+
+PYARROW_WINDOWS_SPARSE_FILL_BROKEN = (
+    sys.platform.lower().startswith("win32") and not IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
+)
 
 try:
     from pandas.errors import UndefinedVariableError
@@ -263,6 +269,14 @@ def assert_frame_equal_with_arrow(left, right, **kwargs):
         right = right.to_pandas()
 
     assert_frame_equal(left, right, **kwargs)
+
+
+def assert_frame_equal_with_arrow_for_sparse(left, right, **kwargs):
+    if PYARROW_WINDOWS_SPARSE_FILL_BROKEN:
+        # Skipping assertion because conversion from arrow to pandas may be broken for old version of pyarrow
+        # https://github.com/apache/arrow/issues/47234
+        return
+    assert_frame_equal_with_arrow(left, right, **kwargs)
 
 
 def random_ascii_string(length: int) -> str:
@@ -1310,11 +1324,184 @@ def assert_schema_match(left: pd.DataFrame, right: pd.DataFrame):
     assert left.dtypes.equals(right.dtypes)
 
 
-def merge_update(
-    target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[str]] = None, inplace: bool = False
+def _validate_merge_update_inputs(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[str]]) -> List[str]:
+    """Validate inputs for merge_update and return the normalized `on` list."""
+    if isinstance(target.index, pd.MultiIndex):
+        is_datetime = isinstance(target.index.get_level_values(0), pd.DatetimeIndex)
+    else:
+        is_datetime = isinstance(target.index, pd.DatetimeIndex)
+
+    # Row-range indexed DataFrames must specify at least one column to match on, since there's no meaningful index to
+    # join on.
+    if not is_datetime:
+        assert on is not None and len(on) > 0, "Row range index requires at least one on column"
+
+    if on is None:
+        on = []
+
+    # Verify all requested match columns exist in both DataFrames. For MultiIndex, on columns may also reference index
+    # level names (since ArcticDB stores non-datetime index levels as regular columns internally).
+    on_set = set(on)
+    target_available = set(target.columns)
+    source_available = set(source.columns)
+    if isinstance(target.index, pd.MultiIndex):
+        target_available |= set(target.index.names)
+    if isinstance(source.index, pd.MultiIndex):
+        source_available |= set(source.index.names)
+    missing_target = on_set - target_available
+    if missing_target:
+        raise ValueError(f"Missing columns in target: {missing_target}")
+    missing_source = on_set - source_available
+    if missing_source:
+        raise ValueError(f"Missing columns in source: {missing_source}")
+
+    return on
+
+
+def _prepare_merge_frames(
+    target: pd.DataFrame, source: pd.DataFrame, merge_on: List[str], match_on_index: bool
+) -> tuple:
+    """Prepare copies of target and source for pd.merge.
+
+    Promotes the datetime index into a regular column if match_on_index is True. Replaces None/NaN with a sentinel in
+    object-typed key columns so pd.merge treats them as equal.
+
+    Returns (target_merge, source_merge, merge_on).
+    """
+    # Work on copies so we can add helper columns without mutating the originals.
+    target_merge = target.copy(deep=True)
+    source_merge = source.copy(deep=True)
+
+    # For datetime indexes, promote the index into a regular column so it can participate in pd.merge alongside any
+    # user-specified match columns.
+    if match_on_index:
+        idx_col = "__merge_index__"
+        # Pandas can change the resolution but arcticdb always works with ns
+        target_merge[idx_col] = target.index.values.astype("datetime64[ns]")
+        source_merge[idx_col] = source.index.values.astype("datetime64[ns]")
+        merge_on = [idx_col] + merge_on
+
+    # pd.merge treats NaN != NaN by default, so rows with None/NaN in key columns would never match. Replace them with
+    # a unique sentinel object so they compare as equal. The sentinel can never collide with real data values.
+    _na_sentinel = object()
+    for c in merge_on:
+        if target_merge[c].dtype == object:
+            target_merge[c] = target_merge[c].fillna(_na_sentinel)
+        if source_merge[c].dtype == object:
+            source_merge[c] = source_merge[c].fillna(_na_sentinel)
+
+    return target_merge, source_merge, merge_on
+
+
+def _find_matching_rows(target_merge: pd.DataFrame, source_merge: pd.DataFrame, on: List[str]) -> pd.DataFrame:
+    """Find matching row pairs between target and source via an inner join.
+
+    Tags each frame with positional indices (__target_idx__, __source_idx__), then performs an inner merge on the
+    columns in "on". Only key + position columns are included to avoid suffixed duplicates for shared value column
+    names.
+
+    Returns the merged DataFrame with __target_idx__ and __source_idx__ columns.
+    """
+    # Store original positional indices so we can trace back which rows matched after the merge reindexes the result.
+    target_merge["__target_idx__"] = np.arange(len(target_merge))
+    source_merge["__source_idx__"] = np.arange(len(source_merge))
+
+    # Inner join on the columns in "on". Only rows present in both DataFrames are kept. We select only the columns in
+    # "on" and position trackers to avoid creating suffixed duplicates for value columns that share names across target
+    # and source.
+    return pd.merge(target_merge[on + ["__target_idx__"]], source_merge[on + ["__source_idx__"]], on=on)
+
+
+def _apply_updates(
+    target: pd.DataFrame,
+    source: pd.DataFrame,
+    matching_rows: pd.DataFrame,
+    update_columns: List[str],
 ) -> pd.DataFrame:
+    """Apply source values to target at matched positions and restore dtypes.
+
+    Validates that no target row is matched by multiple source rows, then overwrites each column not in "on" at matched
+    positions.
+    """
+    result = target.copy(deep=True)
+
+    if not matching_rows.empty:
+        # Guard against ambiguous updates: if multiple source rows match the same target row, we can't decide which
+        # source values to use.
+        dup_targets = matching_rows.groupby("__target_idx__")["__source_idx__"].nunique()
+        multi = dup_targets[dup_targets > 1]
+        if not multi.empty:
+            raise ValueError(f"Multiple source rows match the same target row. Target row is {multi.index[0]}")
+
+        # Extract the parallel arrays of matched positions. target_indices[i] and source_indices[i] form a matched pair.
+        target_indices = matching_rows["__target_idx__"].values
+        source_indices = matching_rows["__source_idx__"].values
+
+        # Overwrite each column not in "on" column in result at the matched target positions with the corresponding
+        # source values.
+        for col in update_columns:
+            col_loc = result.columns.get_loc(col)
+            result.iloc[target_indices, col_loc] = source.iloc[source_indices][col].values
+
+    # Assignments via iloc can silently upcast dtypes (e.g. int -> float when NaN
+    # is involved). Cast back to the original target dtypes to keep schema stable.
+    for col in target.columns:
+        result[col] = result[col].astype(target[col].dtype)
+
+    return result
+
+
+def _merge_update_multiindex(target: pd.DataFrame, source: pd.DataFrame, on: List[str]) -> pd.DataFrame:
+    """Flatten MultiIndex, delegate to merge_update, reconstruct MultiIndex."""
+    index_names = list(target.index.names)
+    data_columns = list(target.columns)
+    overlap = [col for col in data_columns if col and col in index_names]
+    if len(overlap) > 0 and any(col in on for col in overlap):
+        raise ValueError(
+            f"Cannot perform merge_update on a DataFrame with MultiIndex columns that overlap with index. Overlap: {overlap}"
+        )
+    is_datetime_level0 = isinstance(target.index.get_level_values(0), pd.DatetimeIndex)
+
+    # Save original dtypes for index levels being flattened.
+    original_index_dtypes = {i: target.index.get_level_values(i).dtype for i in range(len(index_names))}
+
+    # Flatten: keep level 0 as index if DatetimeIndex, reset the rest to regular columns.
+    levels_to_reset = list(range(1, len(index_names))) if is_datetime_level0 else list(range(len(index_names)))
+    flat_target = target.reset_index(level=levels_to_reset)
+    flat_source = source.reset_index(level=levels_to_reset)
+    flattened_cols = [c for c in flat_target.columns if c not in data_columns]
+
+    # Restore dtypes that reset_index may have changed.
+    for col, level in zip(flattened_cols, levels_to_reset):
+        expected = original_index_dtypes[level]
+        if flat_target[col].dtype != expected:
+            flat_target[col] = flat_target[col].astype(expected)
+        if flat_source[col].dtype != expected:
+            flat_source[col] = flat_source[col].astype(expected)
+
+    result = merge_update(flat_target, flat_source, on=on)
+
+    # Reconstruct MultiIndex, restoring dtypes that set_index may change.
+    result = result.set_index(flattened_cols, append=is_datetime_level0)
+    levels = []
+    for i in range(result.index.nlevels):
+        values = result.index.get_level_values(i)
+        if values.dtype != original_index_dtypes[i]:
+            values = values.astype(original_index_dtypes[i])
+        levels.append(values)
+    result.index = pd.MultiIndex.from_arrays(levels, names=index_names)
+
+    if len(result.columns) == 0:
+        result.columns = target.columns
+
+    return result
+
+
+def merge_update(target: pd.DataFrame, source: pd.DataFrame, on: Optional[List[str]] = None) -> pd.DataFrame:
     """
     Special case of merge when the strategy is MergeStrategy(matched=update, not_matched_by_target=do_nothing)
+
+    Source and target are expected to have the same set of columns.
 
     Parameters
     ----------
@@ -1323,55 +1510,52 @@ def merge_update(
     source : pd.DataFrame
         The source DataFrame containing the new values.
     on : `Optional[List[str]]`, default=None
-        A list of columns to match on, the index is always implicitly included no regardless if the parameter is None or
-        contains values. When a row in source matches a row in target on all these columns, the row in target is updated with
-        the values from source. If None, only the index is used for matching.
-    inplace : `bool`, default=False
-        If True, modifies the target DataFrame in place. Otherwise, returns a new DataFrame with the updates applied.
+        A list of columns to match on. For datetime indexes, the index is always implicitly included regardless if the
+        parameter is None or contains values. For row range indexes, at least one column must be specified and matching
+        is done purely on column values using pd.merge (the row range index is not used for matching). When a row in
+        source matches a row in target on all these columns, the row in target is updated with the values from source.
+        For object dtype columns, None and np.nan are treated as equal for matching purposes.
+        The original values in target are preserved (e.g., if target has None and source has np.nan, target keeps None).
 
     Returns
     -------
     Pandas DataFrame representing the target updated with the values from source.
     """
+    on = _validate_merge_update_inputs(target, source, on)
 
-    assert isinstance(target.index, pd.DatetimeIndex), "Only datetime index is implemented"
+    if isinstance(target.index, pd.MultiIndex):
+        return _merge_update_multiindex(target, source, on)
 
-    deep = not inplace
-    original_column_order = list(target.columns)
+    row_range_index_name = None
+    if isinstance(target.index, pd.RangeIndex):
+        row_range_index_name = target.index.name
+        target = target.reset_index(drop=True)
+        source = source.reset_index(drop=True)
 
-    # If "on" is an empty match on the index. Otherwise, create a multiindex which includes the DatetimeIndex (if any)
-    # and the columns listed in "on". Using the a multiindex makes it easier to find which rows match using
-    # DataFrame.loc
-    if on is None:
-        result = target.copy(deep=deep)
-    else:
-        if isinstance(target.index, pd.DatetimeIndex):
-            index_name = target.index.name or "index"
-            while index_name in target.columns:
-                index_name = f"_{index_name}_"
-        else:
-            raise Exception("Only datetime index is implemented")
+    on_set = set(on)
 
-        if inplace:
-            target.reset_index(names=index_name, inplace=True)
-            result = target
-        else:
-            result = target.reset_index(names=index_name, inplace=False)
+    # Columns not in "on" are the ones we'll overwrite with source values.
+    update_columns = [col for col in target.columns if col not in on_set]
 
-        source_reset = source.reset_index(names=index_name)
-        new_index_columns = [index_name] + on
-        result.set_index(new_index_columns, inplace=True)
-        source_reset.set_index(new_index_columns, inplace=True)
+    # If every column is in "on", there's nothing to update.
+    if not update_columns:
+        result = target.copy(deep=True)
+        if row_range_index_name is not None:
+            result.index.name = row_range_index_name
+        return result
 
-        source = source_reset
+    # If `on` contains duplicates (e.g. ["city", "city", "state"]), pd.merge would treat them as separate join keys and
+    # create suffixed columns (city_x, city_y). dict.fromkeys preserves order while removing duplicates.
+    merge_on = list(dict.fromkeys(on))
+    target_merge, source_merge, merge_on = _prepare_merge_frames(
+        target, source, merge_on, match_on_index=isinstance(target.index, pd.DatetimeIndex)
+    )
 
-    common_idx = result.index.intersection(source.index)
-    result.loc[common_idx] = source.loc[common_idx]
-    if on is not None:
-        # Result is multiindex. Reset it so that it's indexed as target
-        result.reset_index(level=on, inplace=True)
-        result.index.name = target.index.name
-    result = result[original_column_order]
+    matching_rows = _find_matching_rows(target_merge, source_merge, merge_on)
+
+    result = _apply_updates(target, source, matching_rows, update_columns)
+    if row_range_index_name is not None:
+        result.index.name = row_range_index_name
     return result
 
 
@@ -1380,10 +1564,8 @@ def merge(
     source: pd.DataFrame,
     strategy: MergeStrategy,
     on: Optional[List[str]] = None,
-    inplace: bool = False,
 ) -> pd.DataFrame:
     assert_schema_match(target, source)
-    assert isinstance(target.index, pd.DatetimeIndex), "Only DateTime index implemented"
     assert normalize_merge_strategy(strategy) == normalize_merge_strategy(
         MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     ), f"Only update on matched is implemented but {strategy} was given"
@@ -1391,6 +1573,10 @@ def merge(
     if normalize_merge_strategy(strategy) == normalize_merge_strategy(
         MergeStrategy(matched="update", not_matched_by_target="do_nothing")
     ):
-        return merge_update(target, source, on, inplace=inplace)
+        return merge_update(target, source, on)
     # TODO: Implement other merge strategies
     raise Exception(f"Merge strategy {strategy} not implemented")
+
+
+def query_stats_operation_count(stats, operation, key_type):
+    return stats.get("storage_operations", {}).get(operation, {}).get(key_type, {}).get("count", 0)

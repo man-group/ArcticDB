@@ -16,8 +16,12 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/version/snapshot.hpp>
+#include <arcticdb/version/version_core.hpp>
+#include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/util/native_handler.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/util/key_utils.hpp>
 
 #include <chrono>
 #include <thread>
@@ -126,25 +130,25 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
     auto k2 = write_version_frame(stream_id, 1, version_store, 1000000, true, 1, k1);
     write_version_frame(stream_id, 2, version_store, 1000000, true, 2, k2);
 
-    auto iter_entry = std::make_shared<VersionMapEntry>();
-    auto ref_entry = std::make_shared<VersionMapEntry>();
+    auto iter_entry = std::make_shared<VersionMapEntry>(stream_id);
+    auto ref_entry = std::make_shared<VersionMapEntry>(stream_id);
 
     version_map->load_via_iteration(mock_store, stream_id, iter_entry);
     version_map->load_via_ref_key(
             mock_store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, ref_entry
     );
 
-    EXPECT_EQ(std::string(iter_entry->head_.value().view()), std::string(ref_entry->head_.value().view()));
+    EXPECT_EQ(iter_entry->head_.value(), ref_entry->head_.value());
     ASSERT_EQ(iter_entry->keys_.size(), ref_entry->keys_.size());
     for (size_t idx = 0; idx != iter_entry->keys_.size(); idx++) {
-        EXPECT_EQ(std::string(iter_entry->keys_[idx].view()), std::string(ref_entry->keys_[idx].view()));
+        EXPECT_EQ(iter_entry->keys_[idx], ref_entry->keys_[idx]);
     }
 
     // Testing the method after compaction
     version_map->compact(mock_store, stream_id);
 
-    auto iter_entry_compact = std::make_shared<VersionMapEntry>();
-    auto ref_entry_compact = std::make_shared<VersionMapEntry>();
+    auto iter_entry_compact = std::make_shared<VersionMapEntry>(stream_id);
+    auto ref_entry_compact = std::make_shared<VersionMapEntry>(stream_id);
 
     version_map->load_via_iteration(mock_store, stream_id, iter_entry_compact);
     version_map->load_via_ref_key(
@@ -154,14 +158,10 @@ TEST(PythonVersionStore, IterationVsRefWrite) {
             ref_entry_compact
     );
 
-    EXPECT_EQ(
-            std::string(iter_entry_compact->head_.value().view()), std::string(ref_entry_compact->head_.value().view())
-    );
+    EXPECT_EQ(iter_entry_compact->head_.value(), ref_entry_compact->head_.value());
     ASSERT_EQ(iter_entry_compact->keys_.size(), ref_entry_compact->keys_.size());
     for (size_t idx = 0; idx != iter_entry_compact->keys_.size(); idx++) {
-        EXPECT_EQ(
-                std::string(iter_entry_compact->keys_[idx].view()), std::string(ref_entry_compact->keys_[idx].view())
-        );
+        EXPECT_EQ(iter_entry_compact->keys_[idx], ref_entry_compact->keys_[idx]);
     }
 }
 
@@ -261,7 +261,8 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
@@ -348,7 +349,8 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
@@ -430,7 +432,8 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
     auto vit = test_store_->compact_incomplete(symbol, false, false, true, false);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result =
             test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
     const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
@@ -525,7 +528,9 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     BatchReadOptions batch_read_options(true);
     batch_read_options.set_output_format(OutputFormat::NATIVE);
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());
+    auto handler_data = std::make_shared<std::any>(
+            TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
+    );
     auto latest_versions = test_store_->batch_read(
             symbols, std::vector<VersionQuery>(10), read_queries, batch_read_options, handler_data
     );
@@ -658,7 +663,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
 
     uint64_t version_id = 1;
     // Test that v1 is visible when deleted versions are included
-    auto entry_deleted = std::make_shared<VersionMapEntry>();
+    auto entry_deleted = std::make_shared<VersionMapEntry>(symbol);
     version_map->load_via_ref_key(
             store,
             symbol,
@@ -673,7 +678,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     ASSERT_TRUE(it != std::end(all_index_keys));
 
     // Test that v1 is not visible when only undeleted versions are queried
-    auto entry_undeleted = std::make_shared<VersionMapEntry>();
+    auto entry_undeleted = std::make_shared<VersionMapEntry>(symbol);
     version_map->load_via_ref_key(
             store,
             symbol,
@@ -720,7 +725,8 @@ TEST(VersionStore, UpdateWithin) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -764,7 +770,8 @@ TEST(VersionStore, UpdateBefore) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -808,7 +815,8 @@ TEST(VersionStore, UpdateAfter) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -852,7 +860,8 @@ TEST(VersionStore, UpdateIntersectBefore) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -896,7 +905,8 @@ TEST(VersionStore, UpdateIntersectAfter) {
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
@@ -950,7 +960,8 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
@@ -1014,7 +1025,8 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data =
+            std::make_shared<std::any>(TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE));
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
@@ -1132,4 +1144,163 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     }
     auto staged_keys_final = get_staged_keys();
     ASSERT_EQ(staged_keys_final.size(), 0);
+}
+
+namespace {
+struct DeleteTreesStatsFixture {
+    arcticdb::version_store::PythonVersionStore pvs;
+    std::shared_ptr<arcticdb::Store> store;
+    std::shared_ptr<arcticdb::VersionMap> version_map;
+    arcticdb::StreamId sym;
+    arcticdb::entity::AtomKey k0;
+    arcticdb::entity::AtomKey k1;
+    arcticdb::entity::AtomKey k2;
+};
+
+DeleteTreesStatsFixture make_three_version_fixture(const std::string& library_name) {
+    auto pvs = arcticdb::get_test_engine<arcticdb::version_store::PythonVersionStore>({}, library_name);
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+    arcticdb::StreamId sym{library_name + "_sym"};
+    auto k0 = write_version_frame(sym, 0, pvs, 5);
+    auto k1 = write_version_frame(sym, 1, pvs, 5);
+    auto k2 = write_version_frame(sym, 2, pvs, 5);
+    return {std::move(pvs),
+            std::move(store),
+            std::move(version_map),
+            std::move(sym),
+            std::move(k0),
+            std::move(k1),
+            std::move(k2)};
+}
+} // namespace
+
+TEST(DeleteTreesResponsiblyStats, CountsConsideredAndDeleted) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_basic");
+
+    version_store::PreDeleteChecks checks{false, false, false, false, {}};
+    MasterSnapshotMap empty_snap_map;
+    auto stats =
+            version_store::delete_trees_responsibly(
+                    f.store, f.version_map, {f.k0, f.k1, f.k2}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+            )
+                    .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 3u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 3u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_considered, 3u);
+}
+
+TEST(DeleteTreesResponsiblyStats, CountsKeysProtectedBySnapshots) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_snap");
+
+    MasterSnapshotMap snap_map;
+    snap_map[f.sym][f.k1].insert(SnapshotId{"snap1"});
+
+    version_store::PreDeleteChecks checks{true, false, false, false, {}};
+    auto stats = version_store::delete_trees_responsibly(
+                         f.store, f.version_map, {f.k0, f.k1, f.k2}, snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 3u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 1u);
+    EXPECT_EQ(stats.index_keys_deleted, 2u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 2u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 2u);
+}
+
+TEST(DeleteTreesResponsiblyStats, DryRunReportsCountsButDoesNotDelete) {
+    using namespace arcticdb;
+    auto f = make_three_version_fixture("dtr_stats_dry");
+
+    version_store::PreDeleteChecks checks{false, false, false, false, {}};
+    MasterSnapshotMap empty_snap_map;
+    auto stats =
+            version_store::delete_trees_responsibly(
+                    f.store, f.version_map, {f.k0, f.k1, f.k2}, empty_snap_map, std::nullopt, checks, /*dry_run=*/true
+            )
+                    .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 3u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 3u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 3u);
+    EXPECT_EQ(stats.data_keys_considered, 3u);
+    EXPECT_EQ(stats.data_keys_deleted, 3u);
+
+    EXPECT_TRUE(f.store->key_exists(f.k0).get());
+    EXPECT_TRUE(f.store->key_exists(f.k1).get());
+    EXPECT_TRUE(f.store->key_exists(f.k2).get());
+}
+
+TEST(DeleteTreesResponsiblyStats, IndexKeyWithMultipleDataKeys) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto pvs = get_test_engine<version_store::PythonVersionStore>({}, "dtr_stats_multi_data");
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+
+    StreamId sym{"dtr_multi_data_sym"};
+    auto wrapper = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    SlicingPolicy slicing = FixedSlicer{/*col_per_slice=*/127, /*row_per_slice=*/2};
+    auto index_key =
+            write_frame(IndexPartialKey{sym, 0}, wrapper.frame_, slicing, store, std::make_shared<DeDupMap>()).get();
+
+    version_store::PreDeleteChecks checks{false, false, false, false, {}};
+    MasterSnapshotMap empty_snap_map;
+    auto stats = version_store::delete_trees_responsibly(
+                         store, version_map, {index_key}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 1u);
+    EXPECT_EQ(stats.index_keys_protected_by_snapshots, 0u);
+    EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_EQ(stats.column_stats_keys_deleted, 1u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 2u);
+}
+
+TEST(DeleteTreesResponsiblyStats, DataKeysConsideredCountsBeforeExclusion) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+
+    auto pvs = get_test_engine<version_store::PythonVersionStore>({}, "store");
+    auto store = pvs._test_get_store();
+    auto version_map = pvs._test_get_version_map();
+
+    StreamId sym{"sym"};
+    SlicingPolicy slicing = FixedSlicer{/*col_per_slice=*/127, /*row_per_slice=*/2};
+
+    auto wrapper0 = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    auto k0 = write_frame(IndexPartialKey{sym, 0}, wrapper0.frame_, slicing, store, std::make_shared<DeDupMap>()).get();
+
+    auto de_dup_map = std::make_shared<DeDupMap>();
+    for (const auto& data_key : get_data_keys(store, k0, storage::ReadKeyOpts{})) {
+        de_dup_map->insert_key(data_key);
+    }
+    auto wrapper1 = get_test_simple_frame(sym, /*num_rows=*/4, /*start_val=*/0);
+    auto k1 = write_frame(IndexPartialKey{sym, 1}, wrapper1.frame_, slicing, store, de_dup_map).get();
+
+    version_store::PreDeleteChecks checks{
+            /*snapshots=*/false, /*version_visible=*/false, /*prev_version=*/false, /*next_version=*/false, {k1}
+    };
+    MasterSnapshotMap empty_snap_map;
+    auto stats = version_store::delete_trees_responsibly(
+                         store, version_map, {k0}, empty_snap_map, std::nullopt, checks, /*dry_run=*/false
+    )
+                         .get();
+
+    EXPECT_EQ(stats.index_keys_considered, 1u);
+    EXPECT_EQ(stats.index_keys_deleted, 1u);
+    EXPECT_EQ(stats.data_keys_considered, 2u);
+    EXPECT_EQ(stats.data_keys_deleted, 0u);
 }

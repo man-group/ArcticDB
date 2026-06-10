@@ -13,6 +13,7 @@
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/version/version_store_api.hpp>
+#include <arcticdb/version/version_constants.hpp>
 #include <arcticdb/version/python_bindings_common.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -27,6 +28,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/python_bindings_common.hpp>
 
 namespace arcticdb::version_store {
@@ -147,6 +149,22 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
 
     py::register_local_exception<StreamDescriptorMismatch>(version, "StreamDescriptorMismatch", base_exception.ptr());
 
+    // Useful for enterprise
+    auto constants = version.def_submodule("constants", "Reserved stream id constants used by ArcticDB");
+    constants.attr("WRITE_VERSION_ID") = py::str(WriteVersionId);
+    constants.attr("TOMBSTONE_VERSION_ID") = py::str(TombstoneVersionId);
+    constants.attr("TOMBSTONE_ALL_VERSION_ID") = py::str(TombstoneAllVersionId);
+    constants.attr("CREATE_SNAPSHOT_ID") = py::str(CreateSnapshotId);
+    constants.attr("DELETE_SNAPSHOT_ID") = py::str(DeleteSnapshotId);
+    constants.attr("LAST_SYNC_ID") = py::str(LastSyncId);
+    constants.attr("LAST_BACKUP_ID") = py::str(LastBackupId);
+    constants.attr("LAST_BACKGROUND_DELETION_ID") = py::str(LastBackgroundDeletionId);
+    constants.attr("FAILED_TARGET_ID") = py::str(FailedTargetId);
+    constants.attr("STORAGE_LOG_ID") = py::str(StorageLogId);
+    constants.attr("FAILED_STORAGE_LOG_ID") = py::str(FailedStorageLogId);
+    constants.attr("RECREATE_SYMBOL_ID") = py::str(RecreateSymbolId);
+    constants.attr("REFRESH_SYMBOL_ID") = py::str(RefreshSymbolId);
+
     entity::apy::register_common_entity_bindings(version, arcticdb::BindingScope::GLOBAL);
 
     py::class_<Value, std::shared_ptr<Value>>(version, "ValueType").def(py::init());
@@ -187,8 +205,13 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             }))
             .def(py::init([](py::array value_list) { return std::make_shared<ValueSet>(value_list); }));
 
+    py::class_<storage::KeySegmentPair>(version, "KeySegmentPair").def(py::init<>());
+
     py::class_<PreloadedIndexQuery, std::shared_ptr<PreloadedIndexQuery>>(version, "PreloadedIndexQuery")
-            .def(py::init<AtomKey, SegmentInMemory>());
+            .def(py::init<AtomKey, SegmentInMemory, std::shared_ptr<Segment>>(),
+                 py::arg("index_key"),
+                 py::arg("index_seg"),
+                 py::arg("column_stats_seg") = nullptr);
 
     py::class_<VersionQuery>(version, "PythonVersionStoreVersionQuery")
             .def(py::init())
@@ -233,9 +256,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             "read_dataframe_from_file",
             [](StreamId sid, std::string path, std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
             ) {
-                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                auto handler_data = std::make_shared<std::any>(
+                        TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                );
                 return adapt_read_df(
-                        read_dataframe_from_file(sid, path, read_query, read_options, handler_data), &handler_data
+                        read_dataframe_from_file(sid, path, read_query, read_options, handler_data), handler_data.get()
                 );
             }
     );
@@ -243,7 +268,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     register_version_store_common_bindings(version, BindingScope::GLOBAL);
 
-    py::class_<RecordBatchData>(version, "RecordBatchData")
+    py::class_<RecordBatchData, std::shared_ptr<RecordBatchData>>(version, "RecordBatchData")
             .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema);
@@ -329,7 +354,39 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
             .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor)
             .def_property_readonly("key", &DescriptorItem::key)
-            .def_property_readonly("index_segment", &DescriptorItem::index_segment);
+            .def_property_readonly("index_segment", &DescriptorItem::index_segment)
+            .def_property_readonly("column_stats_segment", &DescriptorItem::column_stats_segment);
+
+    py::class_<CompactDataInfo, std::shared_ptr<CompactDataInfo>>(version, "CompactDataInfo", R"pbdoc(
+        Result returned by the compact_data_explain_plan method. Contains information about what the effect of calling
+        compact_data would be on the specified symbol.
+
+        Attributes
+        ----------
+        row_slices_before : List[int]
+            The row numbers of boundaries between row-slices in the current latest version
+        row_slices_after : List[int]
+            What the row numbers of boundaries between row-slices would be after calling compact_data
+        num_row_slices_before : int
+            The number of row-slices in the current latest version
+        num_row_slices_after : int
+            What the number of row-slices would be after calling compact_data
+        version_id_before : int
+            The version id of the current latest version
+        version_id_after : int
+            What the version id would be after calling compact_data
+        will_do_work : bool
+            Whether calling compact_data would do any compaction. If False, the current data is already suitably
+            compacted.
+)pbdoc")
+            .def_property_readonly("row_slices_before", &CompactDataInfo::row_slices_before)
+            .def_property_readonly("row_slices_after", &CompactDataInfo::row_slices_after)
+            .def_property_readonly("num_row_slices_before", &CompactDataInfo::num_row_slices_before)
+            .def_property_readonly("num_row_slices_after", &CompactDataInfo::num_row_slices_after)
+            .def_property_readonly("version_id_before", &CompactDataInfo::version_id_before)
+            .def_property_readonly("version_id_after", &CompactDataInfo::version_id_after)
+            .def_property_readonly("will_do_work", &CompactDataInfo::will_do_work)
+            .def("__repr__", &CompactDataInfo::to_string);
 
     py::class_<StageResult>(version, "StageResult", R"pbdoc(
         Result returned by the stage method containing information about staged segments.
@@ -472,6 +529,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("SUB", OperationType::SUB)
             .value("MUL", OperationType::MUL)
             .value("DIV", OperationType::DIV)
+            .value("POW", OperationType::POW)
             .value("EQ", OperationType::EQ)
             .value("NE", OperationType::NE)
             .value("LT", OperationType::LT)
@@ -691,6 +749,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::compact_library,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Compact the whole library wherever necessary")
+            .def("_compact_data_explain_plan",
+                 &PythonVersionStore::compact_data_explain_plan,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Calculates what the new row-slice distribution would be after calling compact_data")
+            .def("_compact_data",
+                 &PythonVersionStore::compact_data,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Compact data segments")
             .def("is_symbol_fragmented",
                  &PythonVersionStore::is_symbol_fragmented,
                  py::call_guard<SingleThreadMutexHolder>(),
@@ -792,11 +858,12 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const VersionQuery& version_query,
                         const std::shared_ptr<ReadQuery>& read_query,
                         const ReadOptions& read_options) {
-                        auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format())
+                        );
                         return adapt_read_df(
                                 v.read_dataframe_version(sid, version_query, read_query, read_options, handler_data),
-                                &handler_data
+                                handler_data.get()
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),
@@ -938,13 +1005,14 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const std::vector<VersionQuery>& version_queries,
                         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                         const BatchReadOptions& batch_read_options) {
-                        auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format())
+                        );
                         return python_util::adapt_read_dfs(
                                 v.batch_read(
                                         stream_ids, version_queries, read_queries, batch_read_options, handler_data
                                 ),
-                                &handler_data
+                                handler_data.get()
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),
@@ -986,7 +1054,9 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                             });
                         }
                         const OutputFormat output_format = read_options.output_format();
-                        auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                        auto handler_data = std::make_shared<std::any>(
+                                TypeHandlerRegistry::instance()->get_handler_data(output_format)
+                        );
                         return adapt_read_df(
                                 v.batch_read_and_join(
                                         std::make_shared<std::vector<StreamId>>(std::move(stream_ids)),
@@ -996,7 +1066,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                         std::move(_clauses),
                                         handler_data
                                 ),
-                                &handler_data
+                                handler_data.get()
                         );
                     },
                     py::call_guard<SingleThreadMutexHolder>(),

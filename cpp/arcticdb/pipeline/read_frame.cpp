@@ -10,6 +10,7 @@
 
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -41,7 +42,9 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(context->slice_and_keys_, true, context->incompletes_after_).value();
 }
 
-std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
+using BlockConfigPerColumn = SegmentInMemory::BlockConfigPerColumn;
+
+std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
@@ -52,33 +55,34 @@ std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_ext
     return util::variant_match(
             index,
             [&desc, &filter_columns, &read_options](const auto& idx
-            ) -> std::pair<StreamDescriptor, std::vector<size_t>> {
+            ) -> std::pair<StreamDescriptor, BlockConfigPerColumn> {
                 const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-                auto extra_bytes_per_column = std::vector<size_t>();
-                extra_bytes_per_column.reserve(fields->size());
+                BlockConfigPerColumn block_config_per_column;
+                block_config_per_column.reserve(fields->size());
                 auto handlers = TypeHandlerRegistry::instance();
 
                 for (auto& field : *fields) {
                     if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
-                        auto [output_type, extra_bytes] =
-                                handler->output_type_and_extra_bytes(field.type(), field.name(), read_options);
-                        extra_bytes_per_column.emplace_back(extra_bytes);
+                        auto [output_type, block_config] =
+                                handler->output_type_and_block_config(field.type(), field.name(), read_options);
+                        block_config_per_column.emplace_back(block_config);
                         if (output_type != field.type())
                             field.mutable_type() = output_type;
                     } else {
-                        extra_bytes_per_column.emplace_back(0);
+                        block_config_per_column.emplace_back(detachable_block_config::Regular{0});
                     }
                 }
 
-                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, extra_bytes_per_column};
+                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, block_config_per_column
+                };
             }
     );
 }
 
-std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
+std::pair<StreamDescriptor, BlockConfigPerColumn> get_filtered_descriptor_and_block_config(
         const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
 ) {
-    return get_filtered_descriptor_and_extra_bytes_per_column(
+    return get_filtered_descriptor_and_block_config(
             context->descriptor().clone(), read_options, context->filter_columns_
     );
 }
@@ -113,9 +117,9 @@ SegmentInMemory allocate_chunked_frame(
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
     ARCTICDB_DEBUG(log::version(), "Allocated chunked frame with offset {} and row count {}", offset, row_count);
-    auto [desc, extra_bytes_per_column] = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options);
+    auto [desc, block_config_per_column] = get_filtered_descriptor_and_block_config(context, read_options);
     SegmentInMemory output{
-            std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes_per_column
+            std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, block_config_per_column
     };
 
     for (auto& column : output.columns()) {
@@ -129,8 +133,7 @@ SegmentInMemory allocate_chunked_frame(
                 // number of memory blocks not equal number of segments because follow-up methods like
                 // `copy_frame_data_to_buffer` rely on offsets rather than block indices.
                 const auto bytes = block_row_count * data_size;
-                column->allocate_data(bytes);
-                column->advance_data(bytes);
+                column->allocate_and_advance_by(bytes);
             }
         }
     }
@@ -144,8 +147,8 @@ SegmentInMemory allocate_contiguous_frame(
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    auto desc = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options).first;
-    // extra_bytes_per_column are not used for contiguous frame allocation
+    auto desc = get_filtered_descriptor_and_block_config(context, read_options).first;
+    // block_config_per_column is not used for contiguous frame allocation
     SegmentInMemory output{std::move(desc), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
@@ -281,15 +284,68 @@ void decode_index_field(
     }
 }
 
+bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
+
+// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type).
+// We have decoded the column of source type directly onto the output buffer above.
+// We therefore need to iterate backwards through the source values, static casting them to the destination
+// type to avoid overwriting values we haven't cast yet.
+template<typename SourceType, typename DestinationType>
+requires(sizeof(SourceType) <= sizeof(DestinationType))
+void promote_integral_type(const ColumnMapping& m, Column& column) {
+    const auto src_data_type_size = data_type_size(m.source_type_desc_);
+    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
+
+    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_, src_data_type_size * m.num_rows_));
+    auto dest_ptr =
+            reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_, dest_data_type_size * m.num_rows_));
+
+    for (auto i = static_cast<ssize_t>(m.num_rows_) - 1; i >= 0; --i) {
+        dest_ptr[i] = static_cast<DestinationType>(src_ptr[i]);
+    }
+}
+
+void handle_type_promotion(const ColumnMapping& m, Column& column) {
+    if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
+        m.dest_type_desc_.visit_tag([&column, &m](auto dest_desc_tag) {
+            using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+            m.source_type_desc_.visit_tag([&column, &m](auto src_desc_tag) {
+                using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
+                constexpr auto is_arithmetic =
+                        std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>;
+                constexpr auto is_size_non_decreasing = sizeof(SourceType) <= sizeof(DestinationType);
+                if constexpr (is_arithmetic && is_size_non_decreasing) {
+                    promote_integral_type<SourceType, DestinationType>(m, column);
+                } else {
+                    util::raise_rte(
+                            "Can't promote type {} to type {} in field {}",
+                            m.source_type_desc_,
+                            m.dest_type_desc_,
+                            m.frame_field_descriptor_.name()
+                    );
+                }
+            });
+        });
+    }
+}
+
 void decode_or_expand(
-        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
-        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const ColumnMapping& mapping, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info, // type of the column.
+        // encoded_field_info is the type of the data key. and dest_column may need to be promoted if types are
+        // differrent between data keys
+        // timeseries descriptor contains the promoted types of the column in destination
+        const DecodePathData& shared_data,
+        std::any& handler_data
+        /*if we need to allocate python string, python ref counts, we pass it to type handler eg nan,this is for
+           PANDAS*/
+        ,
+        EncodingVersion encoding_version,
+        const ColumnMapping& mapping /*where we should write in dest_column and truncate range info*/,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
-    auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
-    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
+    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc)) {
         handler->handle_type(
                 data,
                 dest_column,
@@ -303,46 +359,61 @@ void decode_or_expand(
         );
     } else {
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
+        auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
         const auto dest_bytes = mapping.dest_bytes_;
         std::optional<util::BitMagic> bv;
-        if (encoded_field_info.has_ndarray() && encoded_field_info.ndarray().sparse_map_bytes() > 0) {
-            const auto& ndarray = encoded_field_info.ndarray();
-            const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
+        util::check(encoded_field_info.has_ndarray(), "Unsupported encoding for field {}", encoded_field_info);
+        const auto uncompressed_bytes = encoding_sizes::data_uncompressed_size(encoded_field_info.ndarray());
+        const auto dense_num_rows = uncompressed_bytes / source_type_desc.get_type_bytes();
+        // In some cases (stage and finalize) no sparse map is encoded if all dense values are at the beginning,
+        // hence `ndarray().sparse_map_bytes() > 0` is not enough. We check whether the uncompressed size matches
+        // the expected number of rows.
+        const bool is_sparse = dense_num_rows < mapping.num_rows_;
+        const bool is_arrow = read_options.output_format() == OutputFormat::ARROW;
 
-            ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
-            SliceDataSink sparse_sink{sparse.data(), bytes};
-            data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, &read_options](auto tdt) {
-                using TagType = decltype(tdt);
-                using RawType = typename TagType::DataTypeTag::raw_type;
-                if (read_options.output_format() != OutputFormat::ARROW) {
-                    // Arrow doesn't care what values are at indices where the validity bitmap is zero
-                    util::default_initialize<TagType>(dest, dest_bytes);
+        if (is_sparse) {
+            // We explicitly allocate an intermediate dense_buffer to decode the dense data into.
+            // We then expand it into the dest column, casting to dest type in the same pass.
+            // Avoiding the extra allocation would require expanding in dest in-place via reverse iteration
+            // of the BitMagic vector. However, reverse iteration was benchmarked to be ~5x slower than the
+            // fast forward enumerator, which outweighs any savings from skipping the allocation.
+            ChunkedBuffer dense_buffer = ChunkedBuffer::presized(uncompressed_bytes);
+            SliceDataSink dense_sink{dense_buffer.data(), uncompressed_bytes};
+            data += decode_field(source_type_desc, encoded_field_info, data, dense_sink, bv, encoding_version);
+
+            if (!bv.has_value()) {
+                bv = util::BitMagic();
+                if (dense_num_rows > 0) {
+                    bv->set_range(0, dense_num_rows - 1, true);
                 }
-                util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
+            }
+
+            dest_type_desc.visit_tag([&](auto dest_tdt) {
+                using DestType = typename decltype(dest_tdt)::DataTypeTag::raw_type;
+                if (!is_arrow) {
+                    // Arrow doesn't care about values at positions marked missing by the validity bitmap.
+                    util::default_initialize<decltype(dest_tdt)>(dest, dest_bytes);
+                }
+                source_type_desc.visit_tag([&](auto src_tdt) {
+                    using SrcType = typename decltype(src_tdt)::DataTypeTag::raw_type;
+                    util::expand_dense_buffer_and_promote_type<SrcType, DestType>(
+                            bv.value(), dense_buffer.data(), dest
+                    );
+                });
             });
 
-            // For arrow we must apply the truncation to the bitmap and set it as an extra buffer.
-            if (read_options.output_format() == OutputFormat::ARROW) {
-                bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
+            // For Arrow output, apply truncation to the bitmap and set it as an extra buffer.
+            if (is_arrow) {
+                bv->resize(mapping.num_rows_);
                 handle_truncation(*bv, mapping.truncate_);
-                if (bv->count() != bv->size()) {
-                    auto first_offset_after_truncation = mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0
-                                                                                 ) * dest_type_desc.get_type_bytes();
-                    create_dense_bitmap(first_offset_after_truncation, *bv, dest_column, AllocationType::DETACHABLE);
-                }
+                auto first_offset_after_truncation =
+                        mapping.offset_bytes_ + mapping.truncate_.start_.value_or(0) * dest_type_desc.get_type_bytes();
+                create_dense_bitmap_if_any_nulls(first_offset_after_truncation, *bv, dest_column);
             }
         } else {
             SliceDataSink sink(dest, dest_bytes);
-            const auto& ndarray = encoded_field_info.ndarray();
-            if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
-                ARCTICDB_TRACE(log::version(), "Default initializing as only have {} bytes of {}", bytes, dest_bytes);
-                source_type_desc.visit_tag([dest, bytes, dest_bytes](auto tdt) {
-                    using TagType = decltype(tdt);
-                    util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
-                });
-            }
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
+            handle_type_promotion(mapping, dest_column);
         }
         handle_truncation(dest_column, mapping.truncate_);
     }
@@ -375,10 +446,8 @@ ColumnTruncation get_truncate_range_from_rows(
 ColumnTruncation get_truncate_range_from_index(
         const Column& column, const RowRange& slice_range, const TimestampRange& timestamp_range
 ) {
-    auto start_row =
-            column.search_sorted<timestamp>(timestamp_range.first, false, slice_range.start(), slice_range.end());
-    auto end_row =
-            column.search_sorted<timestamp>(timestamp_range.second, true, slice_range.start(), slice_range.end());
+    auto start_row = lower_bound_idx<timestamp>(column, timestamp_range.first, slice_range.start(), slice_range.end());
+    auto end_row = upper_bound_idx<timestamp>(column, timestamp_range.second, slice_range.start(), slice_range.end());
     util::check(
             start_row < slice_range.end() && end_row > slice_range.start(),
             "date range filter unexpectedly got a slice with no intersection with requested date range. "
@@ -574,7 +643,7 @@ void check_data_left_for_subsequent_fields(
     );
 }
 
-void decode_into_frame_static(
+void decode_into_frame_static( // with or without filters, row range or date range
         SegmentInMemory& frame, PipelineContextRow& context, const storage::KeySegmentPair& key_seg,
         const DecodePathData& shared_data, std::any& handler_data, const ReadQuery& read_query,
         const ReadOptions& read_options
@@ -604,11 +673,19 @@ void decode_into_frame_static(
         auto& index_field = fields.at(0u);
         const auto index_field_offset = data;
         decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
-        auto truncate_range = get_truncate_range(
-                frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
+        auto truncate_range = get_truncate_range( // arrow specific, if we have filters finds the index start and end
+                frame,
+                context,
+                read_options,
+                read_query,
+                encoding_version,
+                index_field,
+                index_field_offset
         );
         if (context.fetch_index() && get_index_field_count(frame)) {
-            handle_truncation(frame.column(0), truncate_range);
+            handle_truncation(
+                    frame.column(0), truncate_range
+            ); // truncates the index column if we have an index and we need to truncate based on the filte
         }
 
         StaticColumnMappingIterator it(context, index_fieldcount);
@@ -616,7 +693,7 @@ void decode_into_frame_static(
             return;
 
         while (it.has_next()) {
-            advance_skipped_cols(data, it, fields, hdr);
+            advance_skipped_cols(data, it, fields, hdr); // if we have colum filter
             if (has_magic_nums)
                 util::check_magic_in_place<ColumnMagic>(data);
 
@@ -629,7 +706,9 @@ void decode_into_frame_static(
             );
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
             auto& column = frame.column(static_cast<ssize_t>(it.dest_col()));
-            ColumnMapping mapping{frame, it.dest_col(), it.source_field_pos(), context};
+            ColumnMapping mapping{
+                    frame, it.dest_col(), it.source_field_pos(), context
+            }; // where to write in the output frame
             mapping.set_truncate(truncate_range);
 
             check_type_compatibility(mapping, field_name, it.source_col(), it.dest_col());
@@ -671,49 +750,6 @@ void check_mapping_type_compatibility(const ColumnMapping& m) {
             m.dest_type_desc_,
             m.frame_field_descriptor_.name()
     );
-}
-
-// If the source and destination types are different, then sizeof(destination type) >= sizeof(source type)
-// We have decoded the column of source type directly onto the output buffer above
-// We therefore need to iterate backwards through the source values, static casting them to the destination
-// type to avoid overriding values we haven't cast yet.
-template<typename SourceType, typename DestinationType>
-void promote_integral_type(const ColumnMapping& m, Column& column) {
-    const auto src_data_type_size = data_type_size(m.source_type_desc_);
-    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
-
-    const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
-    const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
-
-    auto src_ptr = reinterpret_cast<SourceType*>(column.bytes_at(m.offset_bytes_ + src_ptr_offset, 0UL)
-    ); // No bytes required as we are at the end
-    auto dest_ptr = reinterpret_cast<DestinationType*>(column.bytes_at(m.offset_bytes_ + dest_ptr_offset, 0UL));
-    for (auto i = 0u; i < m.num_rows_; ++i) {
-        *dest_ptr-- = static_cast<DestinationType>(*src_ptr--);
-    }
-}
-
-bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
-
-void handle_type_promotion(const ColumnMapping& m, const DecodePathData& shared_data, Column& column) {
-    if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
-        m.dest_type_desc_.visit_tag([&column, &m, shared_data](auto dest_desc_tag) {
-            using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            m.source_type_desc_.visit_tag([&column, &m](auto src_desc_tag) {
-                using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-                if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    promote_integral_type<SourceType, DestinationType>(m, column);
-                } else {
-                    util::raise_rte(
-                            "Can't promote type {} to type {} in field {}",
-                            m.source_type_desc_,
-                            m.dest_type_desc_,
-                            m.frame_field_descriptor_.name()
-                    );
-                }
-            });
-        });
-    }
 }
 
 void decode_into_frame_dynamic(
@@ -788,8 +824,6 @@ void decode_into_frame_dynamic(
                     context.string_pool_ptr(),
                     read_options
             );
-
-            handle_type_promotion(mapping, shared_data, column);
             ARCTICDB_TRACE(
                     log::codec(),
                     "Decoded or expanded dynamic column {} to position {}",
@@ -829,14 +863,14 @@ class NullValueReducer {
     size_t pos_;
     size_t column_block_idx_;
     DecodePathData shared_data_;
-    std::any& handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     const OutputFormat output_format_;
     std::optional<Value> default_value_;
 
   public:
     NullValueReducer(
             Column& column, std::shared_ptr<PipelineContext>& context, SegmentInMemory frame,
-            DecodePathData shared_data, std::any& handler_data, OutputFormat output_format,
+            DecodePathData shared_data, std::shared_ptr<std::any> handler_data, OutputFormat output_format,
             std::optional<Value> default_value = {}
     ) :
         column_(column),
@@ -898,7 +932,7 @@ class NullValueReducer {
                 handler) {
                 auto type_size = data_type_size(column_.type());
                 handler->default_initialize(
-                        column_.buffer(), start_row * type_size, num_rows * type_size, shared_data_, handler_data_
+                        column_.buffer(), start_row * type_size, num_rows * type_size, shared_data_, *handler_data_
                 );
             } else if (output_format_ != OutputFormat::ARROW || default_value_.has_value()) {
                 // Arrow does not care what values are in the main buffer where the validity bitmap is zero
@@ -934,13 +968,13 @@ struct ReduceColumnTask : async::BaseTask {
     std::shared_ptr<FrameSliceMap> slice_map_;
     std::shared_ptr<PipelineContext> context_;
     DecodePathData shared_data_;
-    std::any& handler_data_;
+    std::shared_ptr<std::any> handler_data_;
     ReadOptions read_options_;
 
     ReduceColumnTask(
             SegmentInMemory frame, size_t c, std::shared_ptr<FrameSliceMap> slice_map,
-            std::shared_ptr<PipelineContext>& context, DecodePathData shared_data, std::any& handler_data,
-            const ReadOptions& read_options
+            std::shared_ptr<PipelineContext>& context, DecodePathData shared_data,
+            std::shared_ptr<std::any> handler_data, const ReadOptions& read_options
     ) :
         frame_(std::move(frame)),
         column_index_(c),
@@ -1030,9 +1064,30 @@ struct ReduceColumnTask : async::BaseTask {
     }
 };
 
+void reduce_and_fix_columns_sync(
+        std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
+        std::shared_ptr<std::any> handler_data
+) {
+    ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
+    ARCTICDB_DEBUG(log::version(), "Reduce and fix columns (sync)");
+    if (frame.empty())
+        return;
+
+    auto slice_map = std::make_shared<FrameSliceMap>(context, read_options.dynamic_schema().value_or(false));
+
+    DecodePathData shared_data;
+    for (size_t idx = 0; idx < frame.descriptor().fields().size(); ++idx) {
+        const auto& frame_field = frame.field(idx);
+        if (read_options.dynamic_schema().value_or(false) ||
+            (slice_map->columns_.contains(frame_field.name()) && is_sequence_type(frame_field.type().data_type()))) {
+            ReduceColumnTask(frame, idx, slice_map, context, shared_data, handler_data, read_options)();
+        }
+    }
+}
+
 folly::Future<folly::Unit> reduce_and_fix_columns(
         std::shared_ptr<PipelineContext>& context, SegmentInMemory& frame, const ReadOptions& read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(ReduceAndFixStringCol)
     ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
@@ -1056,7 +1111,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
     static const auto batch_size = ConfigsMap::instance()->get_int("ReduceColumns.BatchSize", 100);
     return folly::collect(folly::window(
                                   std::move(fields_to_reduce),
-                                  [context, frame, slice_map, shared_data, read_options, &handler_data](size_t field
+                                  [context, frame, slice_map, shared_data, read_options, handler_data](size_t field
                                   ) mutable {
                                       return async::submit_cpu_task(ReduceColumnTask(
                                               frame, field, slice_map, context, shared_data, handler_data, read_options
@@ -1071,7 +1126,7 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
 folly::Future<SegmentInMemory> fetch_data(
         SegmentInMemory&& frame, const std::shared_ptr<PipelineContext>& context,
         const std::shared_ptr<stream::StreamSource>& ssource, const ReadQuery& read_query,
-        const ReadOptions& read_options, DecodePathData shared_data, std::any& handler_data
+        const ReadOptions& read_options, DecodePathData shared_data, std::shared_ptr<std::any> handler_data
 ) {
     ARCTICDB_SAMPLE_DEFAULT(FetchSlices)
     if (frame.empty())
@@ -1090,17 +1145,17 @@ folly::Future<SegmentInMemory> fetch_data(
                      frame = frame,
                      dynamic_schema = dynamic_schema,
                      shared_data,
-                     &handler_data,
+                     handler_data,
                      read_query,
                      read_options](auto&& ks) mutable {
                         auto key_seg = std::forward<storage::KeySegmentPair>(ks);
                         if (dynamic_schema) {
                             decode_into_frame_dynamic(
-                                    frame, row, key_seg, shared_data, handler_data, read_query, read_options
+                                    frame, row, key_seg, shared_data, *handler_data, read_query, read_options
                             );
                         } else {
                             decode_into_frame_static(
-                                    frame, row, key_seg, shared_data, handler_data, read_query, read_options
+                                    frame, row, key_seg, shared_data, *handler_data, read_query, read_options
                             );
                         }
 

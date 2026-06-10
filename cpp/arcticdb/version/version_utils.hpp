@@ -39,7 +39,12 @@ inline std::optional<AtomKey> read_segment_with_keys(
     for (; row < ssize_t(seg.row_count()); ++row) {
         auto key = read_key_row(seg, row);
         ARCTICDB_TRACE(log::version(), "Reading key {}", key);
-
+        util::check(
+                key.id() == entry.stream_id_,
+                "read_segment_with_keys found mismatching stream ids {} != {}",
+                key.id(),
+                entry.stream_id_
+        );
         if (is_index_key_type(key.type())) {
             entry.keys_.push_back(key);
             oldest_loaded_index = std::min(oldest_loaded_index, key.version_id());
@@ -47,11 +52,11 @@ inline std::optional<AtomKey> read_segment_with_keys(
 
             if (!entry.is_tombstoned(key)) {
                 oldest_loaded_undeleted_index = std::min(oldest_loaded_undeleted_index, key.version_id());
-                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_timestamp, key.creation_ts());
+                earliest_loaded_undeleted_timestamp = std::min(earliest_loaded_undeleted_timestamp, key.creation_ts());
             }
 
         } else if (key.type() == KeyType::TOMBSTONE) {
-            entry.tombstones_.try_emplace(key.version_id(), key);
+            entry.try_set_tombstone(key);
             entry.keys_.push_back(key);
         } else if (key.type() == KeyType::TOMBSTONE_ALL) {
             entry.try_set_tombstone_all(key);
@@ -91,16 +96,22 @@ std::shared_ptr<VersionMapEntry> build_version_map_entry_with_predicate_iteratio
 ) {
 
     auto prefix = std::holds_alternative<StringId>(stream_id) ? std::get<StringId>(stream_id) : std::string();
-    auto output = std::make_shared<VersionMapEntry>();
+    auto output = std::make_shared<VersionMapEntry>(stream_id);
     std::vector<AtomKey> read_keys;
     for (auto key_type : key_types) {
         store->iterate_type(
                 key_type,
-                [&predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk) {
+                [&stream_id, &predicate, &read_keys, &store, &output, &perform_read_segment_with_keys](VariantKey&& vk
+                ) {
                     const auto& key = to_atom(std::move(vk));
                     if (!predicate(key))
                         return;
-
+                    util::check(
+                            key.id() == stream_id,
+                            "build_version_map_entry_with_predicate_iteration found mismatching stream ids {} != {}",
+                            key.id(),
+                            stream_id
+                    );
                     read_keys.push_back(key);
                     ARCTICDB_DEBUG(log::storage(), "Version map iterating key {}", key);
                     if (perform_read_segment_with_keys) {
@@ -201,6 +212,18 @@ inline std::optional<VersionId> get_version_id_negative_index(VersionId latest, 
     auto candidate_version_id = static_cast<SignedVersionId>(latest) + index + 1;
     return candidate_version_id >= 0 ? std::make_optional<VersionId>(static_cast<VersionId>(candidate_version_id))
                                      : std::nullopt;
+}
+
+inline std::optional<VersionId> resolve_version_id(SignedVersionId signed_version_id, const VersionMapEntry& entry) {
+    if (signed_version_id >= 0)
+        return static_cast<VersionId>(signed_version_id);
+
+    auto opt_latest = entry.get_first_index(true).first;
+
+    if (!opt_latest.has_value())
+        return std::nullopt;
+
+    return get_version_id_negative_index(opt_latest->version_id(), signed_version_id);
 }
 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size);

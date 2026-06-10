@@ -171,6 +171,8 @@ class Library {
 
     bool supports_atomic_writes() const { return storages_->supports_atomic_writes(); }
 
+    [[nodiscard]] std::optional<size_t> max_delete_batch_size() const { return storages_->max_delete_batch_size(); }
+
     [[nodiscard]] const LibraryPath& library_path() const { return library_path_; }
 
     [[nodiscard]] OpenMode open_mode() const { return storages_->open_mode(); }

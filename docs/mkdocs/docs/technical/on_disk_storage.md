@@ -95,7 +95,7 @@ By re-using data layer keys from the previous version, calls to `append` are as 
 
 Consider a use case where a symbol with 10 columns, all of 8 byte numeric types, is appended to once per minute. This means that each day, 1,440 data layer segments are written, each with just 80 bytes of information in. Calling `read` for a days worth of data therefore requires 1,440 reads of these tiny data layer objects, which will be much less efficient than reading a single object of 115,200 bytes.
 
-We will soon be adding an API to perform exactly this operation, re-slicing data such that subsequent reads can be as efficient as possible, without harming the efficiency of existing `append` or `update` operations.
+The [compact_data](../api/library.md) method can be used to deal with this fragmentation by re-slicing the data on disk into fewer, larger data keys. See the [accompanying notebook](../notebooks/ArcticDB_demo_compact_data.ipynb) for a detailed overview of how this works.
 
 ### Symbol List Caching
 

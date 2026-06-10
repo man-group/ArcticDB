@@ -10,6 +10,7 @@
 
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/storage/library.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
@@ -33,8 +34,7 @@ using VersionedItemOrError = std::variant<VersionedItem, DataError>;
  * Requirements for the latter is fluid, so methods here could be lifted.
  */
 using SpecificAndLatestVersionKeys = std::pair<
-        std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>,
-        std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
+        std::shared_ptr<std::unordered_map<StreamId, AtomKey>>, std::shared_ptr<std::unordered_map<StreamId, AtomKey>>>;
 struct VersionIdAndDedupMapInfo {
     VersionId version_id;
     std::shared_ptr<DeDupMap> de_dup_map;
@@ -51,7 +51,21 @@ struct KeySizesInfo {
     size_t compressed_size; // bytes
 };
 
-folly::Future<folly::Unit> delete_trees_responsibly(
+/**
+ * These statistics record the number of deletions *attempted*. In particular note that we attempt
+ * to delete column stats keys without checking whether they exist first.
+ */
+struct DeleteTreesStats {
+    size_t index_keys_considered = 0;
+    size_t index_keys_protected_by_snapshots = 0;
+    size_t index_keys_deleted = 0;
+    size_t column_stats_keys_deleted = 0;
+    size_t data_keys_considered = 0;
+    size_t data_keys_deleted = 0;
+};
+
+// The stats are used by the enterprise repo for logging
+folly::Future<DeleteTreesStats> delete_trees_responsibly(
         std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted = std::nullopt,
@@ -157,7 +171,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     ReadVersionWithNodesOutput read_dataframe_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-            const ReadOptions& read_options, std::any& handler_data
+            const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
     ) override;
 
     VersionedItem read_modify_write_internal(
@@ -289,14 +303,14 @@ class LocalVersionedEngine : public VersionedEngine {
     std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> batch_read_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
-            std::any& handler_data
+            std::shared_ptr<std::any> handler_data
     );
 
     MultiSymbolReadOutput batch_read_and_join_internal(
             std::shared_ptr<std::vector<StreamId>> stream_ids,
             std::shared_ptr<std::vector<VersionQuery>> version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
-            std::vector<std::shared_ptr<Clause>>&& clauses, std::any& handler_data
+            std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
     );
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
@@ -323,6 +337,14 @@ class LocalVersionedEngine : public VersionedEngine {
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
             const StreamId& stream_id, const VersionQuery& version_query
     );
+
+    CompactDataInfo compact_data_explain_plan_internal(
+            const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+    ) override;
+
+    VersionedItem compact_data_internal(
+            const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+    ) override;
 
     bool is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) override;
 
@@ -449,6 +471,7 @@ class LocalVersionedEngine : public VersionedEngine {
     void add_to_symbol_list_on_compaction(
             const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
     );
+    UpdateInfo compact_data_preamble(const StreamId& stream_id);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

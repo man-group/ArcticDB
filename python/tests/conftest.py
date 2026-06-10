@@ -7,6 +7,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
+import faulthandler
+import sys
 from typing import Callable, Generator, Iterable, Union
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import NativeVersionStore
@@ -22,7 +24,6 @@ import re
 import time
 import requests
 import uuid
-import sys
 import multiprocessing
 from datetime import datetime
 from functools import partial
@@ -54,8 +55,10 @@ from arcticdb.storage_fixtures.mongo import ManagedMongoDBServer, auto_detect_se
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int, unset_config_int
+import arcticdb_ext.cpp_async as adb_async
+from arcticdb_ext.cpp_async import reinit_task_scheduler
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer, CustomArrayNormalizer
+from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
@@ -91,6 +94,7 @@ from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
 )
+from arcticdb.util.test import config_context, config_context_multi
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -102,6 +106,22 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
+
+# Timeout for faulthandler's C-level deadlock watchdog (seconds).
+# Must be shorter than pytest-timeout (3600s) and the GH Actions step timeout
+# (90min = 5400s) so it fires first and gives us a traceback.
+# Disabled by default (0) — enabled in CI via parallel_test.sh.
+_FAULTHANDLER_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_TIMEOUT", "0"))
+# Session-level timeout for hangs during collection or session fixture setup,
+# before any test enters pytest_runtest_protocol.  Defaults to 10 minutes.
+_FAULTHANDLER_SESSION_TIMEOUT = int(os.environ.get("ARCTICDB_FAULTHANDLER_SESSION_TIMEOUT", "600"))
+# Directory for faulthandler crash files.  xdist workers have stderr piped
+# through execnet, so writing to sys.stderr won't reach the CI log.  We write
+# to a file instead, and parallel_test.sh prints any crash files after pytest.
+_FAULTHANDLER_DIR = os.environ.get(
+    "ARCTICDB_FAULTHANDLER_DIR",
+    os.path.join(os.environ.get("TEST_OUTPUT_DIR", "/tmp"), "faulthandler"),
+)
 
 
 # Ensure pytest-xdist uses 'fork' start method on macOS
@@ -117,11 +137,85 @@ def _set_multiprocessing_start_method_for_macos():
             pass
 
 
+_faulthandler_file = None  # kept open so faulthandler can write to the fd
+
+
 # silence warnings about custom markers
 def pytest_configure(config):
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
+
+    # Arm a session-level faulthandler watchdog on xdist workers only.
+    # Workers collect tests and run session fixtures before pytest_runtest_protocol
+    # arms the per-test timer — this covers that gap.
+    # Skip the xdist controller (no PYTEST_XDIST_WORKER env var): it never runs
+    # tests, so the per-test timer never replaces this one, and it would false-fire
+    # while legitimately waiting for workers.
+    is_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER") is not None
+    if _FAULTHANDLER_TIMEOUT > 0 and is_xdist_worker:
+        os.makedirs(_FAULTHANDLER_DIR, exist_ok=True)
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        global _faulthandler_file
+        _faulthandler_file = open(crash_path, "w")
+        _faulthandler_file.write(
+            f"Faulthandler session timeout ({_FAULTHANDLER_SESSION_TIMEOUT}s): "
+            f"hang during collection/setup (pid {os.getpid()})\n"
+        )
+        _faulthandler_file.flush()
+        faulthandler.dump_traceback_later(
+            _FAULTHANDLER_SESSION_TIMEOUT,
+            exit=True,
+            file=_faulthandler_file,
+        )
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_runtest_protocol(item, nextitem):
+    """Arm faulthandler's C-level timer before each test.
+
+    Unlike pytest-timeout's thread method, dump_traceback_later() is
+    implemented entirely in C and does NOT need the GIL.  This means it
+    can kill the process and dump tracebacks even when C++ extension code
+    is holding the GIL indefinitely.
+
+    We write to a per-PID file because xdist worker stderr is piped through
+    execnet and never reaches the CI log.  parallel_test.sh prints these
+    files after pytest exits.
+    """
+    global _faulthandler_file
+    if _FAULTHANDLER_TIMEOUT > 0:
+        os.makedirs(_FAULTHANDLER_DIR, exist_ok=True)
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        # Close previous file if any (rearms for the new test)
+        if _faulthandler_file is not None:
+            _faulthandler_file.close()
+        _faulthandler_file = open(crash_path, "w")
+        # Write the test id so the crash file is self-describing
+        _faulthandler_file.write(f"Faulthandler timeout ({_FAULTHANDLER_TIMEOUT}s) for: {item.nodeid}\n")
+        _faulthandler_file.flush()
+        faulthandler.dump_traceback_later(
+            _FAULTHANDLER_TIMEOUT,
+            exit=True,
+            file=_faulthandler_file,
+        )
+    return None  # Let the default protocol run
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_runtest_teardown(item, nextitem):
+    """Cancel the faulthandler timer after each test completes."""
+    global _faulthandler_file
+    faulthandler.cancel_dump_traceback_later()
+    if _faulthandler_file is not None:
+        _faulthandler_file.close()
+        _faulthandler_file = None
+        # Remove the crash file for tests that completed normally
+        crash_path = os.path.join(_FAULTHANDLER_DIR, f"crash_{os.getpid()}.log")
+        try:
+            os.unlink(crash_path)
+        except OSError:
+            pass
 
 
 if platform.system() == "Linux":
@@ -131,6 +225,25 @@ if platform.system() == "Linux":
         cdll.LoadLibrary("libSegFault.so")
     except:
         pass
+
+
+@pytest.fixture(
+    params=[True, False],
+)
+def single_threaded_config(request):
+    """Parametrized fixture that runs the test twice: once with a single IO/CPU thread and once with defaults."""
+    if request.param:
+        set_config_int("VersionStore.NumIOThreads", 1)
+        set_config_int("VersionStore.NumCPUThreads", 1)
+        reinit_task_scheduler()
+
+    try:
+        yield request.param
+    finally:
+        if request.param:
+            unset_config_int("VersionStore.NumIOThreads")
+            unset_config_int("VersionStore.NumCPUThreads")
+            reinit_task_scheduler()
 
 
 @pytest.fixture()
@@ -241,6 +354,14 @@ def lmdb_library_static_dynamic(request):
 def lmdb_library_factory(lmdb_storage, lib_name):
     def f(library_options: LibraryOptions = LibraryOptions()):
         return lmdb_storage.create_arctic().create_library(lib_name, library_options=library_options)
+
+    return f
+
+
+@pytest.fixture
+def mem_library_factory(mem_storage, lib_name):
+    def f(library_options: LibraryOptions = LibraryOptions()):
+        return mem_storage.create_arctic().create_library(lib_name, library_options=library_options)
 
     return f
 
@@ -1148,11 +1269,16 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     return store
 
 
-# Explicitly not including `OutputFormat.EXPERIMENTAL_POLARS` as `polars.to_pandas()` is not index aware, so all
+# Explicitly not including `OutputFormat.POLARS` as `polars.to_pandas()` is not index aware, so all
 # `assert_frame_equal_with_arrow` would not work. Also POLARS is just a thin wrapper on top of pyarrow, so testing
 # just one is sufficent.
 @pytest.fixture(params=[OutputFormat.PANDAS, pytest.param(OutputFormat.PYARROW, marks=PYARROW_POST_PROCESSING)])
 def any_output_format(request) -> OutputFormat:
+    return request.param
+
+
+@pytest.fixture(params=[OutputFormat.PYARROW, OutputFormat.POLARS])
+def arrow_output_format(request) -> OutputFormat:
     return request.param
 
 
@@ -1577,8 +1703,90 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory) -> NativeVersi
     return in_memory_store_factory(column_group_size=2, segment_row_size=2)
 
 
+@pytest.fixture
+def in_memory_version_store_tiny_segment_dynamic(in_memory_store_factory) -> NativeVersionStore:
+    return in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+
+
+@pytest.fixture
+def in_memory_version_store_arrow(in_memory_store_factory) -> NativeVersionStore:
+    store = in_memory_store_factory(dynamic_strings=True)
+    store.set_output_format(OutputFormat.PYARROW)
+    store._set_allow_arrow_input()
+    return store
+
+
+@pytest.fixture
+def in_memory_version_store_dynamic_schema_arrow(in_memory_store_factory) -> NativeVersionStore:
+    store = in_memory_store_factory(dynamic_schema=True, dynamic_strings=True)
+    store.set_output_format(OutputFormat.PYARROW)
+    store._set_allow_arrow_input()
+    return store
+
+
+@pytest.fixture
+def in_memory_version_store_tiny_segment_arrow(in_memory_store_factory) -> NativeVersionStore:
+    store = in_memory_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    store.set_output_format(OutputFormat.PYARROW)
+    store._set_allow_arrow_input()
+    return store
+
+
+@pytest.fixture
+def in_memory_library() -> Library:
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst")
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_dynamic() -> Library:
+    library_options = LibraryOptions(dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_tiny_segment() -> Library:
+    library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture
+def in_memory_library_tiny_segment_dynamic() -> Library:
+    library_options = LibraryOptions(rows_per_segment=2, columns_per_segment=2, dynamic_schema=True)
+    ac = Arctic("mem://")
+    lib = ac.create_library("tst", library_options=library_options)
+    return lib
+
+
+@pytest.fixture(params=["in_memory_library", "in_memory_library_dynamic"])
+def in_memory_library_static_dynamic(request) -> Library:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(params=["in_memory_library_tiny_segment", "in_memory_library_tiny_segment_dynamic"])
+def in_memory_library_tiny_segment_static_dynamic(request) -> Library:
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        "in_memory_library_tiny_segment",
+        "in_memory_library_tiny_segment_dynamic",
+        "in_memory_library",
+        "in_memory_library_dynamic",
+    ]
+)
+def in_memory_library_static_dynamic_different_segments(request) -> Library:
+    return request.getfixturevalue(request.param)
+
+
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
-def lmdb_or_in_memory_version_store_tiny_segment(request) -> NativeVersionStore:
+def lmdb_or_in_memory_version_store_tiny_segment(request) -> Library:
     return request.getfixturevalue(request.param)
 
 
@@ -1659,6 +1867,37 @@ def all_recursive_metastructure_versions(request):
     set_config_int("VersionStore.RecursiveNormalizerMetastructure", request.param)
     yield request.param
     unset_config_int("VersionStore.RecursiveNormalizerMetastructure")
+
+
+@pytest.fixture
+def column_stats_filtering_enabled():
+    with config_context("ColumnStats.UseForQueries", 1):
+        yield True
+
+
+@pytest.fixture
+def column_stats_filtering_disabled():
+    with config_context("ColumnStats.UseForQueries", 0):
+        yield False
+
+
+@pytest.fixture(params=["column_stats_filtering_enabled", "column_stats_filtering_disabled"])
+def column_stats_filtering_enabled_and_disabled(request):
+    yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def tiny_thread_pool():
+    original_io = adb_async.io_thread_count()
+    original_cpu = adb_async.cpu_thread_count()
+    with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
+        adb_async.reinit_task_scheduler()
+        assert adb_async.io_thread_count() == 1
+        assert adb_async.cpu_thread_count() == 1
+        yield
+    adb_async.reinit_task_scheduler()
+    assert adb_async.io_thread_count() == original_io
+    assert adb_async.cpu_thread_count() == original_cpu
 
 
 # region Pytest special xfail handling

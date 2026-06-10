@@ -233,8 +233,10 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
+PYARROW_WINDOWS_SPARSE_FILL_BROKEN = WINDOWS and not IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
+
 PYARROW_POST_PROCESSING = pytest.mark.skipif(
-    WINDOWS and not IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED,
+    PYARROW_WINDOWS_SPARSE_FILL_BROKEN,
     reason="pyarrow 21.0.0 doesn't correctly apply fill_null: https://github.com/apache/arrow/issues/47234",
 )
 

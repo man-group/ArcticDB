@@ -25,6 +25,7 @@ from datetime import datetime, date, timedelta
 import numpy as np
 from arcticdb.util.test import (
     assert_frame_equal,
+    config_context,
     distinct_timestamps,
     random_strings_of_length,
     random_floats,
@@ -196,8 +197,9 @@ def test_read_metadata_batch_missing_keys(arctic_library):
     lib_tool.remove(s1_index_key)
     lib_tool.remove(s2_key_to_delete)
 
-    # When
-    batch = lib.read_metadata_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        batch = lib.read_metadata_batch(["s1", ReadInfoRequest("s2", as_of=0), "s3"])
 
     # Then
     assert isinstance(batch[0], DataError)
@@ -1157,7 +1159,9 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     q = QueryBuilder()
     q = q[q["a"] < 5]
     # When
-    batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
+    # Disable version map cache so the read hits storage and sees the missing keys
+    with config_context("VersionMap.ReloadInterval", 0):
+        batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
     # Then
     assert isinstance(batch[0], DataError)  # now we check for key if deleted, look up
     assert batch[0].symbol == "s1"

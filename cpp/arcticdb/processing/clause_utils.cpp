@@ -9,6 +9,9 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
+#include <arcticdb/stream/index.hpp>
+#include <arcticdb/util/collection_utils.hpp>
+#include <arcticdb/python/normalization_utils.hpp>
 
 namespace arcticdb {
 namespace ranges = std::ranges;
@@ -18,7 +21,7 @@ using namespace proto::descriptors;
 std::vector<std::vector<EntityId>> structure_by_row_slice(
         ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    auto entity_ids = flatten_entities(std::move(entity_ids_vec));
+    auto entity_ids = util::flatten_vectors(std::move(entity_ids_vec));
     return structure_by_row_slice(component_manager, std::move(entity_ids));
 }
 
@@ -84,21 +87,6 @@ std::vector<EntityId> push_entities(
         );
     }
     return ids;
-}
-
-std::vector<EntityId> flatten_entities(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
-    size_t res_size = std::accumulate(
-            entity_ids_vec.cbegin(),
-            entity_ids_vec.cend(),
-            size_t(0),
-            [](size_t acc, const std::vector<EntityId>& vec) { return acc + vec.size(); }
-    );
-    std::vector<EntityId> res;
-    res.reserve(res_size);
-    for (const auto& entity_ids : entity_ids_vec) {
-        res.insert(res.end(), entity_ids.begin(), entity_ids.end());
-    }
-    return res;
 }
 
 using SegmentAndSlice = pipelines::SegmentAndSlice;
@@ -296,8 +284,8 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
     }
     for (size_t idx = 0; idx < index_fields.size(); ++idx) {
         if (non_matching_name_indices.contains(idx)) {
-            // This is the same naming scheme used in _normalization.py for unnamed multiindex levels. Ensures that any
-            // subsequent processing that checks for columns of this format will continue to work
+            // This is the samsame naming scheme used in _normalization.py for unnamed multiindex levels. Ensures that
+            // any subsequent processing that checks for columns of this format will continue to work
             stream_desc.fields().add_field(
                     index_fields.at(idx).type(), idx == 0 ? "index" : fmt::format("__fkidx__{}", idx)
             );
@@ -306,117 +294,6 @@ std::unordered_set<size_t> add_index_fields(StreamDescriptor& stream_desc, std::
         }
     }
     return non_matching_name_indices;
-}
-
-NormalizationMetadata generate_norm_meta(
-        const std::vector<OutputSchema>& input_schemas, std::unordered_set<size_t>&& non_matching_name_indices
-) {
-    // Ensure:
-    // All are Series or all are DataFrames
-    // All have PandasIndex OR PandasMultiIndex
-    // If PandasIndex:
-    //  - name/is_int/fake_name - if all the same maintain, otherwise "index"/false/true
-    //  - tz - if all the same maintain, otherwise empty string
-    //  - is_physically stored must all be the same
-    //  - RangeIndex
-    //    - start==0/step==1 - maintain
-    //    - All steps the same, use start from first schema and maintain step
-    //    - Otherwise, log warning, set start==0/step==1
-    // If PandasMultiIndex:
-    //  - name/is_int - if all the same maintain, otherwise "index"/false
-    //  - field_count must all be same
-    //  - tz - if all the same maintain, otherwise empty string
-    //  - fake_field_pos - unioned together, along with non_matching_name_indices
-    //      fake_field_pos.contains(0) serves same purpose as fake_name flag on PandasIndex
-    //  - timezone - Like tz, for a given key all values must be same, otherwise set value to empty string
-    util::check(!input_schemas.empty(), "Cannot join empty list of schemas");
-    auto res = input_schemas.front().norm_metadata_;
-    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            res.has_series() || res.has_df(), "Multi-symbol joins only supported with Series and DataFrames"
-    );
-    auto* res_common = res.has_series() ? res.mutable_series()->mutable_common() : res.mutable_df()->mutable_common();
-    if (res_common->has_multi_index()) {
-        for (auto pos : res_common->multi_index().fake_field_pos()) {
-            non_matching_name_indices.insert(pos);
-        }
-    }
-    for (auto it = std::next(input_schemas.cbegin()); it != input_schemas.cend(); ++it) {
-        const auto& input_schema = *it;
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                input_schema.norm_metadata_.has_series() || input_schema.norm_metadata_.has_df(),
-                "Multi-symbol joins only supported with Series and DataFrames"
-        );
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                res.has_series() == input_schema.norm_metadata_.has_series(),
-                "Multi-symbol joins cannot join a Series to a DataFrame"
-        );
-        const auto& common = res.has_series() ? input_schema.norm_metadata_.series().common()
-                                              : input_schema.norm_metadata_.df().common();
-        if (res.has_series()) {
-            if (res_common->name() != common.name() || !common.has_name() || !res_common->has_name()) {
-                res_common->set_name("");
-                res_common->set_has_name(false);
-            }
-        }
-        schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                common.has_multi_index() == res_common->has_multi_index(), "Mismatching norm metadata in schema join"
-        );
-        if (res_common->has_multi_index()) {
-            auto* res_index = res_common->mutable_multi_index();
-            const auto& index = common.multi_index();
-            if ((index.name() != res_index->name()) || (index.is_int() != res_index->is_int())) {
-                res_index->clear_name();
-                res_index->set_is_int(false);
-            }
-            if (index.tz() != res_index->tz()) {
-                res_index->clear_tz();
-            }
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index.field_count() == res_index->field_count(), "Mismatching norm metadata in schema join"
-            );
-            for (const auto& [idx, idx_timezone] : index.timezone()) {
-                (*res_index->mutable_timezone())[idx] =
-                        (*res_index->mutable_timezone())[idx] == idx_timezone ? idx_timezone : "";
-            }
-            for (auto pos : index.fake_field_pos()) {
-                // Do not modify the result fake_field_pos directly as it would likely result in many duplicate values
-                // Track in this set and then just insert them all into the result at the end
-                non_matching_name_indices.insert(pos);
-            }
-        } else {
-            auto* res_index = res_common->mutable_index();
-            const auto& index = common.index();
-            if ((index.name() != res_index->name()) || (index.is_int() != res_index->is_int()) || index.fake_name() ||
-                res_index->fake_name()) {
-                res_index->set_name("index");
-                res_index->set_is_int(false);
-                res_index->set_fake_name(true);
-            }
-            if (index.tz() != res_index->tz()) {
-                res_index->clear_tz();
-            }
-            schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-                    index.is_physically_stored() == res_index->is_physically_stored(),
-                    "Mismatching norm metadata in schema join"
-            );
-            if (index.step() != res_index->step()) {
-                log::version().warn("Mismatching RangeIndexes being combined, setting to start=0, step=1");
-                res_index->set_start(0);
-                res_index->set_step(1);
-            }
-        }
-    }
-    if (res_common->has_multi_index()) {
-        auto* index = res_common->mutable_multi_index();
-        index->clear_fake_field_pos();
-        for (auto idx : non_matching_name_indices) {
-            index->add_fake_field_pos(idx);
-        }
-        if (non_matching_name_indices.contains(0)) {
-            index->set_name("index");
-        }
-    }
-    return res;
 }
 
 void inner_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_schemas) {
@@ -529,6 +406,41 @@ void outer_join(StreamDescriptor& stream_desc, std::vector<OutputSchema>& input_
     for (const auto& column_name : column_names_to_keep) {
         stream_desc.add_scalar_field(columns_to_keep.at(column_name), column_name);
     }
+}
+
+static auto first_missing_column(OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns) {
+    const auto& column_types = output_schema.column_types();
+    for (auto input_column_it = required_columns.begin(); input_column_it != required_columns.end();
+         ++input_column_it) {
+        if (!column_types.contains(*input_column_it) &&
+            !column_types.contains(stream::mangled_name(*input_column_it))) {
+            return input_column_it;
+        }
+    }
+    return required_columns.end();
+}
+
+void check_column_presence(
+        OutputSchema& output_schema, const std::unordered_set<std::string>& required_columns,
+        std::string_view clause_name
+) {
+    const auto first_missing = first_missing_column(output_schema, required_columns);
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+            first_missing == required_columns.end(),
+            "{}Clause requires column '{}' to exist in input data",
+            clause_name,
+            first_missing == required_columns.end() ? "" : *first_missing
+    );
+}
+
+void check_is_timeseries(const StreamDescriptor& stream_descriptor, std::string_view clause_name) {
+    schema::check<ErrorCode::E_UNSUPPORTED_INDEX_TYPE>(
+            stream_descriptor.index().type() == IndexDescriptor::Type::TIMESTAMP &&
+                    stream_descriptor.index().field_count() >= 1 &&
+                    stream_descriptor.field(0).type() == make_scalar_type(DataType::NANOSECONDS_UTC64),
+            "{}Clause can only be applied to timeseries",
+            clause_name
+    );
 }
 
 } // namespace arcticdb

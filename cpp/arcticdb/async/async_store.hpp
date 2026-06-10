@@ -14,7 +14,6 @@
 #include <arcticdb/storage/library.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
-#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 
 namespace arcticdb::toolbox::apy {
@@ -338,6 +337,13 @@ class AsyncStore : public Store {
         return read_and_continue(key, library_, opts, DecodeTimeseriesDescriptorTask{});
     }
 
+    std::pair<VariantKey, TimeseriesDescriptor> read_timeseries_descriptor_sync(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts
+    ) override {
+        auto key_seg = read_sync_dispatch(key, library_, opts);
+        return DecodeTimeseriesDescriptorTask{}(std::move(key_seg));
+    }
+
     folly::Future<bool> key_exists(entity::VariantKey&& key) {
         return async::submit_io_task(KeyExistsTask{std::move(key), library_});
     }
@@ -366,37 +372,56 @@ class AsyncStore : public Store {
         return async::submit_io_task(WriteCompressedBatchTask(std::move(kvs), library_));
     }
 
-    folly::Future<RemoveKeyResultType> remove_key(const entity::VariantKey& key, storage::RemoveOpts opts) override {
+    folly::Future<folly::Unit> remove_key(const entity::VariantKey& key, storage::RemoveOpts opts) override {
         return async::submit_io_task(RemoveTask{key, library_, opts});
     }
 
-    RemoveKeyResultType remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
-        return RemoveTask{key, library_, opts}();
+    void remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
+        RemoveTask{key, library_, opts}();
     }
 
-    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>()
-                            : async::submit_io_task(RemoveBatchTask{keys, library_, opts});
-    }
-
-    folly::Future<std::vector<RemoveKeyResultType>> remove_keys(
-            std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts
-    ) override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>()
-                            : async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(
-            const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts
-    ) override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>() : RemoveBatchTask{keys, library_, opts}();
-    }
-
-    std::vector<RemoveKeyResultType> remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts)
+    folly::Future<folly::Unit> remove_keys(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts)
             override {
-        return keys.empty() ? std::vector<RemoveKeyResultType>() : RemoveBatchTask{std::move(keys), library_, opts}();
+        return remove_keys(std::vector<entity::VariantKey>{keys}, opts);
+    }
+
+    folly::Future<folly::Unit> remove_keys(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts) override {
+        if (keys.empty()) {
+            return folly::Unit{};
+        }
+        const auto batch_size = library_->max_delete_batch_size();
+        if (!batch_size.has_value() || keys.size() <= *batch_size) {
+            return async::submit_io_task(RemoveBatchTask{std::move(keys), library_, opts});
+        }
+        auto chunks = chunk_keys(std::move(keys), *batch_size);
+        auto futs = folly::window(
+                std::move(chunks),
+                [this, opts](std::vector<entity::VariantKey>&& chunk) {
+                    return async::submit_io_task(RemoveBatchTask{std::move(chunk), library_, opts});
+                },
+                async::TaskScheduler::instance()->io_thread_count()
+        );
+        return folly::collect(std::move(futs)).via(&async::io_executor()).thenValue([](auto&&) {
+            return folly::Unit{};
+        });
+    }
+
+    void remove_keys_sync(const std::vector<entity::VariantKey>& keys, storage::RemoveOpts opts) override {
+        remove_keys_sync(std::vector<entity::VariantKey>{keys}, opts);
+    }
+
+    void remove_keys_sync(std::vector<entity::VariantKey>&& keys, storage::RemoveOpts opts) override {
+        if (keys.empty()) {
+            return;
+        }
+        const auto batch_size = library_->max_delete_batch_size();
+        if (!batch_size.has_value() || keys.size() <= *batch_size) {
+            RemoveBatchTask{std::move(keys), library_, opts}();
+            return;
+        }
+        for (auto& chunk : chunk_keys(std::move(keys), *batch_size)) {
+            RemoveBatchTask{std::move(chunk), library_, opts}();
+        }
     }
 
     std::vector<folly::Future<VariantKey>> batch_read_compressed(
@@ -421,14 +446,22 @@ class AsyncStore : public Store {
             std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
     ) override {
         ARCTICDB_RUNTIME_DEBUG(log::version(), "Reading {} keys", ranges_and_keys.size());
-        std::vector<folly::Future<pipelines::SegmentAndSlice>> output;
-        for (auto&& ranges_and_key : ranges_and_keys) {
-            const auto key = ranges_and_key.key_;
-            output.emplace_back(read_and_continue(
-                    key, library_, storage::ReadKeyOpts{}, DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
-            ));
-        }
-        return output;
+        // Window the reads for reasons detailed in the PR description https://github.com/man-group/ArcticDB/pull/3086
+        // x2 IO threadpool size is a balance to keep the IO workers busy, without reading data in faster than we can
+        // process it
+        return folly::window(
+                std::move(ranges_and_keys),
+                [this, columns_to_decode](pipelines::RangesAndKey&& ranges_and_key) {
+                    const auto key = ranges_and_key.key_;
+                    return read_and_continue(
+                            key,
+                            library_,
+                            storage::ReadKeyOpts{},
+                            DecodeSliceTask{std::move(ranges_and_key), columns_to_decode}
+                    );
+                },
+                2 * async::TaskScheduler::instance()->io_thread_count()
+        );
     }
 
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
@@ -495,8 +528,23 @@ class AsyncStore : public Store {
 
     std::string name() const override { return library_->name(); }
 
+    storage::OpenMode open_mode() const override { return library_->open_mode(); }
+
   private:
     friend class arcticdb::toolbox::apy::LibraryTool;
+
+    static std::vector<std::vector<entity::VariantKey>> chunk_keys(
+            std::vector<entity::VariantKey>&& keys, size_t batch_size
+    ) {
+        std::vector<std::vector<entity::VariantKey>> chunks;
+        chunks.reserve((keys.size() + batch_size - 1) / batch_size);
+        for (size_t i = 0; i < keys.size(); i += batch_size) {
+            const size_t end = std::min(i + batch_size, keys.size());
+            chunks.emplace_back(std::make_move_iterator(keys.begin() + i), std::make_move_iterator(keys.begin() + end));
+        }
+        return chunks;
+    }
+
     std::shared_ptr<storage::Library> library_;
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_;
     const EncodingVersion encoding_version_;

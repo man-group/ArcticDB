@@ -84,6 +84,10 @@ struct StreamSource {
             const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
     ) = 0;
 
+    virtual std::pair<VariantKey, TimeseriesDescriptor> read_timeseries_descriptor_sync(
+            const entity::VariantKey& key, storage::ReadKeyOpts opts = storage::ReadKeyOpts{}
+    ) = 0;
+
     virtual void read_ignoring_key_not_found(KeySizeCalculators&& calculators) {
         if (calculators.empty()) {
             return;

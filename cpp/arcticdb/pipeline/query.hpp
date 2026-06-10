@@ -12,6 +12,7 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/codec/segment.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
@@ -39,14 +40,17 @@ struct SpecificVersionQuery {
     bool iterate_snapshots_if_tombstoned;
 };
 
+// Similar to IndexInformation. See comment on IndexInformation for why both are useful.
 struct PreloadedIndexQuery {
-    PreloadedIndexQuery(AtomKey index_key, SegmentInMemory index_seg) :
+    PreloadedIndexQuery(AtomKey index_key, SegmentInMemory index_seg, std::shared_ptr<Segment> column_stats_seg = {}) :
         index_key_(std::move(index_key)),
-        index_seg_(std::move(index_seg)) {}
+        index_seg_(std::move(index_seg)),
+        column_stats_seg_(std::move(column_stats_seg)) {}
 
     // Key is just needed for constructing the VersionedItem to return
-    const entity::AtomKey index_key_;
+    const AtomKey index_key_;
     const SegmentInMemory index_seg_;
+    const std::shared_ptr<Segment> column_stats_seg_;
 };
 
 using VersionQueryType = std::variant<
@@ -259,7 +263,7 @@ void build_col_read_query_filters(
 ) {
     if (pipeline_context->only_index_columns_selected() && pipeline_context->overall_column_bitset_->count() > 0) {
         auto query = [pipeline = std::move(pipeline_context
-                      )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&&) mutable {
+                      )](const index::IndexSegmentReader& isr, std::unique_ptr<util::BitSet>&& input) mutable {
             auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(isr.size()));
             auto start_row = isr.column(index::Fields::start_row).begin<stream::SliceTypeDescriptorTag>();
             auto start_row_end = isr.column(index::Fields::start_row).end<stream::SliceTypeDescriptorTag>();
@@ -273,6 +277,9 @@ void build_col_read_query_filters(
                 }
                 ++index_segment_row;
                 ++start_row;
+            }
+            if (input) {
+                res->combine_operation_and(*input, bm::bvector<>::opt_none);
             }
             return res;
         };

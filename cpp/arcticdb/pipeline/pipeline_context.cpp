@@ -35,8 +35,14 @@ void PipelineContext::set_selected_columns(const std::optional<std::vector<std::
 }
 
 bool PipelineContext::only_index_columns_selected() const {
-    return overall_column_bitset_ && ((overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0]) ||
-                                      overall_column_bitset_->count() == 0);
+    if (!overall_column_bitset_)
+        return false;
+    if (overall_column_bitset_->count() == 0)
+        return true;
+    // For RangeIndex, field_count() == 0, so bit 0 is a data column, not an index column.
+    if (desc_ && desc_->index().field_count() == 0)
+        return false;
+    return overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0];
 }
 
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {

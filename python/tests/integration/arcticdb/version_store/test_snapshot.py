@@ -13,6 +13,7 @@ import random
 import re
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
+from arcticdb.exceptions import UserInputException, ArcticNativeException
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
@@ -409,6 +410,40 @@ def test_add_to_snapshot_multiple(basic_store_tombstone_and_pruning):
 
 
 @pytest.mark.storage
+def test_add_to_snapshot_duplicate_symbol_different_versions_raises(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s1", 2)
+    lib.write("s1", 3)
+    lib.snapshot("snap")
+
+    with pytest.raises(UserInputException, match="appears more than once"):
+        lib.add_to_snapshot("snap", ["s1", "s1"], as_ofs=[2, 3])
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_duplicate_symbol_same_version_raises(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.write("s1", 2)
+    lib.snapshot("snap")
+
+    with pytest.raises(UserInputException, match="appears more than once"):
+        lib.add_to_snapshot("snap", ["s1", "s1"], as_ofs=[2, 2])
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_mismatched_symbols_and_versions_raises(basic_store_tombstone_and_pruning):
+    lib = basic_store_tombstone_and_pruning
+    lib.write("s1", 1)
+    lib.snapshot("snap")
+    lib.write("s2", 2)
+
+    with pytest.raises(ArcticNativeException):
+        lib.add_to_snapshot("snap", ["s1"], as_ofs=[2, 3])
+
+
+@pytest.mark.storage
 def test_remove_from_snapshot(basic_store_tombstone_and_pruning):
     lib = basic_store_tombstone_and_pruning
     lib.write("s1", 1)
@@ -503,6 +538,98 @@ def test_snapshot_tombstoned_but_referenced_in_other_snapshot_version(basic_stor
     lib.snapshot("s2", versions={symA: symA_ver, symB: symB_ver})
     assert lib.read(symA, as_of="s2").data == 1
     assert lib.read(symB, as_of="s2").data == 1
+
+
+@pytest.fixture(params=["basic_store_delayed_deletes_v1", "basic_store_prune_previous"])
+def tombstone_store(request, basic_store_factory):
+    return request.getfixturevalue(request.param)
+
+
+@pytest.mark.parametrize("delete_via", ["prune", "delete"])
+@pytest.mark.storage
+def test_add_to_snapshot_rejects_deleted_version(tombstone_store, delete_via):
+    lib = tombstone_store
+    lib.write("existing_sym", 100)
+    lib.snapshot("snap")
+
+    ver = lib.write("deleted_sym", 1).version
+
+    if delete_via == "prune":
+        lib.write("deleted_sym", 2)  # tombstones v0 via pruning
+    else:
+        lib.delete("deleted_sym")
+
+    with pytest.raises(NoSuchVersionException):
+        lib.add_to_snapshot("snap", ["deleted_sym"], [ver])
+
+    # Snapshot should be unchanged - still contains only "existing_sym"
+    snap_versions = lib.list_versions(snapshot="snap")
+    assert len(snap_versions) == 1
+    assert snap_versions[0]["symbol"] == "existing_sym"
+    assert lib.read("existing_sym", as_of="snap").data == 100
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_allows_tombstoned_version_kept_alive_by_other_snapshot(tombstone_store):
+    lib = tombstone_store
+    ver = lib.write("tombstoned_sym", 1).version
+    lib.snapshot("protecting_snap")
+    lib.write("tombstoned_sym", 2)  # tombstones v0 via pruning; data kept alive by protecting_snap
+
+    lib.write("existing_sym", 100)
+    lib.snapshot("target_snap")
+
+    lib.add_to_snapshot("target_snap", ["tombstoned_sym"], [ver])
+
+    # target_snap should now contain both existing_sym and tombstoned_sym:v0
+    snap_versions = lib.list_versions(snapshot="target_snap")
+    snap_symbols = {v["symbol"] for v in snap_versions}
+    assert snap_symbols == {"existing_sym", "tombstoned_sym"}
+    assert lib.read("tombstoned_sym", as_of="target_snap").data == 1
+    assert lib.read("existing_sym", as_of="target_snap").data == 100
+    # protecting_snap should still be intact
+    assert lib.read("tombstoned_sym", as_of="protecting_snap").data == 1
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_rejects_multiple_deleted_versions(tombstone_store):
+    lib = tombstone_store
+    lib.write("existing_sym", 100)
+    lib.snapshot("snap")
+
+    ver_a = lib.write("deleted_sym_a", 1).version
+    lib.delete("deleted_sym_a")
+    ver_b = lib.write("deleted_sym_b", 1).version
+    lib.delete("deleted_sym_b")
+    with pytest.raises(NoSuchVersionException, match=r"deleted_sym_a.*deleted_sym_b|deleted_sym_b.*deleted_sym_a"):
+        lib.add_to_snapshot("snap", ["deleted_sym_a", "deleted_sym_b"], [ver_a, ver_b])
+
+    # Snapshot should be unchanged - still contains only "existing_sym"
+    snap_versions = lib.list_versions(snapshot="snap")
+    assert len(snap_versions) == 1
+    assert lib.read("existing_sym", as_of="snap").data == 100
+
+
+@pytest.mark.storage
+def test_add_to_snapshot_allows_version_behind_tombstone_all_if_in_snapshot(tombstone_store):
+    """v0 <- v1 <- tombstone_all <- v2, where v0 is protected by another snapshot."""
+    lib = tombstone_store
+    lib.write("sym", 10)  # v0
+    lib.snapshot("protecting_snap", versions={"sym": 0})  # explicitly protects v0
+    lib.write("sym", 20)  # v1
+    lib.delete("sym")  # tombstone_all over v0 and v1
+    lib.write("sym", 30)  # v2
+
+    lib.write("existing_sym", 100)
+    lib.snapshot("target_snap")
+
+    lib.add_to_snapshot("target_snap", ["sym"], [0])
+
+    snap_versions = lib.list_versions(snapshot="target_snap")
+    snap_symbols = {v["symbol"] for v in snap_versions}
+    assert snap_symbols == {"existing_sym", "sym"}
+    assert lib.read("sym", as_of="target_snap").data == 10
+    assert lib.read("existing_sym", as_of="target_snap").data == 100
 
 
 def test_add_to_snapshot_atomicity(s3_bucket_versioning_storage, lib_name):

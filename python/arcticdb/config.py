@@ -175,7 +175,7 @@ def make_loggers_config(
     ----------
     default_level: str
         Default log level for all the loggers unless overriden with specific_log_levels.
-        Valid values are "TRACE" (most verbose), "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF" (no logging).
+        Valid values are "DEBUG" (most verbose), "INFO", "WARN", "ERROR", "CRITICAL", "OFF" (no logging).
     specific_log_levels: Optional[Dict[str, str]]
         Optional overrides for specific logger(s).
         The possible logger names can be found in `arcticdb.log.logger_by_name.keys()` (subject to change).
@@ -207,7 +207,12 @@ def make_loggers_config(
         sink.file.path = file_output_path
 
     for logger_name in logger_by_name:
-        level_to_set = specific_log_levels.get(logger_name, default_level)
+        # The s3 stream carries AWS SDK output, which is very noisy. It ignores the global default level
+        # (so ARCTICDB_all_loglevel does not enable it) and stays quiet unless explicitly enabled.
+        if logger_name == "s3":
+            level_to_set = specific_log_levels.get("s3", "CRITICAL")
+        else:
+            level_to_set = specific_log_levels.get(logger_name, default_level)
         logger = log_cfgs.logger_by_id[logger_name]
         if console_output:
             logger.sink_ids.append("console")
@@ -231,7 +236,7 @@ def set_log_level(
     ----------
     default_level: str
         Default log level for all the loggers unless overriden with specific_log_levels.
-        Valid values are "TRACE" (most verbose), "DEBUG", "INFO", "WARN", "ERROR", "CRITICAL", "OFF" (no logging).
+        Valid values are "DEBUG" (most verbose), "INFO", "WARN", "ERROR", "CRITICAL", "OFF" (no logging).
     specific_log_levels: Optional[Dict[str, str]]
         Optional overrides for specific logger(s).
         The possible logger names can be found in `arcticdb.log.logger_by_name.keys()` (subject to change).

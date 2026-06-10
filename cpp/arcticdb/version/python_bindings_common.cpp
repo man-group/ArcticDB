@@ -10,7 +10,7 @@
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/pipeline/pandas_output_frame.hpp>
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 
 namespace py = pybind11;
 
@@ -27,7 +27,9 @@ void register_version_store_common_bindings(py::module& version, BindingScope sc
             .def("extract_numpy_arrays",
                  [](PandasOutputFrame& self) { return python_util::extract_numpy_arrays(self); });
 
-    py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame", py::module_local(local_bindings))
+    py::class_<ArrowOutputFrame, std::shared_ptr<ArrowOutputFrame>>(
+            version, "ArrowOutputFrame", py::module_local(local_bindings)
+    )
             .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches);
 }
 

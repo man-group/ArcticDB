@@ -166,4 +166,10 @@ void create_dense_bitmap_all_zeros(
     std::memset(sparse_buffer.data(), 0, num_bytes);
 }
 
+void create_dense_bitmap_if_any_nulls(size_t offset, const util::BitSet& bv, Column& dest_column) {
+    if (bv.count() != bv.size()) {
+        create_dense_bitmap(offset, bv, dest_column, AllocationType::DETACHABLE);
+    }
+}
+
 } // namespace arcticdb

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21) # TARGET_RUNTIME_DLLS
+cmake_minimum_required(VERSION 3.25)
 
 # Make the `project` command handle the version of the project.
 cmake_policy(SET CMP0048 NEW)
@@ -11,6 +11,9 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake" ${CMAKE_MODULE_PATH})
 project(arcticdb VERSION 0.0.1)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/compiler_cache.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/pdb_generation.cmake)
 
 enable_testing()
 
@@ -29,6 +32,23 @@ option(ARCTICDB_LOG_PERFORMANCE "Whether to log performance timings." OFF)
 option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations." OFF)
 option(ARCTICDB_KEEP_DEBUG_SYMBOLS "Whether to keep debug symbols in RelWithDebInfo builds." OFF)
 option(ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT "Enables pretty printing of segments. The printing can affect runtime" OFF)
+set(ARCTICDB_PDB_GENERATION_MODE "TARGET" CACHE STRING
+    "Whether to generate PDB per translation unit or per target. Possible options are TARGET|TU. Windows only option \
+    Generating PDB per TU does not work with PCH it will also force a single-threaded build for MSBuild even if /MP \
+    is set. Generating PDB per target does not work with compiler caches."
+)
+set(ARCTICDB_COMPILER_CACHE "AUTO" CACHE STRING
+    "Compiler cache for ArcticDB to use. Can be AUTO|CCACHE|SCCACHE|CUSTOM|OFF. If CCACHE or SCCACHE are provided will \
+    try to find the executables on the machine. If CUSTOM is provided ARCTICDB_COMPILER_CACHE_PATH must be set to the \
+    path for the custom compiler cache. AUTO will try to find a usable compiler cache (sccache or ccache) and set it \
+    only if CMAKE_C(XX)_COMPILER_LAUNCHER is empty. Prefer using this to setting explicitly \
+    CMAKE_C(XX)_COMPILER_LAUNCHER to get early exits during configure time if incompatible options are detected."
+)
+set(ARCTICDB_COMPILER_CACHE_PATH "" CACHE FILEPATH
+    "Path to compiler cache executable. In order to use it ARCTICDB_COMPILER_CACHE must be set to CUSTOM"
+)
+
+set_arcticdb_compiler_cache()
 
 set(ARCTICDB_SANITIZER_FLAGS)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})
@@ -75,6 +95,52 @@ if(ARCTICDB_SANITIZER_FLAGS)
     add_compile_options("${ARCTICDB_SANITIZER_FLAGS}")
     add_link_options(${ARCTICDB_SANITIZER_FLAGS})
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
+endif()
+
+# Use mold linker if available on Linux (faster linking via async I/O; ~30% speedup over GNU ld)
+# Skipped when sanitizers are active (Clang sanitizer builds require lld).
+# Skipped when CMAKE_LINKER_TYPE is set — set that in CMakeUserPresets.json to use your own linker.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ARCTICDB_SANITIZER_FLAGS AND NOT CMAKE_LINKER_TYPE)
+    find_program(MOLD_PROGRAM mold)
+    if(MOLD_PROGRAM)
+        include(CheckLinkerFlag)
+        check_linker_flag(CXX "-fuse-ld=mold" CXX_SUPPORTS_FUSE_LD_MOLD)
+        if(CXX_SUPPORTS_FUSE_LD_MOLD)
+            add_link_options(-fuse-ld=mold)
+            message(STATUS "Using mold linker: ${MOLD_PROGRAM}")
+        else()
+            # GCC < 12 doesn't support -fuse-ld=mold but can use mold via a -B shim directory
+            # containing an `ld` symlink. mold --help prints "Usage: /real/path/to/mold ..." so
+            # we parse that to find the real binary even when MOLD_PROGRAM is a wrapper script.
+            execute_process(
+                COMMAND "${MOLD_PROGRAM}" --help
+                OUTPUT_VARIABLE _MOLD_HELP
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET
+            )
+            if(_MOLD_HELP MATCHES "Usage: ([^ \n]+)")
+                get_filename_component(_MOLD_REAL_BIN_DIR "${CMAKE_MATCH_1}" DIRECTORY)
+            else()
+                get_filename_component(_MOLD_REAL_BIN_DIR "${MOLD_PROGRAM}" DIRECTORY)
+            endif()
+            set(_MOLD_SHIM_FOUND FALSE)
+            foreach(_MOLD_SHIM_CANDIDATE
+                "${_MOLD_REAL_BIN_DIR}/../libexec/mold"
+                "${_MOLD_REAL_BIN_DIR}/../lib/mold"
+            )
+                get_filename_component(_MOLD_SHIM_CANDIDATE "${_MOLD_SHIM_CANDIDATE}" ABSOLUTE)
+                if(EXISTS "${_MOLD_SHIM_CANDIDATE}/ld")
+                    add_link_options("-B${_MOLD_SHIM_CANDIDATE}")
+                    message(STATUS "Using mold linker via -B shim: ${_MOLD_SHIM_CANDIDATE}")
+                    set(_MOLD_SHIM_FOUND TRUE)
+                    break()
+                endif()
+            endforeach()
+            if(NOT _MOLD_SHIM_FOUND)
+                message(STATUS "Mold linker found but skipped: compiler does not support -fuse-ld=mold and no -B shim found")
+            endif()
+        endif()
+    endif()
 endif()
 
 if(${ARCTICDB_USING_CONDA})
@@ -137,11 +203,16 @@ if(WIN32)
         )
     endif()
 
-    # We always generate the debug info on Windows since those are not in the final .dll.
-    # sccache needs the /Z7 format, but the linker will still produce .pdb files.
+    # Equivalent of setting /Zi. We need this because /Z7 has a limit of 4GB per file which we reached. The main issue
+    # With /Zi is that it does not work with sccache. It's because /Zi will write the debug symbols of all TUs in a
+    # single file, thus the result of the compiler invocation is non-deterministic when /MP is used. For now this is
+    # solved by using /Fd to generate .pdb file per TU which are then linked (see arcticdb/CMakeLists.txt). Downside
+    # is that linking these files requires a lot of RAM. In case the CI starts OOM-ing we should drop this and give
+    # on using sccache.
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
-        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
+        /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /wd4244 /wd4267
     )
 
     if(${ARCTICDB_USING_CONDA})

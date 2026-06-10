@@ -6,8 +6,9 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_c_interface.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/column_store/block.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
@@ -46,19 +47,36 @@ sparrow::primitive_array<T> create_primitive_array(
     }
 }
 
-template<>
-sparrow::primitive_array<bool> create_primitive_array(
-        bool* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
+sparrow::array create_packed_bool_array(
+        TypedBlockData<ScalarTagType<DataTypeTag<DataType::BOOL8>>>& block, const ExternalPackedMemBlock* packed_block,
+        std::string_view name, std::optional<sparrow::validity_bitmap>&& maybe_bitmap
 ) {
-    // We need special handling for bools because arrow uses dense bool representation (i.e. 8 bools per byte)
-    // Our internal representation is not dense. We use sparrow's `make_data_buffer` utility, but if needed, we can use
-    // our own.
-    auto buffer = sparrow::details::primitive_data_access<bool>::make_data_buffer(std::span{data_ptr, data_size});
-    if (validity_bitmap) {
-        return sparrow::primitive_array<bool>{std::move(buffer), data_size, std::move(*validity_bitmap)};
-    } else {
-        return sparrow::primitive_array<bool>{std::move(buffer), data_size};
+    const auto num_bools = block.row_count();
+    const auto packed_bytes = packed_block->physical_bytes();
+    const auto shift = packed_block->shift();
+    auto* data_ptr = block.release();
+    // u8_buffer<bool> treats each element as 1 byte. We pass packed_bytes as the element count so that
+    // the buffer owns exactly the packed allocation. sparrow's primitive_array<bool> interprets this
+    // buffer as packed bits.
+    sparrow::u8_buffer<bool> buffer(data_ptr, packed_bytes, get_detachable_allocator());
+    // The buffer holds num_bools + shift bits; slice_inplace below will restrict to [shift, shift + num_bools).
+    const auto unsliced_bools = num_bools + shift;
+    auto arr = [&]() {
+        if (maybe_bitmap) {
+            return sparrow::array{
+                    sparrow::primitive_array<bool>{std::move(buffer), unsliced_bools, std::move(*maybe_bitmap)}
+            };
+        } else {
+            return sparrow::array{sparrow::primitive_array<bool>{std::move(buffer), unsliced_bools}};
+        }
+    }();
+    // If the packed block has a non-zero bit shift (e.g. after truncation via memcpy) slice it inplace.
+    // This is zero-copy, only updates the arrow offset.
+    if (shift > 0) {
+        arr.slice_inplace(shift, shift + num_bools);
     }
+    arr.set_name(name);
+    return arr;
 }
 
 template<typename T>
@@ -293,37 +311,47 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
                 vec.emplace_back(empty_arrow_array_for_column(column, name));
                 continue;
             }
-            auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
-            if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                if (column_data.buffer().has_extra_bytes_per_block()) {
-                    vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
-                } else {
-                    vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
-                }
+            if constexpr (is_bool_type(TagType::DataTypeTag::data_type)) {
+                util::check(
+                        block->mem_block()->get_type() == MemBlockType::EXTERNAL_PACKED,
+                        "Expected packed block for bool column"
+                );
+                const auto* packed_mem = static_cast<const ExternalPackedMemBlock*>(block->mem_block());
+                // For bool columns we need to add the shift because we will later slice_inplace the buffer alongside
+                // the bitmap.
+                auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count() + packed_mem->shift());
+                vec.emplace_back(create_packed_bool_array(*block, packed_mem, name, std::move(bitmap)));
             } else {
-                vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
+                auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
+                if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
+                    if (column_data.buffer().has_extra_bytes_per_block()) {
+                        vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                    } else {
+                        vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                    }
+                } else {
+                    vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
+                }
             }
         }
     });
     return vec;
 }
 
-std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
+std::vector<sparrow::record_batch> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
     if (num_columns == 0) {
         // We can't construct a record batch with no columns, so in this case we return an empty list of record batches,
         // which needs special handling in python.
-        return std::make_shared<std::vector<sparrow::record_batch>>();
+        return std::vector<sparrow::record_batch>();
     }
     const auto column_blocks = segment.column(0).num_blocks();
     util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     // column_blocks == 0 is a special case where we are returning a zero-row structure (e.g. if date_range is
     // provided outside of the time range covered by the symbol)
-    auto output = std::make_shared<std::vector<sparrow::record_batch>>(
-            column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{}
-    );
+    std::vector<sparrow::record_batch> output{column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{}};
     for (auto i = 0UL; i < num_columns; ++i) {
         auto& column = segment.column(static_cast<position_t>(i));
         util::check(
@@ -335,15 +363,15 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 
         auto column_arrays = arrow_arrays_from_column(column, segment.field(i).name());
         util::check(
-                column_arrays.size() == output->size(),
+                column_arrays.size() == output.size(),
                 "Unexpected number of arrow arrays returned: {} != {}",
                 column_arrays.size(),
-                output->size()
+                output.size()
         );
 
         for (auto block_idx = 0UL; block_idx < column_arrays.size(); ++block_idx) {
-            util::check(block_idx < output->size(), "Block index overflow {} > {}", block_idx, output->size());
-            (*output)[block_idx].add_column(
+            util::check(block_idx < output.size(), "Block index overflow {} > {}", block_idx, output.size());
+            output[block_idx].add_column(
                     static_cast<std::string>(segment.field(i).name()), std::move(column_arrays[block_idx])
             );
         }
@@ -392,35 +420,15 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     }
 }
 
-std::pair<std::vector<DataType>, std::optional<size_t>> find_data_types_and_index_position(
-        const sparrow::record_batch& record_batch, const std::optional<std::string>& index_name
-) {
-    std::vector<DataType> data_types;
-    data_types.reserve(record_batch.nb_columns());
-    std::optional<size_t> index_column_position;
-    for (size_t idx = 0; idx < record_batch.nb_columns(); ++idx) {
-        if (index_name.has_value() && record_batch.get_column_name(idx) == *index_name) {
-            index_column_position = idx;
-        }
-        data_types.emplace_back(arcticdb_type_from_arrow_array(record_batch.get_column(idx)));
-    }
-    if (index_name.has_value()) {
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-                index_column_position.has_value(), "Specified index column named '{}' not present in data", *index_name
-        );
-    }
-    return {std::move(data_types), index_column_position};
-}
-
-std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
-        const std::vector<sparrow::record_batch>& record_batches, const std::optional<std::string>& index_name
-) {
+SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches, bool has_index) {
     SegmentInMemory seg;
     if (record_batches.empty()) {
-        return {seg, std::nullopt};
+        return seg;
     }
-    auto record_batch = record_batches.cbegin();
-    auto [data_types, index_column_position] = find_data_types_and_index_position(*record_batch, index_name);
+    const auto& first_batch = record_batches.front();
+    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+            !has_index || first_batch.nb_columns() > 0, "Cannot use index_column=True on a table with no columns"
+    );
     uint64_t total_rows = std::accumulate(
             record_batches.cbegin(),
             record_batches.cend(),
@@ -429,28 +437,26 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 return accum + record_batch.nb_rows();
             }
     );
-    auto column_names = record_batches.front().names();
+    auto column_names = first_batch.names();
     std::vector<Column> columns;
-    columns.reserve(data_types.size());
-    for (auto data_type : data_types) {
+    columns.reserve(first_batch.nb_columns());
+    for (size_t idx = 0; idx < first_batch.nb_columns(); ++idx) {
+        auto data_type = arcticdb_type_from_arrow_array(first_batch.get_column(idx));
         // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
         columns.emplace_back(make_scalar_type(data_type), Sparsity::NOT_PERMITTED, ChunkedBuffer());
     }
     uint64_t start_row{0};
-    for (; record_batch != record_batches.cend(); ++record_batch) {
-        for (size_t idx = 0; idx < record_batch->nb_columns(); ++idx) {
+    for (const auto& batch : record_batches) {
+        for (size_t idx = 0; idx < batch.nb_columns(); ++idx) {
             auto& column = columns[idx];
-            const auto& data_type = data_types[idx];
-            const auto& array = record_batch->get_column(idx);
+            const auto data_type = column.type().data_type();
+            const auto& array = batch.get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
-            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    array.null_count() == 0,
-                    "Column '{}' contains null values, which are not currently supported",
-                    record_batch->names()[idx]
-            );
+            // arrow_array_buffers[0] is the validity bitmap. It may be nullptr if there are no null values
+            // arrow_array_buffers[1] is the actual column data buffer.
+            // arrow_array_buffers[i] for i>1 are extra buffers used only for certain types.
+            // E.g. the strings buffer for a variable length encoded string array.
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
-            // arrow_array_buffers[0] seems to be the validity bitmap, and may be NULL if there are no null values
-            // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
                 // Arrow bool columns are packed bitsets
@@ -474,22 +480,31 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                     column.buffer().add_external_block(data, bytes);
                 }
             }
+
+            if (array.null_count() > 0) {
+                schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                        !(has_index && idx == 0),
+                        "Index column '{}' cannot contain null values, but {} nulls were found",
+                        column_names[idx],
+                        array.null_count()
+                );
+                ChunkedBuffer bitmap_buffer;
+                // arrow_array_buffers[0] is the validity bitmap
+                bitmap_buffer.add_external_packed_block(
+                        arrow_array_buffers[0].data<uint8_t>(), array.size(), array.offset()
+                );
+                column.set_extra_buffer(
+                        start_row * get_type_size(data_type), ExtraBufferType::BITMAP, std::move(bitmap_buffer)
+                );
+            }
         }
-        start_row += record_batch->nb_rows();
-    }
-    if (index_column_position.has_value()) {
-        seg.add_column(
-                column_names[*index_column_position],
-                std::make_shared<Column>(std::move(columns[*index_column_position]))
-        );
+        start_row += batch.nb_rows();
     }
     for (size_t idx = 0; idx < column_names.size(); ++idx) {
-        if (!index_column_position.has_value() || idx != *index_column_position) {
-            seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
-        }
+        seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
     }
     seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
-    return {seg, index_column_position};
+    return seg;
 }
 
 RecordBatchData empty_record_batch_from_descriptor(

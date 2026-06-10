@@ -113,14 +113,14 @@ result = lib.read("symbol", query_builder=q)
 ## Testing
 
 ```bash
-# Run all tests
-python -m pytest python/tests/
+# Run unit tests (default)
+make test-py
 
-# Run unit tests only
-python -m pytest python/tests/unit/
+# Run integration tests
+make test-py TYPE=integration
 
 # Run specific test file
-python -m pytest python/tests/unit/arcticdb/test_arctic.py
+make test-py FILE=python/tests/unit/arcticdb/test_arctic.py
 ```
 
 ## Related Documentation

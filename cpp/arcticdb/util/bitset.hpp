@@ -39,4 +39,21 @@ void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
 
 void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr);
 
+void bools_to_packed_bits(const bool* src, size_t num_bools, uint8_t* dest);
+
+bool get_bit_at(const uint8_t* packed_bits, size_t bit_pos);
+
+void set_bit_at(uint8_t* packed_bits, size_t bit_pos, bool value);
+
+void copy_packed_bits(const uint8_t* src, size_t src_bit_offset, size_t num_bits, uint8_t* dest);
+
+template<typename functor>
+requires std::is_invocable_r_v<void, functor, size_t>
+void iterate_over_set_positions(const bm::bvector<>& bv, size_t from, size_t to, functor&& f) {
+    // TODO: Investigate performance of `get_enumerator`. Maybe having an rs_index can speed it up.
+    for (auto en = bv.get_enumerator(from); *en < to; ++en) {
+        f(*en);
+    }
+}
+
 } // namespace arcticdb

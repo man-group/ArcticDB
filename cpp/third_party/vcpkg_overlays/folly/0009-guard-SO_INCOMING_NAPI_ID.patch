@@ -1,0 +1,13 @@
+diff --git a/folly/io/async/AsyncSocketTransport.cpp b/folly/io/async/AsyncSocketTransport.cpp
+index 8ca129c..e719ca3 100644
+--- a/folly/io/async/AsyncSocketTransport.cpp
++++ b/folly/io/async/AsyncSocketTransport.cpp
+@@ -25,7 +25,7 @@ const SocketAddress& AsyncSocketTransport::anyAddress() {
+ }
+ 
+ int AsyncSocketTransport::getNapiId() const {
+-#if defined(__linux__)
++#if defined(__linux__) && defined(SO_INCOMING_NAPI_ID)
+   int id = -1;
+   socklen_t len = sizeof(id);
+   auto ret = ::getsockopt(

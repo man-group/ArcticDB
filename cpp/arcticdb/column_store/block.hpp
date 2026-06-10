@@ -50,7 +50,7 @@ class IMemBlock {
     // virtual to allow ExternalPackedBuffer to override to throw
     [[nodiscard]] virtual const uint8_t* ptr(size_t pos) const;
     [[nodiscard]] virtual uint8_t* ptr(size_t pos);
-    [[nodiscard]] uint8_t* end() const;
+    [[nodiscard]] virtual uint8_t* end() const;
 };
 
 // DynamicMemBlock stores inline memory of a certain capacity. It allows resizing within the predefined capacity.
@@ -132,13 +132,14 @@ class ExternalMemBlock : public IMemBlock {
 class ExternalPackedMemBlock : public ExternalMemBlock {
   public:
     ExternalPackedMemBlock(
-            const uint8_t* data, size_t logical_size, size_t shift, size_t offset, entity::timestamp ts, bool owning
+            const uint8_t* data, size_t logical_size, size_t offset, entity::timestamp ts, size_t shift, bool owning
     );
 
     MemBlockType get_type() const final;
     [[nodiscard]] size_t logical_size() const final;
     [[nodiscard]] const uint8_t* ptr(size_t pos) const final;
     [[nodiscard]] uint8_t* ptr(size_t pos) final;
+    [[nodiscard]] uint8_t* end() const final;
     [[nodiscard]] size_t shift() const;
 
   private:

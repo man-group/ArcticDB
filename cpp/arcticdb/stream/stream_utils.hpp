@@ -400,12 +400,19 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     // For explicit integer indexes, the index is actually present in the first column even though the field_count
     // is 0.
     ssize_t index_till;
-    const auto& common = norm_info.has_df() ? norm_info.df().common() : norm_info.series().common();
-    if (auto idx_type = common.index_type_case();
-        idx_type == arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex)
-        index_till = common.index().is_physically_stored() ? 1 : stream_descriptor.index().field_count();
-    else
-        index_till = 1 + common.multi_index().field_count(); // # The value of field_count is len(index) - 1
+    if (norm_info.has_experimental_arrow()) {
+        // Data written as arrow can optionally specify a single index column. If a `has_index==true` the index is
+        // physically stored.
+        index_till = norm_info.experimental_arrow().has_index() ? 1 : 0;
+    } else {
+        const auto& common = norm_info.has_df() ? norm_info.df().common() : norm_info.series().common();
+        if (auto idx_type = common.index_type_case();
+            idx_type == arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex) {
+            index_till = common.index().is_physically_stored() ? 1 : stream_descriptor.index().field_count();
+        } else {
+            index_till = 1 + common.multi_index().field_count(); // # The value of field_count is len(index) - 1
+        }
+    }
 
     std::vector<std::string> index_columns;
     for (auto field_idx = 0; field_idx < index_till; ++field_idx)

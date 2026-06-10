@@ -6,7 +6,9 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <algorithm>
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/storage.hpp>
@@ -22,6 +24,7 @@
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <pipeline/column_stats_filter.hpp>
 
 namespace {
 using namespace arcticdb;
@@ -156,6 +159,7 @@ folly::Future<folly::Unit> LocalVersionedEngine::delete_unreferenced_pruned_inde
             in_snaps.insert(key_to_keep);
             PreDeleteChecks checks{false, false, false, false, std::move(in_snaps)};
             return delete_trees_responsibly(store(), version_map(), not_in_snaps, {}, {}, checks)
+                    .thenValueInline([](auto&&) { return folly::Unit{}; }) // drop the DeleteTreesStats
                     .thenError(folly::tag_t<std::exception>{}, [](auto const& ex) {
                         log::version().warn("Failed to clean up pruned previous versions due to: {}", ex.what());
                     });
@@ -430,13 +434,22 @@ VersionIdentifier get_version_identifier(
 
 ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, std::any& handler_data
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
-                return {preloaded_index_query};
+                std::optional<ColumnStatsSource> column_stats;
+                if (preloaded_index_query->column_stats_seg_) {
+                    column_stats.emplace(ColumnStatsSource{
+                            preloaded_index_query->column_stats_seg_, ColumnStatsQueryMetadata(read_query->clauses_)
+                    });
+                }
+                return std::make_shared<IndexInformation>(
+                        std::pair{preloaded_index_query->index_key_, preloaded_index_query->index_seg_.clone()},
+                        std::move(column_stats)
+                );
             },
             [&](const auto&) -> VersionIdentifier {
                 auto version = get_version_to_read(stream_id, version_query);
@@ -483,8 +496,10 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), target_stream);
     const auto target_version = get_next_version_from_key(maybe_prev);
 
+    VersionIdentifier resolved =
+            std::make_shared<IndexInformation>(read_index_key_without_column_stats(store(), source_version->key_));
     std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store(), std::move(source_version).value(), *read_query, read_options);
+            setup_pipeline_context(store(), resolved, *read_query, read_options);
     const IndexPartialKey target_partial_index_key{target_stream, target_version};
     VersionedItem versioned_item = read_modify_write_impl(
                                            store(),
@@ -506,46 +521,68 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k, bool include_index_segment) {
     const auto key = std::move(k);
-    return store()->read(key).thenValue([include_index_segment](auto&& key_seg_pair) -> DescriptorItem {
-        auto key = to_atom(std::move(key_seg_pair.first));
-        auto seg = std::move(key_seg_pair.second);
-        std::optional<TimeseriesDescriptor> timeseries_descriptor;
-        if (seg.has_index_descriptor())
-            timeseries_descriptor.emplace(seg.index_descriptor());
+    auto index_future = store()->read(key);
 
-        std::optional<timestamp> start_index;
-        std::optional<timestamp> end_index;
-        if (seg.row_count() > 0) {
-            const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
-            entity::details::visit_type(
-                    start_index_column.type().data_type(),
-                    [&start_index_column, &start_index](auto column_desc_tag) {
-                        using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
-                        if constexpr (is_time_type(type_info::data_type)) {
-                            start_index = start_index_column.template scalar_at<timestamp>(0);
-                        }
-                    }
-            );
+    auto column_stats_future = folly::makeFuture<std::shared_ptr<Segment>>(std::shared_ptr<Segment>{});
+    if (include_index_segment && is_column_stats_enabled()) {
+        auto column_stats_key = index_key_to_column_stats_key(key);
+        storage::ReadKeyOpts stats_read_opts{.dont_warn_about_missing_key = true};
+        column_stats_future =
+                store()->read_compressed(column_stats_key, stats_read_opts)
+                        .thenValueInline([](storage::KeySegmentPair&& key_seg) -> std::shared_ptr<Segment> {
+                            return key_seg.segment_ptr();
+                        });
+    }
 
-            const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
-            entity::details::visit_type(
-                    end_index_column.type().data_type(),
-                    [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
-                        using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
-                        if constexpr (is_time_type(type_info::data_type)) {
-                            // -1 as the end timestamp in the data keys is one nanosecond greater than the last value in
-                            // the index column
-                            end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
-                        }
+    return folly::collectAll(std::move(index_future), std::move(column_stats_future))
+            .via(&async::io_executor())
+            .thenValue([include_index_segment](auto&& results) -> DescriptorItem {
+                auto& [index_try, column_stats_try] = results;
+                auto key_seg_pair = std::move(index_try).value();
+                auto key = to_atom(std::move(key_seg_pair.first));
+                auto seg = std::move(key_seg_pair.second);
+                std::optional<TimeseriesDescriptor> timeseries_descriptor;
+                if (seg.has_index_descriptor())
+                    timeseries_descriptor.emplace(seg.index_descriptor());
+
+                std::optional<timestamp> start_index;
+                std::optional<timestamp> end_index;
+                if (seg.row_count() > 0) {
+                    const auto& start_index_column = seg.column(position_t(index::Fields::start_index));
+                    entity::details::visit_type(
+                            start_index_column.type().data_type(),
+                            [&start_index_column, &start_index](auto column_desc_tag) {
+                                using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                                if constexpr (is_time_type(type_info::data_type)) {
+                                    start_index = start_index_column.template scalar_at<timestamp>(0);
+                                }
+                            }
+                    );
+
+                    const auto& end_index_column = seg.column(position_t(index::Fields::end_index));
+                    entity::details::visit_type(
+                            end_index_column.type().data_type(),
+                            [&end_index_column, &end_index, row_count = seg.row_count()](auto column_desc_tag) {
+                                using type_info = ScalarTypeInfo<decltype(column_desc_tag)>;
+                                if constexpr (is_time_type(type_info::data_type)) {
+                                    // -1 as the end timestamp in the data keys is one nanosecond greater than the last
+                                    // value in the index column
+                                    end_index = *end_index_column.template scalar_at<timestamp>(row_count - 1) - 1;
+                                }
+                            }
+                    );
+                }
+                DescriptorItem descriptor_item{
+                        std::move(key), start_index, end_index, std::move(timeseries_descriptor)
+                };
+                if (include_index_segment) {
+                    descriptor_item.index_segment_ = std::move(seg);
+                    if (!column_stats_try.hasException()) {
+                        descriptor_item.column_stats_segment_ = std::move(column_stats_try).value();
                     }
-            );
-        }
-        DescriptorItem descriptor_item{std::move(key), start_index, end_index, std::move(timeseries_descriptor)};
-        if (include_index_segment) {
-            descriptor_item.index_segment_ = std::move(seg);
-        }
-        return descriptor_item;
-    });
+                }
+                return descriptor_item;
+            });
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor_async(
@@ -968,9 +1005,13 @@ VersionedItem LocalVersionedEngine::write_segment(
     return versioned_item;
 }
 
-// Steps of delete_trees_responsibly:
+/**
+ * For an index key considered for deletion (target_key) we protect the nearest versions to it (above and below)
+ * that are included in snapshots from deletion. This is because the index key may be dedup'd against an earlier
+ * version in a snapshot, or a later version in a snapshot may be dedup'd against this index key.
+ */
 void copy_versions_nearest_to_target(
-        const MasterSnapshotMap::value_type::second_type& keys_map, const IndexTypeKey& target_key,
+        const MasterSnapshotMap::value_type::second_type& index_key_to_snapshot_map, const IndexTypeKey& target_key,
         util::ContainerFilterWrapper<std::unordered_set<IndexTypeKey>>& not_to_delete
 ) {
     const auto target_version = target_key.version_id();
@@ -978,7 +1019,7 @@ void copy_versions_nearest_to_target(
     const IndexTypeKey* least_higher_version = nullptr;
     const IndexTypeKey* greatest_lower_version = nullptr;
 
-    for (const auto& pair : keys_map) {
+    for (const auto& pair : index_key_to_snapshot_map) {
         const auto& key = pair.first;
         if (key != target_key) {
             const auto version = key.version_id();
@@ -1017,27 +1058,28 @@ std::unordered_map<StreamId, VersionId> min_versions_for_each_stream(const std::
     return out;
 }
 
-folly::Future<folly::Unit> delete_trees_responsibly(
+folly::Future<DeleteTreesStats> delete_trees_responsibly(
         std::shared_ptr<Store> store, std::shared_ptr<VersionMap>& version_map,
         const std::vector<IndexTypeKey>& orig_keys_to_delete, const arcticdb::MasterSnapshotMap& snapshot_map,
         const std::optional<SnapshotId>& snapshot_being_deleted, const PreDeleteChecks& check, const bool dry_run
 ) {
     ARCTICDB_SAMPLE(DeleteTree, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_tree");
-
+    DeleteTreesStats stats;
+    stats.index_keys_considered = orig_keys_to_delete.size();
     util::ContainerFilterWrapper keys_to_delete(orig_keys_to_delete);
     util::ContainerFilterWrapper not_to_delete(check.could_share_data);
 
     // Each section below performs these checks:
-    // 1) remove any keys_to_delete that is still visible,
-    // 2) find any other index key that could share data with the keys_to_delete
+    // 1) remove any keys_to_delete that are still visible
+    // 2) find any other index key that could share data with the keys_to_delete (due to dedup).
 
-    // Check snapshot:
+    // Remove any keys considered for deletion that are covered by a snapshot.
     if (check.snapshots) {
-        keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete](const auto& target_key) {
-            // symbol -> IndexTypeKey -> set<SnapshotId>
-            auto find_symbol = snapshot_map.find(target_key.id());
-            if (find_symbol != snapshot_map.end()) {
+        keys_to_delete.remove_if([&snapshot_map, &snapshot_being_deleted, &not_to_delete, &stats](const auto& target_key
+                                 ) {
+            // snapshot map is {symbol: {index_key: {snapshots...}}}
+            if (auto find_symbol = snapshot_map.find(target_key.id()); find_symbol != snapshot_map.end()) {
                 const auto& keys_map = find_symbol->second;
                 auto snaps_itr = keys_map.find(target_key);
                 if (snaps_itr != keys_map.end()) {
@@ -1051,6 +1093,7 @@ folly::Future<folly::Unit> delete_trees_responsibly(
                                 target_key.id(),
                                 target_key.version_id()
                         );
+                        ++stats.index_keys_protected_by_snapshots;
                         return true;
                     }
                 }
@@ -1060,19 +1103,35 @@ folly::Future<folly::Unit> delete_trees_responsibly(
         });
     }
 
-    // Check versions:
+    // Remove any keys considered for deletion that are still undeleted in the version chain, or which may share
+    // keys with undeleted versions via the dedup mechanism.
     auto load_type = check.calc_load_type();
     if (load_type != LoadType::NOT_LOADED) {
         std::unordered_map<StreamId, std::shared_ptr<VersionMapEntry>> entry_map;
         {
             auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
+            std::vector<StreamId> stream_ids;
+            std::vector<folly::Future<std::shared_ptr<VersionMapEntry>>> reload_futures;
+            stream_ids.reserve(min_versions.size());
+            reload_futures.reserve(min_versions.size());
             for (const auto& min : min_versions) {
                 auto load_strategy =
                         load_type == LoadType::DOWNTO
                                 ? LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(min.second)}
                                 : LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY};
-                const auto entry = version_map->check_reload(store, min.first, load_strategy, __FUNCTION__);
-                entry_map.try_emplace(std::move(min.first), entry);
+                stream_ids.push_back(min.first);
+                reload_futures.push_back(
+                        async::submit_io_task(CheckReloadTask{store, version_map, min.first, load_strategy})
+                );
+            }
+            // Safe to block here: this code path is only reached when load_type != NOT_LOADED,
+            // which excludes the delete_unreferenced_pruned_indexes path (all checks=false, so
+            // calc_load_type() == NOT_LOADED). All other callers of delete_trees_responsibly
+            // invoke it from a Python thread, not from within a thread pool callback.
+            // Verified by test_batch_delete_versions_* with single-threaded config.
+            auto results = folly::collectAll(reload_futures).get();
+            for (size_t i = 0; i < results.size(); ++i) {
+                entry_map.try_emplace(std::move(stream_ids[i]), std::move(results[i]).value());
             }
         }
 
@@ -1089,16 +1148,16 @@ folly::Future<folly::Unit> delete_trees_responsibly(
             get_matching_prev_and_next_versions(
                     entry,
                     key.version_id(), // Check 2)
-                    [](const AtomKey&) {},
-                    [&check, &not_to_delete](auto& prev) {
+                    [](const AtomKeyPacked&) {},
+                    [&check, &not_to_delete, &entry](auto& prev) {
                         if (check.prev_version)
-                            not_to_delete.insert(prev);
+                            not_to_delete.insert(prev.to_atom_key(entry->stream_id_));
                     },
-                    [&check, &not_to_delete](auto& next) {
+                    [&check, &not_to_delete, &entry](auto& next) {
                         if (check.next_version)
-                            not_to_delete.insert(next);
+                            not_to_delete.insert(next.to_atom_key(entry->stream_id_));
                     },
-                    [v = key.version_id()](const AtomKeyImpl& key, const std::shared_ptr<VersionMapEntry>& entry) {
+                    [v = key.version_id()](const AtomKeyPacked& key, const std::shared_ptr<VersionMapEntry>& entry) {
                         // Can't use is_live_index_type_key() because the target version's index key might have
                         // already been tombstoned, so will miss it and thus not able to find the prev/next key.
                         return is_index_key_type(key.type()) && (key.version_id() == v || !entry->is_tombstoned(key));
@@ -1118,6 +1177,7 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     storage::ReadKeyOpts read_opts;
     read_opts.ignores_missing_key_ = true;
     auto data_keys_to_be_deleted = recurse_index_keys(store, *keys_to_delete, read_opts);
+    stats.data_keys_considered = data_keys_to_be_deleted.size();
     log::version().debug("Candidate: {} total of data keys", data_keys_to_be_deleted.size());
 
     read_opts.dont_warn_about_missing_key = true;
@@ -1153,34 +1213,39 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     );
     log::version().debug("Number of Data keys to be deleted: {}", vks_data_to_delete.size());
 
-    folly::Future<folly::Unit> remove_keys_fut;
-    if (!dry_run) {
-        ARCTICDB_TRACE(
-                log::version(), fmt::format("Column Stats keys to be deleted: {}", fmt::join(vks_column_stats, ", "))
-        );
-        ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
-        ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
+    stats.index_keys_deleted = vks_to_delete.size();
+    stats.column_stats_keys_deleted = vks_column_stats.size();
+    stats.data_keys_deleted = vks_data_to_delete.size();
 
-        // Delete any associated column stats keys first
-        remove_keys_fut = store->remove_keys(std::move(vks_column_stats), remove_opts)
-                                  .thenValue([store = store,
-                                              vks_to_delete = std::move(vks_to_delete),
-                                              remove_opts](auto&&) mutable {
-                                      log::version().debug("Column Stats keys deleted.");
-                                      return store->remove_keys(std::move(vks_to_delete), remove_opts);
-                                  })
-                                  .thenValue([store = store,
-                                              vks_data_to_delete = std::move(vks_data_to_delete),
-                                              remove_opts](auto&&) mutable {
-                                      log::version().debug("Index keys deleted.");
-                                      return store->remove_keys(std::move(vks_data_to_delete), remove_opts);
-                                  })
-                                  .thenValue([](auto&&) {
-                                      log::version().debug("Data keys deleted.");
-                                      return folly::Unit();
-                                  });
+    if (dry_run) {
+        return folly::makeFuture(stats);
     }
-    return remove_keys_fut;
+    ARCTICDB_TRACE(
+            log::version(), fmt::format("Column Stats keys to be deleted: {}", fmt::join(vks_column_stats, ", "))
+    );
+    ARCTICDB_TRACE(log::version(), fmt::format("Index keys to be deleted: {}", fmt::join(vks_to_delete, ", ")));
+    ARCTICDB_TRACE(log::version(), fmt::format("Data keys to be deleted: {}", fmt::join(vks_data_to_delete, ", ")));
+
+    // Parallel deletion of column-stats, index, and data keys. The previous sequential order
+    // (stats → index → data) provided a narrower window for dangling references on partial failure,
+    // but since all reads already set ignores_missing_key_ = true, a reader encountering a dangling
+    // index→data reference will simply skip the missing data key. The parallelism is a worthwhile
+    // trade-off for the performance gain on batch deletes.
+    return folly::collectAll(
+                   store->remove_keys(std::move(vks_column_stats), remove_opts),
+                   store->remove_keys(std::move(vks_to_delete), remove_opts),
+                   store->remove_keys(std::move(vks_data_to_delete), remove_opts)
+    )
+            .via(&async::io_executor())
+            .thenValueInline([](auto&& results) {
+                // Re-throw first error, if any, to preserve the error propagation
+                // behaviour of the previous sequential chain.
+                std::get<0>(results).throwUnlessValue();
+                std::get<1>(results).throwUnlessValue();
+                std::get<2>(results).throwUnlessValue();
+                return folly::Unit();
+            })
+            .thenValueInline([stats](folly::Unit) { return stats; });
 }
 
 void LocalVersionedEngine::remove_incomplete(const StreamId& stream_id) {
@@ -1275,6 +1340,60 @@ std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incom
     return versioned_item;
 }
 
+UpdateInfo LocalVersionedEngine::compact_data_preamble(const StreamId& stream_id) {
+    UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    storage::check<ErrorCode::E_SYMBOL_NOT_FOUND>(
+            update_info.previous_index_key_.has_value(), "Cannot compact data of non-existent symbol \"{}\".", stream_id
+    );
+    // We could make this work by compacting the leaf nodes, but it is not obviously worth the effort at this stage
+    // Leaf nodes of recursively normalized data cannot become fragmented through appends/updates, so it would only be
+    // useful for changing the slicing by an explicitly provided rows_per_segment
+    schema::check<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+            update_info.previous_index_key_->type() != KeyType::MULTI_KEY,
+            "Cannot compact data of recursively normalized symbol {}",
+            stream_id
+    );
+    return update_info;
+}
+
+CompactDataInfo LocalVersionedEngine::compact_data_explain_plan_internal(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data_explain_plan");
+    py::gil_scoped_release release_gil;
+    UpdateInfo update_info = compact_data_preamble(stream_id);
+    return compact_data_explain_plan_impl(
+                   store(), update_info, rows_per_segment.value_or(get_write_options().segment_row_size)
+    )
+            .get();
+}
+
+VersionedItem LocalVersionedEngine::compact_data_internal(
+        const StreamId& stream_id, std::optional<uint64_t> rows_per_segment, bool prune_previous_versions
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: compact_data");
+    py::gil_scoped_release release_gil;
+    UpdateInfo update_info = compact_data_preamble(stream_id);
+    auto versioned_item = compact_data_impl(
+                                  store(),
+                                  VersionedItem{*update_info.previous_index_key_},
+                                  get_write_options(),
+                                  IndexPartialKey{stream_id, update_info.next_version_id_},
+                                  rows_per_segment.value_or(get_write_options().segment_row_size)
+    )
+                                  .get();
+    if (versioned_item.has_value()) {
+        write_version_and_prune_previous(
+                prune_previous_versions, versioned_item->key_, update_info.previous_index_key_
+        );
+        return *versioned_item;
+    } else {
+        // compact_data_impl returns nullopt if the data was already compacted, in which case the versioned item we
+        // return is for the existing version
+        return {std::move(*update_info.previous_index_key_)};
+    }
+}
+
 bool LocalVersionedEngine::is_symbol_fragmented(const StreamId& stream_id, std::optional<size_t> segment_size) {
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     auto options = get_write_options();
@@ -1312,7 +1431,7 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
 std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedEngine::batch_read_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
-        std::any& handler_data
+        std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
     if (stream_ids.empty()) {
@@ -1336,7 +1455,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
-                                    &handler_data](auto&& opt_index_key) {
+                                    handler_data](auto&& opt_index_key) {
                             auto version_info = get_version_identifier(
                                     stream_ids[idx],
                                     version_queries[idx],
@@ -1351,7 +1470,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options = batch_read_options.at(idx),
-                                    &handler_data](ReadVersionOutput&& result) {
+                                    handler_data](ReadVersionOutput&& result) {
                             auto& keys = result.frame_and_descriptor_.keys_;
                             if (keys.empty()) {
                                 return folly::makeFuture(ReadVersionWithNodesOutput{std::move(result), {}});
@@ -1440,7 +1559,7 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
 MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
         std::shared_ptr<std::vector<StreamId>> stream_ids, std::shared_ptr<std::vector<VersionQuery>> version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
-        std::vector<std::shared_ptr<Clause>>&& clauses, std::any& handler_data
+        std::vector<std::shared_ptr<Clause>>&& clauses, std::shared_ptr<std::any> handler_data
 ) {
     py::gil_scoped_release release_gil;
     util::check(!clauses.empty(), "Cannot join with no joining clause provided");
@@ -1479,7 +1598,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
     return folly::collect(symbol_processing_result_futs)
             .via(&async::io_executor())
-            .thenValueInline([this, &handler_data, clauses_ptr, component_manager, read_options](
+            .thenValueInline([this, handler_data, clauses_ptr, component_manager, read_options](
                                      std::vector<SymbolProcessingResult>&& symbol_processing_results
                              ) mutable {
                 auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
@@ -1493,14 +1612,14 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                     std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
                             return collect_segments(std::move(proc));
                         })
-                        .thenValueInline([store = store(), &handler_data, pipeline_context, read_options](
+                        .thenValueInline([store = store(), handler_data, pipeline_context, read_options](
                                                  std::vector<SliceAndKey>&& slice_and_keys
                                          ) mutable {
                             return prepare_output_frame(
                                     std::move(slice_and_keys), pipeline_context, store, read_options, handler_data
                             );
                         })
-                        .thenValueInline([&handler_data,
+                        .thenValueInline([handler_data,
                                           pipeline_context,
                                           res_versioned_items,
                                           res_metadatas,
@@ -1556,6 +1675,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
                                 store(), version_map, index_key, std::move(stream_update_info.previous_index_key_)
                         }
                 )
+                        .via(&async::cpu_executor())
                         .thenValue([this, index_key](auto&& atom_key_vec) {
                             return delete_unreferenced_pruned_indexes(std::move(atom_key_vec), index_key);
                         });
@@ -1975,12 +2095,25 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 ) {
     std::map<StreamId, VersionVectorType> sym_versions;
     WarnVersionTypeNotHandled warner;
+
     for (const auto& stream_id : folly::enumerate(stream_ids)) {
         const auto& query = version_queries[stream_id.index].content_;
-        if (std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id].push_back(std::get<SpecificVersionQuery>(query).version_id_);
-        else
+
+        if (!std::holds_alternative<SpecificVersionQuery>(query)) {
             warner.warn(*stream_id);
+            continue;
+        }
+
+        const auto version_id = std::get<SpecificVersionQuery>(query).version_id_;
+
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                version_id >= 0,
+                "Negative version numbers are not supported in add_to_snapshot. Got version {} for symbol '{}'",
+                version_id,
+                *stream_id
+        );
+
+        sym_versions[*stream_id].emplace_back(version_id);
     }
     return sym_versions;
 }
@@ -2028,8 +2161,8 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
         auto restore_fut =
                 async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key->id(), *key, maybe_prev});
         if (maybe_prev && maybe_prev->deleted) {
-            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a symbol
-            // list entry for it
+            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a
+            // symbol list entry for it
             auto overall_fut =
                     std::move(restore_fut).via(&async::io_executor()).thenValue([this](auto&& restore_result) {
                         WriteSymbolTask(store(),
@@ -2076,10 +2209,44 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries
 ) {
     std::shared_ptr<std::unordered_map<StreamId, AtomKey>> latest_versions;
-    std::shared_ptr<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>> specific_versions;
+    std::shared_ptr<std::unordered_map<StreamId, AtomKey>> specific_versions;
     if (!version_queries.empty()) {
-        auto sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
-        specific_versions = batch_get_specific_versions(store(), version_map(), sym_versions);
+        auto multi_sym_versions = get_multiple_sym_versions_from_query(stream_ids, version_queries);
+
+        auto symbol_with_more_than_one_version =
+                std::ranges::find_if(multi_sym_versions, [](const auto& pair) { return pair.second.size() > 1; });
+
+        if (symbol_with_more_than_one_version != multi_sym_versions.end()) {
+            auto stream_id = symbol_with_more_than_one_version->first;
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    "Only one version per symbol is allowed in snapshots. Symbol '{}' appears more than once", stream_id
+            );
+        }
+
+        std::map<StreamId, VersionId> sym_versions;
+        for (const auto& [symbol, versions] : multi_sym_versions) {
+            sym_versions[symbol] = versions.front();
+        }
+
+        auto result = batch_get_specific_version(
+                store(),
+                version_map(),
+                sym_versions,
+                BatchGetVersionOption::LIVE_AND_TOMBSTONED_VER_REF_IN_OTHER_SNAPSHOT
+        );
+        specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>(std::move(result.found));
+
+        if (!result.rejected.empty()) {
+            std::vector<std::string> rejected_strs;
+            for (const auto& [symbol, version] : result.rejected) {
+                rejected_strs.push_back(fmt::format("{}:{}", symbol, version));
+            }
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                    "add_to_snapshot: the following versions have been deleted "
+                    "and are not preserved in any other snapshot: {}",
+                    fmt::join(rejected_strs, ", ")
+            );
+        }
         std::vector<StreamId> latest_ids;
         std::copy_if(
                 std::begin(stream_ids),
@@ -2089,7 +2256,7 @@ SpecificAndLatestVersionKeys LocalVersionedEngine::get_stream_index_map(
         );
         latest_versions = batch_get_latest_version(store(), version_map(), latest_ids, false);
     } else {
-        specific_versions = std::make_shared<std::unordered_map<std::pair<StreamId, VersionId>, AtomKey>>();
+        specific_versions = std::make_shared<std::unordered_map<StreamId, AtomKey>>();
         latest_versions = batch_get_latest_version(store(), version_map(), stream_ids, false);
     }
 
@@ -2234,8 +2401,8 @@ timestamp LocalVersionedEngine::latest_timestamp(const std::string& symbol) {
     return -1;
 }
 
-// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra listing
-// operations
+// Some key types are historical or very specialized, so restrict to these in size calculations to avoid extra
+// listing operations
 static constexpr std::array<KeyType, 10> TYPES_FOR_SIZE_CALCULATION = {
         KeyType::VERSION_REF,
         KeyType::VERSION,
@@ -2357,7 +2524,8 @@ VersionedItem LocalVersionedEngine::merge_internal(
         if (source->empty()) {
             ARCTICDB_RUNTIME_DEBUG(
                     log::version(),
-                    "Merging into existing data with an empty source has no effect. \n No new version is being created "
+                    "Merging into existing data with an empty source has no effect. \n No new version is being "
+                    "created "
                     "for symbol='{}', and the last version is returned",
                     stream_id
             );

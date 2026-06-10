@@ -38,13 +38,14 @@ dependencies:
   # TODO: Understand failures with 8.17
   - libcurl >=8.18
   - bitmagic
-  - sparrow-devel==2.3.0
+  - sparrow-devel==2.4.0
   - spdlog
   - azure-core-cpp
   - azure-identity-cpp
   - azure-storage-blobs-cpp
   - fmt
-  - folly==2025.04.14.00
+  - sel(unix): folly==2026.06.08.00
+  - sel(win): folly==2025.04.14.00 # Pending Windows build in the more recent folly version
   - unordered_dense
   - entt
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
@@ -57,7 +58,6 @@ dependencies:
   # Matches the version of lmdb as vendored in its submodule.
   - lmdb==0.9.22
   - lmdbxx
-  - libiconv
   - aws-c-s3
   # Build dependencies for tests
   - libarrow

@@ -15,6 +15,7 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/index.hpp>
 
+#include <optional>
 #include <span>
 
 namespace arcticdb::storage {
@@ -126,6 +127,10 @@ class Storage {
 
     bool fast_delete() { return do_fast_delete(); }
 
+    // Maximum number of keys this storage will accept in a single do_remove(span) call
+    // std::nullopt means no limit (e.g. LMDB, memory)
+    [[nodiscard]] virtual std::optional<size_t> max_delete_batch_size() const { return std::nullopt; }
+
     virtual void cleanup() {}
 
     inline bool key_exists(const VariantKey& key) { return do_key_exists(key); }
@@ -139,7 +144,7 @@ class Storage {
     }
 
     [[nodiscard]] virtual bool supports_object_size_calculation() const {
-        // TODO aseaton remove this default implementation when more storages have special size calculations implemented
+        // TODO remove this default implementation when more storages have special size calculations implemented
         return false;
     }
 

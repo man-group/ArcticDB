@@ -59,28 +59,15 @@ void densify_buffer_using_bitmap(
     }
 }
 
-template<typename RawType>
-void expand_dense_buffer_using_bitmap(const BitMagic& bv, const uint8_t* dense_ptr, uint8_t* sparse_ptr) {
-    auto en = bv.first();
-    auto en_end = bv.end();
-    auto element_sz = sizeof(RawType);
-
-    size_t pos_in_dense_buffer = 0;
-    while (en < en_end) {
-        auto dense_index_in_bitset = *en;
-        auto copy_to = sparse_ptr + dense_index_in_bitset * element_sz;
-        auto copy_from = dense_ptr + pos_in_dense_buffer * element_sz;
-        auto bytes_to_copy = element_sz;
-        ARCTICDB_TRACE(
-                log::version(),
-                "expand: copying from value: {}, copying to {}, element at pos: {}",
-                copy_from - dense_ptr,
-                copy_to - sparse_ptr,
-                *(reinterpret_cast<const RawType*>(copy_from))
-        );
-        memcpy(copy_to, copy_from, bytes_to_copy);
-        ++pos_in_dense_buffer;
-        ++en;
+/// Expand packed source-type values to their bitmap positions in the expanded_ptr, casting to DestType.
+template<typename SrcType, typename DestType = SrcType>
+void expand_dense_buffer_and_promote_type(const BitMagic& bv, const uint8_t* dense_ptr, uint8_t* expanded_ptr) {
+    util::check(dense_ptr != expanded_ptr, "Expansion of dense buffer is not safe inline");
+    auto src = reinterpret_cast<const SrcType*>(dense_ptr);
+    auto dst = reinterpret_cast<DestType*>(expanded_ptr);
+    size_t dense_pos = 0;
+    for (auto en = bv.first(), en_end = bv.end(); en != en_end; ++en, ++dense_pos) {
+        dst[*en] = static_cast<DestType>(src[dense_pos]);
     }
 }
 

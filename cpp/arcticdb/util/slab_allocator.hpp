@@ -14,6 +14,7 @@
 #include <folly/Function.h>
 
 #include <atomic>
+#include <latch>
 
 namespace arcticdb {
 

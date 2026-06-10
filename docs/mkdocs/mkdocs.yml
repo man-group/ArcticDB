@@ -124,6 +124,7 @@ nav:
   - Querybuilder Notebook: 'notebooks/ArcticDB_demo_querybuilder.ipynb'
   - Resample Notebook: 'notebooks/ArcticDB_demo_resample.ipynb'
   - Symbol Concat Notebook: 'notebooks/ArcticDB_demo_concat.ipynb'
+  - Data Compaction Notebook: 'notebooks/ArcticDB_demo_compact_data.ipynb'
   - AWS Blockchain Notebook: 'notebooks/ArcticDB_aws_public_blockchain.ipynb'
   - Snapshots Notebook: 'notebooks/ArcticDB_demo_snapshots.ipynb'
   - Equity Analytics Notebook: 'notebooks/ArcticDB_demo_equity_analytics.ipynb'

@@ -15,7 +15,6 @@ on:
       version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
       run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
-      DEBUG_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       cmake_extra_args:  {default: "", type: string, required: false, description: 'Additional CMake arguments to pass during configuration'}
       ref: {default: "", type: string, required: false, description: 'The git ref (branch or tag) that is being built'}
 jobs:
@@ -69,6 +68,8 @@ jobs:
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
         SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
+        X_VCPKG_ASSET_SOURCES
+      CIBW_ENVIRONMENT_LINUX: COPY_VCPKG_DOWNLOADS_TO_HOST=1
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -80,11 +81,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          submodules: recursive
-          fetch-depth: 0
+          fetch-depth: ${{ startsWith(github.ref, 'refs/tags/') && 0 || 1 }}
           ref: ${{ inputs.ref }}
 
-      - name: Convert to Full Clone
+      - name: Init submodules
         run: |
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git submodule update --init --recursive
@@ -123,12 +123,18 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Install AWS CLI
+        # For VCPKG source asset upload to cache in S3
+        if: matrix.os == 'linux' && inputs.job_type == 'cpp-tests'
+        run: yum install -y awscli
+
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
           HOME=~ . build_tooling/vcpkg_caching.sh # Linux build-python-wheels needs another call in CIBW
           echo -e "VCPKG_BINARY_SOURCES=$VCPKG_BINARY_SOURCES
           VCPKG_ROOT=$PLATFORM_VCPKG_ROOT
+          ${X_VCPKG_ASSET_SOURCES:+X_VCPKG_ASSET_SOURCES=$X_VCPKG_ASSET_SOURCES}
           ${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
         env:
@@ -209,6 +215,11 @@ jobs:
       - name: Compile C++ core library only
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_core_static -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Upload vcpkg assets to S3 cache
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux'
+        run: bash build_tooling/vcpkg_upload_assets.sh
+        continue-on-error: true
 
       - name: Compile C++ rapidcheck tests
         if: inputs.job_type == 'cpp-tests'
@@ -406,7 +417,6 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
           CIBW_ARCHS_MACOS: "arm64"
-          # Ensure macOS builds use sccache as the compiler launcher
           CIBW_ENVIRONMENT_MACOS: |
             CMAKE_C_COMPILER_LAUNCHER=sccache
             CMAKE_CXX_COMPILER_LAUNCHER=sccache
@@ -414,6 +424,15 @@ jobs:
           C_COMPILER_LAUNCHER: sccache
           CXX_COMPILER_LAUNCHER: sccache
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
+
+      - name: Upload vcpkg assets to S3 cache
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        run: |
+          # setup.py copies vcpkg downloads to /host/tmp/vcpkg_downloads inside the
+          # CIBW container, which is /tmp/vcpkg_downloads on the host.
+          bash build_tooling/vcpkg_upload_assets.sh /tmp/vcpkg_downloads
+          sudo rm -rf /tmp/vcpkg_downloads
+        continue-on-error: true
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
@@ -521,7 +540,7 @@ jobs:
         uses: actions/checkout@v3.3.0
 
       - name: Get wheel artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: wheel-${{needs.compile.outputs.cibw_build}}
           path: ${{runner.temp}}
@@ -552,17 +571,6 @@ jobs:
           maximum-size: 8GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-
-      - name: Windows download timezone data for pyarrow
-        if: matrix.os == 'windows'
-        shell: pwsh
-        # Script sourced from: https://arrow.apache.org/docs/cpp/build_system.html#download-timezone-database
-        run: |
-          curl https://data.iana.org/time-zones/releases/tzdata2021e.tar.gz --output tzdata.tar.gz
-          mkdir tzdata
-          tar --extract --file tzdata.tar.gz --directory tzdata
-          move tzdata C:\Users\runneradmin\Downloads\tzdata
-          curl https://raw.githubusercontent.com/unicode-org/cldr/master/common/supplemental/windowsZones.xml --output C:\Users\runneradmin\Downloads\tzdata\windowsZones.xml
 
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
@@ -602,6 +610,10 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
+      - name: Download Windows timezone data for PyArrow
+        if: matrix.os == 'windows'
+        run: python -c "from pyarrow.util import download_tzdata_on_windows; download_tzdata_on_windows()"
+
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
         if: ${{ env.real_tests_storage_type != 'no' }}
@@ -620,21 +632,24 @@ jobs:
         if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.DEBUG_ENABLED == '1' }}  
+      # SSH into the container and stop at this step
+      # This is left only for reference on how to use this for debugging on personal branches, having this on master is a security risk.
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3
+      #   with:
+      #     limit-access-to-actor: true
         
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}        
         uses: ./.github/actions/enable_logging
 
       - name: Run test
+        timeout-minutes: ${{ env.real_tests_storage_type != '' && env.real_tests_storage_type != 'no' && 300 || 120 }}
         run: |
           # find ssl directory where cacerts are (for Azure)
           openssl version -d 
           # list file descriptors and other limits of the runner
           ulimit -a
-          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python
@@ -648,11 +663,13 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
-          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 2 --dist worksteal' || inputs.pytest_xdist_mode}}
+          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 0' || inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
+          ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: 0
+          ARCTICDB_LMDBSTORAGE_WARNIFOPENED_STR: all
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

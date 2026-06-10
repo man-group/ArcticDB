@@ -1024,6 +1024,19 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
 
     def cleanup_bucket(self, b: S3Bucket):
         self._live_buckets.remove(b)
+        if not self._p.is_alive():
+            logger.warning(
+                f"Moto server process (port {self.port}) died before bucket cleanup — skipping cleanup of {b.bucket}"
+            )
+            return
+        try:
+            self._cleanup_bucket_inner(b)
+        except botocore.exceptions.EndpointConnectionError:
+            logger.warning(
+                f"Moto server process (port {self.port}) died during bucket cleanup — skipping cleanup of {b.bucket}"
+            )
+
+    def _cleanup_bucket_inner(self, b: S3Bucket):
         if len(self._live_buckets):
             if not self.use_mock_storage_for_testing:
                 # We are not writing to buckets in this case

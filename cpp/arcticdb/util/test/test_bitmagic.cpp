@@ -60,7 +60,7 @@ TEST(BitMagic, DensifyAndExpand) {
     memset(sparse_buffer.data(), 0, sparse_buffer.bytes());
 
     // Now expand it back
-    arcticdb::util::expand_dense_buffer_using_bitmap<float>(bv, dense_buffer.data(), sparse_buffer.data());
+    arcticdb::util::expand_dense_buffer_and_promote_type<float>(bv, dense_buffer.data(), sparse_buffer.data());
     auto* sparse_array = reinterpret_cast<float*>(sparse_buffer.data());
 
     for (auto& data : sample_data) {
