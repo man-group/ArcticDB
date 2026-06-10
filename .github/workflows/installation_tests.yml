@@ -101,13 +101,13 @@ jobs:
         # This way we cover all python versions, OS-es and installation repos 
         # in just 8 combinations
         include:
-          - os: macos-latest
+          - os: macos-26
             python: "3.9"
             use_conda: "yes"
           - os: windows-latest
             python: "3.10"
             use_conda: "no"
-          - os: macos-latest
+          - os: macos-26
             python: "3.11"
             use_conda: "yes"
           - os: ubuntu-22.04

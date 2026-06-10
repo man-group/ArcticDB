@@ -830,6 +830,9 @@ if (NOT WIN32)
             )
 endif ()
 
+find_package(Boost REQUIRED COMPONENTS thread)
+list (APPEND arcticdb_core_libraries Boost::thread)
+
 list (APPEND arcticdb_core_libraries Threads::Threads) # comes last for weakreference resolution pthread_atexit in folly
 
 set(arcticdb_core_includes
