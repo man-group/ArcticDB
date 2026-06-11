@@ -95,8 +95,12 @@ def test_simple_flow(basic_store_no_symbol_list, symbol):
 def test_special_chars(object_version_store):
     """Test chars with special URI encoding under RFC 3986"""
     errors = []
+    special_chars = list("$@=;/:+ ,?{^}%`[]\"'~#|!-_.()")
+    # Azure silently maps '\' to '/', so it's rejected on new symbol writes
+    if object_version_store.get_backing_store() != "azure_storage":
+        special_chars += "\\"
     # we are doing manual iteration due to a limitation that should be fixed by issue #1053
-    for special_char in list("$@=;/:+ ,?\\{^}%`[]\"'~#|!-_.()"):
+    for special_char in special_chars:
         try:
             sym = f"prefix{special_char}postfix"
             df = sample_dataframe()

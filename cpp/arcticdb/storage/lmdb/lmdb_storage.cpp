@@ -333,7 +333,10 @@ bool LmdbStorage::do_iterate_type_until_match(
     return false;
 }
 
-bool LmdbStorage::do_is_path_valid(std::string_view path ARCTICDB_UNUSED) const {
+std::optional<char> LmdbStorage::do_is_library_path_valid(std::string_view path) const {
+    if (auto unsupported = is_path_valid(path)) {
+        return unsupported;
+    }
 #ifdef _WIN32
     // Note that \ and / are valid characters as they will create subdirectories which are expected to work.
     // The filenames such as COM1, LPT1, AUX, CON etc. are reserved but not strictly disallowed by Windows as directory
@@ -341,14 +344,14 @@ bool LmdbStorage::do_is_path_valid(std::string_view path ARCTICDB_UNUSED) const 
     std::string_view invalid_win32_chars = "<>:\"|?*";
     auto found = path.find_first_of(invalid_win32_chars);
     if (found != std::string::npos) {
-        return false;
+        return path[found];
     }
 
     if (!path.empty() && (path.back() == '.' || std::isspace(path.back()))) {
-        return false;
+        return path.back();
     }
 #endif
-    return true;
+    return std::nullopt;
 }
 
 void remove_db_files(const fs::path& lib_path) {

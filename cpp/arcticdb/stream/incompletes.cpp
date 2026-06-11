@@ -481,7 +481,7 @@ std::vector<AtomKey> write_parallel_impl(
 ) {
     // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern
     // validation.
-    CheckOutcome check_outcome = verify_symbol_key(stream_id);
+    CheckOutcome check_outcome = verify_symbol_key(stream_id, store);
     if (std::holds_alternative<Error>(check_outcome) &&
         !store->key_exists_sync(RefKey{stream_id, KeyType::VERSION_REF})) {
         std::get<Error>(check_outcome).throw_error();

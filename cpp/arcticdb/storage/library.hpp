@@ -158,7 +158,13 @@ class Library {
 
     bool key_exists(const VariantKey& key) { return storages_->key_exists(key); }
 
-    [[nodiscard]] bool is_path_valid(const std::string_view path) const { return storages_->is_path_valid(path); }
+    [[nodiscard]] std::optional<char> is_path_valid(std::string_view path) const {
+        return storages_->is_path_valid(path);
+    }
+
+    [[nodiscard]] std::optional<char> is_library_path_valid(std::string_view path) const {
+        return storages_->is_library_path_valid(path);
+    }
 
     /** Calls VariantStorage::do_key_path on the primary storage */
     [[nodiscard]] std::string key_path(const VariantKey& key) const { return storages_->key_path(key); }

@@ -101,10 +101,11 @@ VersionedItem write_dataframe_impl(
 }
 
 std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
-        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
+        const std::shared_ptr<Store>& store, const WriteOptions& options, const InputFrame& frame, VersionId version_id,
+        bool validate_index
 ) {
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame.desc().id());
+        auto check_outcome = verify_symbol_key(frame.desc().id(), store);
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
@@ -130,7 +131,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     ARCTICDB_SAMPLE(DoWrite, 0)
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto [partial_key, slicing_policy] =
-            get_partial_key_and_slicing_policy(options, *frame, version_id, validate_index);
+            get_partial_key_and_slicing_policy(store, options, *frame, version_id, validate_index);
     return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 

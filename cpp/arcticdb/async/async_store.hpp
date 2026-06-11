@@ -184,7 +184,11 @@ class AsyncStore : public Store {
         return WriteIfNoneTask{library_}(std::move(encoded));
     }
 
-    bool is_path_valid(const std::string_view path) const override { return library_->is_path_valid(path); }
+    std::optional<char> is_path_valid(std::string_view path) const override { return library_->is_path_valid(path); }
+
+    std::optional<char> is_library_path_valid(std::string_view path) const override {
+        return library_->is_library_path_valid(path);
+    }
 
     folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair ks) override {
         return async::submit_io_task(WriteCompressedTask{std::move(ks), library_});

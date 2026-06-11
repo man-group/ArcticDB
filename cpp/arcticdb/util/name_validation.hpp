@@ -9,6 +9,7 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
+#include <memory>
 #include <string>
 
 namespace arcticdb {
@@ -20,10 +21,13 @@ constexpr size_t MAX_SYMBOL_LENGTH = std::numeric_limits<uint8_t>::max() - 1;
 
 // Verifies whether a symbol_key is valid and raises UserInputException exceptions on invalid symbol names.
 // Should be used only when writing new symbols to allow for backwards compatibility with old symbols.
-[[nodiscard]] CheckOutcome verify_symbol_key(const StreamId& symbol_key);
+// The name is also checked against the storage backend (e.g. Azure rejects '\').
+[[nodiscard]] CheckOutcome verify_symbol_key(const StreamId& symbol_key, const std::shared_ptr<Store>& store);
 
 // Similar to verify_symbol_key above.
-[[nodiscard]] CheckOutcome verify_snapshot_id(const entity::SnapshotId& snapshot_id);
+[[nodiscard]] CheckOutcome verify_snapshot_id(
+        const entity::SnapshotId& snapshot_id, const std::shared_ptr<Store>& store
+);
 
 // Does strict checks on library names and raises UserInputException if it encounters an error.
 // Should be checked only when writing new libraries to allow for backwards compatibility

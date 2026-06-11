@@ -137,7 +137,9 @@ class InMemoryStore : public Store {
         return key;
     }
 
-    bool is_path_valid(const std::string_view) const override { return true; }
+    std::optional<char> is_path_valid(std::string_view) const override { return std::nullopt; }
+
+    std::optional<char> is_library_path_valid(std::string_view) const override { return std::nullopt; }
 
     folly::Future<entity::VariantKey> write(
             stream::KeyType key_type, const StreamId& stream_id, SegmentInMemory&& segment

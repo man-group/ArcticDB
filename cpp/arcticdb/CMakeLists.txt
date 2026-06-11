@@ -1097,6 +1097,7 @@ if(${TEST})
             storage/test/common.hpp
             storage/test/test_storage_exceptions.cpp
             storage/test/test_azure_storage.cpp
+            storage/test/test_path_validation.cpp
             storage/test/common.hpp
             storage/test/test_storage_operations.cpp
             stream/test/stream_test_common.cpp
