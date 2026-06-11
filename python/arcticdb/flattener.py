@@ -34,6 +34,7 @@ from arcticdb_ext import get_config_int
 # round-trips on read. The min() keeps msgpack's packer as a ceiling too. Tying the cap directly to
 # DEFAULT_RECURSE_LIMIT broke when msgpack 1.2.0 raised it to 1024, letting writes through at depths the
 # reader could not reconstruct.
+# https://man312219.monday.com/boards/7852509418/pulses/12254825163
 DEFAULT_RECURSE_LIMIT = min(511, _DEFAULT_RECURSE_LIMIT)
 
 
