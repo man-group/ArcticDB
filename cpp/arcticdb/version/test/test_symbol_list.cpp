@@ -757,7 +757,13 @@ TEST_F(SymbolListSuite, BackwardsCompat) {
 
     auto old_keys = backwards_compat_get_all_symbol_list_keys(store);
     auto old_symbols = backwards_compat_get_symbols(store);
+    std::set<AtomKey> old_key_set(old_keys.begin(), old_keys.end());
     backwards_compat_compact(store, std::move(old_keys), old_symbols);
+
+    // delete_keys must remove every old journal/compaction key, leaving only the freshly written compaction key
+    auto keys_after_compact = backwards_compat_get_all_symbol_list_keys(store);
+    ASSERT_EQ(keys_after_compact.size(), 1);
+    ASSERT_EQ(old_key_set.count(keys_after_compact.front()), 0);
 
     ASSERT_EQ(all_symbols_match(store, symbol_list, expected), true);
 

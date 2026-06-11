@@ -799,7 +799,7 @@ void delete_keys(const std::shared_ptr<Store>& store, std::vector<AtomKey>&& rem
         // Corner case: if the newly written Compaction key (exclude) has the same timestamp as an existing one
         // (e.g. when a previous compaction round failed in the deletion step), we don't want to delete the former
         if (atom_key != exclude)
-            to_remove.emplace_back(std::move(atom_key));
+            variant_keys.emplace_back(std::move(atom_key));
     }
 
     store->remove_keys_sync(variant_keys);
