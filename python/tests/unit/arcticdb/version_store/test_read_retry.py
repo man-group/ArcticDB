@@ -21,7 +21,7 @@ import pytest
 
 import arcticdb.toolbox.query_stats as qs
 from arcticdb.exceptions import KeyNotFoundException, NoDataFoundException
-from arcticdb.util.test import config_context, config_context_multi, query_stats_operation_count
+from arcticdb.util.test import config_context, query_stats_operation_count
 
 # 2**62 nanoseconds (~146 years): effectively infinite — the cached version chain never expires.
 STICKY_RELOAD_INTERVAL = 2**62
@@ -63,23 +63,6 @@ def test_read_retries_when_latest_version_pruned_concurrently(in_memory_store_fa
 
     assert result.version == 1
     assert result.data["a"][0] == 1
-
-
-def test_read_without_retries_raises_when_version_pruned_concurrently(in_memory_store_factory):
-    """Guard that the retry is load-bearing: with VersionStore.ReadRetries=0 the same race surfaces
-    the missing-key error instead of recovering."""
-    writer = in_memory_store_factory()
-    reader = in_memory_store_factory(reuse_name=True)
-    sym = "sym"
-
-    with config_context_multi({"VersionMap.ReloadInterval": STICKY_RELOAD_INTERVAL, "VersionStore.ReadRetries": 0}):
-        writer.write(sym, _df(0))
-        assert reader.read(sym).data["a"][0] == 0
-
-        writer.write(sym, _df(1), prune_previous_version=True)
-
-        with pytest.raises((NoDataFoundException, KeyNotFoundException)):
-            reader.read(sym)
 
 
 def test_read_does_not_retry_genuinely_missing_version(in_memory_store_factory):
@@ -169,19 +152,18 @@ def test_retry_reads_are_bounded_regardless_of_live_versions(in_memory_store_fac
 
 def test_specific_version_read_does_not_retry_when_pruned(in_memory_store_factory):
     """read(as_of=0) for a version that was pruned must not silently re-resolve to a later version.
-    With ReadRetries=5 the retry loop would fire for a latest read, but a pinned version query
-    must always use max_attempts=1 regardless of the retry config."""
+    Retries are only enabled for latest-version reads; pinned queries must fail immediately."""
     writer = in_memory_store_factory()
     reader = in_memory_store_factory(reuse_name=True)
 
-    with config_context_multi({"VersionMap.ReloadInterval": STICKY_RELOAD_INTERVAL, "VersionStore.ReadRetries": 5}):
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
         writer.write("sym", _df(0))
         assert reader.read("sym").data["a"][0] == 0  # warm cache so reader sees v0 in stale chain
 
         writer.write("sym", _df(1), prune_previous_version=True)
 
-        # The stale cache still resolves v0, but its keys are gone. With max_attempts=1 for pinned
-        # queries the error propagates immediately — no retry, no wrong-version return.
+        # The stale cache still resolves v0, but its keys are gone. Pinned queries never retry,
+        # so the error propagates immediately — no wrong-version return.
         with pytest.raises((NoDataFoundException, KeyNotFoundException)):
             reader.read("sym", as_of=0)
 
@@ -190,3 +172,252 @@ def test_specific_version_read_does_not_retry_when_pruned(in_memory_store_factor
 # included because ArcticDB protects snapshot-referenced keys from pruning — prune_previous_version
 # leaves keys intact when they are held by a snapshot, so snapshot reads always succeed and the
 # "no-retry" code path is not reachable through normal API usage.
+
+
+# ---- batch_read ----
+
+
+def test_read_batch_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """batch_read recovers the same way as read when a concurrent prune races a latest-version read."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0))
+        assert reader.read(sym).data["a"][0] == 0
+
+        writer.write(sym, _df(1), prune_previous_version=True)
+
+        results = reader.batch_read([sym])
+
+    assert results[sym].data["a"][0] == 1
+
+
+def test_read_batch_partial_race_recovers_raced_symbol_only(in_memory_store_factory):
+    """A 2-symbol batch where only one symbol raced: that symbol recovers, the other is untouched."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write("raced", _df(0))
+        writer.write("stable", _df(100))
+        assert reader.read("raced").data["a"][0] == 0
+        assert reader.read("stable").data["a"][0] == 100
+
+        writer.write("raced", _df(1), prune_previous_version=True)
+
+        results = reader.batch_read(["raced", "stable"])
+
+    assert results["raced"].data["a"][0] == 1
+    assert results["stable"].data["a"][0] == 100
+
+
+def test_read_batch_retry_is_bounded(in_memory_store_factory, clear_query_stats):
+    """Retry overhead for batch_read must be O(1) storage reads, matching the single-symbol retry."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+    N = 15
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        for i in range(N):
+            writer.write(sym, _df(i), prune_previous_version=False)
+
+        assert reader.read(sym).data["a"][0] == N - 1
+
+        writer.write(sym, _df(N), prune_previous_version=True)
+
+        qs.enable()
+        qs.reset_stats()
+        results = reader.batch_read([sym])
+        stats = qs.get_query_stats()
+        qs.disable()
+
+    assert results[sym].data["a"][0] == N
+    assert _version_ref_reads(stats) == 2
+    assert _version_reads(stats) == 0
+
+
+# ---- read_batch_and_join ----
+
+
+def test_read_batch_and_join_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """batch_read_and_join recovers when a concurrent prune races a latest-version read."""
+    from arcticdb import QueryBuilder
+
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym_a, sym_b = "sym_a", "sym_b"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym_a, _df(0))
+        writer.write(sym_b, _df(100))
+        assert reader.read(sym_a).data["a"][0] == 0
+        assert reader.read(sym_b).data["a"][0] == 100
+
+        writer.write(sym_a, _df(1), prune_previous_version=True)
+
+        q = QueryBuilder()
+        q = q.concat("outer")
+        result = reader.batch_read_and_join([sym_a, sym_b], q)
+
+    assert len(result.versions) == 2
+
+
+# ---- read_metadata / read_metadata_batch ----
+
+
+def test_read_metadata_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """read_metadata recovers when a concurrent prune races a latest-version read."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0), metadata={"v": 0})
+        assert reader.read_metadata(sym) is not None
+
+        writer.write(sym, _df(1), metadata={"v": 1}, prune_previous_version=True)
+
+        result = reader.read_metadata(sym)
+
+    assert result.version == 1
+
+
+def test_read_metadata_batch_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """batch_read_metadata recovers when a concurrent prune races a latest-version read."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0), metadata={"v": 0})
+        assert reader.read_metadata(sym) is not None
+
+        writer.write(sym, _df(1), metadata={"v": 1}, prune_previous_version=True)
+
+        results = reader.batch_read_metadata([sym])
+
+    assert sym in results
+    assert results[sym].version == 1
+
+
+# ---- get_info / batch_get_info (get_description / get_description_batch) ----
+
+
+def test_get_info_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """get_info (backing get_description) recovers when a concurrent prune races a latest-version read."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0))
+        assert reader.get_info(sym) is not None
+
+        writer.write(sym, _df(1), prune_previous_version=True)
+
+        info = reader.get_info(sym)
+
+    assert info is not None
+    assert info["rows"] == 1
+
+
+def test_batch_get_info_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """batch_get_info (backing get_description_batch) recovers when a concurrent prune races a latest-version read."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0))
+        assert reader.get_info(sym) is not None
+
+        writer.write(sym, _df(1), prune_previous_version=True)
+
+        results = reader.batch_get_info([sym])
+
+    assert len(results) == 1
+    assert results[0] is not None
+    assert results[0]["rows"] == 1
+
+
+# ---- read_modify_write ----
+
+
+def test_read_modify_write_recovers_and_writes_target_once(in_memory_store_factory):
+    """read_modify_write retries the source read when its version is pruned mid-flight, and the
+    target version must be written exactly once — the write is outside the retry, so a retried
+    source read must not produce a second target version."""
+    from arcticdb import QueryBuilder
+
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    src, dst = "src", "dst"
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(src, _df(0))
+        assert reader.read(src).data["a"][0] == 0  # warm cache so reader sees src@v0 in stale chain
+
+        writer.write(src, _df(1), prune_previous_version=True)
+
+        q = QueryBuilder()
+        q = q[q["a"] >= 0]
+        reader._read_modify_write(src, q, dst)
+
+        result = reader.read(dst)
+
+    # Recovered the live source (v1), and the target was written exactly once (version 0).
+    assert result.data["a"][0] == 1
+    assert result.version == 0
+
+
+# ---- read_column_stats / get_column_stats_info ----
+
+
+def test_read_column_stats_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """read_column_stats recovers when a concurrent prune races a latest-version read. The pruned
+    version's column-stats key is gone, so the read must re-resolve to the live version's stats."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+    stats = {"a": {"MINMAX"}}
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0))
+        writer.create_column_stats(sym, stats)
+        assert reader.read_column_stats(sym) is not None  # warm cache so reader sees v0 in stale chain
+
+        # Supersede and prune v0 (deletes v0's column-stats key too), then build stats for v1.
+        writer.write(sym, _df(1), prune_previous_version=True)
+        writer.create_column_stats(sym, stats)
+
+        table = reader.read_column_stats(sym)
+
+    assert table is not None
+
+
+def test_get_column_stats_info_recovers_when_latest_version_pruned_concurrently(in_memory_store_factory):
+    """get_column_stats_info recovers when a concurrent prune races a latest-version read."""
+    writer = in_memory_store_factory()
+    reader = in_memory_store_factory(reuse_name=True)
+    sym = "sym"
+    stats = {"a": {"MINMAX"}}
+
+    with config_context("VersionMap.ReloadInterval", STICKY_RELOAD_INTERVAL):
+        writer.write(sym, _df(0))
+        writer.create_column_stats(sym, stats)
+        assert reader.get_column_stats_info(sym) is not None
+
+        writer.write(sym, _df(1), prune_previous_version=True)
+        writer.create_column_stats(sym, stats)
+
+        info = reader.get_column_stats_info(sym)
+
+    assert info == stats
+
+
+# Note: get_index_range (LocalVersionedEngine::get_index_range) is also wrapped with the retry
+# primitive, but it has no Python binding and no other caller, so there is no deterministic
+# Python-level test for it. It follows the same pattern as the methods covered above.

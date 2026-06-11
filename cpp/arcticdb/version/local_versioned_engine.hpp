@@ -467,6 +467,11 @@ class LocalVersionedEngine : public VersionedEngine {
     );
 
   private:
+    ReadVersionWithNodesOutput read_one_dataframe_version(
+            const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+            const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
+    );
+
     void initialize(const std::shared_ptr<storage::Library>& library);
     void add_to_symbol_list_on_compaction(
             const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info
