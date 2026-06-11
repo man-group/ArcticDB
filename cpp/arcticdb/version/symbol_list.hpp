@@ -17,6 +17,8 @@
 #include <util/storage_lock.hpp>
 
 namespace arcticdb {
+enum class ActionType : uint8_t { ADD, DELETE };
+
 // Compact 32-byte representation of a SYMBOL_LIST journal AtomKey.
 // Stores only the fields needed to reconstruct the full AtomKey for deletion.
 // The symbol (start_index / map key) is held separately by the containing JournalMapType.
@@ -74,8 +76,6 @@ constexpr std::string_view AddSymbol = "__add__";
 constexpr std::string_view DeleteSymbol = "__delete__";
 
 constexpr VersionId unknown_version_id = std::numeric_limits<VersionId>::max();
-
-enum class ActionType : uint8_t { ADD, DELETE };
 
 inline StreamId action_id(ActionType action) {
     switch (action) {
