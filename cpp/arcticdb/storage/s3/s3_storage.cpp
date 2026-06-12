@@ -215,10 +215,21 @@ void S3Storage::create_s3_client(const S3Settings& conf, const Aws::Auth::AWSCre
     } else if (creds.GetAWSAccessKeyId() == USE_AWS_CRED_PROVIDERS_TOKEN &&
                creds.GetAWSSecretKey() == USE_AWS_CRED_PROVIDERS_TOKEN) {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS auth mechanisms");
+        auto client_config = get_s3_config_and_set_env_var(conf);
+        if (!conf.aws_profile().empty()) {
+            ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using AWS profile {}", conf.aws_profile());
+            Aws::Config::ReloadCachedConfigFile(); // config files loaded in Aws::InitAPI; It runs once at first S3Storage
+                                                   // object construct; reload to get latest
+            client_config.profileName = conf.aws_profile();
+            // Set the profile on both fields. aws-sdk-cpp >= 1.11.814 re-reads profileName when building the
+            // credentials chain (ClientConfiguration::ResolveCredentialProviderConfig), but 1.11.748..1.11.813 read
+            // the credentialProviderConfig snapshot captured during ClientConfiguration construction, so profileName
+            // set here would be ignored by them. (Reading profile credentials from the AWS *config* file at all
+            // requires >= 1.11.748; the credentialProviderConfig member exists from 1.11.646.)
+            client_config.credentialProviderConfig.profile = conf.aws_profile();
+        }
         s3_client_ = std::make_unique<S3ClientImpl>(
-                get_s3_config_and_set_env_var(conf),
-                Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
-                conf.use_virtual_addressing()
+                client_config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, conf.use_virtual_addressing()
         );
     } else {
         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using provided auth credentials");

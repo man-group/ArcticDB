@@ -1,7 +1,46 @@
 import pytest
 from arcticdb.adapters import S3LibraryAdapter, GCPXMLLibraryAdapter
+from arcticdb.adapters.s3_library_adapter import USE_AWS_CRED_PROVIDERS_TOKEN
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.exceptions import UserInputException
+from arcticdb.version_store.helper import add_s3_library_to_env
+from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb_ext.storage import AWSAuthMethod
+
+
+def _add_s3_library(aws_auth, aws_profile, is_nfs_layout=False):
+    add_s3_library_to_env(
+        EnvironmentConfigsMap(),
+        lib_name="lib",
+        env_name="env",
+        credential_name=USE_AWS_CRED_PROVIDERS_TOKEN,
+        credential_key=USE_AWS_CRED_PROVIDERS_TOKEN,
+        bucket_name="bucket",
+        endpoint="endpoint",
+        aws_auth=aws_auth,
+        aws_profile=aws_profile,
+        is_nfs_layout=is_nfs_layout,
+    )
+
+
+def test_s3_default_auth_with_profile_allowed():
+    # aws_profile is now allowed with the default credentials provider chain, not just STS
+    _add_s3_library(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "my_profile")
+
+
+def test_s3_profile_requires_aws_auth():
+    with pytest.raises(UserInputException, match="aws_profile can only be set"):
+        _add_s3_library(AWSAuthMethod.DISABLED, "my_profile")
+
+
+def test_s3_sts_auth_requires_profile():
+    with pytest.raises(UserInputException, match="STS credential provider requires aws_profile"):
+        _add_s3_library(AWSAuthMethod.STS_PROFILE_CREDENTIALS_PROVIDER, "")
+
+
+def test_s3_profile_not_allowed_for_nfs():
+    with pytest.raises(UserInputException, match="can only be set for S3"):
+        _add_s3_library(AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN, "my_profile", is_nfs_layout=True)
 
 
 def test_s3_native_cfg_sdk_default():
