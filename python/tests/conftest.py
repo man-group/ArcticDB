@@ -190,6 +190,10 @@ def pytest_configure(config):
     for marker in _MARKERS:
         config.addinivalue_line("markers", marker)
 
+    # Third-party noise we cannot fix: hypothesis is pinned <6.73 (newer versions cause
+    # disruptive test failures) and uses the deprecated pandas is_categorical_dtype internally
+    config.addinivalue_line("filterwarnings", "ignore:is_categorical_dtype is deprecated:DeprecationWarning")
+
     # Arm a session-level faulthandler watchdog on xdist workers only.
     # Workers collect tests and run session fixtures before pytest_runtest_protocol
     # arms the per-test timer — this covers that gap.
