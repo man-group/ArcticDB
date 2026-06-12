@@ -1127,6 +1127,7 @@ def test_filter_string_nans_col_col(lmdb_version_store_v1, any_output_format):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str, bool))
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_filter_null_filtering(lmdb_version_store_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1606,6 +1607,7 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1, any_out
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
@@ -1798,6 +1800,7 @@ def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_stri
     assert lib.read(sym, query_builder=q2).data.empty
 
 
+@pytest.mark.filterwarnings("ignore:Mismatched null-like values:FutureWarning")
 def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)

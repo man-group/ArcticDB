@@ -679,6 +679,7 @@ def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_v
     assert_frame_equal(lmdb_version_store.read(sym).data, expected_dfs[-1])
 
 
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_defragment_no_work_to_do(sym, lmdb_version_store):
     df = pd.DataFrame({"a": [1, 2, 3]})
     lmdb_version_store.write(sym, df)
