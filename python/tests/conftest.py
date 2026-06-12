@@ -202,8 +202,14 @@ def pytest_configure(config):
     )
 
     # Third-party noise we cannot fix: hypothesis is pinned <6.73 (newer versions cause
-    # disruptive test failures) and uses the deprecated pandas is_categorical_dtype internally
+    # disruptive test failures) and internally uses deprecated pandas APIs
     config.addinivalue_line("filterwarnings", "ignore:is_categorical_dtype is deprecated:DeprecationWarning")
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore:Series.__setitem__ treating keys as positions is deprecated"
+        ":FutureWarning"
+        ":hypothesis\\.extra\\.pandas\\.impl",
+    )
 
     # Arm a session-level faulthandler watchdog on xdist workers only.
     # Workers collect tests and run session fixtures before pytest_runtest_protocol
