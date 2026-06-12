@@ -222,6 +222,18 @@ assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 
+def nans_to_none(df: pd.DataFrame) -> pd.DataFrame:
+    """Replace NaN with None in object columns, in place.
+
+    ArcticDB backfills missing string values with None, while pandas concat uses NaN. Future
+    pandas versions will consider them not-matching in assert_frame_equal, so expected frames
+    built with concat need normalizing before comparison.
+    """
+    object_cols = df.columns[df.dtypes == object]
+    df[object_cols] = df[object_cols].where(df[object_cols].notna(), None)
+    return df
+
+
 def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
     """For Pandas 1 type of empty series will be float64 when returned by arctic"""
     if IS_PANDAS_ONE:
