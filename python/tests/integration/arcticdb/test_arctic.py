@@ -1314,7 +1314,7 @@ def test_dedup(arctic_client, lib_name):
             symbol = "test_dedup"
             lib.write_pickle(symbol, 1)
             lib.write_pickle(symbol, 1, prune_previous_versions=False)
-            data_key_version = lib._nvs.read_index(symbol)["version_id"][0]
+            data_key_version = lib._nvs.read_index(symbol)["version_id"].iloc[0]
             assert data_key_version == 0 if dedup else 1
         except AssertionError as e:
             errors.append(f"Failed when using dedup value {dedup}: {str(e)}")
