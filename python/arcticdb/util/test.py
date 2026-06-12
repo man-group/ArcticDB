@@ -280,6 +280,13 @@ def assert_frame_equal_with_arrow(left, right, **kwargs):
     if isinstance(right, pl.DataFrame):
         right = right.to_pandas()
 
+    # Arrow has a single null type, so None/NaN distinctions in object columns are not
+    # meaningful here; normalize both sides to None
+    if isinstance(left, pd.DataFrame):
+        left = nans_to_none(left.copy())
+    if isinstance(right, pd.DataFrame):
+        right = nans_to_none(right.copy())
+
     assert_frame_equal(left, right, **kwargs)
 
 
