@@ -35,6 +35,9 @@ from arcticdb_ext.exceptions import (
 
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
+# These tests intentionally exercise the deprecated staging APIs
+pytestmark = pytest.mark.filterwarnings("ignore:Staging data with:DeprecationWarning")
+
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
     df.index = pd.date_range(start_time, periods=df.shape[0], freq="s")

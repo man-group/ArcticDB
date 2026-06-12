@@ -59,6 +59,9 @@ from ...util.mark import (
     xfail_azure_chars,
 )
 
+# These tests intentionally exercise the deprecated staging APIs
+pytestmark = pytest.mark.filterwarnings("ignore:Staging data with:DeprecationWarning")
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 

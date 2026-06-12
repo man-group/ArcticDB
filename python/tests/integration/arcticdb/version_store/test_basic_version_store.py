@@ -58,6 +58,9 @@ from arcticdb.version_store._store import resolve_defaults
 from tests.util.mark import xfail_azure_chars
 from tests.util.marking import marks
 
+# These tests intentionally exercise the deprecated staging APIs
+pytestmark = pytest.mark.filterwarnings("ignore:Staging data with:DeprecationWarning")
+
 
 @pytest.fixture()
 def symbol():

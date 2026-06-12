@@ -36,6 +36,9 @@ from arcticdb.util.test import config_context_multi
 
 import arcticdb_ext.cpp_async as adb_async
 
+# These tests intentionally exercise the deprecated staging APIs
+pytestmark = pytest.mark.filterwarnings("ignore:Staging data with:DeprecationWarning")
+
 
 def get_append_keys(lib, sym):
     lib_tool = lib.library_tool()
