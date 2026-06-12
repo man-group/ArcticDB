@@ -51,3 +51,20 @@ counts had under-counted: pytest "file.py: N warnings" multiplier lines weren't 
 - Marked test_defragment_no_work_to_do (defrag deprecation), added hypothesis `Series.__setitem__`
   module-scoped ignore (verified module-scoped filters keep the same message visible from our code).
 - Unit-job failures in CI (test_deep_nesting_metastruct_size_over_limit) are pre-existing, unrelated.
+
+## Round 4 — stragglers from the completed full-matrix run (run 27415317796, head 541743f3d)
+
+Run confirmed the round-3 fixes: 8 unique warnings across all 138 pytest jobs (from 15 unique /
+~300k occurrences). Three were still actionable, fixed in 41dd4c516:
+- filterwarnings mark on test_prune_previous_defragment_symbol_data (276x, deliberate defrag-API test)
+- utcnow in test_stress_delete via naive `now(timezone.utc).replace(tzinfo=None)` — values go into
+  library names, aware isoformat would inject "+00:00"
+- filterwarnings mark on hypothesis test_resample_dynamic_schema (empty/all-NA concat inherent to
+  generated differing-column-set frames)
+
+Remaining (environment-level, intentionally left): fork()-in-multithreaded (3.12+), localhost
+InsecureRequestWarning, LMDB-on-Windows (238x — possible fixture bug worth a look) and Mongo
+fixture-cleanup warnings, boto3 3.9 EOL notice.
+
+Pre-existing test_deep_nesting_metastruct_size_over_limit failures now hit every unit job on all
+18 matrices — unrelated to this PR, needs its own ticket.
