@@ -140,11 +140,55 @@ def _set_multiprocessing_start_method_for_macos():
 _faulthandler_file = None  # kept open so faulthandler can write to the fd
 
 
-# silence warnings about custom markers
+# Markers are registered here rather than in pyproject.toml because CI
+# (build_tooling/parallel_test.sh) runs pytest from a temp dir where
+# pyproject.toml is not visible, so ini-file registration is ignored there.
+_MARKERS = [
+    "storage: marks a test as a test against real storage (deselect with: -m 'not storage')",
+    "dedup: marks deduplication tests",
+    "authentication: marks a test for authentication group (deselect with: -m 'not authentication')",
+    "pipeline: Pipeline tests (deselect with: -m 'not pipeline')",
+    "skip_fixture_params: will instruct fixture that supports excluding fixture values, which values to be excluded",
+    "only_fixture_params: will instruct fixture supporting that to include only parameters from the list",
+    "bug_ids: allows specifying bug ids list the tests is based on or depends",
+    "priority0: Most important tests group",
+    "compat: Mark from physical folder",
+    "integration: Mark from physical folder",
+    "unit: Mark from physical folder",
+    "stress: Mark from physical folder",
+    "nonreg: Mark from physical folder",
+    "sanitizers: Mark from physical folder",
+    "hypothesis: Mark from physical folder",
+    "arcticdb: Mark from physical folder",
+    "version_store: Mark from physical folder",
+    "toolbox: Mark from physical folder",
+    "lmdb: Mark from test usage for execution against LMDB storage",
+    "mem: Mark from test usage for execution against In-memory storage",
+    "s3: Mark from test usage for execution against Simulated S3 storage",
+    "gcp: Mark from test usage for execution against Simulated GCP storage",
+    "azurite: Mark from test usage for execution against Simulated Azurite storage",
+    "nfs: Mark from test usage for execution against Simulated NFS S3 storage",
+    "mongo: Mark from test usage for execution against Mongo storage",
+    "merge_update: Merge update tests across unit, hypothesis, and stress",
+    "real_s3: Mark from test usage for execution against AWS S3 storage",
+    "real_azure: Mark from test usage for execution against Azure storage",
+    "real_gcp: Mark from test usage for execution against GCP storage",
+    "dynamic_schema: marks test using dynamic_schema=True",
+    "empty_types: marks test using empty_types=True",
+    "delayed_deletes: marks test using delayed_deletes=True",
+    "sync_passive: marks test using sync_passive=True",
+    "use_tombstones: marks test using use_tombstones=True",
+    "segment_size: marks test using any of library segment size settings",
+    "dynamic_strings: marks tests using dynamic_strings=True",
+    "bucketize_dynamic: marks tests using bucketize_dynamic=True",
+    "prune_previous: marks tests using prune_previous_version=True",
+    "encoding_v2: marks tests that use V2 encoding",
+]
+
+
 def pytest_configure(config):
-    config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
-    config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
-    config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
+    for marker in _MARKERS:
+        config.addinivalue_line("markers", marker)
 
     # Arm a session-level faulthandler watchdog on xdist workers only.
     # Workers collect tests and run session fixtures before pytest_runtest_protocol
