@@ -656,7 +656,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     df0_subset = df0[["A", "C"]]
     expected = pd.concat([df0_subset, df1], ignore_index=True)
     # Pandas concat will fill NaN for bools, Arcticdb is using False
-    expected["bool"] = expected["bool"].fillna(False)
+    expected["bool"] = expected["bool"].where(expected["bool"].notna(), False).astype(bool)
     assert_frame_equal(expected, data)
 
     # Concatenate symbols with column filters + row range
@@ -689,7 +689,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     df1_subset = df1[["B", "C"]]
     expected = pd.concat([df0_subset, df1_subset, df0_1], ignore_index=True)
     # Pandas concat will fill NaN for bools, Arcticdb is using False
-    expected["bool"] = expected["bool"].fillna(False)
+    expected["bool"] = expected["bool"].where(expected["bool"].notna(), False).astype(bool)
     # Pandas concat will fill NaN for strings, Arcticdb is using None
     if not dynamic_strings and not WINDOWS:
         # make expected result like the actual due to static string
@@ -765,7 +765,7 @@ def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_versi
     df0_subset = df0[["A", "C"]]
     expected = pd.concat([df0_subset, df1], ignore_index=True)
     # Pandas concat will fill NaN for bools, Arcticdb is using False
-    expected["bool"] = expected["bool"].fillna(False)
+    expected["bool"] = expected["bool"].where(expected["bool"].notna(), False).astype(bool)
     ## ERROR: With dynamic schema filtering of the columns will fail
     #  here in the 'data' df instead of None/Na values for first 19 rows for
     #  bool and B column we will see values, which should not have been there
