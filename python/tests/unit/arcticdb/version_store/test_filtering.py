@@ -423,7 +423,7 @@ def test_filter_datetime_timezone_aware(
     for ts in [pd_ts, pd_ts.to_pydatetime()]:
         q = QueryBuilder()
         q = q[q["a"] < ts]
-        expected = df[df["a"] < ts]
+        expected = df[df["a"] < ts].copy()
         # Convert to UTC and strip tzinfo to match behaviour of roundtripping through Arctic
         expected["a"] = expected["a"].apply(lambda x: x.tz_convert(timezone("utc")).tz_localize(None))
         generic_filter_test(lib, symbol, q, expected)
