@@ -68,3 +68,11 @@ fixture-cleanup warnings, boto3 3.9 EOL notice.
 
 Pre-existing test_deep_nesting_metastruct_size_over_limit failures now hit every unit job on all
 18 matrices — unrelated to this PR, needs its own ticket.
+
+## Round 4 follow-up — suppress environment-level warnings (70f20cad1)
+
+Per user decision: the four environment-level sources (ExceptionInCleanUpWarning from storage
+fixtures, fork()-while-multi-threaded on 3.12+, InsecureRequestWarning, boto3 3.9 EOL) are now
+globally ignored in conftest, with investigation tracked in GitHub issue #3170. Filter semantics
+verified locally (all four suppressed, unrelated warnings still visible). CI pytest warning
+summaries should now be empty.
