@@ -1950,7 +1950,7 @@ def test_coercion_to_float(basic_store):
     lib = basic_store
     df = pd.DataFrame({"col": [np.nan, "1", np.nan]})
     # col is now an Object column with all NaNs
-    df["col"][1] = np.nan
+    df.loc[1, "col"] = np.nan
 
     assert df["col"].dtype == np.object_
 
