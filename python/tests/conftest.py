@@ -25,7 +25,7 @@ import time
 import requests
 import uuid
 import multiprocessing
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 from tempfile import mkdtemp
 
@@ -292,7 +292,7 @@ def single_threaded_config(request):
 
 @pytest.fixture()
 def sym(request: "pytest.FixtureRequest"):
-    return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
+    return request.node.name + datetime.now(timezone.utc).strftime("%Y-%m-%dT%H_%M_%S_%f")
 
 
 @pytest.fixture()
@@ -302,7 +302,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    hashed = hash(f"{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
+    hashed = hash(f"{pid}_{thread_id}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
     return f"{name}.{hashed}"
 
 
@@ -572,7 +572,7 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(
         shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -580,7 +580,7 @@ def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
 def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
         shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -588,7 +588,7 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
 def real_azure_storage_factory() -> AzureStorageFixtureFactory:
     return real_azure_from_environment_variables(
         shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -611,7 +611,7 @@ def real_storage_factory(
 def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(
         shared_path=True,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -619,7 +619,7 @@ def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
 def real_gcp_shared_path_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
         shared_path=True,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -627,7 +627,7 @@ def real_gcp_shared_path_storage_factory() -> BaseGCPStorageFixtureFactory:
 def real_azure_shared_path_storage_factory() -> AzureStorageFixtureFactory:
     return real_azure_from_environment_variables(
         shared_path=True,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
 
 
@@ -701,7 +701,9 @@ def real_s3_sts_storage_factory(monkeypatch_session) -> Generator[BaseS3StorageF
     else:
         working_dir = mkdtemp(suffix="S3STSStorageFixtureFactory")
         config_file_path = os.path.join(working_dir, "config")
-        sts_test_credentials_prefix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+        sts_test_credentials_prefix = (
+            f"{random.randint(0, 999)}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+        )
         username = f"gh_sts_test_user_{sts_test_credentials_prefix}"
         role_name = f"gh_sts_test_role_{sts_test_credentials_prefix}"
         policy_name = f"gh_sts_test_policy_name_{sts_test_credentials_prefix}"

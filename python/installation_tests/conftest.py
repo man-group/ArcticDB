@@ -6,7 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import random
 import re
@@ -40,7 +40,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    hashed = hash(f"{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
+    hashed = hash(f"{pid}_{thread_id}_{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H_%M_%S')}_{uuid.uuid4()}")
     return f"{name}.{hashed}"
 
 
