@@ -27,6 +27,12 @@ from logger import get_logger
 logger = get_logger()
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "storage: marks a test as a test against real storage (deselect with: -m 'not storage')"
+    )
+
+
 @pytest.fixture()
 def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
