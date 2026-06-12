@@ -27,3 +27,27 @@ The PR CI (run 27407218638, job "3.13 Linux / unit-DefaultCache") surfaced a new
 - Left alone: fork()-in-multithreaded-process DeprecationWarning (Python 3.13, env-level), InsecureRequestWarning (localhost TLS-less simulators), mongo fixture-cleanup noise, BlockManagerUnconsolidated.
 
 Verification: local runs in `/tmp/mark_repro` (CI-style symlinked tests dir) with venv `~/venvs/314`; changed `arcticdb/` util files must be copied into the venv's site-packages before runs (tests import installed package, not repo source).
+
+## Round 3 — full-matrix PR run (run 27409690219, head 0e805a63d)
+
+The full 3.9–3.14 matrix surfaced pre-existing emitters the 3.11-only runs hid (and my round-1
+counts had under-counted: pytest "file.py: N warnings" multiplier lines weren't expanded).
+
+- **Switched staging + BlockManagerUnconsolidated suppression to global conftest filterwarnings**
+  (user request) and removed all 17 per-file `pytestmark` staging suppressions added in rounds 1–3.
+- `nans_to_none` on expected frame in test_stress_dynamic_bucketize (~226k warnings, the biggest single source).
+- Both-sides `nans_to_none` in the two string schema-change tests in test_stress_append (written NaNs
+  round-trip as NaN, backfill comes back as None — one-sided normalization can't work).
+- `assert_frame_equal_with_arrow` now normalizes null-likes on both sides (arrow has a single null type) —
+  fixes test_arrow_read/test_arrow_api wholesale.
+- hypothesis/test_sort_merge `assert_equal` helper normalizes both sides; the two hypothesis merge_update
+  tests and the three deliberate null-filtering tests in test_filtering got filterwarnings marks.
+- `arcticdb/util/tasks.py`: added `_utcnow()` helper returning naive UTC — a plain `datetime.now(timezone.utc)`
+  substitution would have broken the snapshot-name strptime roundtrip and naive/aware subtraction.
+- test_stress_merge_update: accumulate parts + single concat (empty-entry concat deprecation).
+- test_stress_write_peakmem `create_mixed_type_df`: dict-astype + `.copy()` — astype(dict) still leaves one
+  block per column (verified empirically); only copy() consolidates, which silences the fragmentation warning
+  raised from `_normalization.py:961` (`reset_index(inplace=True)` on the MultiIndex write path).
+- Marked test_defragment_no_work_to_do (defrag deprecation), added hypothesis `Series.__setitem__`
+  module-scoped ignore (verified module-scoped filters keep the same message visible from our code).
+- Unit-job failures in CI (test_deep_nesting_metastruct_size_over_limit) are pre-existing, unrelated.
