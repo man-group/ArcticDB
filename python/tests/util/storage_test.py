@@ -324,7 +324,7 @@ def check_last_timestamp(df, end_timestamp="1/1/2023"):
     return is_correct
 
 
-def generate_pseudo_random_dataframe(n, freq="S", end_timestamp="1/1/2023"):
+def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     """
     Generates a Data Frame with 2 columns (timestamp and value) and N rows
     - timestamp contains timestamps with a given frequency that end at end_timestamp
@@ -344,7 +344,7 @@ def gen_fake_ticker(val):
     return f"TK_{chr((val % 255) + 1)}"
 
 
-def generate_ascending_dataframe(n, freq="S", end_timestamp="1/1/2023"):
+def generate_ascending_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     """
     Generates a Data Frame with 3 columns (timestamp, fake_ticker and value) and N rows
     - timestamp contains timestamps with a given frequency that end at end_timestamp

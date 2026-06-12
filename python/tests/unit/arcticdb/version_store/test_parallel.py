@@ -281,7 +281,7 @@ def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic
 
     df1 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-01", periods=7, freq="h"),
             "col1": np.arange(1, 8, dtype=np.uint8),
             "col2": [f"a{i:02d}" for i in range(1, 8)],
             "col3": np.arange(1, 8, dtype=np.int32),
@@ -290,7 +290,7 @@ def test_parallel_write_chunking_dynamic(lmdb_version_store_tiny_segment_dynamic
 
     df2 = pd.DataFrame(
         {
-            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+            "timestamp": pd.date_range("2023-01-04", periods=7, freq="h"),
             "col1": np.arange(8, 15, dtype=np.int32),
             "col2": [f"b{i:02d}" for i in range(8, 15)],
             "col3": np.arange(8, 15, dtype=np.uint16),

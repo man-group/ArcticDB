@@ -321,12 +321,12 @@ def test_basic_write_read_update_and_append(arctic_library):
     )
 
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    df.index = pd.date_range("2018-01-01", periods=3, freq="H")
+    df.index = pd.date_range("2018-01-01", periods=3, freq="h")
     lib.write("timeseries", df, metadata={"hello": "world"})
     assert lib["timeseries"].version == 0
 
     df = pd.DataFrame({"col1": [4, 5, 6], "col2": [7, 8, 9]})
-    df.index = pd.date_range("2018-01-01", periods=3, freq="H")
+    df.index = pd.date_range("2018-01-01", periods=3, freq="h")
     lib.update("timeseries", df)
     assert lib["timeseries"].version == 1
     df.index.freq = None
