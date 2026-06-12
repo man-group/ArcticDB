@@ -117,7 +117,7 @@ def test_querybuilder_pickling_all_clauses():
 
     # PythonResampleClause
     q = QueryBuilder()
-    q = q.resample("T", "right", "left")
+    q = q.resample("min", "right", "left")
 
     assert pickle.loads(pickle.dumps(q)) == q
 

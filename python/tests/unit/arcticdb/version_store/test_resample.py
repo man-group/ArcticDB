@@ -535,6 +535,7 @@ def test_resampling_batch_read_query(lmdb_version_store_v1, use_date_range, sing
         "C",
     ),
 )
+@pytest.mark.filterwarnings("ignore:'[A-Z]+' is deprecated:FutureWarning")
 def test_resample_rejects_unsupported_frequency_strings(freq):
     with pytest.raises(ArcticDbNotYetImplemented):
         QueryBuilder().resample(freq)
