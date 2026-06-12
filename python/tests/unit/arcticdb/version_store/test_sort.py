@@ -147,6 +147,9 @@ def test_stage_finalize_strings_dynamic(arctic_library_dynamic):
     result = arctic_library.read(symbol).data
 
     expected = pd.concat([df1, df2]).sort_values(sort_cols)
+    # Pandas concat fills missing string values with NaN, ArcticDB uses None
+    object_cols = expected.columns[expected.dtypes == object]
+    expected[object_cols] = expected[object_cols].where(expected[object_cols].notna(), None)
     pd.testing.assert_frame_equal(result, expected)
 
 

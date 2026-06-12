@@ -691,11 +691,12 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     # Pandas concat will fill NaN for bools, Arcticdb is using False
     expected["bool"] = expected["bool"].fillna(False)
     # Pandas concat will fill NaN for strings, Arcticdb is using None
-    if not dynamic_strings:
+    if not dynamic_strings and not WINDOWS:
         # make expected result like the actual due to static string
-        if not WINDOWS:
-            # windows does not have static strings
-            expected["str"] = expected["str"].fillna("")
+        # (windows does not have static strings)
+        expected["str"] = expected["str"].fillna("")
+    else:
+        expected["str"] = expected["str"].where(expected["str"].notna(), None)
     assert_frame_equal(expected, data)
 
     # Cover query builders per symbols
