@@ -165,7 +165,9 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     # if the series is empty.
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, series, check_index_type=(len(series) > 0))
     lmdb_version_store_dynamic_schema.append(sym, append_series)
-    result_ser = pd.concat([series, append_series])
+    # Exclude empty entries before concat: pandas is deprecating their exclusion from result dtype inference
+    to_concat = [s for s in (series, append_series) if not s.empty]
+    result_ser = pd.concat(to_concat) if to_concat else series
     assert_series_equal(
         lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0)
     )
