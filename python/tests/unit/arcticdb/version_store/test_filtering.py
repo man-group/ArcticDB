@@ -464,13 +464,13 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     q = QueryBuilder()
     q = q[q["col1"] + "1" == 3]
     with pytest.raises(
-        UserInputException, match='Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
+        UserInputException, match=r'Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
     ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[-q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Cannot perform unary operation -\(col_str\).*type=STRING"):
+    with pytest.raises(UserInputException, match=r"Cannot perform unary operation -\(col_str\).*type=STRING"):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -483,7 +483,7 @@ def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
     with pytest.raises(
         UserInputException,
-        match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
+        match=r"Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
     ):
         lib.read(sym, query_builder=q)
 
