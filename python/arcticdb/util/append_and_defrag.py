@@ -139,7 +139,7 @@ def _append_and_defrag_idempotent(
                 # To ensure idempotency, we must not append the same data twice
                 start_index_of_new_df = append_df.index[0]
                 # read_index returns timezone-naive timestamps representing UTC in the start_index and end_index columns
-                end_index_of_existing_df = index["end_index"][-1].tz_localize("UTC").tz_localize(
+                end_index_of_existing_df = index["end_index"].iloc[-1].tz_localize("UTC").tz_localize(
                     start_index_of_new_df.tz
                 ) - pd.Timedelta(1, unit="ns")
                 if start_index_of_new_df <= end_index_of_existing_df:
@@ -148,7 +148,7 @@ def _append_and_defrag_idempotent(
                     # Drop columns we don't need as we're going to do a filter
                     index = index[["start_row", "end_row", "start_col"]]
                     # Drop everything except the first column slice
-                    first_start_col = index["start_col"][0]
+                    first_start_col = index["start_col"].iloc[0]
                     index = index[index["start_col"] == first_start_col]
                     self.start_indexes = index.index.to_list()
                     self.start_rows = index["start_row"].to_list()
