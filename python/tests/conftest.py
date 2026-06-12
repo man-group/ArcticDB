@@ -201,6 +201,19 @@ def pytest_configure(config):
         "ignore:Passing a BlockManagerUnconsolidated to DataFrame is deprecated:DeprecationWarning",
     )
 
+    # Environment-level noise, suppressed pending investigation in #3170: storage fixture
+    # teardown failures (LMDB file deletion on Windows, Mongo server shutdown races),
+    # fork()-while-multi-threaded on Python 3.12+, unverified HTTPS to the localhost storage
+    # simulators, and boto3's Python 3.9 EOL notice
+    config.addinivalue_line("filterwarnings", "ignore::arcticdb.storage_fixtures.utils.ExceptionInCleanUpWarning")
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore:This process \\(pid=\\d+\\) is multi-threaded, use of fork\\(\\) may lead to deadlocks"
+        ":DeprecationWarning",
+    )
+    config.addinivalue_line("filterwarnings", "ignore::urllib3.exceptions.InsecureRequestWarning")
+    config.addinivalue_line("filterwarnings", "ignore:Boto3 will no longer support Python 3.9:")
+
     # Third-party noise we cannot fix: hypothesis is pinned <6.73 (newer versions cause
     # disruptive test failures) and internally uses deprecated pandas APIs
     config.addinivalue_line("filterwarnings", "ignore:is_categorical_dtype is deprecated:DeprecationWarning")
