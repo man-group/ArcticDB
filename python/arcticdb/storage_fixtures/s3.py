@@ -106,6 +106,8 @@ class S3Bucket(StorageFixture):
             self.arctic_uri += f"&aws_profile={factory.aws_profile}"
         else:
             self.arctic_uri += "aws_auth=default"
+            if factory.aws_profile:
+                self.arctic_uri += f"&aws_profile={factory.aws_profile}"
         if port:
             self.arctic_uri += f"&port={port}"
         if factory.default_prefix:
@@ -592,6 +594,51 @@ aws_secret_access_key = {factory.sts_test_key.secret}
         config_file.write(aws_credentials)
 
 
+def real_s3_default_profile_from_environment_variables(
+    profile_name: str, profile_file_path: str, use_credentials_file: bool = False
+) -> BaseS3StorageFixtureFactory:
+    """Factory for testing aws_profile with the default credentials provider chain (non-STS): writes the real S3
+    static credentials under the named profile and configures the fixture to authenticate via aws_auth=default + that
+    profile.
+
+    With use_credentials_file=False the keys are written to an AWS *config* file (``[profile X]``); with
+    use_credentials_file=True they are written to an AWS *credentials* file (``[X]``). The distinction matters because
+    aws-sdk-cpp only reads profile credentials from the config file since 1.11.748 (the CRT provider, like boto3),
+    whereas every supported version reads them from the credentials file."""
+    additional_suffix = f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}"
+    out = real_s3_from_environment_variables(False, NativeVariantStorage(), additional_suffix)
+    if use_credentials_file:
+        # Credentials file: profile-less section header, no region (region comes from the native config)
+        profile_file_content = (
+            f"[{profile_name}]\n"
+            f"aws_access_key_id = {out.default_key.id}\n"
+            f"aws_secret_access_key = {out.default_key.secret}\n"
+        )
+    else:
+        profile_file_content = (
+            f"[profile {profile_name}]\n"
+            f"aws_access_key_id = {out.default_key.id}\n"
+            f"aws_secret_access_key = {out.default_key.secret}\n"
+        )
+    profile_dir = os.path.dirname(profile_file_path)
+    os.makedirs(profile_dir, exist_ok=True)
+    with open(profile_file_path, "w") as profile_file:
+        profile_file.write(profile_file_content)
+
+    out.native_config = NativeVariantStorage(
+        NativeS3Settings(
+            aws_auth=AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN,
+            aws_profile=profile_name,
+            use_internal_client_wrapper_for_testing=False,
+        )
+    )
+    out.aws_auth = AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN
+    out.aws_profile = profile_name
+    # Reset to ensure the client can't fall back to default key+secret auth and must resolve the profile
+    out.default_key = Key(id="", secret="", user_name="unknown user")
+    return out
+
+
 def real_s3_sts_resources_ready(factory: BaseS3StorageFixtureFactory):
     sts_client = boto3.client(
         "sts", aws_access_key_id=factory.sts_test_key.id, aws_secret_access_key=factory.sts_test_key.secret
@@ -675,6 +722,15 @@ def mock_s3_with_error_simulation():
 
 class HostDispatcherApplication(DomainDispatcherApplication):
     _reqs_till_rate_limit = -1
+    # When set to an access key id, any S3 request not signed with that key is rejected with 403. None disables.
+    _enforced_access_key = None
+
+    @staticmethod
+    def _request_access_key(environ):
+        # SigV4 Authorization header: "AWS4-HMAC-SHA256 Credential=<access_key_id>/<date>/<region>/s3/aws4_request, ..."
+        auth = environ.get("HTTP_AUTHORIZATION", "")
+        match = re.search(r"Credential=([^/,\s]+)/", auth)
+        return match.group(1) if match else None
 
     def get_backend_for_host(self, host):
         """The stand-alone server needs a way to distinguish between S3 and IAM. We use the host for that"""
@@ -720,6 +776,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Limit accepted"]
 
+            # Allow enforcing that requests are signed with a specific access key id (empty body disables)
+            if path_info in ("/enforce_access_key", b"/enforce_access_key"):
+                length = int(environ["CONTENT_LENGTH"])
+                body = environ["wsgi.input"].read(length).decode("ascii")
+                self._enforced_access_key = body or None
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Access key enforcement set"]
+
             if self._reqs_till_rate_limit == 0:
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>'
@@ -736,6 +800,16 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             if "/whoami" in path_info:
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Moto AWS S3"]
+
+            if self._enforced_access_key is not None and self._request_access_key(environ) != self._enforced_access_key:
+                response_body = (
+                    b'<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code>'
+                    b"<Message>Access Denied</Message></Error>"
+                )
+                start_response(
+                    "403 Forbidden", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                )
+                return [response_body]
 
         return super().__call__(environ, start_response)
 
