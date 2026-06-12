@@ -27,13 +27,16 @@ from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNo
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_int
 
-# The binding constraint is the read path: reconstructing the data recurses ~3 Python stack frames
-# per nesting level (see create_original_obj_from_metastruct), so with the default recursion limit of
-# 1000 reads fail above ~330 levels. We pin the cap at 255 - the value it was effectively fixed at for
-# years, when msgpack's DEFAULT_RECURSE_LIMIT was 511 (511 // 2 == 255) - which both packs on write and
-# round-trips on read. The min() keeps msgpack's packer as a ceiling too. Tying the cap directly to
-# DEFAULT_RECURSE_LIMIT broke when msgpack 1.2.0 raised it to 1024, letting writes through at depths the
-# reader could not reconstruct.
+# Two separate limits govern maximum nesting depth:
+#   Write (msgpack packer): uses ~2 Python stack frames per level; capped at DEFAULT_RECURSE_LIMIT // 2.
+#   Read (create_original_obj_from_metastruct): uses ~3 Python stack frames per level, so reads
+#   fail above sys.getrecursionlimit() // 3 ≈ 333 with Python's default limit of 1000.
+#
+# The read path is tighter, so we pin msgpack's DEFAULT_RECURSE_LIMIT at 511, giving a write
+# cap of 511 // 2 == 255 — safely below the ~333 read ceiling. msgpack 1.2.0 raised its own
+# constant DEFAULT_RECURSE_LIMIT to 1024, which silently allowed writes that the reader could not
+# reconstruct. We keep 511 regardless of what msgpack exports.
+# TODO: once the metastruct reader is non-recursive, raise to (sys.getrecursionlimit() - 10) // 2.
 # https://man312219.monday.com/boards/7852509418/pulses/12254825163
 DEFAULT_RECURSE_LIMIT = min(511, _DEFAULT_RECURSE_LIMIT)
 
