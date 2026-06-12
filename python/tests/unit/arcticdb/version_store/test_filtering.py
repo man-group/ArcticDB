@@ -1692,6 +1692,7 @@ def test_filter_ne_dynamic_missing_column_drops_missing_rows(
 
 
 # Defrag removes column slicing and therefore basically makes any symbol dynamic
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
     lib._set_output_format_for_pipeline_tests(any_output_format)

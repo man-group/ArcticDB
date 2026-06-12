@@ -58,6 +58,7 @@ def test_modification_methods(lmdb_version_store_v1, monkeypatch, method, env_va
     ],
 )
 @pytest.mark.parametrize("env_var_set", [True, False])
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_single_argument_methods(lmdb_version_store_v1, monkeypatch, method, env_var_set):
     if env_var_set:
         monkeypatch.setenv("ARCTICDB_DISABLE_KWARG_VALIDATION", "1")

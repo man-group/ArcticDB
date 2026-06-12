@@ -633,6 +633,7 @@ def test_read_incomplete_no_warning(s3_store_factory, sym, get_stderr):
 
 
 @pytest.mark.parametrize("prune_previous_versions", [True, False])
+@pytest.mark.filterwarnings("ignore:(defragment_symbol_data|is_symbol_fragmented) is deprecated:DeprecationWarning")
 def test_defragment_read_prev_versions(sym, lmdb_version_store, prune_previous_versions):
     start_time, end_time = pd.to_datetime(("1990-1-1", "1995-1-1"))
     cols = ["a", "b", "c", "d"]
