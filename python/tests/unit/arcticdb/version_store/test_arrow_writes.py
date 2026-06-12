@@ -28,6 +28,9 @@ from arcticdb_ext.storage import KeyType
 from tests.util.arrow import assert_arrow_equal, string_format_kwargs, to_format
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
+# These tests intentionally exercise the deprecated staging APIs
+pytestmark = pytest.mark.filterwarnings("ignore:Staging data with:DeprecationWarning")
+
 
 def test_record_batches_roundtrip():
     t0 = pa.table({"col": pa.array([0, 1], pa.int64())})
