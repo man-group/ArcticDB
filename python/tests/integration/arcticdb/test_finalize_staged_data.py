@@ -18,9 +18,6 @@ from arcticdb.util.test_utils import CachedDFGenerator, TimestampNumber, stage_c
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from tests.stress.arcticdb.version_store.test_stress_finalize_staged_data import generate_chunk_sizes
 
-# These tests intentionally exercise the deprecated staging APIs
-pytestmark = pytest.mark.filterwarnings("ignore:Staging data with:DeprecationWarning")
-
 
 class CacheParts:
 

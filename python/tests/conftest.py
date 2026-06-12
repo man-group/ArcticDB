@@ -190,6 +190,17 @@ def pytest_configure(config):
     for marker in _MARKERS:
         config.addinivalue_line("markers", marker)
 
+    # Many tests deliberately cover the deprecated staging APIs (write/append with
+    # parallel/incomplete, write with staged=True), so the deprecation is suppressed globally
+    config.addinivalue_line("filterwarnings", "ignore:Staging data with:DeprecationWarning")
+
+    # ArcticDB's zero-copy read path constructs DataFrames from a BlockManager subclass;
+    # replacing that is tracked separately, so silence the noise it generates in every read test
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore:Passing a BlockManagerUnconsolidated to DataFrame is deprecated:DeprecationWarning",
+    )
+
     # Third-party noise we cannot fix: hypothesis is pinned <6.73 (newer versions cause
     # disruptive test failures) and uses the deprecated pandas is_categorical_dtype internally
     config.addinivalue_line("filterwarnings", "ignore:is_categorical_dtype is deprecated:DeprecationWarning")
