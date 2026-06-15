@@ -45,6 +45,23 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
     }
 }
 
+// arrow_data_to_segment now returns the columns and descriptor as a pair instead of a fully-built
+// SegmentInMemory. Wrap them here so the existing assertions can stay the same.
+inline SegmentInMemory arrow_data_to_segment_for_test(
+        const std::vector<sparrow::record_batch>& record_batches, bool has_index = false
+) {
+    auto [cols, desc] = arrow_data_to_segment(record_batches, has_index);
+    SegmentInMemory seg;
+    seg.descriptor().set_index(desc.index());
+    for (size_t i = 0; i < cols.size(); ++i) {
+        seg.add_column(desc.field(i).name(), std::make_shared<Column>(std::move(cols[i])));
+    }
+    if (!seg.columns().empty() && seg.column(0).row_count() > 0) {
+        seg.set_row_data(seg.column(0).row_count() - 1);
+    }
+    return seg;
+}
+
 template<typename types>
 class ArrowDataToSegmentNumeric : public testing::Test {};
 
@@ -69,7 +86,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, Simple) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment(record_batches);
+    auto seg = arrow_data_to_segment_for_test(record_batches);
 
     ASSERT_EQ(seg.fields().size(), 1);
     ASSERT_EQ(seg.num_columns(), 1);
@@ -115,7 +132,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment(record_batches);
+    auto seg = arrow_data_to_segment_for_test(record_batches);
 
     ASSERT_EQ(seg.fields().size(), num_columns);
     ASSERT_EQ(seg.num_columns(), num_columns);
@@ -158,7 +175,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
         auto array = create_array(data);
         record_batches.emplace_back(create_record_batch({{"col", array}}));
     }
-    auto seg = arrow_data_to_segment(record_batches);
+    auto seg = arrow_data_to_segment_for_test(record_batches);
 
     ASSERT_EQ(seg.fields().size(), 1);
     ASSERT_EQ(seg.num_columns(), 1);
@@ -205,7 +222,7 @@ TEST(ArrowDataToSegmentTimestamp, Simple) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment(record_batches);
+    auto seg = arrow_data_to_segment_for_test(record_batches);
 
     ASSERT_EQ(seg.fields().size(), 1);
     ASSERT_EQ(seg.num_columns(), 1);
@@ -251,7 +268,7 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment(record_batches);
+    auto seg = arrow_data_to_segment_for_test(record_batches);
 
     auto num_columns = numeric_data_types.size();
     ASSERT_EQ(seg.fields().size(), num_columns);

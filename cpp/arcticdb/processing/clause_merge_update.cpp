@@ -450,19 +450,24 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         }
         return result;
     }();
-    // TODO: Source and target descriptor can differ for dynamic schema
-    matched = filter_on_additional_columns_match(
-            source_->desc(), source_->desc(), source_->field_tensors(), proc, std::move(matched)
-    );
     if (source_->has_segment()) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Arrow format is not supported as input for merge update"
         );
-    } else if (source_->has_tensors()) {
-        if (update_and_insert(source_->field_tensors(), source_->desc(), proc, *matched)) {
-            return push_entities(*component_manager_, std::move(proc));
-        }
-    } else {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Input frame does not contain neither a segment nor tensors");
+    }
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            source_->has_tensors(), "Input frame does not contain neither a segment nor tensors"
+    );
+    std::vector<NativeTensor> source_tensors;
+    source_tensors.reserve(source_->num_columns());
+    for (size_t i = 0; i < source_->num_columns(); ++i) {
+        source_tensors.push_back(source_->get_tensor(i));
+    }
+    // TODO: Source and target descriptor can differ for dynamic schema
+    matched = filter_on_additional_columns_match(
+            source_->desc(), source_->desc(), source_tensors, proc, std::move(matched)
+    );
+    if (update_and_insert(source_tensors, source_->desc(), proc, *matched)) {
+        return push_entities(*component_manager_, std::move(proc));
     }
     return {};
 }
@@ -498,8 +503,9 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                 const size_t column_position_in_source_tensors =
                         source_field_position - source_descriptor.index().field_count();
                 std::span source_data(
-                        static_cast<const SourceType*>(source_->field_tensors()[column_position_in_source_tensors].data(
-                        )),
+                        static_cast<const SourceType*>(
+                                source_->get_tensor(column_position_in_source_tensors).data()
+                        ),
                         source_->num_rows
                 );
                 for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {
