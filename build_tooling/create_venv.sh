@@ -31,8 +31,7 @@ fi
 VENV_DIR="$1"
 
 echo "Creating venv at $VENV_DIR"
-source <(curl -s https://repo.prod.m/artifactory/man/pegasus-cli/master/pegasus-profile.sh)
-pegasus create "$VENV_DIR"
+/usr/bin/python3 -m venv "$VENV_DIR"
 
 PIP="$VENV_DIR/bin/pip"
 PYTHON="$VENV_DIR/bin/python"

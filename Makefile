@@ -61,7 +61,7 @@ venv: ## Create a dev venv (NAME=<name> required, CLEAN=1 to replace existing)
 ifdef CLEAN
 	rm -rf $(VENV_DIR)/$(VENV_NAME)
 endif
-	$(_PROTOC_ENV) ./build_tooling/create_venv.sh $(if $(PROXY_CMD),--proxy-cmd $(PROXY_CMD)) $(VENV_DIR)/$(VENV_NAME)
+	./build_tooling/create_venv.sh $(if $(PROXY_CMD),--proxy-cmd $(PROXY_CMD)) $(VENV_DIR)/$(VENV_NAME)
 
 activate: ## Print venv activate path (NAME=<name> required). Use: source $$(make activate NAME=x)
 	@echo $(VENV_DIR)/$(VENV_NAME)/bin/activate
