@@ -57,8 +57,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
                 const auto& curr = static_cast<RawType>(value);
                 // In-band sentinel (NaN for floats, NaT for time types) - count it and skip the
                 // min/max update so those reflect only real values.
-                if constexpr (is_floating_point_type(type_info::data_type) ||
-                              is_time_type(type_info::data_type)) {
+                if constexpr (is_floating_point_type(type_info::data_type) || is_time_type(type_info::data_type)) {
                     if (is_nat_or_nan(curr)) {
                         ++nan_count_;
                         any_nan = true;
