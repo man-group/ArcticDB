@@ -33,7 +33,7 @@ namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
         std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
+        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
         bool sparsify_floats
 ) :
     frame_(std::move(frame)),
@@ -41,7 +41,6 @@ WriteToSegmentTask::WriteToSegmentTask(
     slicing_(slicing),
     partial_key_gen_(std::move(partial_key_gen)),
     slice_num_for_column_(slice_num_for_column),
-    index_(std::move(index)),
     sparsify_floats_(sparsify_floats) {
     slice_.check_magic();
 }
@@ -320,87 +319,77 @@ Column WriteToSegmentTask::slice_column(
 }
 
 SegmentInMemory WriteToSegmentTask::slice() const {
-    return util::variant_match(index_, [this](auto& idx) {
-        using IdxType = std::decay_t<decltype(idx)>;
-        using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
+    // Build the segment with no pre-allocated columns. Each column is appended in segment-position
+    // order below: NativeTensor columns get an empty Column placeholder we then write into, Arrow
+    // columns get the sliced Column directly. This avoids the empty-Column waste that a
+    // descriptor-driven constructor would create for Arrow positions.
+    SegmentInMemory seg;
+    seg.descriptor().set_index(slice_.desc()->index());
 
-        SegmentInMemory output;
-        SingleSegmentAggregator agg{
-                FixedSchema{*slice_.desc(), frame_->index},
-                [&output](auto&& segment) { output = std::move(segment); },
-                NeverSegmentPolicy{},
-                *slice_.desc()
-        };
+    const auto offset_in_frame = slice_begin_pos(slice_, *frame_);
+    seg.set_offset(offset_in_frame);
+    const auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
+    const auto index_field_count = frame_->desc().index().field_count();
+    const auto regular_slice_size = util::variant_match(
+            slicing_,
+            [&](const NoSlicing&) { return rows_to_write; },
+            [&](const auto& slicer) { return slicer.row_per_slice(); }
+    );
 
-        const auto regular_slice_size = util::variant_match(
-                slicing_,
-                [&](const NoSlicing&) { return slice_.row_range.second - slice_.row_range.first; },
-                [&](const auto& slicer) { return slicer.row_per_slice(); }
+    // Empty Column at the next position, then write the tensor into it via segment_set_data.
+    auto add_tensor_column = [&](size_t abs_col, const NativeTensor& tensor, const Field& fd, bool sparsify) {
+        seg.add_column(fd, 0, AllocationType::DYNAMIC);
+        auto opt_error = segment_set_data(
+                fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
+                regular_slice_size, sparsify
         );
-
-        // Offset is used for index value in row-count index
-        const auto offset_in_frame = slice_begin_pos(slice_, *frame_);
-        agg.set_offset(offset_in_frame);
-        const auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
-        const auto index_field_count = frame_->desc().index().field_count();
-
-        // For NativeTensor input at segment column position abs_col, write through the aggregator.
-        auto place_tensor = [&](size_t abs_col, const NativeTensor& tensor, const Field& fd, bool sparsify) {
-            auto opt_error = aggregator_set_data(
-                    fd.type(), tensor, agg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
-                    regular_slice_size, sparsify
-            );
-            if (opt_error.has_value()) {
-                opt_error->raise(fd.name(), offset_in_frame);
-            }
-        };
-
-        // For Arrow Column input at segment column position abs_col, build the sliced Column and replace
-        // the aggregator's empty placeholder. slice_column rewrites bool object → BOOL8 and any string
-        // type → UTF_DYNAMIC64, so patch the descriptor field type to match.
-        auto place_column = [&](size_t abs_col, const Column& source_column) {
-            auto sliced = std::make_shared<Column>(
-                    slice_column(source_column, frame_->offset, agg.segment().string_pool())
-            );
-            const auto sliced_type = sliced->type();
-            agg.segment().columns()[abs_col] = std::move(sliced);
-            agg.segment().descriptor().mutable_field(abs_col).mutable_type() = sliced_type;
-        };
-
-        // Index column. opt_index_tensor set ⇒ NumPy/mixed frame, index is a NativeTensor held separately.
-        // Otherwise the frame is pure Arrow and the index sits at columns_[0] (always a Column).
-        if (index_field_count > 0) {
-            const auto& fd = frame_->desc().fields(0);
-            if (frame_->opt_index_tensor().has_value()) {
-                place_tensor(0, *frame_->opt_index_tensor(), fd, false);
-            } else {
-                place_column(0, frame_->get_column(0));
-            }
+        if (opt_error.has_value()) {
+            opt_error->raise(fd.name(), offset_in_frame);
         }
+    };
 
-        // Non-index columns. columns_ holds the variant per entry; mapping from a segment-relative
-        // position to columns_ depends on whether the index sits in opt_index_tensor (then columns_
-        // skips the index) or in columns_[0] (then columns_ mirrors the descriptor positions).
-        const size_t columns_index_offset = frame_->opt_index_tensor().has_value() ? 0 : index_field_count;
-        for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
-            const auto abs_col = col + index_field_count;
-            const auto& fd = slice_.non_index_field(col);
-            const auto src = slice_.absolute_field_col(col) + columns_index_offset;
-            util::variant_match(
-                    frame_->field_data(src),
-                    [&](const NativeTensor& tensor) { place_tensor(abs_col, tensor, fd, sparsify_floats_); },
-                    [&](const Column& source_column) { place_column(abs_col, source_column); }
-            );
+    // Build the sliced Column and append. slice_column may rewrite bool object → BOOL8 and string types
+    // → UTF_DYNAMIC64; add_column(name, col_ptr) derives the descriptor field type from the Column so
+    // the descriptor automatically reflects the post-rewrite type.
+    auto add_arrow_column = [&](const Column& source_column, const Field& fd) {
+        seg.add_column(
+                fd.name(),
+                std::make_shared<Column>(slice_column(source_column, frame_->offset, seg.string_pool()))
+        );
+    };
+
+    // Index column. opt_index_tensor set ⇒ NumPy/mixed frame, index is a NativeTensor held separately.
+    // Otherwise the frame is pure Arrow and the index sits at columns_[0] (always a Column).
+    if (index_field_count > 0) {
+        const auto& fd = frame_->desc().fields(0);
+        if (frame_->opt_index_tensor().has_value()) {
+            add_tensor_column(0, *frame_->opt_index_tensor(), fd, false);
+        } else {
+            add_arrow_column(frame_->get_column(0), fd);
         }
+    }
 
-        agg.end_block_write(rows_to_write);
+    // Non-index columns. columns_ holds the variant per entry; mapping from a segment-relative position
+    // to columns_ depends on whether the index sits in opt_index_tensor (then columns_ skips the index)
+    // or in columns_[0] (then columns_ mirrors the descriptor positions).
+    const size_t columns_index_offset = frame_->opt_index_tensor().has_value() ? 0 : index_field_count;
+    for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
+        const auto abs_col = col + index_field_count;
+        const auto& fd = slice_.non_index_field(col);
+        const auto src = slice_.absolute_field_col(col) + columns_index_offset;
+        util::variant_match(
+                frame_->field_data(src),
+                [&](const NativeTensor& tensor) { add_tensor_column(abs_col, tensor, fd, sparsify_floats_); },
+                [&](const Column& source_column) { add_arrow_column(source_column, fd); }
+        );
+    }
 
-        if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
-            agg.segment().calculate_statistics();
+    seg.end_block_write(rows_to_write);
 
-        agg.finalize();
-        return output;
-    });
+    if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
+        seg.calculate_statistics();
+
+    return seg;
 }
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices) {
@@ -446,7 +435,6 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
                                                       slicing,
                                                       get_partial_key_gen(frame, key),
                                                       slice.second,
-                                                      frame->index,
                                                       sparsify_floats
                                               ))
                         .then([sink, de_dup_map](auto&& ks) {

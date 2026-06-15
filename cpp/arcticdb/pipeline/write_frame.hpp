@@ -31,13 +31,12 @@ struct WriteToSegmentTask : public async::BaseTask {
     const SlicingPolicy slicing_;
     folly::Function<PartialKey(const FrameSlice&)> partial_key_gen_;
     size_t slice_num_for_column_;
-    Index index_;
     bool sparsify_floats_;
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
             std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
+            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column,
             bool sparsify_floats
     );
 

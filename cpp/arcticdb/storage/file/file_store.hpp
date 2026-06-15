@@ -82,7 +82,6 @@ void write_dataframe_to_file_internal(
                                                            slicing,
                                                            get_partial_key_gen(frame, key),
                                                            slice.second,
-                                                           frame->index,
                                                            sparsify_floats
                                                    ));
                                                },
