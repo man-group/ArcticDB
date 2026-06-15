@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "column_store/memory_segment.hpp"
 #include <arcticdb/entity/index_range.hpp>
 
 #include <arcticdb/pipeline/input_frame.hpp>
@@ -43,9 +44,8 @@ struct WriteToSegmentTask : public async::BaseTask {
     std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();
 
   private:
-    SegmentInMemory slice_tensors() const;
-    SegmentInMemory slice_segment() const;
-    Column slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool) const;
+    SegmentInMemory slice() const;
+    Column slice_column(const Column& source_column, size_t offset, StringPool& string_pool) const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(

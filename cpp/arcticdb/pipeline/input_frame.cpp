@@ -88,7 +88,7 @@ timestamp InputFrame::index_value_at(size_t row) {
             columns_[0],
             [row](const Column& col) {
             util::check(
-                    row < col.row_count(),
+                    static_cast<position_t>(row) < col.row_count(),
                     "Out of range row {} requested in InputFrame::index_value_at with column of length {}",
                     row, col.row_count()
                     );
@@ -120,5 +120,29 @@ void InputFrame::set_index_range() {
 }
 
 void InputFrame::set_bucketize_dynamic(bool bucketize) { bucketize_dynamic = bucketize; }
+
+size_t InputFrame::num_columns() const { return columns_.size(); }
+
+const InputFrame::FieldData& InputFrame::field_data(size_t idx) const {
+    util::check(idx < columns_.size(),
+            "InputFrame::field_data index {} out of range (size {})", idx, columns_.size());
+    return columns_[idx];
+}
+
+const NativeTensor& InputFrame::get_tensor(size_t idx) const {
+    util::check(idx < columns_.size(),
+            "InputFrame::get_tensor index {} out of range (size {})", idx, columns_.size());
+    return std::get<NativeTensor>(columns_[idx]);
+}
+
+const Column& InputFrame::get_column(size_t idx) const {
+    util::check(idx < columns_.size(),
+            "InputFrame::get_column index {} out of range (size {})", idx, columns_.size());
+    return std::get<Column>(columns_[idx]);
+}
+
+const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const {
+    return index_tensor_;
+}
 
 } // namespace arcticdb::pipelines

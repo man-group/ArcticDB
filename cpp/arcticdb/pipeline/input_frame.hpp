@@ -33,6 +33,8 @@ concept ValidIndex = util::any_of<
 // around a variant representing either numpy or Arrow input data
 struct InputFrame {
   public:
+    using FieldData = std::variant<NativeTensor, Column>;
+
     InputFrame();
 
     template<ValidIndex Index, typename DescriptorT>
@@ -75,6 +77,23 @@ struct InputFrame {
     timestamp index_value_at(size_t row);
     void set_index_range();
     void set_bucketize_dynamic(bool bucketize);
+    size_t num_columns() const;
+    const FieldData& field_data(size_t idx) const;
+    const entity::NativeTensor& get_tensor(size_t idx) const;
+    const Column& get_column(size_t idx) const;
+    const std::optional<entity::NativeTensor>& opt_index_tensor() const;
+
+    // TEMPORARY: whole-frame predicates that assume a homogeneous frame (all NativeTensor or all Column).
+    // Hold the invariant only while mixed per-column frames are not yet supported. Once PR #2 introduces
+    // mixed input, delete this block and rewrite callers to per-index is_tensor(idx)/is_column(idx).
+    bool has_tensors() const {
+        return !columns_.empty() && std::holds_alternative<entity::NativeTensor>(columns_[0]);
+    }
+    bool has_segment() const {
+        return !columns_.empty() && std::holds_alternative<Column>(columns_[0]);
+    }
+
+
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -86,7 +105,6 @@ struct InputFrame {
     mutable bool bucketize_dynamic = 0;
 
   private:
-    using FieldData = std::variant<NativeTensor, Column>;
     std::vector<FieldData> columns_;
     std::vector<sparrow::record_batch> arrow_buffer_owners_;
     std::optional<NativeTensor> index_tensor_;
