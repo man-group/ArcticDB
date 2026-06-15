@@ -2190,7 +2190,9 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
         return {SegmentInMemory(std::move(segment_in_memory)), tsd, {}};
     } catch (const std::exception& e) {
-        storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
+        // KeyNotFoundException (not the generic E_KEY_NOT_FOUND raise) so a concurrent-prune race is
+        // catchable by the read-retry primitive; both map to E_KEY_NOT_FOUND for callers.
+        throw storage::KeyNotFoundException(fmt::format("Failed to read column stats key: {}", e.what()));
     }
 }
 
@@ -2212,7 +2214,9 @@ ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, cons
         util::check(unpacked, "Failed to unpack column stats header while getting column stats info");
         return ColumnStats{column_stats_header, tsd};
     } catch (const std::exception& e) {
-        storage::raise<ErrorCode::E_KEY_NOT_FOUND>("Failed to read column stats key: {}", e.what());
+        // KeyNotFoundException (not the generic E_KEY_NOT_FOUND raise) so a concurrent-prune race is
+        // catchable by the read-retry primitive; both map to E_KEY_NOT_FOUND for callers.
+        throw storage::KeyNotFoundException(fmt::format("Failed to read column stats key: {}", e.what()));
     }
 }
 

@@ -2,6 +2,8 @@ import time
 import pytest
 from multiprocessing import Process, Queue
 
+from tests.util.mark import RUNS_ON_GITHUB
+
 
 @pytest.fixture
 def writer_store(lmdb_version_store_delayed_deletes_v2):
@@ -11,6 +13,16 @@ def writer_store(lmdb_version_store_delayed_deletes_v2):
 @pytest.fixture
 def reader_store(lmdb_version_store_delayed_deletes_v2):
     return lmdb_version_store_delayed_deletes_v2
+
+
+@pytest.fixture
+def eager_writer_store(lmdb_version_store_v2):
+    return lmdb_version_store_v2
+
+
+@pytest.fixture
+def eager_reader_store(lmdb_version_store_v2):
+    return lmdb_version_store_v2
 
 
 def read_repeatedly(version_store, queue: Queue):
@@ -36,6 +48,33 @@ def test_concurrent_read_write(writer_store, reader_store):
     exceptions_in_reader = Queue()
     reader = Process(target=read_repeatedly, args=(reader_store, exceptions_in_reader))
     writer = Process(target=write_repeatedly, args=(writer_store,))
+
+    try:
+        reader.start()
+        writer.start()
+        reader.join(5)
+        writer.join(0.001)
+    finally:
+        writer.terminate()
+        reader.terminate()
+
+    assert exceptions_in_reader.empty()
+
+
+@pytest.mark.skipif(
+    RUNS_ON_GITHUB, reason="Non-deterministic timing; covered by deterministic unit tests in test_read_retry.py"
+)
+def test_concurrent_read_write_eager_prune(eager_writer_store, eager_reader_store):
+    """Without delayed deletes, prune_previous physically deletes superseded versions as soon as a
+    new version is written. A concurrent reader can resolve a version just before it is pruned out
+    from under it, so the read path retries: when the data/index keys it expected are gone, it
+    re-resolves to the current version and reads again. The reader should therefore always return
+    data and never surface a missing-key error, even while another process writes and eagerly
+    prunes in a tight loop."""
+    eager_writer_store.write("sym", [1, 2, 3], prune_previous_version=True)
+    exceptions_in_reader = Queue()
+    reader = Process(target=read_repeatedly, args=(eager_reader_store, exceptions_in_reader))
+    writer = Process(target=write_repeatedly, args=(eager_writer_store,))
 
     try:
         reader.start()

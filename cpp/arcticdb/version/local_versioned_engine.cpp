@@ -36,6 +36,87 @@ bool is_valid_merge_strategy(const arcticdb::MergeStrategy& strategy) {
     };
     return std::ranges::find(valid_strategies, strategy) != std::ranges::end(valid_strategies);
 }
+template<typename Fn>
+auto retry_read_on_concurrent_prune(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id,
+        const VersionQuery& version_query, Fn&& read_fn
+) {
+    // Retries are only useful for latest-version reads (std::monostate): for pinned queries the
+    // target version is gone and re-resolution would silently return a different version.
+    if (!std::holds_alternative<std::monostate>(version_query.content_))
+        return read_fn();
+    try {
+        return read_fn();
+    } catch (const storage::NoDataFoundException&) {
+        if (!version_map->invalidate_if_version_ref_changed(store, stream_id))
+            throw;
+    } catch (const storage::KeyNotFoundException&) {
+        if (!version_map->invalidate_if_version_ref_changed(store, stream_id))
+            throw;
+    }
+    log::version().info("Read of symbol '{}' raced with a concurrent prune; version ref changed, retrying", stream_id);
+    return read_fn();
+}
+
+// Multi-symbol variant for batch_read_and_join, where one failed symbol read fails the whole
+// operation (so there is no per-symbol Try to retry). Otherwise identical to the single-symbol
+// overload: retries once if any latest-version symbol's version ref changed. read_fn must run on the
+// caller thread (it blocks on nested folly futures).
+template<typename Fn>
+auto retry_read_on_concurrent_prune(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
+        const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries, Fn&& read_fn
+) {
+    auto invalidate_any_latest = [&] {
+        bool any = false;
+        for (auto i = 0UL; i < stream_ids.size(); ++i)
+            if (std::holds_alternative<std::monostate>(version_queries[i].content_))
+                any |= version_map->invalidate_if_version_ref_changed(store, stream_ids[i]);
+        return any;
+    };
+    if (std::none_of(version_queries.begin(), version_queries.end(), [](const VersionQuery& vq) {
+            return std::holds_alternative<std::monostate>(vq.content_);
+        }))
+        return read_fn();
+    try {
+        return read_fn();
+    } catch (const storage::NoDataFoundException&) {
+        if (!invalidate_any_latest())
+            throw;
+    } catch (const storage::KeyNotFoundException&) {
+        if (!invalidate_any_latest())
+            throw;
+    }
+    log::version().info("Batch read raced with a concurrent prune; a version ref changed, retrying");
+    return read_fn();
+}
+
+// For the post-collectAll stage of batch reads. For each result that is a retryable latest-version
+// race (failed with a missing-key error on a latest-version query whose ref has since changed), it
+// invalidates the cache, logs, and re-runs retry_fn(idx) — which performs the read synchronously and
+// returns T — capturing its value or exception back into the result. All other results are left
+// untouched.
+// retry_fn(idx) MUST run on the caller thread, not inside a future continuation: it blocks on nested
+// folly futures, which would deadlock the shared thread pools if called from an executor thread.
+template<typename T, typename Fn>
+void retry_failed_reads_on_concurrent_prune(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
+        const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
+        std::vector<folly::Try<T>>& results, Fn&& retry_fn
+) {
+    for (auto idx = 0UL; idx < results.size(); ++idx) {
+        auto& t = results[idx];
+        if (t.hasValue() || !std::holds_alternative<std::monostate>(version_queries[idx].content_) ||
+            (!t.template hasException<storage::KeyNotFoundException>() &&
+             !t.template hasException<storage::NoDataFoundException>()) ||
+            !version_map->invalidate_if_version_ref_changed(store, stream_ids[idx]))
+            continue;
+        log::version().info(
+                "Read of symbol '{}' raced with a concurrent prune; version ref changed, retrying", stream_ids[idx]
+        );
+        results[idx] = folly::makeTryWith([&] { return retry_fn(idx); });
+    }
+}
 } // namespace
 
 namespace arcticdb::version_store {
@@ -220,14 +301,16 @@ FrameAndDescriptor LocalVersionedEngine::read_column_stats_internal(const Versio
 ReadVersionOutput LocalVersionedEngine::read_column_stats_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
-    auto versioned_item = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-            versioned_item.has_value(),
-            "read_column_stats_version_internal: version not found for stream '{}'",
-            stream_id
-    );
-    auto frame_and_descriptor = read_column_stats_internal(versioned_item.value());
-    return ReadVersionOutput{std::move(versioned_item.value()), std::move(frame_and_descriptor)};
+    return retry_read_on_concurrent_prune(store(), version_map(), stream_id, version_query, [&] {
+        auto versioned_item = get_version_to_read(stream_id, version_query);
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                versioned_item.has_value(),
+                "read_column_stats_version_internal: version not found for stream '{}'",
+                stream_id
+        );
+        auto frame_and_descriptor = read_column_stats_internal(versioned_item.value());
+        return ReadVersionOutput{std::move(versioned_item.value()), std::move(frame_and_descriptor)};
+    });
 }
 
 ColumnStats LocalVersionedEngine::get_column_stats_info_internal(const VersionedItem& versioned_item) {
@@ -237,13 +320,15 @@ ColumnStats LocalVersionedEngine::get_column_stats_info_internal(const Versioned
 ColumnStats LocalVersionedEngine::get_column_stats_info_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
-    auto versioned_item = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-            versioned_item.has_value(),
-            "get_column_stats_info_version_internal: version not found for stream '{}'",
-            stream_id
-    );
-    return get_column_stats_info_internal(versioned_item.value());
+    return retry_read_on_concurrent_prune(store(), version_map(), stream_id, version_query, [&] {
+        auto versioned_item = get_version_to_read(stream_id, version_query);
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                versioned_item.has_value(),
+                "get_column_stats_info_version_internal: version not found for stream '{}'",
+                stream_id
+        );
+        return get_column_stats_info_internal(versioned_item.value());
+    });
 }
 
 std::set<StreamId> LocalVersionedEngine::list_streams_internal(
@@ -406,11 +491,12 @@ std::optional<VersionedItem> LocalVersionedEngine::get_version_to_read(
 }
 
 IndexRange LocalVersionedEngine::get_index_range(const StreamId& stream_id, const VersionQuery& version_query) {
-    auto version = get_version_to_read(stream_id, version_query);
-    if (!version)
-        return unspecified_range();
-
-    return index::get_index_segment_range(version->key_, store());
+    return retry_read_on_concurrent_prune(store(), version_map(), stream_id, version_query, [&] {
+        auto version = get_version_to_read(stream_id, version_query);
+        if (!version)
+            return unspecified_range();
+        return index::get_index_segment_range(version->key_, store());
+    });
 }
 
 VersionIdentifier get_version_identifier(
@@ -432,11 +518,10 @@ VersionIdentifier get_version_identifier(
     return *version;
 }
 
-ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
+ReadVersionWithNodesOutput LocalVersionedEngine::read_one_dataframe_version(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
 ) {
-    py::gil_scoped_release release_gil;
     const auto identifier = util::variant_match(
             version_query.content_,
             [&](const std::shared_ptr<PreloadedIndexQuery>& preloaded_index_query) -> VersionIdentifier {
@@ -480,6 +565,24 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     }
 }
 
+ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
+        const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, std::shared_ptr<std::any> handler_data
+) {
+    py::gil_scoped_release release_gil;
+    // A concurrent writer using prune_previous_version without background deletion physically deletes
+    // a superseded version's keys. A reader can resolve a version just before it is pruned and then
+    // fail to fetch its (now deleted) index/data keys. Rather than surface that race, invalidate the
+    // cached version chain so we re-resolve to the current latest version, and retry.
+    // Retries are only useful for latest-version reads (std::monostate): for pinned queries
+    // (specific version, timestamp, snapshot) the target version is gone and re-resolution would
+    // silently return a different version. A genuinely missing version raises E_NO_SUCH_VERSION
+    // (not caught here) and still fails fast.
+    return retry_read_on_concurrent_prune(store(), version_map(), stream_id, version_query, [&] {
+        return read_one_dataframe_version(stream_id, version_query, read_query, read_options, handler_data);
+    });
+}
+
 VersionedItem LocalVersionedEngine::read_modify_write_internal(
         const StreamId& source_stream, const StreamId& target_stream, const VersionQuery& version_query,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, bool prune_previous_versions,
@@ -487,20 +590,25 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
 ) {
     py::gil_scoped_release release_gil;
 
-    std::optional<VersionedItem> source_version = get_version_to_read(source_stream, version_query);
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            source_version.has_value(), "Could not find requested version for symbol \"{}\"", source_stream
-    );
-
     const WriteOptions write_options = get_write_options();
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), target_stream);
     const auto target_version = get_next_version_from_key(maybe_prev);
-
-    VersionIdentifier resolved =
-            std::make_shared<IndexInformation>(read_index_key_without_column_stats(store(), source_version->key_));
-    std::shared_ptr<PipelineContext> pipeline_context =
-            setup_pipeline_context(store(), resolved, *read_query, read_options);
     const IndexPartialKey target_partial_index_key{target_stream, target_version};
+
+    // Retry only the source read (pure reads — safe to retry).
+    // read_index_key_without_column_stats can throw if the source version's index key was
+    // pruned by a concurrent writer. setup_pipeline_context is unreachable on the failing
+    // attempt so read_query is never mutated before the retry. read_modify_write_impl
+    // (which writes) stays outside and is never replayed.
+    auto pipeline_context = retry_read_on_concurrent_prune(store(), version_map(), source_stream, version_query, [&] {
+        auto source_version = get_version_to_read(source_stream, version_query);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                source_version.has_value(), "Could not find requested version for symbol \"{}\"", source_stream
+        );
+        VersionIdentifier resolved =
+                std::make_shared<IndexInformation>(read_index_key_without_column_stats(store(), source_version->key_));
+        return setup_pipeline_context(store(), resolved, *read_query, read_options);
+    });
     VersionedItem versioned_item = read_modify_write_impl(
                                            store(),
                                            read_query,
@@ -606,14 +714,16 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
         const StreamId& stream_id, const VersionQuery& version_query, bool include_index_segment
 ) {
     ARCTICDB_SAMPLE(ReadDescriptor, 0)
-    auto version = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-            version.has_value(),
-            "Unable to retrieve descriptor data. {}@{}: version not found",
-            stream_id,
-            version_query
-    );
-    return get_descriptor(std::move(version->key_), include_index_segment).get();
+    return retry_read_on_concurrent_prune(store(), version_map(), stream_id, version_query, [&] {
+        auto version = get_version_to_read(stream_id, version_query);
+        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                version.has_value(),
+                "Unable to retrieve descriptor data. {}@{}: version not found",
+                stream_id,
+                version_query
+        );
+        return get_descriptor(std::move(version->key_), include_index_segment).get();
+    });
 }
 
 std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(
@@ -628,6 +738,26 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
         );
     }
     auto descriptors = folly::collectAll(descriptor_futures).get();
+
+    // A latest-version read can race a concurrent prune (see read_dataframe_version_internal).
+    retry_failed_reads_on_concurrent_prune(
+            store(),
+            version_map(),
+            stream_ids,
+            version_queries,
+            descriptors,
+            [&](size_t idx) -> DescriptorItem {
+                auto version = get_version_to_read(stream_ids[idx], version_queries[idx]);
+                missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                        version.has_value(),
+                        "Unable to retrieve descriptor data. {}@{}: version not found",
+                        stream_ids[idx],
+                        version_queries[idx]
+                );
+                return get_descriptor(std::move(version->key_), /*include_index_segment=*/false).get();
+            }
+    );
+
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
@@ -1518,6 +1648,24 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
         );
     }
 
+    // A latest-version read can race a concurrent prune (see read_dataframe_version_internal).
+    retry_failed_reads_on_concurrent_prune(
+            store(),
+            version_map(),
+            stream_ids,
+            version_queries,
+            all_results,
+            [&](size_t idx) -> ReadVersionWithNodesOutput {
+                return read_one_dataframe_version(
+                        stream_ids[idx],
+                        version_queries[idx],
+                        read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
+                        batch_read_options.at(idx),
+                        handler_data
+                );
+            }
+    );
+
     TransformBatchResultsFlags flags;
     flags.convert_no_data_found_to_key_not_found_ = true;
     flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
@@ -1563,91 +1711,98 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
 ) {
     py::gil_scoped_release release_gil;
     util::check(!clauses.empty(), "Cannot join with no joining clause provided");
-    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), *stream_ids, *version_queries);
-    std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
-    symbol_processing_result_futs.reserve(opt_index_key_futs.size());
-    auto component_manager = std::make_shared<ComponentManager>();
-    for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
-        symbol_processing_result_futs.emplace_back(
-                std::move(opt_index_key_fut)
-                        .thenValue([store = store(),
-                                    stream_ids,
-                                    version_queries,
-                                    read_query =
-                                            read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
-                                    idx,
-                                    read_options,
-                                    component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
-                            auto version_info = get_version_identifier(
-                                    (*stream_ids)[idx],
-                                    (*version_queries)[idx],
-                                    read_options,
-                                    opt_index_key.has_value()
-                                            ? std::make_optional<VersionedItem>(std::move(*opt_index_key))
-                                            : std::nullopt
-                            );
-                            return read_and_process(
-                                    store, std::move(version_info), read_query, read_options, component_manager
-                            );
-                        })
-        );
-    }
-    for (auto& clause : clauses) {
-        clause->set_component_manager(component_manager);
-    }
+    // Move clauses once — they cannot be moved twice. schedule_remaining_iterations erases processed
+    // clauses from *clauses_ptr in-place, so snapshot the full list and restore it on each attempt.
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
-    return folly::collect(symbol_processing_result_futs)
-            .via(&async::io_executor())
-            .thenValueInline([this, handler_data, clauses_ptr, component_manager, read_options](
-                                     std::vector<SymbolProcessingResult>&& symbol_processing_results
-                             ) mutable {
-                auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
-                        unpack_symbol_processing_results(std::move(symbol_processing_results));
-                auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
-                return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
-                        .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
-                            auto proc = gather_entities<
-                                    std::shared_ptr<SegmentInMemory>,
-                                    std::shared_ptr<RowRange>,
-                                    std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
-                            return collect_segments(std::move(proc));
-                        })
-                        .thenValueInline([store = store(), handler_data, pipeline_context, read_options](
-                                                 std::vector<SliceAndKey>&& slice_and_keys
-                                         ) mutable {
-                            return prepare_output_frame(
-                                    std::move(slice_and_keys), pipeline_context, store, read_options, handler_data
-                            );
-                        })
-                        .thenValueInline([handler_data,
-                                          pipeline_context,
-                                          res_versioned_items,
-                                          res_metadatas,
-                                          read_options](SegmentInMemory&& frame) mutable {
-                            // Needed to force our usual backfilling behaviour when columns have been outer-joined and
-                            // some are not present in all input symbols
-                            ReadOptions read_options_with_dynamic_schema = read_options.clone();
-                            read_options_with_dynamic_schema.set_dynamic_schema(true);
-                            return reduce_and_fix_columns(
-                                           pipeline_context, frame, read_options_with_dynamic_schema, handler_data
-                            )
-                                    .thenValueInline([pipeline_context,
-                                                      frame,
-                                                      res_versioned_items,
-                                                      res_metadatas](auto&&) mutable {
-                                        return MultiSymbolReadOutput{
-                                                std::move(*res_versioned_items),
-                                                std::move(*res_metadatas),
-                                                {frame,
-                                                 timeseries_descriptor_from_pipeline_context(
-                                                         pipeline_context, {}, pipeline_context->bucketize_dynamic_
-                                                 ),
-                                                 {}}
-                                        };
-                                    });
-                        });
-            })
-            .get();
+    const auto original_clauses = *clauses_ptr;
+
+    return retry_read_on_concurrent_prune(store(), version_map(), *stream_ids, *version_queries, [&] {
+        *clauses_ptr = original_clauses;
+        auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), *stream_ids, *version_queries);
+        std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
+        symbol_processing_result_futs.reserve(opt_index_key_futs.size());
+        auto component_manager = std::make_shared<ComponentManager>();
+        for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
+            symbol_processing_result_futs.emplace_back(
+                    std::move(opt_index_key_fut)
+                            .thenValue([store = store(),
+                                        stream_ids,
+                                        version_queries,
+                                        read_query = read_queries.empty() ? std::make_shared<ReadQuery>()
+                                                                          : read_queries[idx],
+                                        idx,
+                                        read_options,
+                                        component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                                auto version_info = get_version_identifier(
+                                        (*stream_ids)[idx],
+                                        (*version_queries)[idx],
+                                        read_options,
+                                        opt_index_key.has_value()
+                                                ? std::make_optional<VersionedItem>(std::move(*opt_index_key))
+                                                : std::nullopt
+                                );
+                                return read_and_process(
+                                        store, std::move(version_info), read_query, read_options, component_manager
+                                );
+                            })
+            );
+        }
+        for (auto& clause : *clauses_ptr) {
+            clause->set_component_manager(component_manager);
+        }
+        return folly::collect(symbol_processing_result_futs)
+                .via(&async::io_executor())
+                .thenValueInline([this, handler_data, clauses_ptr, component_manager, read_options](
+                                         std::vector<SymbolProcessingResult>&& symbol_processing_results
+                                 ) mutable {
+                    auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] =
+                            unpack_symbol_processing_results(std::move(symbol_processing_results));
+                    auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
+                    return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
+                            .thenValueInline([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+                                auto proc = gather_entities<
+                                        std::shared_ptr<SegmentInMemory>,
+                                        std::shared_ptr<RowRange>,
+                                        std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+                                return collect_segments(std::move(proc));
+                            })
+                            .thenValueInline([store = store(), handler_data, pipeline_context, read_options](
+                                                     std::vector<SliceAndKey>&& slice_and_keys
+                                             ) mutable {
+                                return prepare_output_frame(
+                                        std::move(slice_and_keys), pipeline_context, store, read_options, handler_data
+                                );
+                            })
+                            .thenValueInline([handler_data,
+                                              pipeline_context,
+                                              res_versioned_items,
+                                              res_metadatas,
+                                              read_options](SegmentInMemory&& frame) mutable {
+                                // Needed to force our usual backfilling behaviour when columns have been
+                                // outer-joined and some are not present in all input symbols
+                                ReadOptions read_options_with_dynamic_schema = read_options.clone();
+                                read_options_with_dynamic_schema.set_dynamic_schema(true);
+                                return reduce_and_fix_columns(
+                                               pipeline_context, frame, read_options_with_dynamic_schema, handler_data
+                                )
+                                        .thenValueInline([pipeline_context,
+                                                          frame,
+                                                          res_versioned_items,
+                                                          res_metadatas](auto&&) mutable {
+                                            return MultiSymbolReadOutput{
+                                                    std::move(*res_versioned_items),
+                                                    std::move(*res_metadatas),
+                                                    {frame,
+                                                     timeseries_descriptor_from_pipeline_context(
+                                                             pipeline_context, {}, pipeline_context->bucketize_dynamic_
+                                                     ),
+                                                     {}}
+                                            };
+                                        });
+                            });
+                })
+                .get();
+    });
 }
 
 void LocalVersionedEngine::write_version_and_prune_previous(
@@ -2306,6 +2461,27 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     }
 
     auto metadatas = folly::collectAll(metadata_futures).get();
+
+    // A latest-version read can race a concurrent prune (see read_dataframe_version_internal).
+    retry_failed_reads_on_concurrent_prune(
+            store(),
+            version_map(),
+            stream_ids,
+            version_queries,
+            metadatas,
+            [&](size_t idx) -> std::pair<VariantKey, std::optional<google::protobuf::Any>> {
+                auto version = get_version_to_read(stream_ids[idx], version_queries[idx]);
+                missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                        version.has_value(),
+                        "Unable to retrieve metadata. {}@{}: version not found",
+                        stream_ids[idx],
+                        version_queries[idx]
+                );
+                auto [opt_key, meta_proto] = get_metadata(std::make_optional<AtomKey>(version->key_)).get();
+                return std::make_pair(std::move(*opt_key), std::move(meta_proto));
+            }
+    );
+
     // For legacy reason read_metadata_batch is not throwing if the symbol is missing
     TransformBatchResultsFlags flags;
     flags.throw_on_missing_symbol_ = false;
@@ -2316,9 +2492,11 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
 std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> LocalVersionedEngine::read_metadata_internal(
         const StreamId& stream_id, const VersionQuery& version_query
 ) {
-    auto version = get_version_to_read(stream_id, version_query);
-    std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
-    return get_metadata(std::move(key)).get();
+    return retry_read_on_concurrent_prune(store(), version_map(), stream_id, version_query, [&] {
+        auto version = get_version_to_read(stream_id, version_query);
+        std::optional<AtomKey> key = version.has_value() ? std::make_optional<AtomKey>(version->key_) : std::nullopt;
+        return get_metadata(std::move(key)).get();
+    });
 }
 
 std::variant<VersionedItem, CompactionError> LocalVersionedEngine::sort_merge_internal(
