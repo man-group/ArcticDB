@@ -421,7 +421,7 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     }
 }
 
-std::pair<std::vector<Column>, StreamDescriptor> arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches, bool has_index) {
+std::pair<std::vector<Column>, entity::StreamDescriptor> arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches, bool has_index) {
     if (record_batches.empty()) {
         return {};
     }
@@ -494,6 +494,9 @@ std::pair<std::vector<Column>, StreamDescriptor> arrow_data_to_segment(const std
             }
         }
         start_row += batch.nb_rows();
+    }
+    for (auto& col : columns) {
+        col.set_row_data(start_row - 1);
     }
     return std::make_pair(std::move(columns), std::move(desc));
 }

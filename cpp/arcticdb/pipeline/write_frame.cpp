@@ -298,7 +298,9 @@ Column WriteToSegmentTask::slice_column(
         const auto& slice = contiguous_slices.front();
         ChunkedBuffer chunked_buffer;
         chunked_buffer.add_external_block(slice.block->ptr(slice.start_pos * type_size), slice.size * type_size);
-        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        Column dest{source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+        dest.set_row_data(slice_.rows().diff() - 1);
+        return dest;
     }
     Column dest(
             dest_column_type,
