@@ -166,6 +166,39 @@ def test_delete_snapshot(version_store_factory):
         assert k.version_id != 0
 
 
+def test_delete_snapshot_key_shared_with_another_snapshot(version_store_factory):
+    lib = version_store_factory(use_tombstones=True, delayed_deletes=False)
+    lt = lib.library_tool()
+
+    symbol = "test_delete_snapshot_key_shared_with_another_snapshot"
+    snap1 = "snap1"
+    snap2 = "snap2"
+
+    df = sample_dataframe(100)
+    lib.write(symbol, df)  # v0
+    lib.snapshot(snap1)  # snap1 -> v0
+    lib.snapshot(snap2)  # snap2 -> v0
+
+    # Tombstone v0. It survives physically because both snapshots still reference it.
+    lib.delete_version(symbol, 0)
+    versions = lib.list_versions(symbol)
+    assert len(versions) == 1 and versions[0]["deleted"]
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) > 0
+
+    # Deleting snap1 must not remove v0's keys: snap2 still references them.
+    lib.delete_snapshot(snap1)
+    assert lib.list_snapshots().keys() == {snap2}
+    assert_frame_equal(lib.read(symbol, as_of=snap2).data, df)
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) > 0
+
+    # Deleting the last snapshot referencing v0 removes its keys, as v0 is tombstoned.
+    lib.delete_snapshot(snap2)
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)) == 0
+    assert len(lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)) == 0
+
+
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):
     lib = lmdb_version_store_prune_previous
     assert lib._lib_cfg.lib_desc.version.write_options.prune_previous_version is True
