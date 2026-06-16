@@ -22,11 +22,6 @@ using namespace arcticdb::entity;
 // py::tuple for Pandas data, record batches for Arrow data
 using InputItem = std::variant<py::tuple, std::vector<std::shared_ptr<RecordBatchData>>>;
 
-// Per-column entry inside a Pandas NPDDataFrame's columns_values list.
-// Either a NumPy ndarray (the original path) or a list of Arrow record batches
-// (one per chunk) for a single Arrow-backed pandas column.
-using ColumnEntry = std::variant<py::array, std::vector<std::shared_ptr<RecordBatchData>>>;
-
 struct ARCTICDB_VISIBILITY_HIDDEN PyStringWrapper {
     char* buffer_;
     size_t length_;

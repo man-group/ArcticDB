@@ -48,7 +48,7 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
 inline SegmentInMemory arrow_data_to_segment_for_test(
         const std::vector<sparrow::record_batch>& record_batches, bool has_index = false
 ) {
-    auto [cols, desc] = arrow_data_to_segment(record_batches, has_index);
+    auto [cols, desc] = record_batches_to_columns(record_batches, has_index);
     SegmentInMemory seg;
     seg.descriptor().set_index(desc.index());
     for (size_t i = 0; i < cols.size(); ++i) {
