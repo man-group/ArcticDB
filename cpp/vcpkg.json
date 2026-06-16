@@ -103,7 +103,6 @@
     { "name": "azure-identity-cpp", "version": "1.6.0" },
     { "name": "benchmark", "version": "1.9.0" },
     { "name": "bitmagic", "version": "7.12.3" },
-    { "name": "boost-thread", "version": "1.90.0#1" },
     { "name": "double-conversion", "version": "3.2.1" },
     { "name": "fmt", "version": "12.1.0" },
     { "name": "folly", "version-string": "2026.02.23.00" },
