@@ -45,21 +45,6 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
     }
 }
 
-inline SegmentInMemory arrow_data_to_segment_for_test(
-        const std::vector<sparrow::record_batch>& record_batches, bool has_index = false
-) {
-    auto [cols, desc] = record_batches_to_columns(record_batches, has_index);
-    SegmentInMemory seg;
-    seg.descriptor().set_index(desc.index());
-    for (size_t i = 0; i < cols.size(); ++i) {
-        seg.add_column(desc.field(i).name(), std::make_shared<Column>(std::move(cols[i])));
-    }
-    if (!seg.columns().empty() && seg.column(0).row_count() > 0) {
-        seg.set_row_data(seg.column(0).row_count() - 1);
-    }
-    return seg;
-}
-
 template<typename types>
 class ArrowDataToSegmentNumeric : public testing::Test {};
 
@@ -84,15 +69,12 @@ TYPED_TEST(ArrowDataToSegmentNumeric, Simple) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment_for_test(record_batches);
+    auto [cols, desc] = record_batches_to_columns(record_batches);
 
-    ASSERT_EQ(seg.fields().size(), 1);
-    ASSERT_EQ(seg.num_columns(), 1);
-    ASSERT_EQ(seg.row_count(), num_rows);
-    const auto column_index = seg.column_index("col");
-    ASSERT_TRUE(column_index.has_value());
-    ASSERT_EQ(*column_index, 0);
-    const auto& col = seg.column(0);
+    ASSERT_EQ(desc.fields().size(), 1);
+    ASSERT_EQ(cols.size(), 1);
+    ASSERT_EQ(desc.field(0).name(), "col");
+    const auto& col = cols[0];
     ASSERT_EQ(col.type(), make_scalar_type(data_type_from_raw_type<TypeParam>()));
     ASSERT_EQ(col.row_count(), num_rows);
     ASSERT_EQ(col.last_row(), num_rows - 1);
@@ -130,16 +112,13 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment_for_test(record_batches);
+    auto [cols, desc] = record_batches_to_columns(record_batches);
 
-    ASSERT_EQ(seg.fields().size(), num_columns);
-    ASSERT_EQ(seg.num_columns(), num_columns);
-    ASSERT_EQ(seg.row_count(), num_rows);
+    ASSERT_EQ(desc.fields().size(), num_columns);
+    ASSERT_EQ(cols.size(), num_columns);
     for (size_t idx = 0; idx < num_columns; ++idx) {
-        const auto column_index = seg.column_index(fmt::format("col{}", idx));
-        ASSERT_TRUE(column_index.has_value());
-        ASSERT_EQ(*column_index, idx);
-        const auto& col = seg.column(idx);
+        ASSERT_EQ(desc.field(idx).name(), fmt::format("col{}", idx));
+        const auto& col = cols[idx];
         ASSERT_EQ(col.type(), make_scalar_type(data_type_from_raw_type<TypeParam>()));
         ASSERT_EQ(col.row_count(), num_rows);
         ASSERT_EQ(col.last_row(), num_rows - 1);
@@ -173,15 +152,12 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
         auto array = create_array(data);
         record_batches.emplace_back(create_record_batch({{"col", array}}));
     }
-    auto seg = arrow_data_to_segment_for_test(record_batches);
+    auto [cols, desc] = record_batches_to_columns(record_batches);
 
-    ASSERT_EQ(seg.fields().size(), 1);
-    ASSERT_EQ(seg.num_columns(), 1);
-    ASSERT_EQ(seg.row_count(), total_rows);
-    const auto column_index = seg.column_index("col");
-    ASSERT_TRUE(column_index.has_value());
-    ASSERT_EQ(*column_index, 0);
-    const auto& col = seg.column(0);
+    ASSERT_EQ(desc.fields().size(), 1);
+    ASSERT_EQ(cols.size(), 1);
+    ASSERT_EQ(desc.field(0).name(), "col");
+    const auto& col = cols[0];
     ASSERT_EQ(col.type(), make_scalar_type(data_type_from_raw_type<TypeParam>()));
     ASSERT_EQ(col.row_count(), total_rows);
     ASSERT_EQ(col.last_row(), total_rows - 1);
@@ -220,15 +196,12 @@ TEST(ArrowDataToSegmentTimestamp, Simple) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment_for_test(record_batches);
+    auto [cols, desc] = record_batches_to_columns(record_batches);
 
-    ASSERT_EQ(seg.fields().size(), 1);
-    ASSERT_EQ(seg.num_columns(), 1);
-    ASSERT_EQ(seg.row_count(), num_rows);
-    const auto column_index = seg.column_index("col");
-    ASSERT_TRUE(column_index.has_value());
-    ASSERT_EQ(*column_index, 0);
-    const auto& col = seg.column(0);
+    ASSERT_EQ(desc.fields().size(), 1);
+    ASSERT_EQ(cols.size(), 1);
+    ASSERT_EQ(desc.field(0).name(), "col");
+    const auto& col = cols[0];
     ASSERT_EQ(col.type(), make_scalar_type(DataType::NANOSECONDS_UTC64));
     ASSERT_EQ(col.row_count(), num_rows);
     ASSERT_EQ(col.last_row(), num_rows - 1);
@@ -266,17 +239,14 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
 
     std::vector<sparrow::record_batch> record_batches;
     record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment_for_test(record_batches);
+    auto [cols, desc] = record_batches_to_columns(record_batches);
 
     auto num_columns = numeric_data_types.size();
-    ASSERT_EQ(seg.fields().size(), num_columns);
-    ASSERT_EQ(seg.num_columns(), num_columns);
-    ASSERT_EQ(seg.row_count(), num_rows);
+    ASSERT_EQ(desc.fields().size(), num_columns);
+    ASSERT_EQ(cols.size(), num_columns);
     for (auto [idx, data_type] : folly::enumerate(numeric_data_types)) {
-        const auto column_index = seg.column_index(fmt::format("{}", data_type));
-        ASSERT_TRUE(column_index.has_value());
-        ASSERT_EQ(*column_index, idx);
-        const auto& col = seg.column(idx);
+        ASSERT_EQ(desc.field(idx).name(), fmt::format("{}", data_type));
+        const auto& col = cols[idx];
         ASSERT_EQ(col.type(), make_scalar_type(data_type));
         ASSERT_EQ(col.row_count(), num_rows);
         ASSERT_EQ(col.last_row(), num_rows - 1);
