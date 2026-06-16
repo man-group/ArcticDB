@@ -616,7 +616,7 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
 
 
 @pytest.mark.parametrize(
-    "first_dtype,",
+    "first_dtype",
     [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool],
 )
 @pytest.mark.parametrize(
