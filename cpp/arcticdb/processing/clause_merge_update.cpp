@@ -450,13 +450,10 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         }
         return result;
     }();
-    if (source_->has_segment()) {
+    if (!source_->has_only_tensors()) {
         user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Arrow format is not supported as input for merge update"
         );
     }
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            source_->has_tensors(), "Input frame does not contain neither a segment nor tensors"
-    );
     std::vector<NativeTensor> source_tensors;
     source_tensors.reserve(source_->num_columns());
     for (size_t i = 0; i < source_->num_columns(); ++i) {

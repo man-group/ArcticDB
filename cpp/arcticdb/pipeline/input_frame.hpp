@@ -63,9 +63,10 @@ struct InputFrame {
                 std::make_move_iterator(field_tensors.begin()),
                 std::make_move_iterator(field_tensors.end())
                 );
+        has_only_columns_ = false;
     };
 
-    void set_segment(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners);
+    void set_from_columns(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners);
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
@@ -83,17 +84,8 @@ struct InputFrame {
     const Column& get_column(size_t idx) const;
     const std::optional<entity::NativeTensor>& opt_index_tensor() const;
 
-    // TEMPORARY: whole-frame predicates that assume a homogeneous frame (all NativeTensor or all Column).
-    // Hold the invariant only while mixed per-column frames are not yet supported. Once PR #2 introduces
-    // mixed input, delete this block and rewrite callers to per-index is_tensor(idx)/is_column(idx).
-    bool has_tensors() const {
-        return !columns_.empty() && std::holds_alternative<entity::NativeTensor>(columns_[0]);
-    }
-    bool has_segment() const {
-        return !columns_.empty() && std::holds_alternative<Column>(columns_[0]);
-    }
-
-
+    bool has_only_tensors() const;
+    bool has_only_columns() const;
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -110,6 +102,9 @@ struct InputFrame {
     std::optional<NativeTensor> index_tensor_;
     StreamDescriptor desc_;
     std::optional<StreamDescriptor> desc_for_tsd_;
+
+    bool has_only_tensors_ {true};
+    bool has_only_columns_ {true};
 
 };
 

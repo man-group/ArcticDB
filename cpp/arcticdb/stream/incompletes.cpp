@@ -146,7 +146,7 @@ SegmentInMemory incomplete_segment_from_tensor_frame(
 ) {
     using namespace arcticdb::stream;
     util::check(
-            frame->has_tensors(),
+            frame->has_only_tensors(),
             "incomplete_segment_from_tensor_frame should not be called with InputFrame backed by SegmentInMemory"
     );
 
@@ -284,7 +284,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     // TODO: This clone is also insufficient if there are string columns in the input frame, fix with 18190648152
     // Ideally remove incomplete_segment_from_tensor_frame entirely and just use WriteToSegmentTask
     auto segment = [&]() -> SegmentInMemory {
-        if (frame->has_tensors()) {
+        if (frame->has_only_tensors()) {
             return incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats);
         }
         SegmentInMemory seg;

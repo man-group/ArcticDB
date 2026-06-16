@@ -17,7 +17,7 @@ namespace arcticdb::pipelines {
 
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
-void InputFrame::set_segment(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners) {
+void InputFrame::set_from_columns(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners) {
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
     desc_ = std::move(desc);
     if (norm_meta.experimental_arrow().has_index()) {
@@ -52,6 +52,7 @@ void InputFrame::set_segment(std::vector<Column>&& cols, StreamDescriptor&& desc
             std::make_move_iterator(cols.end())
             );
     arrow_buffer_owners_ = std::move(arrow_buffer_owners);
+    has_only_tensors_ = false;
 }
 
 StreamDescriptor& InputFrame::desc() {
@@ -120,6 +121,10 @@ void InputFrame::set_index_range() {
 }
 
 void InputFrame::set_bucketize_dynamic(bool bucketize) { bucketize_dynamic = bucketize; }
+
+bool InputFrame::has_only_tensors() const { return has_only_tensors_; };
+
+bool InputFrame::has_only_columns() const { return has_only_columns_; };
 
 size_t InputFrame::num_columns() const { return columns_.size(); }
 

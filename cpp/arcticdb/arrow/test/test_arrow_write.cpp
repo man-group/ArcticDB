@@ -45,8 +45,6 @@ sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
     }
 }
 
-// arrow_data_to_segment now returns the columns and descriptor as a pair instead of a fully-built
-// SegmentInMemory. Wrap them here so the existing assertions can stay the same.
 inline SegmentInMemory arrow_data_to_segment_for_test(
         const std::vector<sparrow::record_batch>& record_batches, bool has_index = false
 ) {

@@ -368,7 +368,7 @@ void record_batches_to_frame(const std::vector<std::shared_ptr<RecordBatchData>>
         sparrow_record_batches.emplace_back(std::move(rbd->array_), std::move(rbd->schema_));
     }
     auto [columns, descriptor] = arrow_data_to_segment(sparrow_record_batches, arrow_norm_metadata.has_index());
-    frame.set_segment(std::move(columns), std::move(descriptor), std::move(sparrow_record_batches));
+    frame.set_from_columns(std::move(columns), std::move(descriptor), std::move(sparrow_record_batches));
 }
 
 std::shared_ptr<InputFrame> py_ndf_to_frame(
