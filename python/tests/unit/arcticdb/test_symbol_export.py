@@ -51,8 +51,7 @@ def test_import_pyarrow_before_arcticdb_does_not_abort_on_s3_client():
     """
     pytest.importorskip("pyarrow")
 
-    script = textwrap.dedent(
-        """
+    script = textwrap.dedent("""
         import pyarrow  # noqa: F401  -- load libarrow's bundled AWS SDK first
         import arcticdb as adb
         try:
@@ -61,8 +60,7 @@ def test_import_pyarrow_before_arcticdb_does_not_abort_on_s3_client():
             adb.Arctic("s3://localhost:arcticdb-export-test?access=fake&secret=fake&port=1")
         except Exception:
             pass
-        """
-    )
+        """)
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True)
 
     assert result.returncode == 0, (
