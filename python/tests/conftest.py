@@ -1809,6 +1809,20 @@ def old_venv(request, tmp_path_factory):
         yield old_venv
 
 
+@pytest.fixture(scope="session")
+def latest_venv(tmp_path_factory):
+    """A venv with the latest released ArcticDB. Unparametrized, unlike ``old_venv``, so tests
+    that only need a single recent version can use it without re-parametrizing ``old_venv``."""
+    version = "latest"
+
+    venvs_dir = tmp_path_factory.mktemp("venvs")
+    venv_dir = venvs_dir / version
+    requirements_file = os.path.join(os.path.dirname(__file__), "compat", f"requirements-{version}.txt")
+
+    with Venv(venv_dir, requirements_file, version) as venv:
+        yield venv
+
+
 @pytest.fixture(scope="session", params=[pytest.param("tmp_path_factory", marks=PANDAS_2_COMPAT_TESTS_MARK)])
 def pandas_v1_venv(request):
     """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
