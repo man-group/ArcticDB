@@ -338,9 +338,11 @@ SegmentInMemory WriteToSegmentTask::slice() const {
             [&](const auto& slicer) { return slicer.row_per_slice(); }
     );
 
-    // Empty Column at the next position, then write the tensor into it via segment_set_data.
     auto add_tensor_column = [&](size_t abs_col, const NativeTensor& tensor, const Field& fd, bool sparsify) {
-        seg.add_column(fd, 0, AllocationType::DYNAMIC);
+        seg.add_column(
+                FieldRef{fd.type(), fd.name()},
+                std::make_shared<Column>(fd.type(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED)
+        );
         auto opt_error = segment_set_data(
                 fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
                 regular_slice_size, sparsify

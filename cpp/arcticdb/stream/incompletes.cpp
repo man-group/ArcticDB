@@ -288,6 +288,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
             return incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats);
         }
         SegmentInMemory seg;
+        seg.descriptor().set_id(stream_id);
         if (frame->has_index()) {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         } else {
