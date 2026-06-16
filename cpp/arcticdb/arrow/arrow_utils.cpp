@@ -421,7 +421,9 @@ DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
     }
 }
 
-std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(const std::vector<sparrow::record_batch>& record_batches, bool has_index) {
+std::pair<std::vector<Column>, entity::StreamDescriptor> record_batches_to_columns(
+        const std::vector<sparrow::record_batch>& record_batches, bool has_index
+) {
     if (record_batches.empty()) {
         return {};
     }

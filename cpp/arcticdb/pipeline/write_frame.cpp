@@ -274,9 +274,7 @@ void merge_arrow_slices_into_column(
     });
 }
 
-Column WriteToSegmentTask::slice_column(
-        const Column& source_column, size_t offset, StringPool& string_pool
-) const {
+Column WriteToSegmentTask::slice_column(const Column& source_column, size_t offset, StringPool& string_pool) const {
     const auto type_size = get_type_size(source_column.type().data_type());
     const auto begin_pos = (slice_.rows().first - offset);
     const auto end_pos = (slice_.rows().second - offset);
@@ -340,8 +338,15 @@ SegmentInMemory WriteToSegmentTask::slice() const {
                 std::make_shared<Column>(fd.type(), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED)
         );
         auto opt_error = segment_set_data(
-                fd.type(), tensor, seg, abs_col, rows_to_write, offset_in_frame, slice_num_for_column_,
-                regular_slice_size, sparsify
+                fd.type(),
+                tensor,
+                seg,
+                abs_col,
+                rows_to_write,
+                offset_in_frame,
+                slice_num_for_column_,
+                regular_slice_size,
+                sparsify
         );
         if (opt_error.has_value()) {
             opt_error->raise(fd.name(), offset_in_frame);
@@ -350,8 +355,7 @@ SegmentInMemory WriteToSegmentTask::slice() const {
 
     auto add_arrow_column = [&](const Column& source_column, const Field& fd) {
         seg.add_column(
-                fd.name(),
-                std::make_shared<Column>(slice_column(source_column, frame_->offset, seg.string_pool()))
+                fd.name(), std::make_shared<Column>(slice_column(source_column, frame_->offset, seg.string_pool()))
         );
     };
 
@@ -365,7 +369,7 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         }
     }
 
-    // Non-index columns 
+    // Non-index columns
     const size_t columns_index_offset = frame_->opt_index_tensor().has_value() ? 0 : index_field_count;
     for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
         const auto abs_col = col + index_field_count;

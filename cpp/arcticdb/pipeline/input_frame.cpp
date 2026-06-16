@@ -17,7 +17,9 @@ namespace arcticdb::pipelines {
 
 InputFrame::InputFrame() : index(stream::empty_index()) {}
 
-void InputFrame::set_from_columns(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners) {
+void InputFrame::set_from_columns(
+        std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners
+) {
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
     desc_ = std::move(desc);
     if (norm_meta.experimental_arrow().has_index()) {
@@ -47,23 +49,16 @@ void InputFrame::set_from_columns(std::vector<Column>&& cols, StreamDescriptor&&
         }
     }
 
-    columns_ = std::vector<FieldData>(
-            std::make_move_iterator(cols.begin()),
-            std::make_move_iterator(cols.end())
-            );
+    columns_ = std::vector<FieldData>(std::make_move_iterator(cols.begin()), std::make_move_iterator(cols.end()));
     arrow_buffer_owners_ = std::move(arrow_buffer_owners);
     has_only_tensors_ = false;
 }
 
-StreamDescriptor& InputFrame::desc() {
-    return desc_;
-}
+StreamDescriptor& InputFrame::desc() { return desc_; }
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
-const StreamDescriptor& InputFrame::desc_for_tsd() {
-    return desc_for_tsd_.has_value() ? *desc_for_tsd_ : desc_;
-}
+const StreamDescriptor& InputFrame::desc_for_tsd() { return desc_for_tsd_.has_value() ? *desc_for_tsd_ : desc_; }
 
 void InputFrame::set_offset(ssize_t off) const { offset = off; }
 
@@ -80,7 +75,7 @@ timestamp InputFrame::index_value_at(size_t row) {
                 index_tensor_->data_type() == DataType::NANOSECONDS_UTC64,
                 "Expected timestamp index in append, got type {}",
                 index_tensor_->data_type()
-                );
+        );
         return *index_tensor_->ptr_cast<timestamp>(row);
     }
 
@@ -89,21 +84,22 @@ timestamp InputFrame::index_value_at(size_t row) {
     return util::variant_match(
             columns_[0],
             [row](const Column& col) {
-            util::check(
-                    static_cast<position_t>(row) < col.row_count(),
-                    "Out of range row {} requested in InputFrame::index_value_at with column of length {}",
-                    row, col.row_count()
-                    );
-            // Note that scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which is
-            // equal to the number of input record batches for Arrow
-            return *col.scalar_at<timestamp>(row);
+                util::check(
+                        static_cast<position_t>(row) < col.row_count(),
+                        "Out of range row {} requested in InputFrame::index_value_at with column of length {}",
+                        row,
+                        col.row_count()
+                );
+                // Note that scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which is
+                // equal to the number of input record batches for Arrow
+                return *col.scalar_at<timestamp>(row);
             },
             [](const NativeTensor&) -> timestamp {
-            internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
-                    "Index in columns_[0] is a NativeTensor; NumPy index must be stored in index_tensor_"
-                    );
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                        "Index in columns_[0] is a NativeTensor; NumPy index must be stored in index_tensor_"
+                );
             }
-            );
+    );
 };
 
 void InputFrame::set_index_range() {
@@ -130,25 +126,20 @@ bool InputFrame::has_only_arrow_columns() const { return has_only_arrow_columns_
 size_t InputFrame::num_columns() const { return columns_.size(); }
 
 const InputFrame::FieldData& InputFrame::field_data(size_t idx) const {
-    util::check(idx < columns_.size(),
-            "InputFrame::field_data index {} out of range (size {})", idx, columns_.size());
+    util::check(idx < columns_.size(), "InputFrame::field_data index {} out of range (size {})", idx, columns_.size());
     return columns_[idx];
 }
 
 const NativeTensor& InputFrame::get_tensor(size_t idx) const {
-    util::check(idx < columns_.size(),
-            "InputFrame::get_tensor index {} out of range (size {})", idx, columns_.size());
+    util::check(idx < columns_.size(), "InputFrame::get_tensor index {} out of range (size {})", idx, columns_.size());
     return std::get<NativeTensor>(columns_[idx]);
 }
 
 const Column& InputFrame::get_column(size_t idx) const {
-    util::check(idx < columns_.size(),
-            "InputFrame::get_column index {} out of range (size {})", idx, columns_.size());
+    util::check(idx < columns_.size(), "InputFrame::get_column index {} out of range (size {})", idx, columns_.size());
     return std::get<Column>(columns_[idx]);
 }
 
-const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const {
-    return index_tensor_;
-}
+const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const { return index_tensor_; }
 
 } // namespace arcticdb::pipelines

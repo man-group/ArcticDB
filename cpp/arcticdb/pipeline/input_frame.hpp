@@ -60,13 +60,15 @@ struct InputFrame {
         desc_ = std::forward<DescriptorT>(desc);
         index_tensor_ = std::move(index_tensor);
         columns_ = std::vector<FieldData>(
-                std::make_move_iterator(field_tensors.begin()),
-                std::make_move_iterator(field_tensors.end())
-                );
+                std::make_move_iterator(field_tensors.begin()), std::make_move_iterator(field_tensors.end())
+        );
         has_only_arrow_columns_ = false;
     };
 
-    void set_from_columns(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners);
+    void set_from_columns(
+            std::vector<Column>&& cols, StreamDescriptor&& desc,
+            std::vector<sparrow::record_batch>&& arrow_buffer_owners
+    );
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
@@ -103,9 +105,8 @@ struct InputFrame {
     StreamDescriptor desc_;
     std::optional<StreamDescriptor> desc_for_tsd_;
 
-    bool has_only_tensors_ {true};
-    bool has_only_arrow_columns_ {true};
-
+    bool has_only_tensors_{true};
+    bool has_only_arrow_columns_{true};
 };
 
 } // namespace arcticdb::pipelines

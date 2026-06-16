@@ -295,10 +295,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
             seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         }
         for (size_t i = 0; i < frame->num_columns(); ++i) {
-            seg.add_column(
-                    frame->desc().fields(i).name(),
-                    std::make_shared<Column>(frame->get_column(i).clone())
-            );
+            seg.add_column(frame->desc().fields(i).name(), std::make_shared<Column>(frame->get_column(i).clone()));
         }
         if (frame->num_rows > 0) {
             seg.set_row_data(frame->num_rows - 1);

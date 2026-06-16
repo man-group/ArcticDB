@@ -500,9 +500,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::initialize_rows_to_update_fo
                 const size_t column_position_in_source_tensors =
                         source_field_position - source_descriptor.index().field_count();
                 std::span source_data(
-                        static_cast<const SourceType*>(
-                                source_->get_tensor(column_position_in_source_tensors).data()
-                        ),
+                        static_cast<const SourceType*>(source_->get_tensor(column_position_in_source_tensors).data()),
                         source_->num_rows
                 );
                 for (size_t source_row_idx = 0; source_row_idx < source_data.size(); ++source_row_idx) {

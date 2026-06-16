@@ -357,12 +357,9 @@ inline std::optional<convert::StringEncodingError> segment_set_data(
             normalization::check<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                     tag.dimension() == Dimension::Dim0, "Multidimensional nullable booleans are not supported"
             );
-            set_bool_object_type<TagType, RawType>(
-                    seg, tensor, col, rows_to_write, row, slice_num, regular_slice_size
-            );
+            set_bool_object_type<TagType, RawType>(seg, tensor, col, rows_to_write, row, slice_num, regular_slice_size);
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
-            auto maybe_error =
-                    set_array_type<TagType, RawType>(type_desc, seg, tensor, col, rows_to_write, row);
+            auto maybe_error = set_array_type<TagType, RawType>(type_desc, seg, tensor, col, rows_to_write, row);
             if (maybe_error)
                 return maybe_error;
         } else if constexpr (tag.dimension() == Dimension::Dim2) {
