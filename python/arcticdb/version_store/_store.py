@@ -429,7 +429,7 @@ class NativeVersionStore:
         self._native_cfg = native_cfg
         self._runtime_options = runtime_options
         # Do not make this a runtime option, as it is only temporary until Arrow writes are fully supported
-        self._allow_arrow_input = False
+        self._allow_arrow_input = True
         # Testing configuration to read as ARROW but directly convert back to PANDAS.
         # This is useful to mass enable ARROW testing on existing PANDAS tests without much code changes
         self._test_convert_arrow_back_to_pandas = False

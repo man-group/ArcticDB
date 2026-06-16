@@ -217,7 +217,7 @@ def get_timezone_from_metadata(norm_meta):
     return None
 
 
-def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None):
+def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_column_type=None, norm_meta=None) -> np.ndarray | List[RecordBatchData]:
     arr_dtype_as_str = str(arr.dtype)
     if "pyarrow" in arr_dtype_as_str:
         raise ArcticDbNotYetImplemented(
@@ -234,6 +234,15 @@ def _to_primitive(arr, arr_name, dynamic_strings, string_max_len=None, coerce_co
             norm_meta.common.categories[arr_name].category.extend(arr.categories)
         return arr.codes
 
+    if "str" in arr_dtype_as_str:
+        chunked = arr._pa_array              # pa.ChunkedArray
+        batches = []
+        for chunk in chunked.chunks:         # each chunk is a pa.Array (large_string)
+            rbd = RecordBatchData()
+            chunk._export_to_c(rbd.array(), rbd.schema())
+            batches.append(rbd)
+        
+        return batches
     # This check has to come after the categorical check above, as Categoricals are a Pandas concept, not numpy, which
     # causes issubdtype to throw if arr.dtype == CategoricalDtype
     if np.issubdtype(arr.dtype, np.timedelta64):
