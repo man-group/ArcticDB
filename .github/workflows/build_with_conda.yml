@@ -72,7 +72,7 @@ jobs:
     uses: ./.github/workflows/compile_and_test_with_conda.yml
     secrets: inherit
     with:
-      os:                        windows-latest
+      os:                        windows-2022
       platform:                  win_64
       preset:                    windows-cl-conda-release
       install_mongodb:           false
