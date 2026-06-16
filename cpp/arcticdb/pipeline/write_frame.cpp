@@ -321,10 +321,6 @@ Column WriteToSegmentTask::slice_column(
 }
 
 SegmentInMemory WriteToSegmentTask::slice() const {
-    // Build the segment with no pre-allocated columns. Each column is appended in segment-position
-    // order below: NativeTensor columns get an empty Column placeholder we then write into, Arrow
-    // columns get the sliced Column directly. This avoids the empty-Column waste that a
-    // descriptor-driven constructor would create for Arrow positions.
     SegmentInMemory seg;
     seg.descriptor().set_index(slice_.desc()->index());
 
@@ -352,9 +348,6 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         }
     };
 
-    // Build the sliced Column and append. slice_column may rewrite bool object → BOOL8 and string types
-    // → UTF_DYNAMIC64; add_column(name, col_ptr) derives the descriptor field type from the Column so
-    // the descriptor automatically reflects the post-rewrite type.
     auto add_arrow_column = [&](const Column& source_column, const Field& fd) {
         seg.add_column(
                 fd.name(),
@@ -362,8 +355,7 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         );
     };
 
-    // Index column. opt_index_tensor set ⇒ NumPy/mixed frame, index is a NativeTensor held separately.
-    // Otherwise the frame is pure Arrow and the index sits at columns_[0] (always a Column).
+    // Index column
     if (index_field_count > 0) {
         const auto& fd = frame_->desc().fields(0);
         if (frame_->opt_index_tensor().has_value()) {
@@ -373,16 +365,14 @@ SegmentInMemory WriteToSegmentTask::slice() const {
         }
     }
 
-    // Non-index columns. columns_ holds the variant per entry; mapping from a segment-relative position
-    // to columns_ depends on whether the index sits in opt_index_tensor (then columns_ skips the index)
-    // or in columns_[0] (then columns_ mirrors the descriptor positions).
+    // Non-index columns 
     const size_t columns_index_offset = frame_->opt_index_tensor().has_value() ? 0 : index_field_count;
     for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
         const auto abs_col = col + index_field_count;
         const auto& fd = slice_.non_index_field(col);
-        const auto src = slice_.absolute_field_col(col) + columns_index_offset;
+        const auto col_idx = slice_.absolute_field_col(col) + columns_index_offset;
         util::variant_match(
-                frame_->field_data(src),
+                frame_->field_data(col_idx),
                 [&](const NativeTensor& tensor) { add_tensor_column(abs_col, tensor, fd, sparsify_floats_); },
                 [&](const Column& source_column) { add_arrow_column(source_column, fd); }
         );

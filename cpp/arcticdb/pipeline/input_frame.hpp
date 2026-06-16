@@ -63,7 +63,7 @@ struct InputFrame {
                 std::make_move_iterator(field_tensors.begin()),
                 std::make_move_iterator(field_tensors.end())
                 );
-        has_only_columns_ = false;
+        has_only_arrow_columns_ = false;
     };
 
     void set_from_columns(std::vector<Column>&& cols, StreamDescriptor&& desc, std::vector<sparrow::record_batch>&& arrow_buffer_owners);
@@ -85,7 +85,7 @@ struct InputFrame {
     const std::optional<entity::NativeTensor>& opt_index_tensor() const;
 
     bool has_only_tensors() const;
-    bool has_only_columns() const;
+    bool has_only_arrow_columns() const;
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -104,7 +104,7 @@ struct InputFrame {
     std::optional<StreamDescriptor> desc_for_tsd_;
 
     bool has_only_tensors_ {true};
-    bool has_only_columns_ {true};
+    bool has_only_arrow_columns_ {true};
 
 };
 

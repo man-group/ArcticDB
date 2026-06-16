@@ -6,11 +6,11 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "entity/stream_descriptor.hpp"
 #include <sparrow/record_batch.hpp>
 
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/stream/index.hpp>
 
 namespace arcticdb::pipelines {
@@ -74,6 +74,7 @@ bool InputFrame::empty() const { return num_rows == 0; }
 timestamp InputFrame::index_value_at(size_t row) {
     util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
 
+    // Pandas
     if (index_tensor_.has_value()) {
         util::check(
                 index_tensor_->data_type() == DataType::NANOSECONDS_UTC64,
@@ -83,7 +84,7 @@ timestamp InputFrame::index_value_at(size_t row) {
         return *index_tensor_->ptr_cast<timestamp>(row);
     }
 
-    // Arrow path: index lives as the first column.
+    // Arrow: only the first column can be the index
     util::check(!columns_.empty(), "InputFrame::index_value_at called but no columns are present");
     return util::variant_match(
             columns_[0],
@@ -93,8 +94,8 @@ timestamp InputFrame::index_value_at(size_t row) {
                     "Out of range row {} requested in InputFrame::index_value_at with column of length {}",
                     row, col.row_count()
                     );
-            // scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which equals the
-            // number of input record batches for Arrow.
+            // Note that scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which is
+            // equal to the number of input record batches for Arrow
             return *col.scalar_at<timestamp>(row);
             },
             [](const NativeTensor&) -> timestamp {
@@ -124,7 +125,7 @@ void InputFrame::set_bucketize_dynamic(bool bucketize) { bucketize_dynamic = buc
 
 bool InputFrame::has_only_tensors() const { return has_only_tensors_; };
 
-bool InputFrame::has_only_columns() const { return has_only_columns_; };
+bool InputFrame::has_only_arrow_columns() const { return has_only_arrow_columns_; };
 
 size_t InputFrame::num_columns() const { return columns_.size(); }
 
