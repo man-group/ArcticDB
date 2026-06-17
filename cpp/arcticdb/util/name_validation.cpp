@@ -17,8 +17,7 @@ namespace arcticdb {
 
 [[nodiscard]] CheckOutcome verify_name(
         const std::string& name_type_for_error, const StringId& name, bool check_symbol_out_of_range,
-        const std::set<char>& unsupported_chars,
-        std::optional<char> unsupported_suffix = std::nullopt
+        const std::set<char>& unsupported_chars, std::optional<char> unsupported_suffix = std::nullopt
 ) {
     if (name.empty()) {
         return Error{
@@ -151,7 +150,8 @@ void verify_library_path_on_write(const Store* store, const StringId& library_pa
     }
     if (auto unsupported = store->verify_library_suffix(library_path)) {
         user_input::raise<ErrorCode::E_INVALID_CHAR_IN_NAME>(
-                "The library name's suffix contains character unsupported by storage backend {}. Library Name: {} BadChar: {}",
+                "The library name's suffix contains character unsupported by storage backend {}. Library Name: {} "
+                "BadChar: {}",
                 store->name(),
                 library_path,
                 *unsupported
