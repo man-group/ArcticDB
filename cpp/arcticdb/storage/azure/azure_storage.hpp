@@ -58,7 +58,9 @@ class AzureStorage final : public Storage {
 
     std::string do_key_path(const VariantKey&) const final;
 
-    std::optional<char> do_is_path_valid(std::string_view path) const final;
+    const std::set<char>& do_unsupported_symbol_chars() const final;
+
+    const std::set<char>& do_unsupported_library_chars() const final;
 
   private:
     std::unique_ptr<AzureClientWrapper> azure_client_;

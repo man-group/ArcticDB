@@ -37,22 +37,27 @@ std::unique_ptr<Storage> make_memory() {
 
 TEST(PathValidation, AzureRejectsBackslashEverywhere) {
     auto store = make_azure();
-    EXPECT_EQ(store->is_path_valid("a\\b"), '\\');
-    EXPECT_EQ(store->is_library_path_valid("a\\b"), '\\');
-    EXPECT_FALSE(store->is_path_valid("a/b").has_value());
-    EXPECT_FALSE(store->is_library_path_valid("a/b").has_value());
+    // '\' is banned in both symbol keys and library names, on top of the globally unsupported S3 characters.
+    EXPECT_TRUE(store->unsupported_symbol_chars().contains('\\'));
+    EXPECT_TRUE(store->unsupported_library_chars().contains('\\'));
+    EXPECT_TRUE(store->unsupported_symbol_chars().contains('*'));
+    EXPECT_FALSE(store->unsupported_symbol_chars().contains('/'));
 }
 
 TEST(PathValidation, MongoForwardSlashIsLibraryOnly) {
     auto store = make_mongo();
-    EXPECT_FALSE(store->is_path_valid("a/b").has_value());
-    EXPECT_EQ(store->is_library_path_valid("a/b"), '/');
+    // '/' is only disallowed in library names (it forms the Mongo database name), not in symbol keys.
+    EXPECT_FALSE(store->unsupported_symbol_chars().contains('/'));
+    EXPECT_TRUE(store->unsupported_library_chars().contains('/'));
 }
 
-TEST(PathValidation, BackendsWithoutRestrictionsAcceptEverything) {
+TEST(PathValidation, BackendsWithoutRestrictionsHaveNoExtraChars) {
     auto store = make_memory();
-    EXPECT_FALSE(store->is_path_valid("a/b").has_value());
-    EXPECT_FALSE(store->is_path_valid("a\\b").has_value());
-    EXPECT_FALSE(store->is_library_path_valid("a/b").has_value());
-    EXPECT_FALSE(store->is_library_path_valid("a\\b").has_value());
+    // Only the globally unsupported S3 characters apply; no backend-specific extras.
+    EXPECT_FALSE(store->unsupported_symbol_chars().contains('/'));
+    EXPECT_FALSE(store->unsupported_symbol_chars().contains('\\'));
+    EXPECT_FALSE(store->unsupported_library_chars().contains('/'));
+    EXPECT_FALSE(store->unsupported_library_chars().contains('\\'));
+    EXPECT_TRUE(store->unsupported_symbol_chars().contains('<'));
+    EXPECT_FALSE(store->verify_library_suffix("a\\b").has_value());
 }

@@ -69,12 +69,16 @@ class Storages {
 
     bool key_exists(const VariantKey& key) { return primary().key_exists(key); }
 
-    [[nodiscard]] std::optional<char> is_path_valid(std::string_view path) const {
-        return primary().is_path_valid(path);
+    [[nodiscard]] const std::set<char>& unsupported_symbol_chars() const {
+        return primary().unsupported_symbol_chars();
     }
 
-    [[nodiscard]] std::optional<char> is_library_path_valid(std::string_view path) const {
-        return primary().is_library_path_valid(path);
+    [[nodiscard]] const std::set<char>& unsupported_library_chars() const {
+        return primary().unsupported_library_chars();
+    }
+
+    [[nodiscard]] std::optional<char> verify_library_suffix(std::string_view path) const {
+        return primary().verify_library_suffix(path);
     }
 
     void read_sync_fallthrough(const VariantKey& variant_key, const ReadVisitor& visitor, ReadKeyOpts opts) {
