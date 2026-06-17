@@ -941,7 +941,7 @@ std::vector<std::vector<EntityId>> RowRangeClause::structure_for_processing(
         new_row_ranges.emplace_back(std::move(new_row_range));
     }
 
-    component_manager_->replace_entities<std::shared_ptr<RowRange>>(entity_ids, new_row_ranges);
+    component_manager_->replace_entities_zip(entity_ids, std::move(new_row_ranges));
 
     auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
     return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);
@@ -1131,8 +1131,8 @@ std::vector<std::vector<EntityId>> ConcatClause::structure_for_processing(
             new_row_ranges.emplace_back(std::move(new_row_range));
         }
     }
-    component_manager_->replace_entities<std::shared_ptr<RowRange>>(
-            util::flatten_vectors(std::move(entity_ids_vec)), new_row_ranges
+    component_manager_->replace_entities_zip(
+            util::flatten_vectors(std::move(entity_ids_vec)), std::move(new_row_ranges)
     );
     auto new_structure_offsets = structure_by_row_slice(ranges_and_entities);
     return offsets_to_entity_ids(new_structure_offsets, ranges_and_entities);

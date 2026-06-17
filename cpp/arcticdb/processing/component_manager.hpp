@@ -35,18 +35,18 @@ class ComponentManager {
 
     // Add a single entity with the components defined by args
     template<class... Args>
-    void add_entity(EntityId id, Args... args) {
+    void add_entity(EntityId id, Args&&... args) {
         std::unique_lock lock(mtx_);
         (
                 [&] {
-                    registry_.emplace<Args>(id, args);
+                    registry_.emplace<Args>(id, std::forward<decltype(args)>(args));
                     // Store the initial entity fetch count component as a "first-class" entity, accessible by
                     // registry_.get<EntityFetchCount>(id), as this is external facing (used by resample)
                     // The remaining entity fetch count below will be decremented each time an entity is fetched, but is
                     // never accessed externally. Stored as an atomic to minimise the requirement to take the
                     // shared_mutex with a unique_lock.
-                    if constexpr (std::is_same_v<Args, EntityFetchCount>) {
-                        registry_.emplace<std::atomic<EntityFetchCount>>(id, args);
+                    if constexpr (std::same_as<std::decay_t<Args>, EntityFetchCount>) {
+                        registry_.emplace<std::atomic<EntityFetchCount>>(id, std::forward<decltype(args)>(args));
                     }
                 }(),
                 ...
@@ -56,7 +56,7 @@ class ComponentManager {
     // Add a collection of entities. Each element of args should be a collection of components, all of which have the
     // same number of elements
     template<class... Args>
-    std::vector<EntityId> add_entities(Args... args) {
+    std::vector<EntityId> add_entities(Args&&... args) {
         std::vector<EntityId> ids;
         size_t entity_count{0};
         ARCTICDB_SAMPLE_DEFAULT(AddEntities)
@@ -74,10 +74,13 @@ class ComponentManager {
                                 "ComponentManager::add_entities received collections of differing lengths"
                         );
                     }
-                    registry_.insert<typename Args::value_type>(ids.cbegin(), ids.cend(), args.begin());
-                    if constexpr (std::is_same_v<typename Args::value_type, EntityFetchCount>) {
+                    using T = std::decay_t<typename Args::value_type>;
+                    registry_.insert<T>(ids.cbegin(), ids.cend(), std::make_move_iterator(args.begin()));
+                    if constexpr (std::same_as<T, EntityFetchCount>) {
                         for (auto&& [idx, id] : folly::enumerate(ids)) {
-                            registry_.emplace<std::atomic<EntityFetchCount>>(id, args[idx]);
+                            registry_.emplace<std::atomic<EntityFetchCount>>(
+                                    id, std::forward<EntityFetchCount>(args[idx])
+                            );
                         }
                     }
                 }(),
@@ -87,29 +90,30 @@ class ComponentManager {
     }
 
     template<typename T>
-    void replace_entities(const std::vector<EntityId>& ids, T value) {
+    void replace_entities(std::span<const EntityId> ids, const T& value) {
         ARCTICDB_SAMPLE_DEFAULT(ReplaceEntities)
         std::unique_lock lock(mtx_);
         for (auto id : ids) {
             registry_.replace<T>(id, value);
-            if constexpr (std::is_same_v<T, EntityFetchCount>) {
+            if constexpr (std::same_as<std::decay_t<T>, EntityFetchCount>) {
                 update_entity_fetch_count(id, value);
             }
         }
     }
 
-    template<typename T>
-    void replace_entities(const std::vector<EntityId>& ids, const std::vector<T>& values) {
+    template<std::ranges::random_access_range R>
+    void replace_entities_zip(std::span<const EntityId> ids, R&& values) {
         ARCTICDB_SAMPLE_DEFAULT(ReplaceEntityValues)
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 ids.size() == values.size(),
                 "Received vectors of differing lengths in ComponentManager::replace_entities"
         );
+        using T = std::ranges::range_value_t<R>;
         std::unique_lock lock(mtx_);
         for (auto [idx, id] : folly::enumerate(ids)) {
-            registry_.replace<T>(id, values[idx]);
-            if constexpr (std::is_same_v<T, EntityFetchCount>) {
-                update_entity_fetch_count(id, values[idx]);
+            registry_.replace<T>(id, std::forward<R>(values)[idx]);
+            if constexpr (std::same_as<T, EntityFetchCount>) {
+                update_entity_fetch_count(id, std::forward<R>(values)[idx]);
             }
         }
     }
@@ -118,13 +122,13 @@ class ComponentManager {
 
     // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities_and_decrement_refcount(const std::vector<EntityId>& ids) {
+    std::tuple<std::vector<Args>...> get_entities_and_decrement_refcount(std::span<const EntityId> ids) {
         return get_entities_impl<Args...>(ids, true);
     }
 
     // Get a collection of entities. Returns a tuple of vectors, one for each component requested via Args
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities(const std::vector<EntityId>& ids) {
+    std::tuple<std::vector<Args>...> get_entities(std::span<const EntityId> ids) {
         return get_entities_impl<Args...>(ids, false);
     }
 
@@ -133,7 +137,7 @@ class ComponentManager {
     void update_entity_fetch_count(EntityId id, EntityFetchCount count);
 
     template<class... Args>
-    std::tuple<std::vector<Args>...> get_entities_impl(const std::vector<EntityId>& ids, bool decrement_ref_count) {
+    std::tuple<std::vector<Args>...> get_entities_impl(std::span<const EntityId> ids, bool decrement_ref_count) {
         std::vector<std::tuple<Args...>> tuple_res;
         ARCTICDB_SAMPLE_DEFAULT(GetEntities)
         tuple_res.reserve(ids.size());
